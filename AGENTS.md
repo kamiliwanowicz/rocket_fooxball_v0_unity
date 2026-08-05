@@ -74,6 +74,7 @@ Maintain assembly boundaries:
 
 ## Gameplay implementation
 
+- Runtime ownership/dependency source of truth: `plans/runtime-architecture.md`; behaviour and tuning source: `plans/core-behaviour.md`.
 - Treat `MovementLab` as primary movement sandbox. Preserve quick iteration, visible telemetry, predictable reset behavior.
 - Run gameplay simulation in fixed-step code. Use `Time.fixedDeltaTime` for critical movement/physics math.
 - Preserve `GamePhysicsSettings` contract: 60 Hz fixed step and gravity magnitude `16.875`, unless task explicitly retunes it.
@@ -118,6 +119,18 @@ Validate changes proportionally:
 - Scene/prefab/editor-tool change: run intended editor workflow, save, reopen affected asset, inspect Console/batch log and Git diff.
 - Project/package setting change: restart Unity when required; confirm URP, Input System, build scene, and assembly compilation remain intact.
 - Documentation-only change: inspect diff; Unity launch unnecessary.
+
+Skill change: run official validator and require `Skill is valid!`:
+
+```powershell
+python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" ".agents\skills\<skill-name>"
+```
+
+If validator reports `ModuleNotFoundError: No module named 'yaml'`, install dependency, then rerun validator:
+
+```powershell
+python -m pip install --user PyYAML
+```
 
 Do not claim Unity validation unless Editor or batch command actually ran. Report skipped validation and reason.
 

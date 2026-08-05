@@ -8,12 +8,25 @@ namespace RocketFooxball
         [SerializeField] private InputActionAsset actions;
 
         private bool jumpPressed;
+        private bool kickPressed;
+        private bool fireHeld;
+        private bool gameplayInputEnabled = true;
+        private bool releaseCursorRequested;
+        private bool captureCursorRequested;
+        private bool suppressFireUntilRelease;
         private InputAction moveAction;
         private InputAction lookAction;
         private InputAction jumpAction;
+        private InputAction fireAction;
+        private InputAction kickAction;
+        private InputAction releaseCursorAction;
+        private InputAction captureCursorAction;
 
-        public Vector2 Move => moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
-        public Vector2 Look => lookAction != null ? lookAction.ReadValue<Vector2>() : Vector2.zero;
+        public Vector2 Move => gameplayInputEnabled && moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
+        public Vector2 Look => gameplayInputEnabled && lookAction != null ? lookAction.ReadValue<Vector2>() : Vector2.zero;
+        public bool FireHeld => fireHeld;
+        public bool CursorCaptured => Cursor.lockState == CursorLockMode.Locked;
+        public bool GameplayInputEnabled => gameplayInputEnabled;
 
         private void Awake()
         {
@@ -26,6 +39,10 @@ namespace RocketFooxball
             moveAction = actions.FindAction("Player/Move", true);
             lookAction = actions.FindAction("Player/Look", true);
             jumpAction = actions.FindAction("Player/Jump", true);
+            fireAction = actions.FindAction("Player/Fire", true);
+            kickAction = actions.FindAction("Player/Kick", true);
+            releaseCursorAction = actions.FindAction("Player/ReleaseCursor", true);
+            captureCursorAction = actions.FindAction("Player/CaptureCursor", true);
         }
 
         private void OnEnable()
@@ -33,9 +50,25 @@ namespace RocketFooxball
             Enable(moveAction);
             Enable(lookAction);
             Enable(jumpAction);
+            Enable(fireAction);
+            Enable(kickAction);
+            Enable(releaseCursorAction);
+            Enable(captureCursorAction);
             if (jumpAction != null)
             {
                 jumpAction.started += OnJumpStarted;
+            }
+            if (kickAction != null)
+            {
+                kickAction.started += OnKickStarted;
+            }
+            if (releaseCursorAction != null)
+            {
+                releaseCursorAction.started += OnReleaseCursorStarted;
+            }
+            if (captureCursorAction != null)
+            {
+                captureCursorAction.started += OnCaptureCursorStarted;
             }
         }
 
@@ -45,10 +78,49 @@ namespace RocketFooxball
             {
                 jumpAction.started -= OnJumpStarted;
             }
+            if (kickAction != null)
+            {
+                kickAction.started -= OnKickStarted;
+            }
+            if (releaseCursorAction != null)
+            {
+                releaseCursorAction.started -= OnReleaseCursorStarted;
+            }
+            if (captureCursorAction != null)
+            {
+                captureCursorAction.started -= OnCaptureCursorStarted;
+            }
             Disable(moveAction);
             Disable(lookAction);
             Disable(jumpAction);
-            jumpPressed = false;
+            Disable(fireAction);
+            Disable(kickAction);
+            Disable(releaseCursorAction);
+            Disable(captureCursorAction);
+            ClearGameplayState();
+            releaseCursorRequested = false;
+            captureCursorRequested = false;
+        }
+
+        private void Update()
+        {
+            if (!gameplayInputEnabled || !CursorCaptured || fireAction == null)
+            {
+                fireHeld = false;
+                return;
+            }
+
+            if (suppressFireUntilRelease)
+            {
+                if (!fireAction.IsPressed())
+                {
+                    suppressFireUntilRelease = false;
+                }
+                fireHeld = false;
+                return;
+            }
+
+            fireHeld = fireAction.IsPressed();
         }
 
         public bool ConsumeJumpPressed()
@@ -58,7 +130,82 @@ namespace RocketFooxball
             return result;
         }
 
-        private void OnJumpStarted(InputAction.CallbackContext _) => jumpPressed = true;
+        public bool ConsumeKickPressed()
+        {
+            var result = kickPressed;
+            kickPressed = false;
+            return result;
+        }
+
+        public bool ConsumeReleaseCursorRequested()
+        {
+            var result = releaseCursorRequested;
+            releaseCursorRequested = false;
+            return result;
+        }
+
+        public bool ConsumeCaptureCursorRequested()
+        {
+            var result = captureCursorRequested;
+            captureCursorRequested = false;
+            return result;
+        }
+
+        public void SetGameplayInputEnabled(bool enabled)
+        {
+            if (gameplayInputEnabled == enabled)
+            {
+                return;
+            }
+
+            gameplayInputEnabled = enabled;
+            if (!enabled)
+            {
+                ClearGameplayState();
+            }
+        }
+
+        public void ClearGameplayState()
+        {
+            jumpPressed = false;
+            kickPressed = false;
+            fireHeld = false;
+            suppressFireUntilRelease = fireAction != null && fireAction.IsPressed();
+        }
+
+        private void OnJumpStarted(InputAction.CallbackContext _)
+        {
+            if (gameplayInputEnabled)
+            {
+                jumpPressed = true;
+            }
+        }
+
+        private void OnKickStarted(InputAction.CallbackContext _)
+        {
+            if (gameplayInputEnabled)
+            {
+                kickPressed = true;
+            }
+        }
+
+        private void OnReleaseCursorStarted(InputAction.CallbackContext _)
+        {
+            releaseCursorRequested = true;
+            fireHeld = false;
+        }
+
+        private void OnCaptureCursorStarted(InputAction.CallbackContext _)
+        {
+            if (CursorCaptured)
+            {
+                return;
+            }
+
+            captureCursorRequested = true;
+            fireHeld = false;
+            suppressFireUntilRelease = true;
+        }
 
         private static void Enable(InputAction action)
         {

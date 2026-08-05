@@ -139,7 +139,6 @@ MonoBehaviour:
   airJumpEnabled: 1
   airJumpVelocity: 6.75
   airJumpHorizontalImpulse: 2
-  gravity: 16.875
   input: {fileID: 4153586482274664226}
 --- !u!114 &5313289886365503098
 MonoBehaviour:

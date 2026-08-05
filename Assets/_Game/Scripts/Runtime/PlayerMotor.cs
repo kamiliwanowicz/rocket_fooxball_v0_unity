@@ -31,7 +31,6 @@ namespace RocketFooxball
         [SerializeField] private bool airJumpEnabled = true;
         [SerializeField, Min(0f)] private float airJumpVelocity = 6.75f;
         [SerializeField, Min(0f)] private float airJumpHorizontalImpulse = 2f;
-        [SerializeField, Min(0f)] private float gravity = 16.875f;
         [SerializeField] private PlayerInputReader input;
 
         private const float MaxGroundedFallVelocity = -0.1f;
@@ -85,7 +84,7 @@ namespace RocketFooxball
             else
             {
                 ApplyAirMovement(strafeDirection, forwardDirection, deltaTime);
-                velocity.y -= gravity * deltaTime;
+                velocity.y -= GamePhysicsSettings.GravityMagnitude * deltaTime;
             }
 
             velocity = MovementMath.ClampHorizontal(velocity, HardCap);

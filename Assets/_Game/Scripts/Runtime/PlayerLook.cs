@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 
 namespace RocketFooxball
 {
@@ -19,16 +18,21 @@ namespace RocketFooxball
 
         private void Update()
         {
-            if (Keyboard.current != null && Keyboard.current.escapeKey.wasPressedThisFrame)
+            if (input == null || head == null)
+            {
+                return;
+            }
+
+            if (input.ConsumeReleaseCursorRequested())
             {
                 SetCursorCapture(false);
             }
-            else if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
+            if (input.ConsumeCaptureCursorRequested())
             {
                 SetCursorCapture(true);
             }
 
-            if (Cursor.lockState != CursorLockMode.Locked || input == null || head == null)
+            if (!input.CursorCaptured)
             {
                 return;
             }

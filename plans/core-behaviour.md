@@ -6,11 +6,26 @@ AI implementation source of truth for quick Rocket Fooxball POC.
 
 Goal: test responsive Quake II-like movement, rocket traversal, physical ball control, scoring readability.
 
-Status: behaviour decisions confirmed. Movement-lab slice shipped: `60 Hz` physics setup, `CharacterController` locomotion, normal jump, bunny-hop, air control, double-jump, mouse look, Move/Look/Jump Input System bridge, player prefab, enclosed arena shell, editor builder, debug HUD. Ball, rockets, explosions, body contact, kick, goals, scoring, celebration/reset unbuilt.
+Runtime ownership and dependency source of truth: `plans/runtime-architecture.md`. This document owns behaviour contracts, tuning targets, and implementation status only.
+
+Status: behaviour decisions confirmed. Movement-lab slice shipped: `60 Hz` physics setup, `CharacterController` locomotion, normal jump, bunny-hop, air control, double-jump, mouse look, normalized Move/Look/Jump/Fire/Kick/cursor Input System bridge, player prefab, enclosed arena shell, editor builder, debug HUD. AI-readiness P1-P3 shipped and batch-validated: runtime contracts, input/gravity normalization, package cleanup, retired AI Assistant settings, PC renderer effects/resolution baseline. Manual MovementLab smoke remains pending, so future gameplay gate remains closed. Ball, rockets, explosions, body contact, kick consumer, goals, scoring, celebration/reset unbuilt.
 
 Section status: `COMPLETED` -> section contract implemented; `PARTIAL` -> subset implemented; `FUTURE` -> no implementation. Per-section `implemented:` line records shipped scope and owning files.
 
 Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adjust through playtesting without changing behaviour contract.
+
+## Prerequisites Before Future Gameplay [BLOCKED: MANUAL SMOKE]
+
+Do not start or extend a `FUTURE` slice (ball, rockets, explosions, kick, goals, scoring, or celebration/reset) until all prerequisites below are accepted:
+
+- complete: P1 runtime contracts -> `plans/runtime-architecture.md`, this ownership boundary, `Playing -> GoalFreeze -> Reset -> Playing`, builder-first generated-asset workflow
+- complete: P2 input and physics normalization -> intent actions named `Move`, `Look`, `Jump`, `Fire`, `Kick`, `ReleaseCursor`, `CaptureCursor`; `PlayerInputReader` sole device boundary; held Fire and fresh Kick semantics; gameplay-gate clearing; `Cursor.lockState` capture authority; recapture-click Fire suppression; gravity single-sourced through `GamePhysicsSettings`
+- complete: P3 project baseline -> package cleanup, PC render/resolution baseline, preserved URP/Input System contracts
+- complete: Unity 6000.5.6f1 package resolve, runtime/editor compile, `MovementLabBuilder` rebuild, intended semantic diff inspection, meta/GUID/generated-state checks
+- pending: interactive MovementLab smoke -> movement, collision, jump states, cursor release/recapture and Fire suppression, HUD, `1920x1200`
+- pending: target-laptop standalone performance -> smooth 60 Hz at `1920x1200`
+
+Until this gate is clear, changes are limited to prerequisite fixes and documentation; do not add speculative gameplay abstractions or bypass the documented owners.
 
 ## Core Physics Contract [PARTIAL]
 
@@ -214,7 +229,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Input Resolution Rules [PARTIAL]
 
-- implemented: Input System Move/Look value reads, fresh Jump press capture, grounded/coyote normal-jump priority, airborne double-jump priority, `100 ms` landing buffer, held-jump non-repeat -> `Assets/InputSystem_Actions.inputactions`, `Assets/_Game/Scripts/Runtime/PlayerInputReader.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`; Attack action exists but has no gameplay consumer, kick/fire/goal-freeze rules pending
+- implemented: Input System Move/Look value reads, fresh Jump/Kick press capture, held Fire state, cursor release/capture intents, actual `Cursor.lockState` capture authority, recapture-click Fire suppression, gameplay gate clear, grounded/coyote normal-jump priority, airborne double-jump priority, `100 ms` landing buffer, held-jump non-repeat -> `Assets/InputSystem_Actions.inputactions`, `Assets/_Game/Scripts/Runtime/PlayerInputReader.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerLook.cs`; launcher, kick, goal-freeze consumers pending
 - jump press while grounded or within coyote window -> normal jump
 - jump press while airborne with air-jump available -> double-jump
 - jump press within `100 ms` before landing -> queued normal jump on contact
