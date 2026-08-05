@@ -26,6 +26,14 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 3. Fast tuning and stable performance
 4. Visual polish last
 
+## Graphics and performance
+
+- Target system: HP EliteBook 840 14 inch G11 Notebook PC; Intel Core Ultra 5 135U (12 cores, 14 logical processors); integrated Intel Graphics; 32 GB RAM; 1920x1200 at 60 Hz.
+- POC must run smoothly at 1920x1200 on target system.
+- Default to simple, low-cost graphics: primitive geometry, basic URP materials, limited effects.
+- Preserve upgrade path for considerably higher visual fidelity when requested.
+- Add higher-cost graphics only after measuring target-system performance; keep scalable quality options or fallbacks.
+
 ## MVP
 
 - Enclosed arena + two goals
