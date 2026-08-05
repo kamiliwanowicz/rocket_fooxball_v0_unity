@@ -1,0 +1,4 @@
+interface:
+  display_name: "Orchestrate Implementation"
+  short_description: "Delegate implementation, review, and fix lanes"
+  default_prompt: "Use $orchestrate-implementation to execute this coding plan through delegated workers and reviewers."

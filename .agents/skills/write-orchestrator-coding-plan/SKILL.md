@@ -52,6 +52,8 @@ Include:
 - changes: ordered implementation actions
 - constraints: relevant repository rules and invariants
 - done when: observable acceptance conditions
+- validation: smallest relevant command or workflow
+- proof: evidence distinguishing intended behavior from pre-change behavior, when needed
 - review focus: likely regressions or contract risks
 
 Omit empty fields. Keep one owner per writable shared path. Mark new paths `proposed`.
@@ -64,7 +66,7 @@ After each coherent implementation packet:
 
 1. Assign inspect-only review against exact changed paths or diff.
 2. Ask reviewer for actionable correctness, regression, safety, and validation findings only.
-3. Send findings to implementation worker as terse fix list.
+3. Route accepted findings to execution's review-fix worker.
 4. Fix findings and continue.
 
 Do not require another review after ordinary fixes. Re-review only when fix changes architecture, public contract, security-sensitive behavior, or broad shared code.
@@ -85,57 +87,11 @@ Final verification should cover only relevant checks, such as:
 
 Name owner, exact command or workflow, and expected result. State manual checks honestly. Do not claim checks ran while writing plan.
 
-## Agent Communication
+## Execution Handoff
 
-Use standard Markdown, never JSON. Apply `$llm-oriented-markdowns` to every agent message.
+Plans own work-packet data, not agent prompt or response formats. Do not embed or duplicate dispatch templates.
 
-Project minimum context. Do not paste full plan, transcripts, unrelated reports, or repeated repository rules. Send file path plus section name when shared artifact is readable.
-
-### Worker Assignment
-
-```markdown
-Task: [outcome]
-Depends on: [accepted input; omit if none]
-Own: [writable paths]
-Read: [focused paths/symbols]
-Do:
-- [step]
-Constraints:
-- [packet-specific rule]
-Done when:
-- [acceptance]
-Return:
-- Changed: [paths + result]
-- Checks: [command/workflow + result]
-- Blocker: [exact need; omit if none]
-```
-
-### Reviewer Assignment
-
-```markdown
-Review: [exact packet/diff/paths]
-Check:
-- [acceptance, invariant, risk]
-Do not edit.
-Return:
-- Verdict: pass | findings
-- Findings: [F1 severity path:line - issue - required fix]
-```
-
-### Fix Assignment
-
-```markdown
-Fix:
-- [F1 exact required outcome]
-Own: [affected paths]
-Verify: [smallest relevant check]
-Return:
-- Changed: [paths + result]
-- Checks: [result]
-- Blocker: [exact need; omit if none]
-```
-
-Reports stay terse. No preamble, praise, restated assignment, or speculative notes. Include exact errors when blocked.
+During execution, use `$orchestrate-implementation` as canonical source for worker, reviewer, and fix-worker templates. Map packet objective, dependencies, ownership, reads, changes, constraints, acceptance, validation, proof, and review focus into those templates.
 
 ## Plan Output
 
@@ -186,6 +142,8 @@ Baseline: [branch/commit or inspection date]
   - [step]
 - constraints: [rules]
 - done when: [acceptance]
+- validation: [smallest command or workflow]
+- proof: [discriminatory evidence when needed]
 - review: [exact focus]
 
 ## Final Verification
@@ -216,8 +174,8 @@ Before saving, confirm:
 - plan covers requested scope and excludes unrelated work
 - complexity matches task size
 - parallel writes do not overlap
-- each packet has outcome, ownership, acceptance, and review focus
+- each packet has outcome, ownership, acceptance, validation, proof needs, and review focus
 - flow stays `implement -> review -> fix -> next`
 - final verification uses real repository commands or workflows
-- agent messages use terse standard Markdown, not JSON
+- plan delegates prompt and response formats to `$orchestrate-implementation`
 - plan contains no implementation changes unless user requested them
