@@ -52,7 +52,7 @@ Include:
 - changes: ordered implementation actions
 - constraints: relevant repository rules and invariants
 - done when: observable acceptance conditions
-- validation: smallest relevant command or workflow
+- validation: smallest relevant command or workflow, sole owner, and run point
 - proof: evidence distinguishing intended behavior from pre-change behavior, when needed
 - review focus: likely regressions or contract risks
 
@@ -73,6 +73,21 @@ Do not require another review after ordinary fixes. Re-review only when fix chan
 
 Group review after several small, tightly related changes when no downstream task consumes them first. Do not review every mechanical microstep.
 
+## Test Ownership
+
+One owner per check per code state. Plan role, run point, exact command or workflow, and invalidation. Defaults:
+
+- implementation worker: focused lane checks after implementation, before review
+- reviewer: inspect code and supplied evidence only; run no tests
+- review-fix worker: rerun only checks invalidated by its fixes, after fixes
+- orchestrator: run only distinct final integration checks explicitly assigned to orchestrator
+
+Carry valid evidence forward. Rerun only after named relevant state change. Same-owner red-green or multi-state proof = one protocol.
+
+Owner failure loop: diagnose -> fix root cause in scope -> rerun to pass -> report complete. Blocked or out-of-scope -> report evidence, diagnosis, needed owner or dependency. Preserve valid checks.
+
+No useful or repository-supported tests -> `tests: none — [reason]`. Same ownership for non-test checks.
+
 ## Verification
 
 Put main verification after implementation and review fixes settle. Derive commands and Unity workflows from repository instructions; never invent validation claims.
@@ -85,7 +100,7 @@ Final verification should cover only relevant checks, such as:
 - affected asset reopen or diff inspection
 - broad regression check only when change warrants it
 
-Name owner, exact command or workflow, and expected result. State manual checks honestly. Do not claim checks ran while writing plan.
+Final verification accounts for carried evidence plus checks not run earlier. It is not a blanket rerun. Name sole owner, run point, exact command or workflow, expected result, and prior checks excluded as already proven. State manual checks honestly. Do not claim checks ran while writing plan.
 
 ## Execution Handoff
 
@@ -142,15 +157,16 @@ Baseline: [branch/commit or inspection date]
   - [step]
 - constraints: [rules]
 - done when: [acceptance]
-- validation: [smallest command or workflow]
+- validation: owner [role]; when [run point]; run `[smallest command or workflow]`; rerun only if [invalidation]
 - proof: [discriminatory evidence when needed]
 - review: [exact focus]
 
 ## Final Verification
 
-- owner: [orchestrator or worker]
-- run: `[exact command/workflow]`
+- evidence: [carried valid results]
+- tests: owner [orchestrator or worker] at [run point]; run `[exact command/workflow]` | none — [reason]
 - expect: [result]
+- exclude: [checks already proven; no rerun]
 - inspect: [diff/assets/runtime behavior when required]
 
 ## Risks and Questions
@@ -175,7 +191,9 @@ Before saving, confirm:
 - complexity matches task size
 - parallel writes do not overlap
 - each packet has outcome, ownership, acceptance, validation, proof needs, and review focus
+- each check has one owner and run point; reviewer owns none; reruns name invalidation
+- test owners fix owned failures and rerun before completion, or report evidenced blocker and needed owner
 - flow stays `implement -> review -> fix -> next`
-- final verification uses real repository commands or workflows
+- final verification uses real repository commands or workflows without repeating valid checks
 - plan delegates prompt and response formats to `$orchestrate-implementation`
 - plan contains no implementation changes unless user requested them
