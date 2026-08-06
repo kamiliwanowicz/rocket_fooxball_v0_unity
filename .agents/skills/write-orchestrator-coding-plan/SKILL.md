@@ -22,6 +22,16 @@ Create lean plan executable by orchestrator and coding subagents. Favor clear ow
 
 If repository is unavailable, request required files or label plan provisional.
 
+## Require Worktree Isolation
+
+Start every generated plan with orchestrator-owned `P0`:
+
+1. Create fresh task-specific Git worktree and branch from plan baseline.
+2. Confirm worktree path writable by orchestrator and all assigned agents before dispatch.
+3. Run all implementation, review, fixes, validation, editor workflows, and commits only in that worktree.
+
+Treat main checkout as read-only after worktree creation. Worktree setup failure blocks execution; never fall back to editing main checkout.
+
 ## Scale Orchestration
 
 Choose smallest useful shape.
@@ -31,7 +41,7 @@ Choose smallest useful shape.
 - medium change: few coherent packets; run sequence above for each packet
 - large change: parallelize only independent packets with disjoint write ownership, stable inputs, and independent completion
 
-Do not split work by arbitrary layer boundaries when one worker can safely complete coherent change. Do not create separate gates, state ledgers, schemas, worktrees, checkpoints, or convergence tasks without concrete need.
+Do not split work by arbitrary layer boundaries when one worker can safely complete coherent change. Do not create separate gates, state ledgers, schemas, checkpoints, or convergence tasks without concrete need.
 
 Keep sequential when packets touch same files, shared contracts, central registration, serialized assets, migration order, or unstable upstream interfaces.
 
@@ -145,7 +155,17 @@ Baseline: [branch/commit or inspection date]
 
 ## Execution
 
-`P1 implement -> R1 review -> F1 fix findings -> P2 -> final verification`
+`P0 create worktree -> P1 implement -> R1 review -> F1 fix findings -> P2 -> final verification`
+
+### P0: Create isolated worktree
+
+- owner: orchestrator
+- baseline: `[branch/commit]`
+- worktree: `[proposed absolute path]`
+- branch: `[proposed task branch]`
+- actions: create fresh worktree; confirm orchestrator and assigned-agent write access; set worktree as sole cwd for all remaining work
+- done when: worktree and branch exist, are writable, and all later packet paths resolve inside worktree
+- blocked: report setup evidence and required permission or workspace-root change; keep main checkout read-only
 
 ### P1: [coherent result]
 
@@ -189,6 +209,7 @@ Before saving, confirm:
 - repository claims cite real paths or label proposals
 - plan covers requested scope and excludes unrelated work
 - complexity matches task size
+- execution starts with fresh writable worktree and keeps all work inside it
 - parallel writes do not overlap
 - each packet has outcome, ownership, acceptance, validation, proof needs, and review focus
 - each check has one owner and run point; reviewer owns none; reruns name invalidation
