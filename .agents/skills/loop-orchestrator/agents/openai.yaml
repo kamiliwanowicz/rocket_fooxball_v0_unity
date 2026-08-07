@@ -1,7 +1,7 @@
 interface:
   display_name: "Loop Orchestrator"
-  short_description: "Run long-lived multi-plan implementation loops"
-  default_prompt: "Use $loop-orchestrator to execute this complex implementation through planning, delegated waves, integration, and final verification."
+  short_description: "Coordinate isolated implementation, review, fixes, and integration"
+  default_prompt: "Use $loop-orchestrator for bounded delegated work with exact-SHA review and verified handoff."
 
 policy:
   allow_implicit_invocation: false
