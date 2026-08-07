@@ -25,6 +25,25 @@ namespace RocketFooxball.Editor
         private const string BallSurfacePath = MaterialsPath + "/BallSurface.physicMaterial";
         private const string BuildMarkerName = "MovementLabGeneratedT3";
 
+        // Keep this list limited to assets authored by this builder. Unity can
+        // serialize empty fields with trailing spaces in both the asset and
+        // paired .meta YAML, so normalize every generated file after saving.
+        private static readonly string[] GeneratedYamlAssetPaths =
+        {
+            PrefabPath,
+            BallPrefabPath,
+            RocketPrefabPath,
+            ScenePath,
+            MaterialsPath + "/Floor.mat",
+            MaterialsPath + "/Wall.mat",
+            MaterialsPath + "/Marking.mat",
+            MaterialsPath + "/Ball.mat",
+            MaterialsPath + "/Rocket.mat",
+            MaterialsPath + "/GoalFrame.mat",
+            MaterialsPath + "/Shield.mat",
+            BallSurfacePath
+        };
+
         private sealed class GoalBuild
         {
             public GameObject Root;
@@ -779,19 +798,25 @@ namespace RocketFooxball.Editor
         // line endings, file IDs, and GUIDs.
         private static void NormalizeGeneratedYamlWhitespace()
         {
-            var paths = new[] { PrefabPath, BallPrefabPath, RocketPrefabPath, ScenePath };
-            for (var i = 0; i < paths.Length; i++)
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
             {
-                if (!File.Exists(paths[i]))
-                {
-                    continue;
-                }
-                var source = File.ReadAllText(paths[i]);
-                var normalized = Regex.Replace(source, @"[ \t]+(?=\r?$)", string.Empty, RegexOptions.Multiline);
-                if (!string.Equals(source, normalized, StringComparison.Ordinal))
-                {
-                    File.WriteAllText(paths[i], normalized, new System.Text.UTF8Encoding(false));
-                }
+                NormalizeYamlFile(GeneratedYamlAssetPaths[i]);
+                NormalizeYamlFile(GeneratedYamlAssetPaths[i] + ".meta");
+            }
+        }
+
+        private static void NormalizeYamlFile(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return;
+            }
+
+            var source = File.ReadAllText(path);
+            var normalized = Regex.Replace(source, @"[ \t]+(?=\r?$)", string.Empty, RegexOptions.Multiline);
+            if (!string.Equals(source, normalized, StringComparison.Ordinal))
+            {
+                File.WriteAllText(path, normalized, new System.Text.UTF8Encoding(false));
             }
         }
 
