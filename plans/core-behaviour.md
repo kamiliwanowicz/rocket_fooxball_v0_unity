@@ -14,19 +14,6 @@ Section status: `COMPLETED` -> section contract implemented; `PARTIAL` -> subset
 
 Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adjust through playtesting without changing behaviour contract.
 
-## Prerequisites Before Future Gameplay [BLOCKED: MANUAL SMOKE]
-
-Do not start or extend a `FUTURE` slice (ball, rockets, explosions, kick, goals, scoring, or celebration/reset) until all prerequisites below are accepted:
-
-- complete: P1 runtime contracts -> `plans/runtime-architecture.md`, this ownership boundary, `Playing -> GoalFreeze -> Reset -> Playing`, builder-first generated-asset workflow
-- complete: P2 input and physics normalization -> intent actions named `Move`, `Look`, `Jump`, `Fire`, `Kick`, `ReleaseCursor`, `CaptureCursor`; `PlayerInputReader` sole device boundary; held Fire and fresh Kick semantics; gameplay-gate clearing; `Cursor.lockState` capture authority; recapture-click Fire suppression; gravity single-sourced through `GamePhysicsSettings`
-- complete: P3 project baseline -> package cleanup, PC render/resolution baseline, preserved URP/Input System contracts
-- complete: Unity 6000.5.6f1 package resolve, runtime/editor compile, `MovementLabBuilder` rebuild, intended semantic diff inspection, meta/GUID/generated-state checks
-- pending: interactive MovementLab smoke -> movement, collision, jump states, cursor release/recapture and Fire suppression, HUD, `1920x1200`
-- pending: target-laptop standalone performance -> smooth 60 Hz at `1920x1200`
-
-Until this gate is clear, changes are limited to prerequisite fixes and documentation; do not add speculative gameplay abstractions or bypass the documented owners.
-
 ## Core Physics Contract [PARTIAL]
 
 - implemented: `CharacterController` player, `60 Hz` fixed step, gravity magnitude `16.875`, player prefab, visible enclosed floor/walls, MovementLab scene and builder, debug HUD -> `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/GamePhysicsSettings.cs`, `Assets/_Game/Scripts/Runtime/MovementDebugHud.cs`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Editor/MovementLabBuilder.cs`; `Rigidbody` ball, hidden failsafe containment, ramps, shared ball surface `PhysicMaterial` pending
