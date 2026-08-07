@@ -77,9 +77,13 @@ Blocker: [active blocker + evidence + recheck/action or None]
 ## Integration
 - branch: [isolated branch or None]
 - worktree: [absolute path or None]
+- last accepted integration SHA: [full SHA; initial accepted baseline until first accepted merge]
 - expected pre-merge head: [full SHA or None]
 - accepted input SHAs: [ordered list or None]
 - merged input SHAs: [ordered list or None]
+- retry baseline SHA: [full SHA or None]
+- retry input SHAs: [ordered list or None]
+- drift: [expected/observed full SHAs + rejected | pending_acceptance | accepted + evidence/authority or None]
 - merge status: pending | active | blocked | complete
 - final SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
@@ -128,6 +132,27 @@ Planner acceptance:
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 
+## Target-drift recovery
+
+Unexpected integration HEAD has no acceptance. Current attempt -> `blocked`; record expected/observed full SHAs and last completed input.
+
+Default retry:
+
+1. Bind `retry baseline SHA` to last recorded accepted integration SHA before drift. Before first accepted merge, use run's accepted baseline SHA.
+2. Derive `retry input SHAs` from accepted execution SHAs not already recorded merged at retry baseline. Preserve declared order.
+3. Provision fresh isolated integration branch/worktree at exact retry baseline.
+4. Dispatch fresh attempt with fresh `attempt_id`; replay retry inputs. Drift SHA remains outside retry ancestry.
+
+Retain drift SHA only when LP records all gate evidence before retry:
+
+- exact observed full SHA and ancestry from last accepted integration SHA;
+- exact changed-path and content scope from last accepted integration SHA;
+- independent Critical/High review and dispositions bound to drift SHA;
+- required checks passing at drift SHA;
+- authority acceptance binding drift SHA and scope. Obtain explicit user authority for any scope, behavior, permission, or mutation outside authority already recorded in state.
+
+Complete gate -> record drift `accepted`, promote exact drift SHA to last accepted integration SHA/retry baseline, and derive remaining inputs from verified ancestry plus prior accepted merge records. Incomplete gate -> record drift `rejected`; use default retry. Observed ancestry alone never accepts drift.
+
 ## Resume
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
@@ -156,7 +181,7 @@ Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
 - digest mismatch: rehash differs; status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
-- target drift: integration status `blocked`; record expected/observed head; merging agent stops; LP provisions fresh isolated integration worktree and attempt; user branch unchanged.
+- target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
 ## Cleanup and completion
 

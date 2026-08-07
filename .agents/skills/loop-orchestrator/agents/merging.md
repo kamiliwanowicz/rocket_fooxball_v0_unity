@@ -41,7 +41,15 @@ Sequential flow: complete prerequisite wave merge first. LP accepts observed int
 
 ## Target drift recovery
 
-Target means bound isolated integration branch, never user branch. Any unexpected HEAD before operation/final return -> current attempt `blocked`. Return expected and observed heads plus last completed input. LP provisions fresh isolated integration branch/worktree from accepted observed baseline, records new expected head and allowed operations, and dispatches fresh attempt. Prior checks become invalid.
+Target means bound isolated integration branch, never user branch. Any unexpected HEAD before operation/final return -> current attempt `blocked`. Return expected and observed full SHAs plus last completed input. Prior checks become invalid.
+
+Fresh dispatch binds retry baseline and inputs from recorded LP acceptance facts:
+
+- default retry baseline: last recorded accepted integration SHA before drift;
+- retry inputs: accepted execution SHAs not already recorded merged at that SHA, in declared order;
+- drift SHA: excluded from retry ancestry unless state records completed [drift-retention gate](../references/state-and-recovery.md#target-drift-recovery).
+
+LP provisions fresh isolated integration branch/worktree from bound retry baseline. Merging agent verifies exact baseline and replays bound retry inputs. Mismatch -> `blocked` before mutation.
 
 Never mutate original, default, or user branch. Documentation-only changes do not relax this boundary.
 

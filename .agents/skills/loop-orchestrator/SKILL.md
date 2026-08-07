@@ -83,7 +83,7 @@ Dispatch [merging agent](agents/merging.md) after every completed wave, includin
 
 Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. One-plan fast-forward may leave commit identity unchanged; isolated branch/worktree plus expected pre-merge and observed post-merge heads prove merge stage occurred.
 
-Target drift -> current merge attempt `blocked`. LP records observed head, provisions fresh isolated integration branch/worktree from accepted observed baseline, binds new attempt, and reruns invalidated checks. Merging agent never mutates user branch.
+Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 
 ## Dispatch identity and results
 
