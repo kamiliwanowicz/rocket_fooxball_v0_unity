@@ -643,6 +643,8 @@ Final-stage aggregate report references existing combined-review/fix fields; it 
 
 Mapping key: exact `(role, task kind, stage, field, raw enum, check kind, blocker presence)`. Each accepted report must select one listed transition. Unlisted, mixed-stage, duplicate-write, missing-evidence, illegal `not_due`/`not_run`, or parent/child identity mismatch rejects before ledger mutation.
 
+## Cross-Record Invariants
+
 - Finding severity rule: preserve reviewer severity `critical | high`; ledger blocking disposition comes from finding status and disposition evidence. `critical` or `high` with status `open` or `fix_approved` blocks completion; `fixed` or `rejected` clears block with evidence; `waived` clears block only with authorized waiver evidence. Never map by free-form synonym.
 - Collection members: `*_ids` lists contain quoted IDs; `*_shas` lists contain quoted full SHAs; ownership lists contain quoted paths or globs; `retained_refs` contains quoted retained branch/worktree refs; `live_agent_ids` contains external agent IDs; action-ID lists contain external authorization IDs.
 - Route invariant: `run.route: direct` exists only before durable ledger initialization and uses direct-route sequence; once ledger exists, `run.route: durable` remains immutable for that run. Direct-to-durable escalation starts a fresh durable attempt from observed baseline and preserved refs.
@@ -668,11 +670,23 @@ Mapping key: exact `(role, task kind, stage, field, raw enum, check kind, blocke
 - Child role binding: `implementation_worker` -> `implementation | integration_conflict`; `reviewer` -> `review`; `review_fix_worker` -> `review_fix`; `combined_reviewer` -> `combined_review`; `integration_fixer` -> `integration_fix`. Parent kind is `plan` for `implementation | review | review_fix`; `integration` for `integration_conflict | combined_review | integration_fix`.
 - Writer-barrier invariant: plan review or shared-project validation requires an accepted `writer_barrier` gate on the frozen plan head. Every active writer lease closes before the barrier; later writes require a fresh dispatch and invalidate review and validation evidence. Final integration fixes use equivalent merger-owned lease closure, commit, and candidate-head freeze before final verification.
 - Lifecycle-role invariant: attempt and result entity pairs match linked dispatch; accepted result artifact raw enum maps exactly to durable outcome through linked dispatch role.
+
+### Capacity
+
 - Capacity invariant: `0 <= effective_limit <= configured_limit`; `available_count = effective_limit - live_count - reserved_count`; counts nonnegative; `reserved_count` equals held reservation slot sum; `live_count` equals live agent ID count. Reservation or spawn is legal only when `requested_slots <= available_count` after reconciliation. Larger request queues/waits; creates no reservation, dispatch, attempt, lease, or spawn side effect.
+
+### Plan Convergence
+
 - Plan-convergence atomicity: validate graph, ownership, artifact digests, and exact committed baselines -> provision branch/worktree from accepted baseline -> verify absolute path, branch, full head SHA, cleanliness, and writability -> one ledger transition records accepted convergence gate, observed branch/worktree facts, and `ready_to_execute`. Before that transition plan remains `awaiting_convergence`.
+
+### Conflict Binding
+
 - Conflict input-state digest encoding: `sha256:` plus SHA-256 of byte stream starting ASCII `conflict-input-v1\n`. Append ordered segments `baseline_sha`, `incoming_accepted_sha`, `index`, `staged_diff`, `unstaged_diff`, `untracked`; each segment encodes UTF-8 label, ASCII decimal payload byte count, LF, then exact payload bytes. SHA payloads are lowercase 40-byte ASCII plus LF. `index` payload is raw `git ls-files --stage -z`; diff payloads are raw outputs from `git diff --cached --binary --full-index --no-ext-diff --no-textconv` and `git diff --binary --full-index --no-ext-diff --no-textconv`; `untracked` payload uses paths from `git ls-files --others --exclude-standard -z`, bytewise sorted, each encoded as raw path bytes, NUL, lowercase full blob SHA from `git hash-object --no-filters -- <path>`, LF. Commands run in recorded parent worktree with Git config `core.quotepath=false`, `color.ui=false`, and no output text decoding.
 - Conflict dispatch binding: after failed merge and before child edit authority starts, compute digest once from canonical pre-edit conflicted index/worktree bytes plus recorded baseline and incoming accepted SHA. Record evidence containing exact digest input byte stream, digest, commands, parent worktree, baseline, and incoming SHA. Copy same digest and incoming SHA into child task, dispatch, attempt, and lease; child report repeats both unchanged; submitted result record copies report values. Dispatch starts only after binding and evidence persist.
 - Conflict result acceptance: compare submitted digest and incoming SHA with stored child-task, dispatch, attempt, lease, result-artifact, and result-record values. Never recompute input digest from child-mutated worktree. Separately reconcile current output: active parent attempt; exact recorded worktree; `HEAD` at recorded baseline; failed-merge input at incoming accepted SHA; changes inside owned scope; resolution evidence matching current index/worktree. Any stored-binding mismatch or output-reconciliation failure rejects result.
+
+### Validation And Final State
+
 - Convergence-gate invariant: accepted plan gate targets current integration SHA; valid gate evidence matches each subject plan `plan_digest` and `plan_baseline_sha`.
 - Validation invariant: `pass`, `fail`, or `waived` requires exact state SHA and evidence. Per-check `not_due` legal only for `intermediate` stage plus `final` check kind. `not_due` illegal for intermediate integration checks and every final-stage check. Aggregate `integration.validation_status: not_due` legal only during intermediate stage. `not_run` valid only when earlier blocker prevents due check; aggregate final `not_run` requires earlier blocker preventing every final check.
 - Blocked-before-check invariant: final-stage verification result uses `not_run`; `integration.validation_status` and final-verify gate use `not_run`; blocker record targets `verification`; run enters explicit side state. No validation evidence claims execution.
@@ -720,28 +734,21 @@ Side-state exit requires revision-CAS transition with evidence and reconciled Gi
 
 ## Direct Route And Canonical Pointers
 
-- Route gate runs before durable `INIT`. Select `direct` only when one coherent task context, no cross-plan dependency or parallel-plan benefit, one recovery boundary, no long external operation, and stable writable ownership hold.
-- Direct sequence: `implementation -> writer_barrier -> one review -> fresh fix worker if findings -> final validation -> handoff`. Implementation, review, fix, and validation workers use one task worktree; workers edit owned files only; LP owns any user-branch merge.
+- Route selection and top-level order: [loop orchestrator Direct route](../SKILL.md#direct-route). Apply before durable `INIT`.
+- Direct-owner authority and execution actions: [`$orchestrate-implementation` Execution Ownership](../../orchestrate-implementation/SKILL.md#execution-ownership).
 - Direct route keeps no durable ledger. Direct owner allocates run-scoped `direct_plan_id` plus unique `direct_child_task_id` values and uses same parent/child envelope shape in transient handoff state; IDs never resolve through durable registries or migrate into later durable run. Handoff records exact branch, worktree, committed baseline, frozen head, review, fix proof, validation, and cleanup status. Failed scope, recovery, dependency, or ownership gate -> stop writes, preserve reachable commits, initialize durable route from exact observed committed baseline, create fresh plan/child identities, dispatch fresh attempt.
 - Canonical pointers: parent `dispatch -> attempt -> lease -> result`; child task has independent `dispatch -> attempt -> lease -> result`. Linked entity active/accepted pointers agree bidirectionally. Every lifecycle record carries entity generation, committed baseline, and optional conflict bindings. Integration fields point only to parent Git-owner attempt; child-task fields point to nested attempts. Gate pointers follow Final-stage gate pointer invariant.
 
 ## Transition Acceptance
 
-Accept transition only when all checks pass:
+Apply [communication-contract acceptance workflow](communication-contracts.md#acceptance-workflow) for every submitted result. Transition eligible only when relevant state invariants hold:
 
-- Submitted result identity is `{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha, input_state_digest, incoming_accepted_sha}`. Linked dispatch, attempt, lease, and result IDs match; generation equals active entity generation; baseline equals dispatch snapshot and unchanged relevant entity baseline. Conflict fields match linked child task. Baseline may be null only for blocked `breaker` breakdown attempt with unavailable baseline; conflict fields are otherwise null.
-- Child result also matches `entity_kind: child_task`, child ID, parent kind/ID, active parent attempt, parent branch/worktree, role/task-kind binding, and scope. Accepting child result closes only child dispatch/attempt/lease and leaves parent Git-owner attempt/lease active.
-- LP re-reads latest committed ledger after Git and evidence checks, then performs one latest-revision CAS write. `expected_revision` remains dispatch snapshot metadata, not a global freshness gate. Unrelated ledger revisions (heartbeat, report, reservation, or other-entity update) do not invalidate result. Relevant entity mutation, supersession, lease closure before acceptance, or baseline change invalidates result and increments generation.
-- Capacity counts and global reservations reconcile with live agents and intended side effect.
-- Baseline, branch, worktree, head, commits, cleanliness, and ancestry reconcile with Git; blocked `breaker` baseline-null path records blocker evidence and makes no fabricated Git claim.
-- Evidence belongs to reported exact head or exact integration state SHA and remains `valid`.
-- Accepted report artifact digest reconciles; raw source enum parses under role contract; exact role/source mapping equals stored `reported_outcome`.
-- Report is neither stale, superseded, previously accepted, nor from interrupted, expired, revoked, quarantined, or closed attempt. Acceptance checks active lease before atomically closing it; late result after closure is rejected.
-- Target-state observable completion condition holds.
-- Update passes closed-schema and restricted-YAML validation.
-- IDs, idempotency keys, enums, references, counters, and event revision chain hold.
+- entity generation, active-pointer symmetry, parent-child lifecycle, role binding, baseline, conflict binding, and lease state
+- capacity invariant before related reservation/spawn side effect
+- observed Git facts, valid evidence, artifact digest, and exact source-outcome mapping
+- target completion condition, closed schema, restricted YAML, references, counters, and event chain
 
-Reject transition without mutating accepted result state. Record rejection through separate latest-revision CAS update and immutable event. Agent assertion never creates completion; reconciled evidence does.
+Accepted transition writes only fields assigned by [Canonical Report Transitions](#canonical-report-transitions) and closes only linked lifecycle. Rejection mutates no accepted result state; communication protocol owns rejection event procedure. Agent assertion never creates completion.
 
 ## Idempotency
 
@@ -819,7 +826,7 @@ After LP restart, context loss, or ambiguous side effect:
 3. Enumerate worktrees, branches, refs, reachable commits, live agents/processes, and pending external outcomes.
 4. Reconcile capacity and reservations. Reconcile every parent and child dispatch, attempt, lease, result identity tuple, entity generation, committed baseline, conflict binding, accepted report artifact digest, raw source enum mapping, active pointer, worktree, branch head, cleanliness, timestamp, and reachable commit.
 5. Reject queued reports from stale, expired, interrupted, superseded, closed, quarantined, generation-mismatched, baseline-mismatched, unmapped, or mapping-inconsistent attempts.
-6. Preserve reachable useful commits before cleanup or replacement. Unconfirmed shared-worktree edit child triggers whole-parent quarantine sequence under Idempotency. Retain old parent branch/worktree; provision replacement parent and child records from safe committed checkpoint on new branch/worktree. Record orphaned or conflicting commits as incidents.
+6. Preserve reachable useful commits before cleanup or replacement. Apply matching child-termination branch under [Idempotency](#idempotency). Record orphaned or conflicting commits as incidents.
 7. Reconcile completed dispatch, spawn, interrupt, merge, validation, lease, reservation, and control-commit side effects. Apply missing ledger transition only when exact outcome proven.
 8. Select first incomplete valid state. After completed wave integration: no next wave -> `WAVE_INTEGRATION` final substates; absent/stale next-wave artifact -> `PLANNING`; current artifact lacking current convergence gate -> `PLAN_CONVERGENCE`; every next-wave plan accepted `ready_to_execute` through current gate at exact integration baseline -> `EXECUTION_WAVE`. Resume final substates from recorded integration pointers, never by creating duplicate top-level phases.
 9. If truth cannot reconcile safely, enter `BLOCKED` or `AWAITING_USER` with exact mismatch and evidence.

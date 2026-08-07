@@ -1,6 +1,13 @@
 # Communication Contracts
 
-Load immediately before every dispatch and report-acceptance decision. Applies to `LP` direct agents and nested-agent routing.
+Load only branch needed for current operation:
+
+- dispatch: `Protocol` + `Dispatch` + selected linked role contract
+- report acceptance: `Protocol` + `Result Identity And Acceptance` + relevant report section + `Acceptance workflow`
+- evidence dispute: `Evidence contract`
+- conflict, recovery, gate, or transition branch: named section in [state and recovery](state-and-recovery.md)
+
+Applies to LP dispatches, direct-route child routing, and durable nested-agent routing.
 
 ## Protocol
 
@@ -48,14 +55,7 @@ Durable child tuple also carries:
 - `Parent attempt: {active_parent_attempt_id}`
 - parent branch/worktree, role, task kind, scope, and review boundary when applicable
 
-Result acceptance:
-
-1. Match tuple against active entity, dispatch, attempt, lease, generation, baseline, and optional conflict fields.
-2. For child result, match child identity and active parent attempt/worktree without closing parent lease. Apply conflict digest acceptance from [state and recovery](state-and-recovery.md) when task kind is `integration_conflict`.
-3. Reconcile Git and evidence against baseline/frozen state; blocked task-breakdown attempt with `baseline_sha: None` records blocker evidence instead of fabricated Git facts.
-4. Re-read latest ledger revision; apply latest-revision CAS and append event.
-5. If CAS loses unrelated update, re-read and retry. Keep result eligible.
-6. Reject on entity mutation, supersession, lease closure, baseline/binding change, stale generation, or relevant Git drift.
+Accept through [Acceptance workflow](#acceptance-workflow). State eligibility and field writes remain canonical in [Transition Acceptance](state-and-recovery.md#transition-acceptance) and [Canonical Report Transitions](state-and-recovery.md#canonical-report-transitions). This file owns acceptance procedure, not state definitions.
 
 Global revision changes alone never reject result. Two parallel results dispatched from same revision may both accept in either completion order when tuples and relevant baselines remain valid. Late result from closed/expired/interrupted attempt is rejected and preserved as incident evidence.
 

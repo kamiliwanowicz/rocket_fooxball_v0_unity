@@ -14,18 +14,12 @@ Create lean plan executable by orchestrator and coding agents. Own artifact stru
 
 ## Route Gate
 
-Choose route before durable initialization:
+Record route selected by invoking orchestrator through [`$loop-orchestrator` Direct route](../loop-orchestrator/SKILL.md#direct-route). Missing route selection blocks artifact finalization.
 
-- `direct`: one coherent plan context; no cross-plan dependency; no parallel benefit; one recovery boundary; no long external operation; stable writable ownership.
-- `durable`: any direct criterion fails, or multi-plan execution, long recovery, dependency waves, or integration risk earns ledger/worktree overhead.
+- `direct` -> `worktree_binding: create_at_execution`
+- `durable` -> `worktree_binding: assigned_at_convergence`
 
-Direct route:
-
-`one task worktree -> implement -> writer barrier -> one review -> fresh fix worker if needed -> final-state validation -> handoff`
-
-Record `worktree_binding: create_at_execution`. Planning creates no branch/worktree. At execution, invoking orchestrator/LP acts as direct-route plan supervisor and sole Git owner, then creates one isolated task branch/worktree from exact artifact baseline. Apply direct-owner and child contracts from `$orchestrate-implementation`. Stop at clean exact task head; user/original-branch merge remains LP-owned and authority-gated.
-
-Durable route uses control, plan, and integration worktrees plus state contracts referenced below. Do not add ledger, convergence, wave, or recovery ceremony when direct route criteria hold.
+Plan includes ceremony for selected route only.
 
 ## Inspect Before Planning
 
@@ -35,7 +29,7 @@ Durable route uses control, plan, and integration worktrees plus state contracts
 4. Inspect Git status and exact committed full baseline SHA. Preserve unrelated user changes.
 5. Ask user only when unresolved behavior, scope, compatibility, architecture, or authority choice changes work.
 6. State minor assumptions in plan. Do not gate on minor assumptions.
-7. Apply route gate. Record route and reason.
+7. Record supplied route and reason.
 
 If repository unavailable, request required files or mark plan provisional.
 
@@ -51,7 +45,7 @@ User answer or blocker resolution triggers fresh breakdown attempt. Do not turn 
 
 ## Ownership And Git Surfaces
 
-Artifact records one ownership forecast covering every writable path, validation owner, dependency boundary, and integration order. Apply durable Git/state ownership from `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md); apply execution roles from `$orchestrate-implementation`. Planner writes immutable artifact under control worktree `loop-runs/{run_id}/artifacts/`; planner performs no product edit or Git operation. LP retains ledger, provisioning, and authorized user/original/default-branch merge. Invoking orchestrator/LP retains direct-route Git ownership.
+Artifact records one ownership forecast covering every writable path, validation owner, dependency boundary, and integration order. Role authority remains external: [state and recovery](../loop-orchestrator/references/state-and-recovery.md) for Git/state ownership; `$orchestrate-implementation` for execution roles. Planner writes artifact only; no product edit or Git operation.
 
 ## Artifact And Worktree Lifecycle
 
@@ -62,15 +56,11 @@ Durable artifact is immutable before product worktree exists:
 - `worktree_binding`: `assigned_at_convergence`
 - future branch name and absolute worktree path: omitted
 
-Durable convergence: validate graph, ownership, artifact digests, and exact baseline -> provision branch/worktree from accepted baseline -> verify path, branch, full head SHA, cleanliness, and writability -> one atomic ledger transition records accepted gate, observed binding facts, and `ready_to_execute`. Before transition plan remains `awaiting_convergence`; committed `ready_to_execute` requires nonnull observed branch/worktree facts. `needs_user` and `blocked` remain artifact-only.
-
-Standalone/direct artifact records `worktree_binding: create_at_execution`. Planning alone creates no branch/worktree. At execution, direct owner creates one task branch/worktree from exact baseline, verifies binding, then dispatches work.
-
-Apply worktree, baseline, freeze, identity, capacity, and recovery invariants from `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md). Apply dispatch acceptance from [communication contracts](../loop-orchestrator/references/communication-contracts.md).
+Durable P0 points to [Plan Convergence](../loop-orchestrator/references/state-and-recovery.md#plan-convergence). `needs_user` and `blocked` remain artifact-only. Direct P0 points to [Direct Route And Canonical Pointers](../loop-orchestrator/references/state-and-recovery.md#direct-route-and-canonical-pointers). Planning creates no product branch/worktree.
 
 ## Result And Evidence Binding
 
-Plan names required identity and evidence outputs; canonical tuple, acceptance, and recovery live in `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md) and [communication contracts](../loop-orchestrator/references/communication-contracts.md). Every accepted artifact names exact frozen state SHA. Plan names invalidation and rerun owner for each check.
+Plan names required identity and evidence outputs, exact frozen state SHA, invalidation, and rerun owner. Runtime identity/acceptance fields come from relevant [communication-contract branch](../loop-orchestrator/references/communication-contracts.md); plan does not copy them.
 
 ## Scale Orchestration
 
@@ -192,9 +182,10 @@ or
 
 - worktree_binding: `assigned_at_convergence` | `create_at_execution`
 - baseline: `[same exact 40-character lowercase commit SHA]`
-- owner: durable -> LP provisions and plan supervisor verifies; direct -> invoking orchestrator/LP creates and verifies
-- action: durable -> convergence validates graph/ownership/digests/baseline, provisions from baseline, verifies observed binding, then atomically records accepted gate + binding facts + `ready_to_execute`; direct -> owner creates binding at execution before dispatch
-- done when: one observed clean writable branch/worktree matches exact baseline; durable ledger or direct transient handoff records facts
+- owner: durable -> LP provisions and plan supervisor verifies; direct -> direct owner creates and verifies
+- contract: durable -> `.agents/skills/loop-orchestrator/references/state-and-recovery.md#plan-convergence`; direct binding -> `.agents/skills/loop-orchestrator/references/state-and-recovery.md#direct-route-and-canonical-pointers`; direct action -> `.agents/skills/orchestrate-implementation/SKILL.md#execution-ownership`
+- action: owner applies selected contract before child dispatch
+- done when: one observed clean writable branch/worktree matches exact baseline; durable ledger or direct transient handoff records binding facts
 - blocked: report setup evidence and required authority; keep main checkout read-only
 
 ### P1: [coherent result]
@@ -263,7 +254,7 @@ Before save, confirm:
 - binding is `assigned_at_convergence` for durable or `create_at_execution` for direct; artifact contains no future branch or absolute product-worktree path
 - ownership forecast covers every writable path
 - one owner per Git surface, file, worktree, check, lease, and evidence item
-- requested slots do not exceed reconciled `available_count`; zero or insufficient capacity queues/waits before reservation or spawn
+- requested slots satisfy [Capacity](../loop-orchestrator/references/state-and-recovery.md#capacity) at execution
 - parallel writers are disjoint and finish before barrier/review/validation
 - review targets frozen exact head; no second review branch exists
 - identity, recovery, final mapping, baseline, and capacity use canonical pointers

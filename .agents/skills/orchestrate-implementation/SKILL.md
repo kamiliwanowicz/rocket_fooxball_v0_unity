@@ -9,20 +9,19 @@ Act only as orchestrator. Delegate implementation, testing, validation, review, 
 
 Own canonical worker, reviewer, and fix-worker prompt and response formats. When executing plan from `$write-orchestrator-coding-plan`, map work-packet data into templates below. Ignore copied or embedded prompt schemas in plans.
 
-Durable entities, baselines, transitions, recovery, and outcome mapping: [state and recovery](../loop-orchestrator/references/state-and-recovery.md). Dispatch envelope and result acceptance: [communication contracts](../loop-orchestrator/references/communication-contracts.md). This file owns execution sequence and child templates only.
+This file owns execution sequence and child templates only. Before child dispatch/report acceptance, load relevant [communication-contract branch](../loop-orchestrator/references/communication-contracts.md). On baseline, freeze, recovery, or transition branch, load named [state-and-recovery section](../loop-orchestrator/references/state-and-recovery.md).
 
 Use standard Markdown, never JSON. Apply `$llm-oriented-markdowns` to every subagent prompt and require same style for responses. Include only task-critical details and exact identifiers.
 
-## Ownership And State
+## Execution Ownership
 
-- `LP`: control ledger, orchestration artifacts, global scheduling, recovery, and authorized user-branch merge.
-- plan supervisor: sole Git owner for one plan branch/worktree; stages, commits, reconciles cleanliness, and freezes accepted exact head. Its one Git-owner attempt does not overlap another plan-supervisor attempt on that branch/worktree. Creates no nested worker worktrees.
-- direct owner: invoking orchestrator/LP acting as direct-route plan supervisor and sole Git owner. Creates isolated task branch/worktree; stages and commits child edits; closes leases; runs writer barrier; freezes exact head; runs or delegates checks; hands off exact task head. Performs no product edits or substantive review.
+- plan supervisor: performs plan-branch Git actions at writer barriers; creates no nested worker worktree.
+- direct owner: invoking orchestrator/LP acting as direct-route plan supervisor and sole task branch/worktree Git owner. Creates isolated task branch/worktree from exact baseline; stages and commits child edits; closes child edit leases; freezes exact head; runs or delegates final checks; hands off exact task head. Performs no product edits or substantive review. LP alone performs authority-gated user/original/default-branch merge.
 - implementation and review-fix workers: child edit leases; edit owned files only. No Git operations, branch/worktree mutation, staging, or commits. Parallel child leases are allowed only for disjoint owned paths; one active child edit lease per owned path.
 - reviewer: inspect frozen state only. No edits or Git operations.
-- merging supervisor: sole Git owner for active integration branch/worktree lease. Stops at verified integration head; `LP` alone merges user/original/default branch.
+- merging supervisor: performs integration-branch Git actions through merger contract.
 
-`LP` provisions durable plan worktree after convergence and before plan-supervisor dispatch. Standalone planning may create `P0`; loop-owned planning verifies pre-provisioned exact branch/worktree. Apply linked identity, lease, freeze, and evidence rules.
+Parent/child identities, Git authority, leases, and freeze invariants: [state and recovery](../loop-orchestrator/references/state-and-recovery.md). This file adds role-local actions only.
 
 ## Roles
 
@@ -37,14 +36,13 @@ Never substitute profiles. Never absorb delegated work when slots, tools, or age
 
 ### 0. Select route
 
-Use direct route when task has one coherent plan context, no cross-plan dependency or parallel-plan gain, one recovery boundary, no long-running external operation, and stable writable ownership:
+Invoking orchestrator selects route through [`$loop-orchestrator` Direct route](../loop-orchestrator/SKILL.md#direct-route) before execution.
+
+Direct execution:
 
 `one worktree -> one writer lane -> writer barrier -> one review -> fresh fix worker if needed -> final validation -> handoff`
 
-Invoking orchestrator/LP is direct-route plan supervisor and sole Git owner. It provisions one isolated task branch/worktree before worker dispatch and owns staging, commits, lease closure, writer barrier, exact-head freeze, checks, and handoff.
-Direct route keeps no durable ledger; handoff records exact branch, worktree, baseline, frozen head, review, fix proof, validation, and cleanup.
-
-Use durable plan route when multi-plan execution, dependency waves, recovery duration, or integration risk earns ledger/worktree overhead. Do not add durable machinery to direct-route work.
+Apply direct transient state from [Direct Route And Canonical Pointers](../loop-orchestrator/references/state-and-recovery.md#direct-route-and-canonical-pointers). Durable plan execution begins only from accepted pre-provisioned plan binding.
 
 Completion: route, worktree, owner, and review boundary are named before dispatch.
 
@@ -85,19 +83,13 @@ Completion: each blocker resolved by narrow scope grant, owner routing, safe loc
 
 ### Pre-review semantic conflicts
 
-If implementation evidence exposes behavior, contract, architecture, or acceptance conflict before review, select exactly one disposition:
-
-- close affected child lease, discard incomplete lane edits, prove unchanged clean parent SHA, then redispatch implementation child from that SHA;
-- close every writer, let parent Git owner commit exact dirty state as unreviewed checkpoint, record checkpoint SHA, then redispatch implementation child from checkpoint;
-- block with conflict evidence plus exact decision or scope needed.
-
-Use canonical Worker Prompt Template, fresh child identity tuple, and selected committed baseline. Checkpoint stays unreviewed. Run normal writer barrier and review after conflict-resolution implementation. Fix Worker becomes legal only for accepted `critical` or `high` findings from completed review boundary.
+On behavior, contract, architecture, or acceptance conflict before review, apply exactly one disposition from [Baselines, Worktrees, And Freeze](../loop-orchestrator/references/state-and-recovery.md#baselines-worktrees-and-freeze). Parent closes affected edit leases and performs any discard/checkpoint Git action; replacement implementation child uses Worker Prompt Template with fresh identity and selected exact baseline. Normal writer barrier and review remain due. Fix Worker becomes legal only after accepted `critical` or `high` review finding.
 
 Completion: every pre-review semantic conflict has exactly one disposition; every redispatch starts from represented clean commit; normal writer barrier and review remain due.
 
 ### Lease recovery
 
-Apply [child recovery and idempotency](../loop-orchestrator/references/state-and-recovery.md#idempotency). Reconcile termination and Git state before replacement. Unconfirmed shared-worktree writer -> quarantine parent attempt/worktree and restart parent plus children from safe committed checkpoint.
+On child stall, termination, or ambiguous writes, apply matching confirmed, unconfirmed writer, or read-only branch in [Idempotency](../loop-orchestrator/references/state-and-recovery.md#idempotency). Reconcile termination and Git before replacement.
 
 Completion: no two live plan-supervisor attempts share one branch/worktree; no two live child leases share one owned path; every replacement and preserved commit is recorded.
 

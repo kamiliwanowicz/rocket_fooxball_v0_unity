@@ -21,8 +21,9 @@ Context gates:
 
 - before `BREAKDOWN`, only when full route fires: read [task breakdown](agents/task-breakdown.md)
 - before `WAVE_INTEGRATION`, only when integration fires: read [merging](agents/merging.md)
-- before durable-state init/update/resume/recovery: read [state and recovery](references/state-and-recovery.md)
-- immediately before every dispatch and report-acceptance decision: read [communication contracts](references/communication-contracts.md)
+- before durable-state init/update: read relevant schema, invariant, or transition section in [state and recovery](references/state-and-recovery.md)
+- before resume/recovery: read [Recovery Bootstrap](references/state-and-recovery.md#recovery-bootstrap) plus referenced recovery branch
+- before dispatch/report acceptance: read only operation branch named by [communication contracts](references/communication-contracts.md)
 
 ## Direct route
 
@@ -40,7 +41,7 @@ Route:
 
 `one isolated worktree -> implementation -> writer barrier -> one review -> fresh fix worker if findings -> final validation -> READY_FOR_USER_MERGE`
 
-Invoking orchestrator/LP remains direct-route plan supervisor and sole Git owner. Use `$orchestrate-implementation` for direct-owner action plus worker/reviewer/fix contracts. Direct plan identity records `worktree_binding: create_at_execution`; planning creates no branch/worktree. Owner creates one isolated task branch/worktree only at execution. LP owns evidence, final handoff, and any authorized user-branch merge. Escalate to full route when gate fails or recovery state grows beyond one boundary.
+Direct state, binding, and escalation: [Direct Route And Canonical Pointers](references/state-and-recovery.md#direct-route-and-canonical-pointers). Direct-owner actions and child contracts: [`$orchestrate-implementation` Execution Ownership](../orchestrate-implementation/SKILL.md#execution-ownership).
 
 ## Role routing
 
@@ -53,7 +54,7 @@ Invoking orchestrator/LP remains direct-route plan supervisor and sole Git owner
 - combined reviewer: exact `sol_medium`, only as final-integration substate when due
 - integration fixer: fresh exact `luna_max`, at most one final fix cycle
 
-Apply parent/child Git ownership from `$orchestrate-implementation`; apply durable identity, recovery, and acceptance from [state and recovery](references/state-and-recovery.md) and [communication contracts](references/communication-contracts.md). Route-local authority: only `LP` may merge exact integration SHA into original/user/default branch after explicit authority.
+Role dispatch uses relevant [communication-contract branch](references/communication-contracts.md). Durable identity and authority use [state and recovery](references/state-and-recovery.md). Execution child roles use `$orchestrate-implementation`.
 
 ## Global policy
 
@@ -65,27 +66,7 @@ Parallel plan gate: same pinned baseline, disjoint writes, stable interfaces, in
 
 ### Capacity
 
-- global ceiling: `20` active agents
-- effective ceiling: `min(20, live platform capacity)`
-- count `LP` when runtime counts root agent
-- LP owns reservation map and slot budgets
-- reserve supervisor plus implementation/review/fix capacity
-- before reservation or spawn, reconcile capacity and require `requested_slots <= available_count`
-- zero or insufficient capacity -> queue/wait; create no reservation, dispatch, attempt, lease, or spawn side effect
-
-Apply capacity invariant and child recovery from [state and recovery](references/state-and-recovery.md). Apply dispatch identity and acceptance from [communication contracts](references/communication-contracts.md).
-
-## Git and artifact isolation
-
-- control branch/worktree: ledger plus immutable orchestration artifacts under `loop-runs/{run_id}/artifacts/`; no product changes; never merge into product branch
-- integration branch/worktree: accepted plan commits plus integration fixes; merging supervisor sole Git owner during active lease
-- plan branch/worktree: exactly one per durable plan; LP provisions during `PLAN_CONVERGENCE` before atomic `ready_to_execute` transition and plan-supervisor dispatch
-- main checkout: read-only
-- code truth: exact Git SHA; accepted result requires committed clean frozen head
-
-Durable artifact records exact full baseline SHA, ownership forecast, and `worktree_binding: assigned_at_convergence`; future branch and absolute worktree path remain absent. Planner writes artifact under control worktree before product worktree exists. LP records artifact digest and immutability. Control worktree holds ledger and immutable orchestration artifacts only; no product edits. Plan supervisor owns plan Git surface per `$orchestrate-implementation`. Loop-owned `P0` verifies pre-provisioned exact branch/worktree; no duplicate creation.
-
-Writer barrier closes every active edit lease before review or shared-project validation. Plan supervisor commits and freezes exact head. Reviews and validation bind to frozen head; no partial lane state is observable. Branch mutation after freeze requires fresh dispatch/attempt/lease and invalidates affected evidence.
+Before each reservation/spawn branch, apply [Capacity](references/state-and-recovery.md#capacity). Insufficient capacity remains queued before any dispatch side effect.
 
 ## Workflow
 
@@ -117,7 +98,7 @@ Done: plan artifact path/digest, exact baseline, requirement IDs, forecast write
 
 ### 5. `PLAN_CONVERGENCE`
 
-Reconcile plan graph. Refresh dependent plans against latest accepted integration head. For each executable plan: validate graph, ownership, artifact digests, and exact baseline -> provision branch/worktree from accepted baseline -> verify path, branch, full head SHA, cleanliness, and writability -> commit one atomic ledger transition containing accepted convergence gate, observed binding facts, and `ready_to_execute`. Before this transition plan remains `awaiting_convergence`; committed `ready_to_execute` requires nonnull observed branch/worktree facts. `needs_user` or `blocked` plans receive no product worktree. Dispatch plan supervisor with `P0 verify_preprovisioned` only after accepted transition.
+Reconcile plan graph and refresh dependent plans against latest accepted integration head. For each executable plan, apply [Plan Convergence](references/state-and-recovery.md#plan-convergence). Dispatch plan supervisor with `P0 verify_preprovisioned` only after accepted transition. `needs_user` or `blocked` plans remain artifact-only.
 
 Done: requirements covered once; baselines valid; writes disjoint; shared-contract owner named; serialized assets ordered; one validation owner per code state; each `ready_to_execute` plan has one worktree; integration order and slot demand accepted.
 
@@ -154,10 +135,6 @@ Done: final artifact recoverable and immutable; merge target/authority explicit;
 LP alone performs authorized merge of exact integration SHA into named original/user/default branch. Merging supervisor never performs this operation. LP records target branch, pre-merge head, observed post-merge head, exact result, and cleanup outcome in control ledger.
 
 Done: requested boundary satisfied or truthful `not_authorized` handoff recorded; recorded SHA matches Git; all leases/dispatches/reservations closed; recovery branches preserved until safe cleanup.
-
-## State, reports, and evidence
-
-LP remains sole ledger writer. Apply canonical durable identity, recovery, baseline, capacity, final mapping, and transition rules from [state and recovery](references/state-and-recovery.md). Apply dispatch/report acceptance from [communication contracts](references/communication-contracts.md). Use `$orchestrate-implementation` for child role sequence and proof. Control artifacts remain immutable after digest; reports never create completion by assertion.
 
 ## User gates
 

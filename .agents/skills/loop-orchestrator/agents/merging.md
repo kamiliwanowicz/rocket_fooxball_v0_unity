@@ -1,16 +1,16 @@
 # Merging Supervisor
 
-Durable entities, conflict binding, gates, nullability, and transitions: [state and recovery](../references/state-and-recovery.md). Dispatch envelope and result acceptance: [communication contracts](../references/communication-contracts.md). This file owns merger sequence and report only.
+This file owns merger sequence and report only. Before merger dispatch/report acceptance, load relevant [communication-contract branch](../references/communication-contracts.md). On conflict, gate, nullability, or transition branch, load named [state-and-recovery section](../references/state-and-recovery.md).
 
 ## Contract
 
 - Role: internal merging supervisor.
 - Profile: exact `sol_high`. Reject substituted profile.
 - Invocation: after each completed dependency wave. When all plans form one independent wave, invoke once after that wave.
-- Identity: every dispatch/report carries `{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha}`. One unique `Attempt` + `Lease` pair per invocation; reject missing, duplicate, expired, or mismatched tuple.
+- Identity and acceptance: apply [Result Identity And Acceptance](../references/communication-contracts.md#result-identity-and-acceptance). One unique active parent attempt/lease per invocation.
 - Git ownership: active lease grants merging supervisor sole integration worktree and integration branch Git-operation ownership for one bounded attempt. Other agents may edit delegated files but perform no Git operation there. Authority ends on accepted, blocked, interrupted, expired, or cancelled attempt.
 - Scope: integration worktree and integration branch only. Merging supervisor never mutates original, user, or default branch. LP alone performs one explicitly authorized user-branch merge after `READY_FOR_USER_MERGE`.
-- Ledger: read-only. Consume ledger facts; report corrections or drift as blockers. Never edit ledger.
+- Ledger: read-only. Consume ledger facts; report corrections or drift as blockers.
 - Source templates: load `$orchestrate-implementation`. Use canonical Worker, Reviewer, and Fix Worker Prompt Templates by pointer. Copy no template into dispatch.
 
 ## Required intake
@@ -60,10 +60,10 @@ Process plans in dependency order. Use frozen accepted SHA, never moving branch 
 Classify every conflicting path and hunk.
 
 - `mechanical_resolved`: resolution provably preserves behavior and intent from both accepted heads. Apply only with clear diff, history, or validation proof. Record proof.
-- `delegated`: semantic, behavioral, architectural, public-contract, or uncertain resolution. Immediately before conflicting merge, record current integration `HEAD` as child `Baseline`. After failed merge and before child edit authority, persist canonical `Input state digest` binding conflicted bytes plus incoming accepted SHA. Dispatch fresh exact `luna_max` implementation worker through `$orchestrate-implementation` Worker Prompt Template with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, `Parent attempt: {active_parent_attempt_id}`, `Task kind: integration_conflict`, stored digest, and incoming SHA. Supply owned files, required behavior, and validation. Worker edits files only. Merging supervisor alone stages, continues merge, commits, and performs every other Git operation. Worker result maps to `implementation_complete`.
+- `delegated`: semantic, behavioral, architectural, public-contract, or uncertain resolution. Apply [Conflict Binding](../references/state-and-recovery.md#conflict-binding). Dispatch fresh exact `luna_max` implementation worker through `$orchestrate-implementation` Worker Prompt Template with integration context, `Task kind: integration_conflict`, stored binding, owned files, required behavior, and validation. Worker edits only; merging supervisor performs every Git operation. Acceptance applies canonical report mapping.
 - `unresolved`: safe resolution or required proof unavailable. Preserve recoverable state, report exact blocker, stop dependent merges.
 
-Accept delegated result only against canonical stored child identity and pre-edit conflict binding; never recompute input digest from child-mutated output. Reconcile current output separately against active parent attempt, recorded worktree, baseline `HEAD`, incoming accepted SHA, owned scope, and resolution evidence. Merging supervisor then completes Git operation and records new integration SHA. Mark combined review due after every semantic conflict. Use fresh worker; conflict work consumes no final-stage integration-fix cycle.
+After accepted delegated result, merging supervisor completes Git operation and records new integration SHA. Mark combined review due after every semantic conflict. Use fresh worker; conflict work consumes no final-stage integration-fix cycle.
 
 Completion: every assigned incoming plan exact accepted SHA is ancestor of integration `HEAD`, or first blocking plan and all skipped assigned dependents are explicit; order matches dependency graph; every conflict has one allowed disposition plus proof; no branch-tip substitution occurred; worktree clean after each completed merge.
 
