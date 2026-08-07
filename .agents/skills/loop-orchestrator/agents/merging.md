@@ -81,7 +81,7 @@ Gate allocation, nullability, acceptance writes, and terminal transition: [Canon
 - Freeze merged integration `HEAD` as review SHA before any review or fix worker.
 - Review exact review SHA across integrated plans, cross-plan behavior, architecture, public contracts, security, regressions, shared code, validation coverage, and requirement evidence. Record one finding disposition per finding.
 - Accepted finding -> fresh exact `luna_max` integration-fix worker through canonical Fix Worker Prompt Template with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, `Parent attempt: {active_parent_attempt_id}`, `Task kind: integration_fix`, and `Review boundary: integration-wide`. Set `Baseline` equal to `Pre-fix frozen head`. Worker edits owned files only and performs no Git operation; response leaves `Final frozen head: pending_plan_supervisor_freeze`. Merging supervisor alone stages, commits, and freezes resulting head. One fix cycle maximum; no fix re-review.
-- After integration fix, close child edit lease, stage/commit, and freeze resulting exact SHA before validation. Fresh fix worker supplies final proof. No fix re-review dispatch; final verification covers invalidated behavior and contract evidence.
+- After accepted integration-fix child result, close child edit lease. Child result keeps `Final frozen head: pending_plan_supervisor_freeze`. When fixer completed and every integration edit lease is closed, stage/commit, prove clean worktree, freeze resulting exact SHA, and report combined-gate disposition before final verification. Fresh fix worker supplies final proof. No fix re-review dispatch; final verification covers invalidated behavior and contract evidence.
 - `Combined review: pass` when review is reused or initial review has no accepted findings.
 - `Combined review: findings_resolved` when one accepted fix cycle has proven fixes and no unresolved blocking findings.
 
@@ -129,7 +129,7 @@ Completion: every assigned check and requirement has canonical value plus eviden
 
 Any unmet stage requirement -> `Status: blocked`. Keep exact unresolved condition in `Blockers` and affected requirement `unresolved` or `integrated_pending_final_verify` as applicable. Never use `wave_complete` for final stage or `complete` for intermediate stage.
 
-Apply report outcome only through [Canonical Report Transitions](../references/state-and-recovery.md#canonical-report-transitions). Final `complete` selects only `READY_FOR_USER_MERGE`. Final `blocked` retains every attempted nonnull gate ID and reported gate status. Report applies one terminal transition; it never writes an intermediate `final_verify` transition.
+Apply report outcome only through [Canonical Report Transitions](../references/state-and-recovery.md#canonical-report-transitions). Final `complete` selects only `READY_FOR_USER_MERGE`. Final `blocked` reports each unattempted gate as ID/status `None` and retains each attempted nonnull gate ID/status. Report applies one terminal transition; it never writes an intermediate `final_verify` transition.
 
 Respond with template only. Use `None` for empty field. Add no prose before or after.
 
@@ -166,4 +166,4 @@ Waste or miscommunication:
 - {cause; impact; recovery; prevention | None}
 ```
 
-Report completion: stage, status, aggregate final validation, and every per-check value agree; every assigned incoming plan, conflict, review finding when due, assigned check, requirement, blocker, environment trap, wasted run, and miscommunication appears exactly once; every SHA matches observed repository state; `Final frozen head` equals observed integration `HEAD` and `Final head`; review SHA may differ after an accepted integration fix and never implies re-review; clean-worktree values come from last checks; user-branch status matches authorization; merger reports integration head only.
+Report completion: stage, status, aggregate final validation, and every per-check value agree; every assigned incoming plan, conflict, review finding when due, assigned check, requirement, blocker, environment trap, wasted run, and miscommunication appears exactly once; every SHA matches observed repository state; nonnull `Final frozen head` equals observed integration `HEAD` and `Final head`; pre-freeze blocked report uses `None`; review SHA may differ after accepted integration fix and never implies re-review; clean-worktree values come from last checks; user-branch status matches authorization; merger reports integration head only.
