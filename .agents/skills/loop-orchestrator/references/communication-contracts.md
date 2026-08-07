@@ -1,55 +1,85 @@
 # Communication Contracts
 
-Load immediately before each dispatch and each report-acceptance decision. Applies to `LP` direct agents and nested-agent routing.
+Load immediately before every dispatch and report-acceptance decision. Applies to `LP` direct agents and nested-agent routing.
 
 ## Protocol
 
-- Agent interchange: strict Markdown.
-- External interchange: JSON only when external boundary enforces JSON Schema.
-- Durable run state: YAML only; state format lives elsewhere.
-- Report body: one exact role artifact from this file or linked role contract.
-- Linked contract precedence: linked role contract owns headings, field order, enums, path form, empty markers, and surrounding-prose rule for its artifact.
-- Local contract scope: rules below apply only to Dispatch, Planner Return, Plan Supervisor Return, request, evidence, and accounting fields defined here.
-- Local field order: template order.
-- Local headings and colon fields: exact spelling and case.
-- Local status and decision values: listed enum only.
-- Local empty required field or section: `None`.
-- Local empty `Environment traps` or `Waste or miscommunication`: `None reported`.
-- Local bullet content: one fact per bullet.
-- Local path: absolute normalized filesystem path unless placeholder states another form.
-- Local attempt: exact active attempt ID.
-- Local branch: exact Git branch name.
-- Local SHA: full 40-character lowercase Git object ID.
-- Local digest: `sha256:` plus 64 lowercase hexadecimal characters over exact file bytes.
-- Local command: exact executable, arguments, quoting, working directory, and relevant environment.
-- Local surrounding prose: absent.
-- Local missing heading, field, item, invalid enum, malformed identifier, or extra prose: invalid report.
-- Task-breakdown, merging, implementation-worker, reviewer, and review-fix artifacts: preserve linked contract path and empty-marker rules unchanged.
+- agent interchange: strict Markdown
+- external interchange: JSON only when boundary enforces JSON Schema
+- durable run state: restricted YAML; format lives in [state and recovery](state-and-recovery.md)
+- report body: one exact role artifact from this file or linked role contract
+- linked contract precedence: linked role contract owns headings, field order, enums, path form, empty markers, and surrounding-prose rule
+- local contract scope: Dispatch, Planner Return, Plan Supervisor Return, request, evidence, and accounting fields defined here
+- local field order: template order
+- local headings/colon fields: exact spelling and case
+- local status/decision values: listed enum only
+- local empty required field/section: `None`
+- local empty accounting sections: `None reported`
+- local bullet: one fact
+- local path: absolute normalized filesystem path unless placeholder says otherwise
+- local attempt: exact active attempt ID
+- local branch: exact Git branch name
+- local entity generation: positive integer for active entity
+- local SHA: full 40-character lowercase Git object ID; `baseline_sha` may be `None` only for blocked task-breakdown attempt with unavailable baseline
+- local digest: `sha256:` plus 64 lowercase hexadecimal characters over exact file bytes
+- local command: exact executable, arguments, quoting, working directory, and relevant environment
+- surrounding prose: absent
+- missing heading/field/item, invalid enum, malformed identifier, or extra prose: invalid report
+
+Nested report enums and pointers map only through field-level rules in [state and recovery](state-and-recovery.md). Role, stage, check-kind, and entity context select one deterministic mapping; unmapped combinations reject. Do not substitute durable enums, infer missing gate/result IDs, or treat summary prose as evidence.
 
 Nested agent -> immediate parent -> `LP`. Nested agents address neither user nor durable ledger. Only `LP` requests user decisions and writes durable state.
 
+## Result identity and CAS
+
+Every dispatch and result carries one identity tuple:
+
+`{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha}`
+
+- `dispatch_id`, `attempt_id`, `lease_id`: exact active IDs
+- `entity_generation`: current positive generation for entity; replacement/supersession/lease closure advances or closes generation
+- `baseline_sha`: relevant full SHA, not global ledger revision; `None` only for blocked task-breakdown attempt with unavailable baseline
+
+Result acceptance:
+
+1. Match tuple against active dispatch, attempt, lease, entity generation, and relevant baseline.
+2. Reconcile Git and evidence against baseline/frozen state; blocked task-breakdown attempt with `baseline_sha: None` records blocker evidence instead of fabricated Git facts.
+3. Re-read latest ledger revision; apply latest-revision CAS and append event.
+4. If CAS loses unrelated update, re-read and retry. Keep result eligible.
+5. Reject on entity mutation, supersession, lease closure, baseline change, stale generation, or relevant Git drift.
+
+Global revision changes alone never reject result. Two parallel results dispatched from same revision may both accept in either completion order when tuples and relevant baselines remain valid. Late result from closed/expired/interrupted attempt is rejected and preserved as incident evidence.
+
 ## Dispatch
 
-### 1. Select contract
+### Select contract
 
-- Task breakdown -> full [task breakdown report](../agents/task-breakdown.md), unchanged.
-- Planner -> `$write-orchestrator-coding-plan` plus Planner Return below.
-- Plan supervisor -> `$orchestrate-implementation` plus Plan Supervisor Return below.
-- Merging supervisor -> full [merging report](../agents/merging.md), unchanged.
-- Implementation worker, reviewer, review-fix worker -> canonical prompts and reports in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md). Copying those formats into this file or plan forbidden.
+- task breakdown -> full [task breakdown report](../agents/task-breakdown.md)
+- planner -> `$write-orchestrator-coding-plan` plus Planner Return below
+- plan supervisor -> `$orchestrate-implementation` plus Plan Supervisor Return below
+- merging supervisor -> full [merging report](../agents/merging.md)
+- implementation/reviewer/review-fix worker -> canonical prompts/reports in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md); copy no worker schema here
+- final-stage combined reviewer/integration fixer -> canonical Reviewer/Fix Worker templates in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md); use `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: integration:{integration_id}`, and `Review boundary: integration-wide`; merging supervisor owns child dispatch and Git operations
+- direct route -> canonical `$orchestrate-implementation` worker/reviewer/fix contracts; no durable multi-plan ceremony
 
-Completion: exactly one role contract and one legal response artifact selected; every requested action falls inside selected role authority.
+Exactly one role contract and one legal response artifact per dispatch. Every action, writable target, Git operation, input state, authority boundary, output artifact contract, and done condition appears once.
 
-### 2. Build dispatch
+Final-stage child source mapping is role- and context-locked: combined reviewer `Verdict: pass | findings` -> durable `reported_outcome: review_passed | changes_required`; integration fixer `Status: complete | blocked` -> `fix_complete | blocked`; pre-review semantic-conflict implementation worker `Status: complete | blocked` -> `implementation_complete | blocked`. Match exact `integration:{integration_id}` entity and `integration-wide` lane/boundary. Unlisted role, context, entity, lane, or source enum rejects.
+
+### Build dispatch
 
 Use exact envelope:
 
 ```text
-Role: task breakdown | planner | plan supervisor | merging supervisor
+Role: breaker | planner | plan_supervisor | merging_supervisor
+Phase: {phase_enum}
 Objective: {single_observable_outcome}
+Dispatch: {dispatch_id}
 Attempt: {active_attempt_id}
 Lease: {lease_id}; {expires_at}
-Baseline: {full_sha}
+Entity: {entity_kind}:{entity_id}
+Entity generation: {positive_integer}
+Baseline: {full_sha | None when blocked task-breakdown baseline is unavailable}
 Branch: {exact_branch | None}
 Worktree: {absolute_path | None}
 Owned scope:
@@ -65,42 +95,52 @@ Completion criterion:
 - {observable_exhaustive_role_result}
 ```
 
-Each action, writable target, Git operation, input state, authority boundary, output artifact contract, and done condition must appear once. Plan supervisor dispatch also includes plan ID, accepted plan digest, requirement IDs, slot budget, validation boundary, and exact branch/worktree. Merging dispatch also includes integration ID, ordered accepted plan heads, allowed conflict policy, required joint checks, and user-branch authority state.
+Plan-supervisor dispatch also includes plan ID, accepted plan digest, requirement IDs, slot budget, validation boundary, exact branch/worktree, and `P0: verify_preprovisioned`. Standalone planning may use `P0: create_standalone`. Merging dispatch also includes integration ID, ordered accepted plan heads, conflict policy, required joint checks, and user-branch authority state.
 
-Completion: dispatch parses against envelope; all writable and protected targets are exact; active attempt, lease, baseline, branch, worktree, inputs, authority, capacity, evidence demand, and exhaustive done condition are present.
+Plan-supervisor authorization: Git operations only on own plan branch/worktree; stage, commit, clean check, and freeze accepted head. Planner writes immutable plan artifact under control worktree and performs no product Git operation. Workers/reviewers/fix workers edit owned files only and perform no Git operations.
 
-### 3. Send and record
+Merging-supervisor authorization: sole Git owner for active integration branch/worktree and lease. Authority ends on accepted, blocked, interrupted, expired, or cancelled attempt. User-branch merge is never inside this grant; `LP` alone performs it after explicit authority.
 
-Send dispatch only to assigned role. Record recipient, attempt, lease, contract, and dispatch artifact location through state workflow.
+Completion: envelope parses; identity tuple, writable/protected targets, authority, capacity, evidence demand, and exhaustive done condition present once.
 
-Completion: one live recipient owns attempt; dispatch artifact is recoverable; no overlapping active lease or unassigned action exists.
+## Task breakdown report
 
-## Task Breakdown Report
+Return one artifact: full exact [task breakdown report](../agents/task-breakdown.md). Linked report remains canonical for headings, attempt/lease, status, baseline, digest, decision, plan IDs, requirement coverage, path form, empty markers, and acceptance. Copy no breakdown schema here.
 
-Return one artifact: full exact [task breakdown report](../agents/task-breakdown.md). No wrapper, extension, summary envelope, or local empty/path override applies. Linked report remains canonical for attempt, lease, status, baseline, digest, decision, plan IDs, requirement coverage, blockers, path form, empty markers, and acceptance. `LP` validates those fields in place.
+Status-specific acceptance matrix:
 
-Completion: one canonical report exists; every canonical acceptance rule passes; attempt, lease, plan, and requirement accounting comes from canonical report only.
+- `ready`: full baseline, decomposition, ownership, requirement coverage, dependency graph, validation boundaries
+- `needs_user`: known evidence, one material question, affected requirements, safe continuing work; final plan graph may be absent
+- `blocked`: exact unavailable fact, blocker evidence, recheck condition; unavailable fields use `None`
+
+User answer or blocker resolution -> fresh breakdown attempt. Truthful `needs_user` or `blocked` report never invents final decomposition.
+
+Completion: linked canonical report passes status-specific acceptance; one status and one decision; no wrapper or extension.
 
 ## Planner Return
 
-Planner must use `$write-orchestrator-coding-plan`. Plan format remains canonical there.
+Planner must use `$write-orchestrator-coding-plan`. Plan format remains canonical there. Planner artifact path must resolve inside control worktree `loop-runs/{run_id}/artifacts/` and become immutable after digest.
 
 ```text
 Role: planner
 Status: complete | blocked
 Plan: {plan_id}
+Dispatch: {dispatch_id}
 Attempt: {attempt_id}
+Lease: {lease_id}
+Entity generation: {positive_integer}
 Baseline: {full_sha}
-Plan path: {absolute_path}
-Digest: {sha256_digest}
+Plan path: {absolute_control_worktree_artifact_path | None when blocked}
+Digest: {sha256_digest | None when blocked}
+P0: create_standalone | verify_preprovisioned | None when blocked
 Requirement IDs:
 - {requirement_id}
 Forecast ownership:
 - {absolute_path_or_exact_symbol}: {exclusive | shared_serialized}; {owner_plan_id}
 Dependencies:
 - {plan_id_or_external_input}: {satisfied | pending | blocked}; {evidence_or_condition}
-Planning timing: now | just_in_time_after_integration
-Baseline rule: exact_input_baseline | latest_integration_head_after_dependencies
+Planning timing: now | just_in_time_after_integration | None when blocked
+Baseline rule: exact_input_baseline | latest_integration_head_after_dependencies | None when blocked
 Blockers:
 - {exact_blocker_and_needed_owner_or_action | None}
 Environment traps:
@@ -109,27 +149,35 @@ Waste or miscommunication:
 - {accounting_item | None reported}
 ```
 
-`now` pairs with `exact_input_baseline`. `just_in_time_after_integration` pairs with `latest_integration_head_after_dependencies`. `complete` requires exact plan artifact, digest, full requirement coverage, forecast ownership, confirmed dependencies, mandatory single `P0` worktree step, and no blocker.
+`now` pairs with `exact_input_baseline`; `just_in_time_after_integration` pairs with `latest_integration_head_after_dependencies`. `complete` requires exact immutable control artifact, digest, full requirement coverage, forecast ownership, confirmed dependencies, one `P0` action, no blocker, and no product Git mutation.
+`blocked` may use `None` for unavailable artifact, requirement, ownership, dependency, or `P0` fields; baseline remains required from accepted plan input. Record exact blocker and needed owner/action.
 
 ## Plan Supervisor Return
 
-Plan supervisor must use `$orchestrate-implementation`. Worker, reviewer, fix-worker, proof, negative-control, review, and run-accounting formats remain canonical there.
+Plan supervisor uses `$orchestrate-implementation`. Worker, reviewer, fix-worker, proof, negative-control, review, and run-accounting formats remain canonical there. This return owns only plan-level aggregation.
 
 ```text
 Role: plan supervisor
 Status: complete | blocked
 Plan: {plan_id}
+Dispatch: {dispatch_id}
 Attempt: {attempt_id}
+Lease: {lease_id}
+Entity generation: {positive_integer}
 Baseline: {full_sha}
 Branch: {branch}
+Worktree: {absolute_path}
 Head: {full_sha | None}
+Reviewed head: {full_sha | None}
+Final frozen head: {full_sha | None}
 Clean worktree: true | false
+Writer barrier: closed | blocked
 Commits:
 - {full_sha | None}
 Requirements:
 - {requirement_id}: delivered | blocked; {evidence_location_and_state_sha}
 Reviews:
-- {lane_id}: pass | findings_resolved | blocked; {evidence_location_and_state_sha}
+- {review_boundary_id_or_lane_id}: pass | findings_resolved | blocked; reviewed {full_sha}; review evidence {evidence_location_and_state_sha}; fix proof {evidence_location_and_state_sha | None}
 Validation:
 - {check_id}: pass | fail | not_run; {state_sha_or_None}; {evidence_location_or_reason}
 Blockers:
@@ -140,72 +188,75 @@ Waste or miscommunication:
 - {accounting_item | None reported}
 ```
 
-`complete` requires non-`None` head, clean worktree, every planned commit, every requirement `delivered`, every review `pass` or `findings_resolved`, and every required validation `pass` at exact head. `blocked` preserves every completed disposition and names remaining owner/action.
+`complete` requires non-`None` `Head`, `Reviewed head`, and `Final frozen head`; `Head` and `Final frozen head` equal observed final branch `HEAD`; clean worktree; `Writer barrier: closed`; every planned commit; every requirement `delivered`; every review `pass` or `findings_resolved`; and every required validation `pass` at `Final frozen head`. Without a post-review fix, `Reviewed head` equals `Final frozen head`. `findings_resolved` permits a different `Final frozen head` only when each accepted finding has fix proof and invalidated final validation binds to that head; child `Final frozen head: pending_plan_supervisor_freeze` never counts as completion evidence; never rewrite review evidence or dispatch a fix re-review. Writer barrier closes all active edit leases before review or shared-project validation. Review evidence names `Reviewed head`; final validation and accepted fix proof name `Final frozen head`. Default one plan-wide review; add early lane review only before downstream contract consumption. One pass per review boundary; fresh fix worker supplies proof; no fix re-review. `blocked` preserves completed dispositions and names remaining owner/action.
 
-## Merging Report
+Nested plan-supervisor mapping is deterministic: `Head` and `Final frozen head` -> `plans[plan].accepted.head_sha`; `Reviews: pass` -> `plans[plan].review.status: accepted` with `plans[plan].review.reviewed_head_sha`, evidence, and no open finding; `findings_resolved` -> the same status with every linked finding `fixed | rejected`, disposition evidence, fix proof, and final validation at `Final frozen head`; `Reviews: blocked` -> `plans[plan].review.status: failed`, `plans[plan].status: blocked`, and blocker. `Requirements: delivered` -> `requirements[id].status: satisfied`; `blocked` -> `blocked` plus blocker. `Writer barrier: closed | blocked` -> `writer_barrier` gate `accepted | failed`. `Validation: pass | fail | not_run` -> `plans[plan].validation.status: pass | fail | not_run`; `not_run` requires blocker. Unlisted role/field/enum combinations reject; pointers must name exact evidence and state SHA.
 
-Return one artifact: full exact [merging report](../agents/merging.md). No wrapper, extension, summary envelope, or local empty/path override applies. Canonical report supplies identity, status, attempt and lease, integration branch, baseline, final head, clean status, evidence, blockers, traps, and waste accounting.
+## Merging report
 
-Validate `Status`, `Stage`, `Combined review`, `Final validation`, per-check status, and all pairings only against canonical merging contract at acceptance time. Local enums do not apply.
+Return one artifact: full exact [merging report](../agents/merging.md). No wrapper or local schema override. Canonical report owns identity, stage, status, merge results, final substates, checks, clean state, blockers, and accounting.
 
-Completion: one canonical report exists; every canonical report-completion rule passes; `LP` validates canonical fields in place against lease, Git, evidence, requirements, and findings.
+Final-stage contract: merger owns `merge -> combined review when due -> integration fix at most once -> final verification`. Final `complete` maps directly to `READY_FOR_USER_MERGE`; no separate top-level dispatch/result. Single-plan final merge with unchanged head may reuse accepted plan-wide review. Combined review is due only for multi-plan integration, conflict resolution, integration fixes, or invalidated cross-plan evidence. Ordinary fix never triggers re-review.
 
-## Acceptance Workflow
+User branch: merger reports integration head only plus `not_authorized` or `authorized_pending_lp`. `LP` alone merges exact SHA into explicitly authorized user/original/default branch and records observed before/after heads. Merger cannot claim user-branch merge complete.
+
+Completion: validate canonical merging report against active lease, integration Git facts, final-substate gates, per-check matrix, and user-branch authority. Nested `Combined review`, `Final validation`, and `Requirement accounting` values map only through field-level rules in the merging/state contracts. `wave_complete` is intermediate only; final `complete` is READY transition only.
+
+## Acceptance workflow
 
 ### 1. Validate shape
 
-Select one legal role artifact. Apply linked contract syntax to linked artifact and local syntax to locally defined artifact. Validate headings, order, enums, identifiers, completeness, path form, empty markers, and surrounding-prose rule from selected contract. Recompute digest by selected contract semantics.
+Select one legal role artifact. Apply linked syntax to linked artifact and local syntax here. Validate headings, order, enums, identity tuple, identifiers, completeness, path form, empty markers, and surrounding-prose rule. Recompute digest by contract semantics.
 
-Completion: exactly one artifact passes selected contract; every required field passes; zero duplicate envelopes, extensions, unknown fields, missing fields, malformed values, or contradictory values remain.
+Done: one artifact passes; no duplicate envelope, extension, unknown field, missing field, malformed value, or contradiction.
 
-### 2. Validate attempt
+### 2. Validate identity and lease
 
-Match report attempt and role against active lease. Confirm lease unexpired, unsuperseded, and owned by reporting agent.
+Match result tuple against active dispatch, attempt, lease, entity generation, and relevant baseline. Confirm lease valid and owned by reporting agent. Reject stale, duplicate, superseded, closed, interrupted, expired, or foreign result.
 
-Completion: exactly one active matching attempt exists; no stale, duplicate, superseded, or foreign result remains eligible.
+Same-worktree replacement requires confirmed termination plus reconciled Git. If old writer remains unconfirmed, quarantine old branch/worktree; replacement gets new branch/worktree from last accepted SHA. Never share write authority. Late result is incident evidence, never completion evidence.
+
+Done: exactly one active matching tuple; no stale result eligible.
 
 ### 3. Validate Git facts
 
-Inspect repository. Match baseline, branch, head, ancestry, commits, and clean status. Use reported absolute worktree from active dispatch. Agent assertion has zero acceptance weight.
+Inspect repository. Match baseline, branch, worktree, head, commits, ancestry, and clean status against active dispatch. Agent assertion has zero acceptance weight. For plan results, exact frozen head must match plan branch. For integration results, exact integration head must match merger report.
 
-Completion: every reported Git fact equals observed Git fact; head is immutable for evidence review; no uncommitted or unexpected state exists.
+Done: every reported Git fact equals observed fact; evidence head immutable for review.
 
 ### 4. Validate evidence
 
-Open evidence artifacts. Match check owner, exact command or workflow, observed result, artifact, and exact state SHA. Apply Evidence Contract. Identify named invalidations caused by later commits or integration.
+Open evidence artifacts. Match owner, exact command/workflow, working directory, observed result, artifact path, and exact state SHA. Writer barrier must be closed before review or shared-project validation. Evidence remains valid only while behavior/dependencies remain state-equivalent; later mutation names exact invalidation and rerun owner.
 
-Completion: every claimed disposition has reproducible proof bound to observed state SHA; every invalid evidence item names exact invalidation and rerun owner.
+One review per review boundary. Findings route to fresh fix worker. Fix worker supplies final proof. No fix re-review. Final validation reruns invalidated checks and binds result to final head. Final integration fixes close child edit lease and freeze candidate head before checks.
+
+Done: every disposition has reproducible proof at applicable frozen SHA; absent negative control has reason plus alternate discrimination.
 
 ### 5. Validate accounting
 
-Map every requirement, review finding, accepted fix, validation check, blocker, environment trap, wasted run, and miscommunication once. Compare artifact fields against canonical contract and evidence artifacts.
+Map every requirement, finding, accepted fix, check, blocker, environment trap, wasted run, and miscommunication once. Compare artifact fields against canonical contract and evidence. Do not duplicate worker/reviewer/fix schemas; follow `$orchestrate-implementation` pointer.
 
-Completion: zero uncovered, duplicated, conflicting, or silently dropped items remain.
+Done: no uncovered, duplicated, conflicting, or silently dropped item.
 
 ### 6. Decide
 
-- Accept once: all prior completion criteria pass -> record one acceptance for exact attempt and state SHA.
-- Reject: send one correction listing exact invalid field, observed mismatch, required value or proof, and response envelope. Preserve valid evidence unaffected by named invalidation.
+Re-read latest durable ledger. Apply latest-revision CAS. Accept matching identity once. If unrelated revision changed, retry CAS without invalidating result. If relevant entity/baseline/lease changed, reject result and preserve evidence. Record one acceptance or one actionable rejection event.
 
-Completion: report has exactly one `accepted` or `rejected` result; rejection is actionable field-by-field; accepted attempt cannot mutate accepted state.
+Done: accepted result cannot mutate accepted state; rejection names exact field, observed mismatch, required value, and proof.
 
-## Evidence Contract
+## Evidence contract
 
-- Assertion: never proof.
-- Evidence item: one owner, one check, one exact state SHA.
-- Required facts: owner; exact command or manual workflow; working directory; observed result; artifact absolute path or `None`; exact state SHA.
-- Artifact: stable, readable, and attributable to command or workflow.
-- Manual workflow: exact setup, actions, observation, and captured artifact.
-- Discrimination and negative control: inherit Proof Rules from `$orchestrate-implementation`; linked reports retain canonical negative-control field.
-- Unsafe or impractical negative control: record reason plus strongest alternate discriminatory proof.
-- Carried evidence: valid while checked behavior and dependencies remain byte/state-equivalent.
-- Invalidation: name exact changed input, dependency, merge, fix, environment, or check contract.
-- Rerun: only invalidated check; retain unaffected accepted evidence.
-- Final proof: match intended state after any negative control; bind to accepted head.
+- assertion: never proof
+- evidence item: one owner, one check, one exact state SHA
+- required facts: owner, exact command/workflow, working directory, observed result, artifact absolute path or `None`, exact state SHA
+- artifact: stable, readable, attributable
+- manual workflow: exact setup, actions, observation, captured artifact
+- negative control: inherit Proof Rules from `$orchestrate-implementation`; unsafe/impractical case records reason plus strongest alternate proof
+- carried evidence: valid while checked behavior/dependencies remain byte/state-equivalent
+- invalidation: exact changed input, dependency, merge, fix, environment, or contract
+- rerun: only invalidated check
 
-Evidence acceptance completion: every requirement or finding disposition has discriminatory, reproducible evidence at applicable accepted state; every absent negative control has accepted reason and alternate proof; no check has multiple owners or state SHAs.
-
-## Scope and Decision Requests
+## Scope and decision requests
 
 ### Narrow authorization or scope grant
 
@@ -224,7 +275,7 @@ Evidence: {absolute_path_or_exact_observation}
 Minimum grant: {narrow_permission_and_duration}
 ```
 
-Parent or `LP` returns exact grant or rejection. Grant names target, operation, attempt, lease duration, and any ownership-map change. Agent resumes only after matching grant.
+Parent or `LP` returns exact grant/rejection. Grant names target, operation, attempt, lease duration, and ownership-map change. Agent resumes only after matching grant.
 
 ### Foreign-file routing
 
@@ -240,7 +291,7 @@ Blocked item: {requirement_id_or_finding_id}
 Evidence: {absolute_path_or_exact_observation}; {state_sha}
 ```
 
-Reporter preserves foreign file. Parent routes finding to recorded owner, requests narrow ownership change, or blocks dependent item.
+Reporter preserves foreign file. Parent routes finding to owner, requests narrow ownership change, or blocks dependent item.
 
 ### User decision request
 
@@ -260,13 +311,11 @@ Evidence:
 - {absolute_path_or_exact_observation}
 ```
 
-Nested agent sends request to parent. Parent routes to `LP`. `LP` verifies gate, asks user once, records answer through state workflow, then sends scoped decision downstream.
+Nested agent sends request to parent. Parent routes to `LP`. `LP` asks user once, records answer, and sends scoped decision downstream. Affected item stays paused; safe independent work continues or records reason.
 
-Request handling completion: request reaches authorized decider; exact affected item stays paused; every safe independent item continues or has recorded reason; decision returns to original attempt or named replacement.
+## Run accounting
 
-## Run Accounting
-
-Planner Return and Plan Supervisor Return include both local sections. Use `None reported` only after checking full owned attempt tree. Linked task-breakdown, merging, implementation-worker, reviewer, and review-fix reports use linked accounting fields and empty markers unchanged.
+Planner Return and Plan Supervisor Return include local accounting sections. Linked task-breakdown, merging, implementation-worker, reviewer, and review-fix reports retain linked accounting fields and empty markers. Use `None reported` only after checking full owned attempt tree.
 
 Environment trap item:
 
@@ -279,7 +328,7 @@ Environment trap item:
   - Permanent fix: {owner_and_change_or_None}
 ```
 
-Waste or miscommunication item:
+Waste/miscommunication item:
 
 ```text
 - ID: {incident_id}
@@ -290,4 +339,4 @@ Waste or miscommunication item:
   - Prevention: {prompt_contract_or_workflow_change}
 ```
 
-Local accounting completion: every owned attempt, retry, rejection, tool/environment failure, ownership error, duplicated run, unusable result, rework cause, and proof gap maps to one item or verified `None reported`; no incident hidden by successful final result. Linked-role accounting completion follows linked contract.
+Completion: every owned retry, rejection, tool/environment failure, ownership error, duplicate run, unusable result, rework cause, and proof gap maps once or is verified `None reported`.

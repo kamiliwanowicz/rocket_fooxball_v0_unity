@@ -25,6 +25,7 @@ Select one decision:
 - `multi_sequential`: multiple plans require ordered accepted baselines
 - `multi_parallel`: multiple independent plans share baseline and have disjoint writes
 - `hybrid`: parallel wave plus dependent sequential wave
+- `None`: no executable decomposition while status is `needs_user` or `blocked`
 
 Select one status:
 
@@ -34,14 +35,21 @@ Select one status:
 
 Minor assumptions stay explicit in report and never cause `needs_user`.
 
+## Status Acceptance Matrix
+
+- `ready`: full observed baseline branch/SHA and state digest; complete requirement coverage; final plan graph; dependency DAG; forecast ownership; validation boundaries; decision from allowed enum; no material question or blocker; `Recheck condition: None`.
+- `needs_user`: known repository evidence; exactly one material question; affected requirement IDs; safe independent work or `None`; `Decision: None` and final `Plans`, dependency, ownership, and coverage sections may be `None` when choice changes decomposition; `Recheck condition: None`. Never invent baseline, plan graph, or coverage. Use `AWAITING_USER` side state.
+- `blocked`: exact unavailable fact; blocker evidence; non-empty observable recheck condition tied to blocker; `Decision: None`; unavailable baseline, plan graph, ownership, coverage, or validation fields use `None`. Use `BLOCKED` side state.
+- User answer resolves `needs_user`; blocker evidence resolves `blocked` -> close prior attempt and lease, increment breakdown entity generation, and start fresh breakdown attempt with new `Attempt` and `Lease`. Never promote prior report in place.
+
 ## Process
 
 1. Inspect normalized input, every cited source, repository instructions, Git status, full baseline SHA, relevant code and assets, validation commands, and existing user changes. Record exact repository-relative paths, symbols or headings, and lowercase SHA-256 digests for inputs.
-   - complete when: every decomposition claim has evidence or is marked proposed; full baseline SHA and input digest are known; material unknowns are classified.
+   - complete when: every decomposition claim has evidence or is marked proposed; full baseline SHA and input digest are known, or status `blocked` records exact unavailable baseline; material unknowns are classified.
 2. Map each atomic requirement to exactly one plan. Choose minimum plan count. Define dependency DAG, waves, stable write ownership, shared-contract ownership, baseline transitions, integration order, and validation boundaries. Keep top-level decomposition final: each plan may contain execution work but cannot request another task-breakdown pass.
-   - complete when: all requirements occur once, plan IDs are unique, DAG is acyclic, same-wave write overlap is absent, and every split has named lifecycle benefit exceeding overhead.
-3. Emit exact report template. Use `None` for every empty scalar or list. Use exact repository-relative paths, full 40-character Git SHAs, and lowercase 64-character SHA-256 digests. Add no prose before or after template.
-   - complete when: report passes every acceptance check; contains exact `Attempt: {attempt_id}` and `Lease: {lease_id}` fields; contains one status plus one decision from allowed enums.
+   - complete when: `ready` has all requirements once, unique plan IDs, acyclic DAG, disjoint same-wave writes, and split rationale; `needs_user` records affected requirements and safe work without final graph; `blocked` records no invented graph.
+3. Emit exact report template. Use `None` for every empty scalar or list permitted by status matrix. Use exact repository-relative paths, full 40-character Git SHAs, and lowercase 64-character SHA-256 digests when known. Add no prose before or after template.
+   - complete when: report passes status matrix; contains exact `Attempt: {attempt_id}`, `Lease: {lease_id}`, and `Recheck condition: ... | None` fields; contains one status plus one decision or status-permitted `None`; user answer or blocker resolution is routed to fresh attempt.
 
 ## Decomposition Rules
 
@@ -59,6 +67,8 @@ Minor assumptions stay explicit in report and never cause `needs_user`.
 - size: larger coherent plan is default; split rationale names qualifying condition and lifecycle payoff
 - scope: forecast writes are exact repository-relative paths, new paths marked `proposed`; use `None` when no writes
 - recursion: plan objective and scope are executable planning boundaries, never requests for new top-level decomposition
+- status: `ready` requires executable graph; `needs_user` stops at one material question with known evidence and safe independent work; `blocked` stops at exact blocker and recheck condition.
+- retry: user answer or blocker resolution creates fresh attempt/lease and entity generation; old report remains immutable and cannot become `ready` by patching fields.
 
 ## Report Contract
 
@@ -68,13 +78,16 @@ Output exactly:
 # Task Breakdown
 
 Status: ready | needs_user | blocked
-Decision: single_plan | multi_sequential | multi_parallel | hybrid
+Decision: single_plan | multi_sequential | multi_parallel | hybrid | None
 Version: 1
-Input: [normalized request identifier and exact source paths with per-item `sha256:<64 lowercase hex>`]
-Digest: sha256:<64 lowercase hex of ordered normalized input bundle>
-Baseline: [branch name] @ [full 40-character Git SHA]; worktree state `clean` | `dirty`; state digest sha256:<64 lowercase hex>
+Input: [normalized request identifier and exact source paths with per-item `sha256:<64 lowercase hex>`] | None when unavailable (`blocked`)
+Digest: sha256:<64 lowercase hex of ordered normalized input bundle> | None when unavailable (`blocked`)
+Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
+Entity generation: {positive_integer}
+Baseline: [branch name] | None when unavailable; worktree state `clean` | `dirty` | None when unavailable; state digest sha256:<64 lowercase hex> | None when unavailable (`blocked`)
+Baseline identity (`baseline_sha`): [full 40-character Git SHA] | None when unavailable (`blocked`)
 
 ## Completion Boundary
 
@@ -83,16 +96,19 @@ Lease: {lease_id}
 - assumptions: [minor assumptions] | None
 - material questions: [behavior/scope/compatibility/architecture/authority choice] | None
 - blocker: [inspection, baseline, or reporting blocker] | None
+- Recheck condition: [observable fact or state change that permits fresh breakdown attempt] | `None` for `ready` or `needs_user`
+- affected requirements: [known requirement IDs] | None
+- safe independent work: [bounded work that does not depend on answer or blocker] | None
 
 ## Repository Evidence
 
 - E1: `[exact repository-relative path]` -> `[symbol, heading, setting, or observed state]`; supports [requirement or constraint]
 - E2: ...
-| None
+- None
 
 ## Plans
 
-### P1: [plan name]
+### P1: [plan name] (required only for `ready`; use `None` for `needs_user` or `blocked` when graph is not executable)
 
 - objective: [single coherent result]
 - requirement coverage: [unique requirement IDs]
@@ -115,16 +131,16 @@ Lease: {lease_id}
 
 ## Dependency and Ownership Check
 
-- DAG: [dependency edges such as `P1 -> P3`; `None` for no edges]
-- waves: [wave -> plan IDs]
-- same-wave write overlap: None | [overlap plus serialization resolution]
+- DAG: [dependency edges such as `P1 -> P3`; `None` for no edges] | `None` when status is `needs_user` or `blocked`
+- waves: [wave -> plan IDs] | `None` when status is `needs_user` or `blocked`
+- same-wave write overlap: None | [overlap plus serialization resolution] | `None` when status is `needs_user` or `blocked`
 - shared contracts: [contract -> owner plan ID -> consumers] | None
-- worktrees: [plan ID -> one isolated worktree rule]
+- worktrees: [plan ID -> one isolated worktree rule] | `None` when status is `needs_user` or `blocked`
 - integration order: [complete deterministic order] | None
 
 ## Requirement Coverage
 
-- R1: [normalized requirement] -> [exactly one plan ID]
+- R1: [normalized requirement] -> [exactly one plan ID] | `None` when status is `needs_user` or `blocked`; list affected IDs in Completion Boundary
 - R2: ...
 
 ## Recommendation
@@ -136,17 +152,15 @@ Lease: {lease_id}
 
 ## Acceptance
 
-- exactly one `Status` and one `Decision`; both use allowed enums
+- exactly one `Status` and one `Decision`; both use allowed enums, with `Decision: None` only for `needs_user` or `blocked`
 - `Version: 1`
-- exact `Attempt: {attempt_id}` field present once
-- exact `Lease: {lease_id}` field present once
-- input paths exact; Git SHAs full; digests lowercase SHA-256
-- plan IDs and requirement IDs unique
-- every requirement covered once by one plan
-- dependency DAG acyclic
-- same-wave forecast writes disjoint; overlap moved to ordered waves
-- each shared contract and writable path has one owner per baseline
-- each plan has every required field, one worktree, exact baseline rule, and bounded validation ownership
+- exact `Dispatch: {dispatch_id}`, `Attempt: {attempt_id}`, `Lease: {lease_id}`, and `Entity generation: {positive_integer}` fields present once
+- exact `Baseline identity (baseline_sha)` field present once; full SHA when known, `None` only when `blocked`
+- input paths exact when known; Git SHAs full when known; digests lowercase SHA-256 when known
+- `ready`: plan IDs and requirement IDs unique; every requirement covered once by one plan; dependency DAG acyclic; same-wave forecast writes disjoint; each shared contract and writable path has one owner per baseline; each plan has every required field, one worktree, exact baseline rule, and bounded validation ownership
+- `needs_user`: affected requirement IDs and safe independent work are truthful; final plan IDs, graph, ownership, and coverage may be `None`
+- `ready` and `needs_user`: `Recheck condition: None`
+- `blocked`: exact unavailable fact, blocker evidence, non-empty observable `Recheck condition` tied to blocker, and `None` for unavailable fields; no invented plan graph
 - each split names qualifying condition and lifecycle payoff
 - `needs_user` used only for material behavior, scope, compatibility, architecture, or authority choice
 - report contains one final top-level decomposition; plans do not delegate task breakdown
