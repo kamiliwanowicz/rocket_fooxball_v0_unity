@@ -1,5 +1,7 @@
 # Merging Supervisor
 
+Durable entities, conflict binding, gates, nullability, and transitions: [state and recovery](../references/state-and-recovery.md). Dispatch envelope and result acceptance: [communication contracts](../references/communication-contracts.md). This file owns merger sequence and report only.
+
 ## Contract
 
 - Role: internal merging supervisor.
@@ -58,10 +60,10 @@ Process plans in dependency order. Use frozen accepted SHA, never moving branch 
 Classify every conflicting path and hunk.
 
 - `mechanical_resolved`: resolution provably preserves behavior and intent from both accepted heads. Apply only with clear diff, history, or validation proof. Record proof.
-- `delegated`: semantic, behavioral, architectural, public-contract, or uncertain resolution. Dispatch fresh exact `luna_max` implementation worker in pre-review conflict mode using `$orchestrate-implementation` canonical Worker Prompt Template. Set `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: integration:{integration_id}`, and `Baseline` to the exact pre-merge integration SHA from intake. Supply conflict state, accepted SHAs, owned files, required behavior, and validation. Worker performs file edits only; merging supervisor owns staging, commits, merge continuation, and all other Git operations. This worker result maps to `implementation_complete`, not `fix_complete`.
+- `delegated`: semantic, behavioral, architectural, public-contract, or uncertain resolution. Immediately before conflicting merge, record current integration `HEAD` as child `Baseline`. After failed merge and before child edit authority, persist canonical `Input state digest` binding conflicted bytes plus incoming accepted SHA. Dispatch fresh exact `luna_max` implementation worker through `$orchestrate-implementation` Worker Prompt Template with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, `Parent attempt: {active_parent_attempt_id}`, `Task kind: integration_conflict`, stored digest, and incoming SHA. Supply owned files, required behavior, and validation. Worker edits files only. Merging supervisor alone stages, continues merge, commits, and performs every other Git operation. Worker result maps to `implementation_complete`.
 - `unresolved`: safe resolution or required proof unavailable. Preserve recoverable state, report exact blocker, stop dependent merges.
 
-After delegated edit, inspect worker evidence, verify requested behavior, complete Git operation, and record new integration SHA. Mark combined review due after every semantic conflict, even when one plan would otherwise qualify for review reuse. Fresh worker means no implementation worker, reviewer, or prior fix worker reuse for that conflict; this pre-review worker does not consume the final-stage integration-fix cycle.
+Accept delegated result only against canonical stored child identity and pre-edit conflict binding; never recompute input digest from child-mutated output. Reconcile current output separately against active parent attempt, recorded worktree, baseline `HEAD`, incoming accepted SHA, owned scope, and resolution evidence. Merging supervisor then completes Git operation and records new integration SHA. Mark combined review due after every semantic conflict. Use fresh worker; conflict work consumes no final-stage integration-fix cycle.
 
 Completion: every assigned incoming plan exact accepted SHA is ancestor of integration `HEAD`, or first blocking plan and all skipped assigned dependents are explicit; order matches dependency graph; every conflict has one allowed disposition plus proof; no branch-tip substitution occurred; worktree clean after each completed merge.
 
@@ -69,14 +71,16 @@ Completion: every assigned incoming plan exact accepted SHA is ancestor of integ
 
 `FINAL_STAGE` is one bounded final-integration attempt: `combined_review -> integration_fix` (optional, at most once) `-> final_verify`. Merger `complete` transitions directly to `READY_FOR_USER_MERGE`.
 
+Gate allocation, nullability, acceptance writes, and terminal transition: [Canonical Report Transitions](../references/state-and-recovery.md#canonical-report-transitions). Merger reports existing IDs/status only; aggregate report never reapplies child transitions or writes intermediate substate.
+
 `Stage: intermediate` -> `Combined review: not_due`; dispatch no combined reviewer. Final validation remains `not_due`.
 
 `Stage: final` owns one bounded attempt inside final `WAVE_INTEGRATION`:
 
-- Decide combined-review need before dispatch. Reuse accepted plan-wide review when one plan merged without changes and evidence remains valid. Multi-plan integration, conflict resolution, integration fixes, or invalidated cross-plan evidence require one independent exact `sol_medium` combined reviewer. Dispatch with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: integration:{integration_id}`, and `Review boundary: integration-wide`.
+- Decide combined-review need before dispatch. Reuse accepted plan-wide review when one plan merged without changes and evidence remains valid. Multi-plan integration, conflict resolution, integration fixes, or invalidated cross-plan evidence require one independent exact `sol_medium` combined reviewer. Dispatch with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, `Parent attempt: {active_parent_attempt_id}`, `Task kind: combined_review`, and `Review boundary: integration-wide`.
 - Freeze merged integration `HEAD` as review SHA before any review or fix worker.
 - Review exact review SHA across integrated plans, cross-plan behavior, architecture, public contracts, security, regressions, shared code, validation coverage, and requirement evidence. Record one finding disposition per finding.
-- Accepted finding -> fresh exact `luna_max` integration-fix worker using canonical Fix Worker Prompt Template with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: integration:{integration_id}`, and `Review boundary: integration-wide`. Set `Baseline` equal to `Pre-fix frozen head`. Worker edits owned files only and performs no Git operation; response carries `Final frozen head: pending_plan_supervisor_freeze` until merger freezes the post-fix head. Merging supervisor owns staging, commit, and resulting head. `final_stage_fix_cycle_used` becomes `1`; a second fix cycle blocks.
+- Accepted finding -> fresh exact `luna_max` integration-fix worker through canonical Fix Worker Prompt Template with `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, `Parent attempt: {active_parent_attempt_id}`, `Task kind: integration_fix`, and `Review boundary: integration-wide`. Set `Baseline` equal to `Pre-fix frozen head`. Worker edits owned files only and performs no Git operation; response leaves `Final frozen head: pending_plan_supervisor_freeze`. Merging supervisor alone stages, commits, and freezes resulting head. One fix cycle maximum; no fix re-review.
 - After integration fix, close child edit lease, stage/commit, and freeze resulting exact SHA before validation. Fresh fix worker supplies final proof. No fix re-review dispatch; final verification covers invalidated behavior and contract evidence.
 - `Combined review: pass` when review is reused or initial review has no accepted findings.
 - `Combined review: findings_resolved` when one accepted fix cycle has proven fixes and no unresolved blocking findings.
@@ -92,15 +96,9 @@ Completion: intermediate stage records `not_due`; final stage records one review
 - Require clean worktree after checks.
 - Map every requirement to integrated plan, accepted head, merged evidence, and final verification evidence.
 - Mark requirement `integrated_and_verified` only with final-head evidence.
-- Intermediate stage: mark aggregate final validation `not_due`; mark every assigned future final check `not_due`; allow `integrated_pending_final_verify`; require all assigned integration checks pass on candidate result SHA for `Status: wave_complete`.
-- Final stage without earlier blocker: run every assigned final check. Every assigned integration and final check passes -> aggregate final validation `pass`. Any failure or incomplete started check set -> aggregate final validation `fail`.
-- Final stage with earlier blocker preventing every final check: run none; mark aggregate final validation `not_run`; require `Status: blocked`; record blocker and each skipped check as `not_run`.
-- Due check prevented by earlier blocker: per-check `not_run`. Run check: per-check `pass` or `fail` from observed result.
-- Final stage completion: every assigned integration and final check passes on candidate result SHA; every requirement becomes `integrated_and_verified`.
-- Use `integrated_pending_final_verify` only during intermediate stage or while final stage is blocked on assigned final verification.
-- Mark missing, failed, or contradicted requirement `unresolved`.
+- Apply stage/check-kind values and requirement disposition through [Canonical Report Transitions](../references/state-and-recovery.md#canonical-report-transitions). Record no local substitute mapping.
 
-Completion: every assigned check has one legal per-check value; intermediate future final checks all `not_due`; final-stage checks exclude `not_due`; aggregate value follows status matrix; all run checks target one result SHA; `HEAD` unchanged; worktree state recorded; every requirement has stage-valid status and concrete evidence.
+Completion: every assigned check and requirement has canonical value plus evidence; all run checks target one result SHA; `HEAD` unchanged; worktree state recorded.
 
 ## 5. Decide and report
 
@@ -131,24 +129,7 @@ Completion: every assigned check has one legal per-check value; intermediate fut
 
 Any unmet stage requirement -> `Status: blocked`. Keep exact unresolved condition in `Blockers` and affected requirement `unresolved` or `integrated_pending_final_verify` as applicable. Never use `wave_complete` for final stage or `complete` for intermediate stage.
 
-Allowed status matrix:
-
-- `intermediate` + `wave_complete` -> final validation `not_due`
-- `intermediate` + `blocked` -> final validation `not_due`
-- `final` + `complete` -> final validation `pass`
-- `final` + `blocked` -> final validation `pass`, `fail`, or `not_run`
-
-All other stage, status, and final-validation combinations invalid. Final-stage `not_run` valid only when earlier blocker prevented every final check. Final-stage `not_due` invalid. Intermediate-stage `pass`, `fail`, or `not_run` invalid.
-
-Allowed per-check matrix:
-
-- `intermediate` + integration check -> `pass`, `fail`, or `not_run`
-- `intermediate` + final check -> `not_due`
-- `final` + integration or final check -> `pass`, `fail`, or `not_run`
-
-All other stage, check-kind, and per-check-value combinations invalid. Per-check `not_due` valid only for intermediate-stage final checks. Per-check `not_run` requires earlier blocker preventing due check. `Status: complete` requires every assigned per-check value `pass`.
-
-Nested merge mapping is deterministic: `Combined review: not_due` is legal only at intermediate stage, requires `combined_review_gate_id: None`, and maps to `integration.final_stage_substate: not_due` with no final-stage attempt; final `pass` maps to a nonnull accepted `combined_review` gate and `final_stage_substate: final_verify`; final `findings_resolved` maps to the same accepted gate plus one accepted integration-fix cycle; final `blocked` maps to a nonnull failed combined-review gate and `final_stage_substate: blocked`. `Final validation` aggregate and per-check values map to `integration.validation_status`, `final_verify` gate status, and exact check evidence under the stage/check-kind matrix. Intermediate final checks use `not_due` and no final-verify gate; final `not_due` rejects. Final `pass` maps to a nonnull accepted final-verification gate; final `fail` maps to a nonnull failed gate and blocked stage; final `not_run` maps to a nonnull not-run gate and blocked stage only when an earlier blocker prevented every final check. Requirement accounting maps `integrated_and_verified` -> `satisfied`, `integrated_pending_final_verify` -> `covered`, and `unresolved` -> `blocked` with blocker or `failed` without blocker. Unlisted stage/status/check-kind combinations reject.
+Apply report outcome only through [Canonical Report Transitions](../references/state-and-recovery.md#canonical-report-transitions). Final `complete` selects only `READY_FOR_USER_MERGE`. Final `blocked` retains every attempted nonnull gate ID and reported gate status. Report applies one terminal transition; it never writes an intermediate `final_verify` transition.
 
 Respond with template only. Use `None` for empty field. Add no prose before or after.
 
@@ -169,9 +150,9 @@ Merge results:
 Conflicts:
 - {path_or_group}: mechanical_resolved | delegated | unresolved - {proof_or_worker_and_result}
 Combined review: pass | findings_resolved | blocked | not_due
-- gate: {combined_review_gate_id | None}; review SHA: {full_sha | None}; reviewer: {dispatch_id | reuse | None}; finding dispositions: {finding_id -> fixed | rejected | waived | unresolved | None}; fix proof: {evidence_location_and_state_sha | None}
+- gate: {combined_review_gate_id | None}; gate status: {canonical_gate_status | None}; review SHA: {full_sha | None}; reviewer: {dispatch_id | reuse | None}; finding dispositions: {finding_id -> fixed | rejected | waived | unresolved | None}; fix proof: {evidence_location_and_state_sha | None}
 Final validation: pass | fail | not_run | not_due
-- final verify gate: {final_verify_gate_id | None}; final frozen head: {full_sha | None}
+- final verify gate: {final_verify_gate_id | None}; gate status: {canonical_gate_status | None}; final frozen head: {full_sha | None}
 - {integration | final} check {check}: {pass | fail | not_run | not_due}; state {exact_sha | None}; {observed_result_or_unrun_reason}
 Final head: {exact_sha | None}
 Clean worktree: {true | false}

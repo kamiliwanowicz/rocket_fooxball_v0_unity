@@ -9,21 +9,20 @@ Act only as orchestrator. Delegate implementation, testing, validation, review, 
 
 Own canonical worker, reviewer, and fix-worker prompt and response formats. When executing plan from `$write-orchestrator-coding-plan`, map work-packet data into templates below. Ignore copied or embedded prompt schemas in plans.
 
+Durable entities, baselines, transitions, recovery, and outcome mapping: [state and recovery](../loop-orchestrator/references/state-and-recovery.md). Dispatch envelope and result acceptance: [communication contracts](../loop-orchestrator/references/communication-contracts.md). This file owns execution sequence and child templates only.
+
 Use standard Markdown, never JSON. Apply `$llm-oriented-markdowns` to every subagent prompt and require same style for responses. Include only task-critical details and exact identifiers.
 
 ## Ownership And State
 
 - `LP`: control ledger, orchestration artifacts, global scheduling, recovery, and authorized user-branch merge.
 - plan supervisor: sole Git owner for one plan branch/worktree; stages, commits, reconciles cleanliness, and freezes accepted exact head. Its one Git-owner attempt does not overlap another plan-supervisor attempt on that branch/worktree. Creates no nested worker worktrees.
+- direct owner: invoking orchestrator/LP acting as direct-route plan supervisor and sole Git owner. Creates isolated task branch/worktree; stages and commits child edits; closes leases; runs writer barrier; freezes exact head; runs or delegates checks; hands off exact task head. Performs no product edits or substantive review.
 - implementation and review-fix workers: child edit leases; edit owned files only. No Git operations, branch/worktree mutation, staging, or commits. Parallel child leases are allowed only for disjoint owned paths; one active child edit lease per owned path.
 - reviewer: inspect frozen state only. No edits or Git operations.
 - merging supervisor: sole Git owner for active integration branch/worktree lease. Stops at verified integration head; `LP` alone merges user/original/default branch.
 
-Immutable plan/report artifacts may live under `loop-runs/{run_id}/artifacts/` in control worktree; control worktree holds ledger and orchestration artifacts only. `LP` provisions one writable plan branch/worktree after plan convergence and before plan-supervisor dispatch. Standalone planning may create `P0`; loop-owned planning verifies pre-provisioned exact branch/worktree and does not create a duplicate.
-
-Every dispatch and result carries `{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha}`. Acceptance binds result to that tuple plus relevant entity state. Unrelated ledger revision changes do not invalidate a result; entity mutation, supersession, lease closure, or baseline change does. `LP` re-reads latest ledger and writes with latest-revision CAS.
-
-Accepted state means committed clean exact full SHA. After freeze, any branch mutation requires a fresh lease and invalidates affected review, validation, and evidence. Evidence names exact frozen head; assertions never substitute for observed Git facts.
+`LP` provisions durable plan worktree after convergence and before plan-supervisor dispatch. Standalone planning may create `P0`; loop-owned planning verifies pre-provisioned exact branch/worktree. Apply linked identity, lease, freeze, and evidence rules.
 
 ## Roles
 
@@ -42,7 +41,7 @@ Use direct route when task has one coherent plan context, no cross-plan dependen
 
 `one worktree -> one writer lane -> writer barrier -> one review -> fresh fix worker if needed -> final validation -> handoff`
 
-Direct route still names plan supervisor as sole Git owner; `LP` provisions one isolated worktree before worker dispatch.
+Invoking orchestrator/LP is direct-route plan supervisor and sole Git owner. It provisions one isolated task branch/worktree before worker dispatch and owns staging, commits, lease closure, writer barrier, exact-head freeze, checks, and handoff.
 Direct route keeps no durable ledger; handoff records exact branch, worktree, baseline, frozen head, review, fix proof, validation, and cleanup.
 
 Use durable plan route when multi-plan execution, dependency waves, recovery duration, or integration risk earns ledger/worktree overhead. Do not add durable machinery to direct-route work.
@@ -86,19 +85,25 @@ Completion: each blocker resolved by narrow scope grant, owner routing, safe loc
 
 ### Pre-review semantic conflicts
 
-If implementation evidence exposes a semantic conflict before a review boundary completes (behavior, contract, architecture, or acceptance mismatch), do not dispatch a Fix Worker. Close the current child edit lease, record the conflict, and dispatch an implementation attempt with the canonical Worker Prompt Template, fresh identity tuple, and exact new baseline. Treat conflict resolution as implementation work; run the writer barrier and normal review after it. Fix Worker dispatch is legal only for accepted `critical` or `high` findings from a completed review boundary.
+If implementation evidence exposes behavior, contract, architecture, or acceptance conflict before review, select exactly one disposition:
 
-Completion: every pre-review semantic conflict maps to an implementation attempt or explicit blocker; no Fix Worker is used before completed review evidence.
+- close affected child lease, discard incomplete lane edits, prove unchanged clean parent SHA, then redispatch implementation child from that SHA;
+- close every writer, let parent Git owner commit exact dirty state as unreviewed checkpoint, record checkpoint SHA, then redispatch implementation child from checkpoint;
+- block with conflict evidence plus exact decision or scope needed.
+
+Use canonical Worker Prompt Template, fresh child identity tuple, and selected committed baseline. Checkpoint stays unreviewed. Run normal writer barrier and review after conflict-resolution implementation. Fix Worker becomes legal only for accepted `critical` or `high` findings from completed review boundary.
+
+Completion: every pre-review semantic conflict has exactly one disposition; every redispatch starts from represented clean commit; normal writer barrier and review remain due.
 
 ### Lease recovery
 
-Keep one live plan-supervisor Git-owner attempt per branch/worktree. Permit parallel child edit leases in that worktree only when owned paths are disjoint; reject overlapping path leases. Same-worktree replacement for a plan-supervisor attempt or child edit lease starts only after confirmed termination and reconciled Git state. If an old writer remains unconfirmed, quarantine its branch/worktree and start replacement on a new branch/worktree from last accepted SHA. Reject late old results by closed lease and entity generation. Preserve reachable commits before cleanup.
+Apply [child recovery and idempotency](../loop-orchestrator/references/state-and-recovery.md#idempotency). Reconcile termination and Git state before replacement. Unconfirmed shared-worktree writer -> quarantine parent attempt/worktree and restart parent plus children from safe committed checkpoint.
 
 Completion: no two live plan-supervisor attempts share one branch/worktree; no two live child leases share one owned path; every replacement and preserved commit is recorded.
 
 ### 4. Writer barrier
 
-Close every active edit lease before review or shared-project validation. Plan supervisor then:
+Close every active edit lease before review or shared-project validation. Parent Git owner (durable plan supervisor or direct owner) then:
 
 - reconciles owned paths and Git state;
 - stages and commits implementation (or accepted fixes);
@@ -123,13 +128,13 @@ Completion: every review boundary has one independent report naming frozen head;
 
 Group compatible in-lane findings. Spawn fresh `luna_max` worker with Fix Worker Prompt Template. Give exact findings, owned scope, acceptance criteria, and required validation.
 
-Fix worker edits only. Run at most one accepted fix cycle per review boundary. Do not send fixes for another review. After fixes, repeat writer barrier: plan supervisor stages, commits, reconciles clean status, and freezes exact post-fix head. Fix worker reports the pre-fix frozen head and `Final frozen head: pending_plan_supervisor_freeze`; plan supervisor binds final behavior proof to the exact post-fix frozen head. Final validation covers invalidated behavior. Report unresolved findings or proof gaps as residual risk.
+Fix worker edits only. Run at most one accepted fix cycle per review boundary. Do not send fixes for another review. After fixes, repeat writer barrier: parent Git owner stages, commits, reconciles clean status, and freezes exact post-fix head. Fix worker reports pre-fix frozen head plus `Final frozen head: pending_plan_supervisor_freeze`; parent Git owner binds final behavior proof to post-fix frozen head. Final validation covers invalidated behavior. Report unresolved findings or proof gaps as residual risk.
 
 Completion: every accepted finding maps to proven fix or explicit unresolved status; one review pass per boundary; no fix re-review.
 
 ### 7. Final-state validation
 
-Run assigned final checks only after final writer barrier. Bind every check to exact final frozen head SHA and record command, working directory, observed result, and artifact. Re-run only checks invalidated by a named post-freeze change. Plan supervisor accepts only committed clean exact head with no live lease able to mutate it.
+Run assigned final checks only after final writer barrier. Bind every check to exact final frozen head SHA and record command, working directory, observed result, and artifact. Re-run only checks invalidated by a named post-freeze change. Parent Git owner accepts only committed clean exact head with no live lease able to mutate it.
 
 Completion: final checks pass at one frozen head, or exact blocker and invalidated evidence are recorded; branch, worktree, and evidence reconcile.
 
@@ -168,21 +173,26 @@ Miscommunication: prompt or handoff ambiguity causing rework, wrong scope, or mi
 
 ## Worker Prompt Template
 
-Context mapping is strict: `Context: plan` uses `Entity: plan:{plan_id}`, `Plan: {plan_id | direct_route}`, and `Lane: {lane_id | plan-wide}`; `Context: integration` uses `Entity: integration:{integration_id}`, `Plan: None`, and `Lane: integration-wide`. Reviewer and fix-worker `Review boundary` uses `lane-contract`, `plan-wide`, or `integration-wide`. Each applicable response repeats context, plan, lane, entity, and boundary fields unchanged so role and durable outcome mapping stay deterministic.
+Context, plan, lane, and review boundary route work only. Every nested dispatch/result identifies child and parent independently: `Entity: child_task:{child_task_id}` plus `Parent: plan:{plan_id}` for plan/direct context or `Parent: integration:{integration_id}` for integration context. Direct route uses run-scoped transient IDs. Every response repeats identity and routing fields unchanged. Reviewer and fix-worker `Review boundary`: `lane-contract | plan-wide | integration-wide`.
 
-Raw response mapping is strict: implementation `Status: complete` -> `implementation_complete`; implementation `Status: blocked` -> `blocked`; reviewer `Verdict: pass` -> `review_passed`; reviewer `Verdict: findings` -> `changes_required`; fix-worker `Status: complete` -> `fix_complete`; fix-worker `Status: blocked` -> `blocked`. Context does not alter mapping. An `unresolved` finding remains open and blocks review acceptance; it does not change the raw fix-worker mapping. Pre-review semantic conflicts always use the Implementation Worker mapping, never `fix_complete`.
+Raw response mapping: [Canonical Report Transitions](../loop-orchestrator/references/state-and-recovery.md#canonical-report-transitions). Context never changes role/task-kind mapping. Pre-review semantic conflict uses implementation worker contract.
 
 ```text
 Role: implementation worker
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: implementation | integration_conflict
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
+Input state digest: {sha256_digest | None}
+Incoming accepted SHA: {full_sha | None}
 Branch: {exact_branch}
 Worktree: {absolute_path}
 Objective: {objective}
@@ -207,12 +217,19 @@ Respond exactly:
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: implementation | integration_conflict
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
+Input state digest: {sha256_digest | None}
+Incoming accepted SHA: {full_sha | None}
+Branch: {exact_branch}
+Worktree: {absolute_path}
 Status: complete | blocked
 Changed:
 - {file_or_symbol}: {change}
@@ -239,12 +256,19 @@ Role: code reviewer. Review only; make no edits.
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: review | combined_review
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
+Input state digest: None
+Incoming accepted SHA: None
+Branch: {exact_branch}
+Worktree: {absolute_path}
 Frozen review head: {full_sha}
 Review boundary: {lane-contract | plan-wide | integration-wide}
 Objective: {objective}
@@ -254,18 +278,25 @@ Acceptance criteria:
 Worker evidence:
 {worker_report_or_artifact_paths}
 
-Review exact frozen review head only. Run no Git operations, tests, or edits. Review correctness, regressions, security, validation gaps, and proof discrimination. Report only `critical` or `high` findings. Verify supplied tests would reject relevant pre-change behavior. Trace cross-lane impact, but keep findings assigned to owning lane. Plan supervisor records `Frozen review head` as `Reviewed head`; post-fix barrier records separate `Final frozen head`.
+Review exact frozen review head only. Run no Git operations, tests, or edits. Review correctness, regressions, security, validation gaps, and proof discrimination. Report only `critical` or `high` findings. Verify supplied tests would reject relevant pre-change behavior. Trace cross-lane impact, but keep findings assigned to owning lane. Parent Git owner records `Frozen review head` as reviewed head; post-fix barrier records separate final frozen head.
 
 Respond exactly:
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: review | combined_review
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
+Input state digest: None
+Incoming accepted SHA: None
+Branch: {exact_branch}
+Worktree: {absolute_path}
 Frozen review head: {full_sha}
 Review boundary: {lane-contract | plan-wide | integration-wide}
 Verdict: pass | findings
@@ -288,16 +319,21 @@ Role: review-fix worker. No later review run follows; supply complete final proo
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: review_fix | integration_fix
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
-Pre-fix frozen head: {full_sha}
-Review boundary: {lane-contract | plan-wide | integration-wide}
+Input state digest: None
+Incoming accepted SHA: None
 Branch: {exact_branch}
 Worktree: {absolute_path}
+Pre-fix frozen head: {full_sha}
+Review boundary: {lane-contract | plan-wide | integration-wide}
 Owned scope: {exact_files_symbols_or_subsystem}
 Protected scope: {must_not_edit}
 Findings:
@@ -307,21 +343,28 @@ Acceptance criteria:
 Required validation:
 - {command_or_check}
 
-For fixes, `Baseline` must equal `Pre-fix frozen head`; both name exact reviewed state before fix edits. Plan supervisor records that reviewed head separately from the post-fix final frozen head. Fix accepted findings in owned scope. Edit files only. Do not run Git operations or mutate branch/worktree, stage, commit, or freeze. Preserve unrelated work. Stop before unowned edits; request narrow named scope. Report cross-lane findings without editing foreign scope. Plan supervisor freezes post-fix state before final validation.
+For fixes, `Baseline` must equal `Pre-fix frozen head`; both name exact reviewed state before fix edits. Parent Git owner records reviewed head separately from post-fix final frozen head. Fix accepted findings in owned scope. Edit files only. Do not run Git operations or mutate branch/worktree, stage, commit, or freeze. Preserve unrelated work. Stop before unowned edits; request narrow named scope. Report cross-lane findings without editing foreign scope. Parent Git owner freezes post-fix state before final validation.
 
 Respond exactly:
 Context: plan | integration
 Plan: {plan_id | direct_route | None for integration}
 Lane: {lane_id | plan-wide | integration-wide}
-Entity: plan:{plan_id} | integration:{integration_id}
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: review_fix | integration_fix
 Dispatch: {dispatch_id}
 Attempt: {attempt_id}
 Lease: {lease_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha}
+Input state digest: None
+Incoming accepted SHA: None
+Branch: {exact_branch}
+Worktree: {absolute_path}
 Pre-fix frozen head: {full_sha}
 Review boundary: {lane-contract | plan-wide | integration-wide}
-Final frozen head: {full_sha | pending_plan_supervisor_freeze}
+Final frozen head: pending_plan_supervisor_freeze
 Status: complete | blocked
 Finding disposition:
 - {finding_id}: fixed | unresolved — {change_or_reason}
