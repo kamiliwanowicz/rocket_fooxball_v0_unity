@@ -1,0 +1,7 @@
+interface:
+  display_name: "Loop Orchestrator"
+  short_description: "Run long-lived multi-plan implementation loops"
+  default_prompt: "Use $loop-orchestrator to execute this complex implementation through planning, delegated waves, integration, and final verification."
+
+policy:
+  allow_implicit_invocation: false
