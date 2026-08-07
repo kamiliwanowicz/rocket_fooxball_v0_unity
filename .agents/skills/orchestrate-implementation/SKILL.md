@@ -39,7 +39,7 @@ Digest or identity mismatch -> `blocked` with observed digest/size and needed LP
 - Execution orchestrator: sole Git owner for plan worktree. Creates no sibling plan/integration worktrees and never mutates user branch.
 - Implementation/fix workers: edit assigned owned paths only; no Git staging, commits, branch/worktree operations, or state edits.
 - One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared contracts, generated/serialized assets, migrations, and shared validation environments.
-- Reviewer: fresh exact `sol_medium`; read-only exact frozen SHA.
+- Reviewer: fresh exact `sol_medium` per review checkpoint; read-only exact frozen SHA.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Required profile unavailable -> `blocked`; no silent substitution.
@@ -50,7 +50,7 @@ Execution orchestrator closes writer barrier before Git mutation, freeze, review
 
 Each child dispatch carries unique `execution_id`, assigned identity/profile/role, bounded task/done condition, objective/exclusions, full baseline SHA, exact branch/worktree, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer), checks, proof/evidence boundary, and plan identity/path/digest.
 
-Reviewer dispatch also binds `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
+Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
 
 Child return repeats identity and role unchanged:
 
@@ -61,15 +61,25 @@ Child return repeats identity and role unchanged:
 
 Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inconsistent result. Preserve as evidence only.
 
+## Review checkpoints
+
+Default: one review checkpoint after each implementation worker returns. Close writer barrier, verify scope, commit accepted worker changes, freeze clean full SHA, then dispatch fresh exact `sol_medium` reviewer before next implementation worker.
+
+Accepted plan may group multiple implementation workers into one checkpoint only when combined chunk creates stronger review boundary than partial worker states. Plan must name checkpoint, covered tasks/workers, join condition, and technical rationale. Valid rationale: producer/consumer contract, coordinated code/serialized asset wiring, or another state whose partial review lacks meaningful proof. Throughput or fewer reviewer calls is insufficient. Missing explicit grouped checkpoint -> per-worker review.
+
+Parallel workers belong to one explicit grouped checkpoint. Wait for every covered worker, stop writers, close barrier, verify combined scope, commit, and freeze before review. No downstream worker crosses checkpoint dependency gate before verdict/fix disposition.
+
+Review scope: checkpoint diff from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted checkpoint head without re-review. Next checkpoint uses post-fix head as `review_base_sha`.
+
 ## Execution loop
 
-1. Parse accepted plan tasks. Dispatch fewest bounded implementation workers. Parallel dispatch only where plan explicitly proves disjoint ownership and stable inputs.
-2. Verify child reports against files, Git, scope, checks, and live identity. Stop writers. Close writer barrier.
-3. Stage only accepted owned paths. Commit plan work. Verify clean worktree, scope, and exact full frozen SHA.
-4. Dispatch fresh exact `sol_medium` reviewer against frozen SHA. Reviewer reports Critical/High findings only and performs no edits/tests unless explicitly assigned.
-5. No accepted finding -> final validation. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
-6. Stop fix writer, close barrier, verify scope, stage, commit, and freeze new clean full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior.
-7. Run final checks at exact committed HEAD. Rehash accepted plan artifact. Verify clean worktree, branch, baseline ancestry, dependencies, owned path diff, and requirements.
+1. Parse tasks and review checkpoints. Missing grouping -> assign one checkpoint per implementation worker. Dispatch bounded workers for next checkpoint only. Parallel dispatch only where plan explicitly proves disjoint ownership, stable inputs, and grouped review boundary.
+2. Verify covered child reports against files, Git, scope, checks, and live identity. Stop writers. Close writer barrier. Require checkpoint join condition.
+3. Stage only accepted owned paths. Commit checkpoint work. Verify clean worktree, scope, and exact full frozen SHA.
+4. Dispatch fresh exact `sol_medium` reviewer for checkpoint. Reviewer reports Critical/High findings only and performs no edits/tests unless explicitly assigned.
+5. No accepted finding -> advance to next checkpoint or final validation. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
+6. Stop fix writer, close barrier, verify scope, stage, commit, and freeze new clean full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance from post-fix head.
+7. Repeat steps 1-6 until every checkpoint has verdict and finding disposition. Run final checks at exact committed HEAD. Rehash accepted plan artifact. Verify clean worktree, branch, baseline ancestry, dependencies, owned path diff, and requirements.
 
 Any required unowned edit, plan decomposition change, dependency drift, artifact mismatch, or product decision outside accepted plan -> `blocked` with needed LP action. Execution orchestrator never expands plan or edits LP state.
 
@@ -83,8 +93,8 @@ Return concise facts:
 - exact baseline, dependency SHAs, branch, worktree;
 - clean committed exact plan SHA when complete;
 - changed paths and scope proof;
-- review SHA/verdict, accepted finding dispositions;
+- each checkpoint ID, covered executions, review base/frozen SHA, verdict, accepted finding dispositions;
 - checks: command/workflow, working directory, observed result, evidence, exact SHA;
 - blocker, evidence, and one needed LP action/recheck when blocked.
 
-`complete` requires artifact match, exact committed head, clean worktree, owned-only diff, completed review/fix flow, and passing final checks. LP verifies Git and artifact facts before acceptance. Execution orchestrator returns plan SHA only; merging agent handles integration.
+`complete` requires artifact match, exact committed head, clean worktree, owned-only diff, every worker covered by completed checkpoint review/fix flow, and passing final checks. LP verifies Git and artifact facts before acceptance. Execution orchestrator returns plan SHA only; merging agent handles integration.

@@ -74,6 +74,8 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 - Split task when parts require separate design reasoning, can compile/prove at distinct barriers, or contain distinct failure domains. Order shared-path tasks serially.
 - Parallel task steps require disjoint writable paths, stable inputs, independent acceptance, and explicit join order.
 - Shared files, contracts, generated/serialized assets, migrations, and product decisions stay serialized.
+- Default review boundary: one unique checkpoint after each expected implementation worker. Group multiple workers only when joined chunk is more meaningful to review than partial worker states; name covered tasks, join condition, and technical rationale. Reviewer-call reduction is insufficient rationale.
+- Parallel workers require one grouped review checkpoint. Downstream dependencies wait for checkpoint verdict/fix disposition.
 - Candidate dependencies use accepted SHAs supplied by LP.
 - Assigned candidate exceeding detailed design capacity -> decomposition mismatch; LP mode returns `blocked` with `fresh task-breakdown`. Produce no shallow catch-all task.
 
@@ -95,6 +97,7 @@ Every plan contains:
 - findings: repository facts, constraints, gaps, proposed paths.
 - decisions: implementation choices, assumptions, and unresolved material questions.
 - tasks: bounded ordered work with enough coding detail to remove non-local worker decisions.
+- review checkpoints: every task maps to one checkpoint; default per worker; grouped checkpoint records covered tasks/workers, join condition, dependency gate, and technical rationale.
 - checks: command/workflow, owner, run point, expected result, evidence, invalidation.
 - proof: discriminatory scenario or safe alternate proof.
 - review focus: Critical/High regression, safety, contract, evidence risks.
@@ -154,10 +157,12 @@ Dependencies: [accepted full SHAs or None]
 - checks: [owner, command/workflow, result, evidence, invalidation]
 - proof: [discriminatory evidence]
 - review_focus: [Critical/High risks]
+- review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
 - return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
 ## Execution
-[ordered plan-level implementation sequence and dependency gates]
+- workers: [ordered/parallel worker assignment and join order]
+- review_checkpoints: [checkpoint ID -> covered tasks/workers -> trigger/join condition -> dependency gate -> grouped rationale or per-worker default]
 
 ## Final Verification
 - exact head: [clean committed SHA requirement]
@@ -173,6 +178,7 @@ Dependencies: [accepted full SHAs or None]
 ## Done Criteria
 - every covered requirement maps to task, owner, check, and proof;
 - every task passes implementation design gate;
+- every implementation worker maps to one review checkpoint; grouped checkpoints include stronger-boundary rationale;
 - exact baseline and dependencies are factual;
 - execution route uses immutable accepted artifact and `$orchestrate-implementation`;
 - final checks bind clean committed head or blocker names needed action.

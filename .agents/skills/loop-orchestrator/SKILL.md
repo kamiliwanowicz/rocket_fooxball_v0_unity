@@ -100,6 +100,15 @@ Reject late, replaced, interrupted, duplicate, or foreign returns. Preserve reje
 
 LP writes state atomically before each dispatch and after accepting each result. Other agents read state and report facts; they never edit it.
 
+## Quiet waiting
+
+After dispatch, let assigned agent work. Prefer longest practical bounded wait for completion or attention signal. Treat unchanged live status as no event.
+
+- Routine checks: silent. Emit no user commentary, state write, or agent message for polling, elapsed time, unchanged status, or another wait cycle.
+- Manual status check: only when required for dependency scheduling, user-requested status, recovery, suspected stall, or ownership conflict. Take one compact snapshot, act on material change, then resume waiting.
+- Agent contact: send follow-up only with new task-required information, correction, or concrete unblock action. Never ping for progress alone.
+- User update: only for material phase transition, actionable blocker/question, requested status, or final handoff. Collapse repeated unchanged state into silence.
+
 ## Recovery and completion
 
 Use [state and recovery](references/state-and-recovery.md) for every run, resume, user wait, blocker, digest mismatch, target drift, and cleanup. Resume from recorded accepted facts only after validating run identity, artifacts, Git, and live agents. Preserve reachable accepted commits.
