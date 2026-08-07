@@ -1,75 +1,115 @@
 ---
 name: loop-orchestrator
-description: Use when user asks for delegated implementation across workers, isolated worktrees, review, fixes, and integration.
+description: Use when user requests plan-first delegated implementation through breakdown, planning, execution orchestration, isolated integration, and verified handoff.
 ---
 
 # Loop Orchestrator
 
-Act as loop owner (`LP`). Coordinate implementation, review, fixes, validation, cleanup, and handoff. LP inspects evidence and routes work; child writers edit product files; LP does not edit product code or perform substantive review.
+Act as loop owner (`LP`). Coordinate mandatory route:
+
+`INIT -> BREAKDOWN -> PLANNING -> EXECUTION -> MERGING -> READY_FOR_USER_MERGE`
+
+Every run follows every stage, including `single_plan`. LP coordinates, resolves blockers, owns durable state, verifies returned facts, and alone may merge exact accepted integration SHA into user branch after explicit authority. LP never writes product files, writes coding plans, dispatches implementation workers directly, performs substantive review, or acts as merging agent.
+
+## Roles
+
+- LP: route owner, sole state writer, blocker resolver, acceptance verifier, user-branch merge authority.
+- [`task-breakdown`](agents/task-breakdown.md): exact `sol_high`; returns plan candidates and requirement coverage.
+- planner: exact `sol_high`; uses [`$write-orchestrator-coding-plan`](../write-orchestrator-coding-plan/SKILL.md) once per ready candidate.
+- execution orchestrator: exact `sol_high`; uses [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) once per accepted plan.
+- [merging agent](agents/merging.md): exact `sol_high`; integrates every completed wave in bound isolated integration worktree.
+
+Profile unavailable -> current attempt `blocked`; LP records blocker and recheck condition. No silent profile substitution.
 
 ## Sources and authority
 
-- Git -> durable code facts: branch, worktree, full commit SHA, ancestry, clean status, path diff.
-- Collaboration tools -> live worker status and ownership.
-- Current context -> objective, scope, authority, ownership.
-- Worker reports -> hints and evidence; never proof without Git/tool verification.
+- Git: durable code facts -> branch, worktree, full SHA, ancestry, clean status, path diff.
+- Collaboration tools: live agent identity, status, ownership.
+- [Run state](references/state-and-recovery.md): LP-owned routing record; never stronger than Git or live observations.
+- Agent reports: evidence hints until LP verifies identity, Git, scope, and checks.
 
-User branch stays unchanged until explicit authority binds target branch and candidate SHA. User approval remains required for merge, destructive action, material scope or behavior change, external mutation, secrets, toolchain or data migration, or dirty-work overwrite.
+User branch stays unchanged until explicit authority binds target branch and candidate SHA. Approval remains required for user-branch merge, destructive action, material scope or behavior change, external mutation, secrets, migration, or dirty-work overwrite.
 
-## Adaptive flow
+## INIT
 
-`inspect -> few tasks -> core checkpoint -> disjoint work -> cleanup -> commit/freeze -> exact-SHA review -> fresh fix once -> validate -> handoff`
+1. Read request, repository instructions, cited sources, dirty paths, current branch, full baseline SHA, checks, and authority.
+2. Generate unique `run_id`, stable `REQ-*` IDs, and unique run directory under Git common dir. Create required `state.md` through atomic-write contract before first dispatch.
+3. Bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, and state path.
 
-Default: one isolated worktree, one Git owner, few bounded workers.
+Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
-1. Inspect request, repository instructions, dirty paths, current branch, full baseline SHA, acceptance checks, and authority.
-2. Choose fewest tasks. Keep one coherent task by default. Split only when real isolation, useful elapsed-time gain, dependency on accepted output, or conflicting validation justifies extra worktrees.
-3. Core checkpoint pins baseline SHA, task ownership, dependencies, protected paths, worktrees, allowed Git operations, and checks. For long or multi-worktree runs, optionally write facts-only phase checkpoint under Git common dir; see [state and recovery](references/state-and-recovery.md).
-4. Dispatch bounded workers. Parallel work requires disjoint paths and stable inputs. Serialize shared files, contracts, generated or serialized assets, migrations, and product decisions.
-5. Stop writers, verify scope, and clean abandoned work. One active writer per path. Parent closes writer barrier before staging or committing.
-6. Commit and freeze clean worktree at exact full SHA. Independent read-only review starts only from this SHA.
-7. Review frozen SHA. Report Critical/High findings only. Accepted finding -> one fresh fix worker; fix worker edits only and returns changed paths, proof/check evidence, and finding disposition. Parent closes writer barrier, verifies scope, stages/commits, freezes and records new clean SHA, then reruns invalidated checks and final validation. Do not re-review fix; pre-fix review never covers post-fix SHA.
-8. Rerun checks invalidated by fix, then validate exact final SHA, clean status, scope, and evidence.
-9. Handoff exact SHA, changed paths, checks, residual risks, and authority needed for user-branch merge.
+## BREAKDOWN
 
-## Single-plan path
+Dispatch [`task-breakdown`](agents/task-breakdown.md) for every run. LP never substitutes inline decomposition.
 
-For one coherent task with stable ownership: inspect -> inline core facts -> one isolated worktree -> bounded writers -> writer barrier -> commit/freeze -> one exact-SHA review -> one fresh fix if needed -> validate -> handoff. No task-breakdown document, separate checkpoint artifact, or integration role.
+Accept result only when strict template is complete, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic.
 
-## Multi-plan path
+- `ready`: record result; assign stable `plan_id` per candidate; start eligible planning.
+- `needs_user`: record breakdown status `awaiting_user`, material question, and safe independent work. User response -> fresh breakdown attempt with new `attempt_id`.
+- `blocked`: record exact blocker and recheck condition. Resolution -> recheck facts, then fresh breakdown attempt.
 
-Use only when split pays lifecycle cost. Each task gets one worktree, one Git owner, exact baseline SHA, disjoint writable paths, protected paths, dependencies, and checks. Dependent task starts only after accepted upstream SHA. Integrator merges exact accepted SHAs in declared order; shared/generated assets stay serialized. Require independent final combined review of exact clean integrated SHA for every multi-plan integration, conflict resolution, or integration-owned edit. Reuse review evidence only for one unchanged already-reviewed plan with still-valid checks/evidence and no integration change. See [task breakdown](agents/task-breakdown.md) and [merging](agents/merging.md).
+Prefer one large plan. Split only for independent ownership, meaningful parallel gain, or accepted dependency. Shared contracts, generated/serialized assets, migrations, and product decisions stay serialized.
 
-## Dispatch contract
+## PLANNING
 
-Every dispatch carries single-use facts:
+For each ready candidate, LP reserves unique create-once artifact path:
 
-- `execution_id`: unique, never reused
-- `assigned_agent`: exact worker identity and role
-- `task`: bounded objective and done condition
-- `objective`: requested outcome and exclusions
-- `baseline_sha`: full 40-character SHA
-- `worktree`, `branch`: exact paths/names
-- `owned_paths`, `protected_paths`: exact repository-relative paths or symbols
-- `dependencies`: accepted SHAs or `None`
-- `allowed_git_ops`: explicit operations and target
-- `checks`: required commands/workflows and evidence locations
+`<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/<attempt-id>.md`
 
-Child writer contract: edit only owned paths; no Git operations; report changed paths. Parent owns barrier, stage, commit, freeze, and scope verification. If writer identity or scope is uncertain, interrupt siblings sharing worktree; quarantine uncertain changes or block.
+Dispatch exact `sol_high` planner with `run_id`, `plan_id`, `attempt_id`, covered requirement IDs, accepted baseline SHA, dependencies, owned/protected paths, reserved artifact path, checks, state path, and objective. Independent disjoint candidates may plan in parallel. Dependent candidate waits until prerequisite merger records accepted integration SHA; that observed SHA becomes planning baseline.
 
-## Return and acceptance
+Planner result handling:
 
-Every return repeats same `execution_id`, `assigned_agent`, and `task`; status is `complete` or `blocked`.
+- `ready`: stop planner; verify artifact exists at reserved path; compute SHA-256 and byte size; record accepted path/digest/size; artifact becomes immutable.
+- `needs_user`: record `awaiting_user` and question. User response -> fresh planner attempt, new `attempt_id`, new reserved path.
+- `blocked`: record blocker and recheck condition. Resolution -> fresh planner attempt and new reserved path.
+- decomposition change: route candidate revision through fresh task-breakdown attempt; planner never splits candidates.
 
-- `complete`: changed paths or reviewed SHA, checks with command/workflow plus observed result, evidence path, and exact SHA.
-- `blocked`: unchanged facts, exact blocker, evidence, and one needed action or recheck fact.
+Rehash accepted artifact immediately before execution dispatch. Mismatch -> plan `blocked`; no product worktree mutation.
 
-Reject late, replaced, or foreign results when current execution identity, Git facts, worktree, branch, baseline, head, or scope do not match dispatch. Preserve report as hint only; never promote by editing fields. Accept through observed facts and scope; result may use any readable heading order.
+## EXECUTION
 
-## Recovery
+For each accepted plan, LP provisions one isolated branch/worktree from recorded plan baseline. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
-Read [state and recovery](references/state-and-recovery.md) when resuming, handling ambiguity, or running long/multi-worktree work. Optional checkpoint contains facts only and lives under Git common dir. Git and tool observations override stale checkpoint. Preserve reachable commits; inspect ambiguous operation before repeating it. Stop writers before cleanup; remove worktrees or branches only after useful SHAs remain reachable and no active writer can mutate accepted work. Target drift during integration -> integrator returns `blocked` with observed target HEAD and performs no further mutation. LP provisions and binds fresh isolated branch/worktree from observed target baseline with exact allowed Git operations, accepted SHAs, and new single-use execution ID before retry.
+Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
-## Completion
+Accept `complete` only when exact execution identity matches, accepted plan digest rehash matches, observed branch/worktree match, committed head descends from bound baseline, changed paths stay owned, required checks bind head, and worktree is clean. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
 
-Handoff is complete when exact final SHA is verified in Git, worktree is clean, scope matches, every Critical/High finding has disposition, required checks pass at applicable SHA, and authority boundary is explicit. If any fact is missing or target drifted, report `blocked` with evidence and needed action.
+## MERGING
+
+Before first merge, LP provisions unique isolated integration branch/worktree from observed accepted baseline. Record branch, worktree, expected pre-merge head, exact allowed Git operations, integration order, and checks in state.
+
+Dispatch [merging agent](agents/merging.md) after every completed wave, including one-plan wave. Inputs are exact accepted execution SHAs in breakdown-declared order. Sequential dependent planning waits for prerequisite wave merge and accepted integration SHA.
+
+Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. One-plan fast-forward may leave commit identity unchanged; isolated branch/worktree plus expected pre-merge and observed post-merge heads prove merge stage occurred.
+
+Target drift -> current merge attempt `blocked`. LP records observed head, provisions fresh isolated integration branch/worktree from accepted observed baseline, binds new attempt, and reruns invalidated checks. Merging agent never mutates user branch.
+
+## Dispatch identity and results
+
+Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, branch/worktree when applicable, owned/protected paths, dependencies, allowed Git operations, checks, and state path.
+
+Role-specific statuses:
+
+- breakdown and planner: `ready | needs_user | blocked` using their strict contracts.
+- execution, implementation, review, fix, and merge: `complete | blocked` using owning skill contract.
+
+Reject late, replaced, interrupted, duplicate, or foreign returns. Preserve rejected report as evidence only. Never promote report by rewriting identity or facts.
+
+LP writes state atomically before each dispatch and after accepting each result. Other agents read state and report facts; they never edit it.
+
+## Recovery and completion
+
+Use [state and recovery](references/state-and-recovery.md) for every run, resume, user wait, blocker, digest mismatch, target drift, and cleanup. Resume from recorded accepted facts only after validating run identity, artifacts, Git, and live agents. Preserve reachable accepted commits.
+
+Final handoff requires:
+
+- phase `READY_FOR_USER_MERGE`;
+- observed clean integration branch/worktree and exact full final SHA;
+- every requirement covered and every accepted execution SHA merged once;
+- required checks bound to final SHA;
+- Critical/High finding dispositions recorded;
+- changed paths and residual risks recorded;
+- explicit authority request binding user target branch and exact integration SHA.
+
+Missing or drifted fact -> `blocked` with evidence and one needed action.

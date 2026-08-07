@@ -1,7 +1,7 @@
 interface:
   display_name: "Loop Orchestrator"
-  short_description: "Coordinate isolated implementation, review, fixes, and integration"
-  default_prompt: "Use $loop-orchestrator for bounded delegated work with exact-SHA review and verified handoff."
+  short_description: "Run mandatory breakdown, planning, execution, and isolated merging"
+  default_prompt: "Use $loop-orchestrator for plan-first delegated implementation with durable state and verified integration handoff."
 
 policy:
   allow_implicit_invocation: false
