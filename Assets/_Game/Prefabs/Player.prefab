@@ -45,6 +45,9 @@ GameObject:
   - component: {fileID: 4153586482274664226}
   - component: {fileID: 1460595302204604614}
   - component: {fileID: 5313289886365503098}
+  - component: {fileID: 8476009461030851118}
+  - component: {fileID: 6044168052179503180}
+  - component: {fileID: 257512934034810264}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -103,7 +106,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 599b939783224e34d87e29770e2e185c, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.PlayerInputReader
   actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
 --- !u!114 &1460595302204604614
@@ -116,7 +119,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 984d381a351d2df41a9f8785ec388606, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.PlayerMotor
   baseSpeed: 10
   groundAcceleration: 80
@@ -150,12 +153,74 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 2fc5c640caa7e7f43afeb877a2af45ec, type: 3}
-  m_Name: 
+  m_Name:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.PlayerLook
   input: {fileID: 4153586482274664226}
   head: {fileID: 8684155597031825141}
   mouseSensitivity: 0.0025
   maxPitchDegrees: 89
+--- !u!114 &8476009461030851118
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5864103043191688095}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e3e4bdbd0a294e019929b45dca9e4748, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.PlayerCameraFeedback
+  player: {fileID: 1460595302204604614}
+  targetCamera: {fileID: 4927503976345080273}
+  baseFov: 75
+  maxFov: 84
+  shakeAmplitude: 0.06
+  shakeDuration: 0.18
+  shakeFrequency: 28
+--- !u!114 &6044168052179503180
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5864103043191688095}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7d735d6928a40e5a36a0d97f1bca112, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.RocketLauncher
+  input: {fileID: 4153586482274664226}
+  look: {fileID: 5313289886365503098}
+  aimCamera: {fileID: 4927503976345080273}
+  spawnPoint: {fileID: 8454294845137277193}
+  projectilePrefab: {fileID: 8559740546736699006, guid: 8cf33930ca4c1194a8901597f06610c0, type: 3}
+  explosionResolver: {fileID: 0}
+  firingInterval: 0.7
+  spawnOffset: 0.35
+--- !u!114 &257512934034810264
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5864103043191688095}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d68d49b1d06d4d079eeea2e4b0bb2d7a, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.BallKick
+  input: {fileID: 4153586482274664226}
+  player: {fileID: 1460595302204604614}
+  look: {fileID: 5313289886365503098}
+  aimCamera: {fileID: 4927503976345080273}
+  ball: {fileID: 0}
+  kickRange: 1.35
+  coneTotalDegrees: 35
+  cooldown: 0.4
+  inputBuffer: 0.5
+  speedFraction: 0.7
+  playerMomentumShare: 0.2
 --- !u!1 &7353942073518467462
 GameObject:
   m_ObjectHideFlags: 0
@@ -186,7 +251,8 @@ Transform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children: []
+  m_Children:
+  - {fileID: 8454294845137277193}
   m_Father: {fileID: 8684155597031825141}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!20 &4927503976345080273
@@ -248,3 +314,34 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7353942073518467462}
   m_Enabled: 1
+--- !u!1 &8366400810931791122
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 8454294845137277193}
+  m_Layer: 0
+  m_Name: RocketMuzzle
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &8454294845137277193
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8366400810931791122}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: -0.05, z: 0.45}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 291735094461411079}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}

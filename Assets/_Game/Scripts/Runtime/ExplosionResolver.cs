@@ -1,0 +1,241 @@
+using UnityEngine;
+
+namespace RocketFooxball
+{
+    /// <summary>Resolves radial blast falloff, geometry occlusion, and additive player/ball impulses.</summary>
+    public sealed class ExplosionResolver : MonoBehaviour
+    {
+        [Header("Blast")]
+        [SerializeField, Min(0.1f)] private float blastRadius = 4.5f;
+        [SerializeField, Min(0f)] private float playerImpulseStrength = 24f;
+        [SerializeField, Min(0f)] private float ballImpulseStrength = 16f;
+        [SerializeField, Range(0f, 1f)] private float occludedForce = 0.25f;
+        [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
+        [SerializeField] private Collider[] goalShieldColliders;
+
+        [Header("Feedback")]
+        [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = 0.8f;
+
+        private readonly Collider[] overlapBuffer = new Collider[128];
+        private readonly PlayerMotor[] playerTargets = new PlayerMotor[16];
+        private readonly Collider[] playerTargetColliders = new Collider[16];
+        private readonly float[] playerTargetDistances = new float[16];
+        private readonly BallMotor[] ballTargets = new BallMotor[8];
+        private readonly Collider[] ballTargetColliders = new Collider[8];
+        private readonly float[] ballTargetDistances = new float[8];
+
+        public float BlastRadius => blastRadius;
+        public float OccludedForce => occludedForce;
+
+        /// <summary>Resolves one rocket blast at origin. Source/impact collider are excluded from occlusion and targets.</summary>
+        public void ResolveExplosion(Vector3 origin, RocketProjectile source = null, Collider impactCollider = null)
+        {
+            var overlapCount = Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
+            var playerCount = 0;
+            var ballCount = 0;
+
+            for (var i = 0; i < overlapCount; i++)
+            {
+                var collider = overlapBuffer[i];
+                if (collider == null || collider == impactCollider || (source != null && collider == source.ProjectileCollider))
+                {
+                    continue;
+                }
+
+                var player = collider.GetComponentInParent<PlayerMotor>();
+                if (player != null)
+                {
+                    AddPlayerTarget(player, collider, origin, ref playerCount);
+                    continue;
+                }
+
+                var ball = collider.GetComponentInParent<BallMotor>();
+                if (ball != null)
+                {
+                    AddBallTarget(ball, collider, origin, ref ballCount);
+                }
+            }
+
+            for (var i = 0; i < playerCount; i++)
+            {
+                var targetCollider = playerTargetColliders[i];
+                var distance = playerTargetDistances[i];
+                var falloff = ComputeFalloff(distance);
+                if (falloff <= 0f)
+                {
+                    continue;
+                }
+
+                var strength = falloff * (IsOccluded(origin, targetCollider, targetCollider.ClosestPoint(origin), false) ? occludedForce : 1f);
+                var target = playerTargets[i];
+                var center = target.transform.position;
+                var direction = center - origin;
+                if (direction.sqrMagnitude <= 0.000001f)
+                {
+                    direction = Vector3.up;
+                }
+                else
+                {
+                    direction.Normalize();
+                }
+                if (direction.y < 0.25f)
+                {
+                    direction = (direction + Vector3.up * playerUpBias).normalized;
+                }
+
+                target.AddExternalImpulse(direction * (playerImpulseStrength * strength));
+                var feedback = target.GetComponent<PlayerCameraFeedback>();
+                feedback?.RequestBlastShake(Mathf.Clamp01(strength * cameraFeedbackScale));
+            }
+
+            for (var i = 0; i < ballCount; i++)
+            {
+                var targetCollider = ballTargetColliders[i];
+                var distance = ballTargetDistances[i];
+                var falloff = ComputeFalloff(distance);
+                if (falloff <= 0f)
+                {
+                    continue;
+                }
+
+                var closestPoint = targetCollider.ClosestPoint(origin);
+                var strength = falloff * (IsOccluded(origin, targetCollider, closestPoint, true) ? occludedForce : 1f);
+                var target = ballTargets[i];
+                var direction = target.transform.position - origin;
+                if (direction.sqrMagnitude <= 0.000001f)
+                {
+                    direction = closestPoint - origin;
+                }
+                if (direction.sqrMagnitude <= 0.000001f)
+                {
+                    continue;
+                }
+                target.QueueImpulse(direction.normalized * (ballImpulseStrength * strength));
+            }
+        }
+
+        /// <summary>Compatibility alias for projectile owners.</summary>
+        public void Resolve(Vector3 origin)
+        {
+            ResolveExplosion(origin);
+        }
+
+        /// <summary>Updates shield list used for ball-transparent blast occlusion.</summary>
+        public void SetShieldColliders(Collider[] shields)
+        {
+            goalShieldColliders = shields;
+        }
+
+        private void AddPlayerTarget(PlayerMotor target, Collider collider, Vector3 origin, ref int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if (playerTargets[i] != target)
+                {
+                    continue;
+                }
+
+                var distance = SurfaceDistance(origin, collider);
+                if (distance < playerTargetDistances[i])
+                {
+                    playerTargetDistances[i] = distance;
+                    playerTargetColliders[i] = collider;
+                }
+                return;
+            }
+
+            if (count >= playerTargets.Length)
+            {
+                return;
+            }
+            playerTargets[count] = target;
+            playerTargetColliders[count] = collider;
+            playerTargetDistances[count] = SurfaceDistance(origin, collider);
+            count++;
+        }
+
+        private void AddBallTarget(BallMotor target, Collider collider, Vector3 origin, ref int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                if (ballTargets[i] != target)
+                {
+                    continue;
+                }
+
+                var distance = SurfaceDistance(origin, collider);
+                if (distance < ballTargetDistances[i])
+                {
+                    ballTargetDistances[i] = distance;
+                    ballTargetColliders[i] = collider;
+                }
+                return;
+            }
+
+            if (count >= ballTargets.Length)
+            {
+                return;
+            }
+            ballTargets[count] = target;
+            ballTargetColliders[count] = collider;
+            ballTargetDistances[count] = SurfaceDistance(origin, collider);
+            count++;
+        }
+
+        private float ComputeFalloff(float surfaceDistance)
+        {
+            var normalized = Mathf.Clamp01(1f - surfaceDistance / Mathf.Max(blastRadius, 0.0001f));
+            return normalized * normalized * (3f - 2f * normalized);
+        }
+
+        private float SurfaceDistance(Vector3 origin, Collider collider)
+        {
+            if (collider == null)
+            {
+                return blastRadius;
+            }
+            return Vector3.Distance(origin, collider.ClosestPoint(origin));
+        }
+
+        private bool IsOccluded(Vector3 origin, Collider targetCollider, Vector3 targetPoint, bool ballTarget)
+        {
+            var offset = targetPoint - origin;
+            var distance = offset.magnitude;
+            if (distance <= 0.0001f)
+            {
+                return false;
+            }
+
+            var direction = offset / distance;
+            if (!Physics.Raycast(origin, direction, out var hit, Mathf.Max(distance - 0.01f, 0f), ~0, QueryTriggerInteraction.Ignore))
+            {
+                return false;
+            }
+            if (hit.collider == targetCollider || hit.collider.transform.IsChildOf(targetCollider.transform))
+            {
+                return false;
+            }
+            if (ballTarget && IsGoalShield(hit.collider))
+            {
+                return false;
+            }
+            return true;
+        }
+
+        private bool IsGoalShield(Collider collider)
+        {
+            if (collider == null || goalShieldColliders == null)
+            {
+                return false;
+            }
+            for (var i = 0; i < goalShieldColliders.Length; i++)
+            {
+                if (goalShieldColliders[i] == collider)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}
