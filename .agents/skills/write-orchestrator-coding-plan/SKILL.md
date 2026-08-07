@@ -7,9 +7,10 @@ description: >-
 
 # Write Orchestrator Coding Plan
 
-Create lean plan executable by orchestrator and coding agents. Use exact paths, owners, dependencies, acceptance, validation, and proof. Canonical execution:
+Create lean plan executable by orchestrator and coding agents. Own artifact structure only. Use exact paths, owners, dependencies, acceptance, validation, and proof.
 
-`implement -> writer barrier -> review -> fix findings -> final-state validation -> handoff`
+- direct: `implementation -> writer barrier -> review -> fix if needed -> final validation -> handoff`
+- durable: `implementation -> writer barrier -> review -> fix if needed -> final plan validation -> integration handoff`
 
 ## Route Gate
 
@@ -22,7 +23,7 @@ Direct route:
 
 `one task worktree -> implement -> writer barrier -> one review -> fresh fix worker if needed -> final-state validation -> handoff`
 
-Use one orchestrator-owned task branch/worktree. Direct-route owner acts as plan supervisor and sole Git operator for that worktree. Workers edit owned files only. Stop at clean exact task head; user/original-branch merge remains LP-owned and authority-gated.
+Record `worktree_binding: create_at_execution`. Planning creates no branch/worktree. At execution, invoking orchestrator/LP acts as direct-route plan supervisor and sole Git owner, then creates one isolated task branch/worktree from exact artifact baseline. Apply direct-owner and child contracts from `$orchestrate-implementation`. Stop at clean exact task head; user/original-branch merge remains LP-owned and authority-gated.
 
 Durable route uses control, plan, and integration worktrees plus state contracts referenced below. Do not add ledger, convergence, wave, or recovery ceremony when direct route criteria hold.
 
@@ -31,7 +32,7 @@ Durable route uses control, plan, and integration worktrees plus state contracts
 1. Read repository instructions, source plans, and requested scope.
 2. Inspect relevant code, assets, manifests, settings, and validation workflows.
 3. Search exact paths and symbols. Mark existing, missing, and proposed facts.
-4. Inspect Git status and full baseline SHA. Preserve unrelated user changes.
+4. Inspect Git status and exact committed full baseline SHA. Preserve unrelated user changes.
 5. Ask user only when unresolved behavior, scope, compatibility, architecture, or authority choice changes work.
 6. State minor assumptions in plan. Do not gate on minor assumptions.
 7. Apply route gate. Record route and reason.
@@ -50,59 +51,37 @@ User answer or blocker resolution triggers fresh breakdown attempt. Do not turn 
 
 ## Ownership And Git Surfaces
 
-Canonical ownership for durable route:
-
-- `LP`: control ledger, immutable orchestration artifacts, global scheduling, plan-worktree provisioning, and authorized user/original-branch merge.
-- planner: immutable plan/report artifact under control worktree `loop-runs/{run_id}/artifacts/`; no product edits or Git operations.
-- plan supervisor: sole Git owner for one plan branch/worktree; stages, commits, checks clean state, and freezes accepted head.
-- child implementation/fix leases: file edits only; parallel leases disjoint; each owned path has one active lease; no child Git, branch, worktree, staging, or commit operation.
-- implementation and fix workers: edit owned files only; no Git operations; no foreign-path edits.
-- reviewer: inspect frozen state only; no edits; run no tests.
-- merging supervisor: sole Git owner for active integration branch/worktree lease; reports verified integration head only. Lease ends on accepted, blocked, interrupted, expired, or cancelled attempt.
-- control worktree: ledger and orchestration artifacts only.
-- integration worktree: accepted product commits and integration fixes.
-- plan worktree: one isolated worktree per plan; no cross-plan sharing.
-
-LP alone merges into user, original, or default branch after explicit authority. Merging supervisor reports `not_authorized` or `authorized_pending_lp` for that boundary. Completion records exact merge outcome and observed user-branch head. Retain control, accepted plan, and integration refs until handoff/recovery retention is recorded; LP owns safe worktree cleanup after all leases close.
+Artifact records one ownership forecast covering every writable path, validation owner, dependency boundary, and integration order. Apply durable Git/state ownership from `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md); apply execution roles from `$orchestrate-implementation`. Planner writes immutable artifact under control worktree `loop-runs/{run_id}/artifacts/`; planner performs no product edit or Git operation. LP retains ledger, provisioning, and authorized user/original/default-branch merge. Invoking orchestrator/LP retains direct-route Git ownership.
 
 ## Artifact And Worktree Lifecycle
 
-Durable planner artifact precedes worktree. `P0` worktree binding is required only for a plan accepted as `ready_to_execute` during `PLAN_CONVERGENCE`:
+Durable artifact is immutable before product worktree exists:
 
-- planner writes immutable plan/report artifact in control worktree; LP records and commits control state.
-- after `PLAN_CONVERGENCE` marks a plan `ready_to_execute`, LP provisions one exact plan branch/worktree from accepted baseline before plan-supervisor dispatch.
-- `needs_user` or `blocked` plans remain artifact-only; no product branch/worktree or `P0` verification is required.
-- loop-owned `P0` verifies pre-provisioned branch/worktree, path, writability, baseline, and ownership. No duplicate creation.
-- standalone planning `P0` creates one fresh task branch/worktree from baseline and verifies access.
-- plan supervisor owns all plan-worktree staging, commits, clean checks, and accepted-head freeze.
-- main checkout stays read-only after setup. Setup failure blocks execution; no fallback edit path.
+- `baseline_sha`: exact committed full SHA
+- `forecast_ownership`: required writable paths and owners
+- `worktree_binding`: `assigned_at_convergence`
+- future branch name and absolute worktree path: omitted
 
-Lease recovery preserves single-writer invariant:
+Durable convergence: validate graph, ownership, artifact digests, and exact baseline -> provision branch/worktree from accepted baseline -> verify path, branch, full head SHA, cleanliness, and writability -> one atomic ledger transition records accepted gate, observed binding facts, and `ready_to_execute`. Before transition plan remains `awaiting_convergence`; committed `ready_to_execute` requires nonnull observed branch/worktree facts. `needs_user` and `blocked` remain artifact-only.
 
-- replace same-worktree attempt only after lease expiry or confirmed interruption, confirmed process termination, and reconciled Git state.
-- if prior agent remains live or termination is unconfirmed, quarantine old branch/worktree; replacement uses new branch/worktree from last accepted SHA.
-- preserve reachable commits before cleanup. Late results fail identity checks against closed lease and entity generation.
+Standalone/direct artifact records `worktree_binding: create_at_execution`. Planning alone creates no branch/worktree. At execution, direct owner creates one task branch/worktree from exact baseline, verifies binding, then dispatches work.
+
+Apply worktree, baseline, freeze, identity, capacity, and recovery invariants from `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md). Apply dispatch acceptance from [communication contracts](../loop-orchestrator/references/communication-contracts.md).
 
 ## Result And Evidence Binding
 
-Result identity:
-
-`{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha}`
-
-LP accepts parallel reports after latest-revision CAS re-read when active entity generation and relevant baseline remain unchanged. Submitted report revision need not equal latest global revision. Unrelated heartbeat, report, or ledger revision does not invalidate result. Entity mutation, supersession, lease closure, or baseline change invalidates result.
-
-Every accepted artifact names exact frozen state SHA. Evidence stays valid only while checked inputs remain byte/state-equivalent. Name invalidation and rerun owner when state changes.
+Plan names required identity and evidence outputs; canonical tuple, acceptance, and recovery live in `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md) and [communication contracts](../loop-orchestrator/references/communication-contracts.md). Every accepted artifact names exact frozen state SHA. Plan names invalidation and rerun owner for each check.
 
 ## Scale Orchestration
 
 - tiny/low-risk: direct route; concise ordered steps; no fake parallelism.
-- one-agent change: one packet -> writer barrier -> one review -> fix -> final validation.
+- one-agent change: one packet -> writer barrier -> one review -> fresh fix if needed -> final validation.
 - medium change: few coherent packets; serialize shared files, contracts, registration, serialized assets, migrations, and unstable interfaces.
 - large change: parallelize only independent packets with disjoint owned files, stable inputs, and independent acceptance.
 
 Parallel packet form:
 
-`P1 implement || P2 implement -> writer barrier -> one plan-wide review -> fix findings -> validation/integration`
+`P1 implementation || P2 implementation -> writer barrier -> one plan-wide review -> fix if needed -> final plan validation -> integration handoff`
 
 Parallel implementation permits owned-file edits only under disjoint child edit leases; one active lease per owned path. Close every active edit lease before review or shared-project validation. Plan supervisor reconciles diff, commits, and freezes exact head. Reviewers inspect that frozen head; repository-wide validation starts after barrier. Downstream lane consuming upstream contract waits for accepted upstream review/fix state.
 
@@ -122,19 +101,13 @@ Each packet gives one agent enough context:
 - validation: sole owner, exact run point, command/workflow, invalidation
 - proof: discriminatory evidence when behavior changes
 - review focus: regression, safety, contract, or evidence risks
+- requested slots: peak concurrent slot count
 
 Mark new paths `proposed`. Keep packet data in plan; use `$orchestrate-implementation` for worker, reviewer, and fix-worker prompts/reports. Workers receive explicit no-Git boundary.
 
 ## Writer Barrier, Review, And Fix
 
-After all writers finish:
-
-1. Plan supervisor closes every edit lease, reconciles owned diff and unrelated state, stages, commits, checks clean worktree, and records `writer_barrier` gate with exact frozen head.
-2. Assign one independent inspect-only review against exact frozen diff/head. Reviewer runs no tests and reports critical/high correctness, regression, safety, and proof findings.
-3. Route accepted findings to fresh fix worker. Fix worker edits owned scope only, supplies final proof, and returns to plan supervisor for commit and clean-head freeze.
-4. Do not dispatch second review. Final-state validation covers behavior and evidence invalidated by fixes.
-
-One review pass applies per review boundary. No architecture, public-contract, security, or broad-code exception. Keep review/fix/validation records tied to exact state SHA.
+Plan artifact includes `WB`, one `R1` per required boundary, optional `F1`, and final validation. Use `$orchestrate-implementation` for role actions, profiles, prompts, reports, one-review rule, fix proof, and freeze behavior. Artifact names exact owners, run points, frozen-state bindings, completion criteria, and invalidations.
 
 ## Check Ownership And Proof
 
@@ -157,16 +130,7 @@ Final validation covers relevant compile/build, focused checks, required editor/
 
 ## Final Integration Boundary
 
-Use one final-stage model across plan, merge, communication, and state contracts:
-
-Final-stage marker: `FINAL_STAGE` (one bounded `WAVE_INTEGRATION` attempt; not a run-state enum).
-Substates: `combined_review` -> `integration_fix` (optional, at most once) -> `final_verify`.
-
-`WAVE_INTEGRATION -> merge -> combined review when needed -> integration fix -> final verification -> READY_FOR_USER_MERGE`
-
-Record review, fix, and verification as final integration substates/gates, not separate top-level plan transitions. Final merging supervisor owns one bounded final-stage attempt and delegates review/fix as needed. At most one accepted integration-fix cycle.
-
-Single-plan optimization: reuse accepted plan-wide review when merge adds no changes and evidence remains valid. Run combined review only for multi-plan integration, conflict resolution, integration fixes, or invalidated cross-plan evidence. Final merger stops at verified integration head; LP performs user-branch merge once when authorized.
+Artifact hands only validated frozen plan head to integration. Point final-stage mapping, gates, and LP merge boundary to `$loop-orchestrator` [state and recovery](../loop-orchestrator/references/state-and-recovery.md#canonical-report-transitions); point merger procedure to [merging](../loop-orchestrator/agents/merging.md). Add no parallel state enum or copied mapping.
 
 ## Execution Handoff
 
@@ -184,7 +148,8 @@ Required structure; remove irrelevant sections:
 Status: proposed
 Route: direct | durable
 Source: [request or source path -> heading]
-Baseline: [branch/commit or inspection date]
+Baseline: [exact 40-character lowercase commit SHA]
+worktree_binding: assigned_at_convergence | create_at_execution
 
 ## Objective
 
@@ -208,25 +173,28 @@ Baseline: [branch/commit or inspection date]
 - invariant: [rule]
 - assumption: [minor assumption]
 
+## Ownership Forecast
+
+- `[writable path or tight glob]`: [single owner]
+- validation: [single owner per check and code state]
+- integration order: [dependency-safe order]
+- requested slots: [peak concurrent count]
+
 ## Execution
 
-`direct: one worktree -> implement -> writer barrier -> review -> fresh fix if needed -> final validation -> handoff`
+`direct: create binding at execution -> implementation -> writer barrier -> review -> fresh fix if needed -> final validation -> handoff`
 
 or
 
-`durable: P0 -> implementation packets -> writer barrier -> review -> fix -> wave/integration handoff -> final validation`
+`durable: convergence assigns binding -> implementation packets -> writer barrier -> review -> fresh fix if needed -> final plan validation -> integration handoff`
 
-### P0: Worktree and artifact binding (durable route)
+### P0: Worktree binding
 
-- owner: LP; plan supervisor verifies exact binding
-- gate: required only when `PLAN_CONVERGENCE` accepts plan as `ready_to_execute`; `needs_user` or `blocked` -> `None`
-- artifact: `[control-worktree]/loop-runs/{run_id}/artifacts/[plan-file]`
-- mode: `create_standalone` | `verify_preprovisioned`
-- baseline: `[full SHA]`
-- branch: `[exact plan branch]`
-- worktree: `[absolute plan worktree]`
-- actions: standalone create one fresh worktree; loop-owned verify LP-provisioned worktree; confirm path, writability, baseline, and no duplicate
-- done when: one plan worktree exists, exact branch/baseline match, all later paths resolve inside it, and control artifact is immutable
+- worktree_binding: `assigned_at_convergence` | `create_at_execution`
+- baseline: `[same exact 40-character lowercase commit SHA]`
+- owner: durable -> LP provisions and plan supervisor verifies; direct -> invoking orchestrator/LP creates and verifies
+- action: durable -> convergence validates graph/ownership/digests/baseline, provisions from baseline, verifies observed binding, then atomically records accepted gate + binding facts + `ready_to_execute`; direct -> owner creates binding at execution before dispatch
+- done when: one observed clean writable branch/worktree matches exact baseline; durable ledger or direct transient handoff records facts
 - blocked: report setup evidence and required authority; keep main checkout read-only
 
 ### P1: [coherent result]
@@ -251,7 +219,7 @@ or
 
 ### R1: Review
 
-- owner: independent reviewer; inspect-only against `[frozen SHA/diff]`; run no tests; report `critical` or `high` only
+- owner: independent reviewer; inspect-only against writer-barrier frozen full SHA/diff; run no tests; report `critical` or `high` only
 - done when: one review result accepted with findings or pass
 
 ### F1: Fix accepted findings
@@ -263,7 +231,7 @@ or
 ## Final Verification
 
 - evidence: [carried valid results and frozen SHA]
-- tests: owner [plan supervisor, merging supervisor, or LP] at [run point]; run `[exact command/workflow]` | none - [reason]
+- tests: owner [direct owner or plan supervisor] at [run point before handoff]; run `[exact command/workflow]` | none - [reason]
 - expect: [result]
 - exclude: [checks already proven; no rerun]
 - inspect: [diff/assets/runtime behavior when required]
@@ -276,10 +244,10 @@ or
 ## Done Criteria
 
 - route and ceremony match task size
-- every writable path has one owner and one worktree
+- every writable path has one owner; execution allocates exactly one route-owned worktree
 - plan head is committed, clean, exact, and frozen before review evidence
 - review runs once per boundary; fix worker supplies final proof; final checks cover invalidations
-- final integration and LP merge boundaries are explicit
+- durable integration receives only validated frozen plan head; LP merge boundary is explicit
 ```
 
 Direct route may replace packet ceremony with short ordered steps, but retain ownership, writer barrier, one review, fix proof, and final validation.
@@ -291,12 +259,13 @@ Before save, confirm:
 - repository claims cite real paths or mark proposals
 - route matches task size; no unearned durable ceremony
 - breakdown status matrix honored; no invented `needs_user`/`blocked` fields
-- artifact path legal; P0 mode matches standalone or loop-owned lifecycle
+- baseline is exact committed full SHA
+- binding is `assigned_at_convergence` for durable or `create_at_execution` for direct; artifact contains no future branch or absolute product-worktree path
+- ownership forecast covers every writable path
 - one owner per Git surface, file, worktree, check, lease, and evidence item
+- requested slots do not exceed reconciled `available_count`; zero or insufficient capacity queues/waits before reservation or spawn
 - parallel writers are disjoint and finish before barrier/review/validation
 - review targets frozen exact head; no second review branch exists
-- result identity includes dispatch, attempt, lease, entity generation, and baseline
-- lease replacement quarantine prevents concurrent writers
-- final-stage model and LP user-merge boundary use canonical pointers
+- identity, recovery, final mapping, baseline, and capacity use canonical pointers
 - packet data delegates prompt/report formats to `$orchestrate-implementation`
 - no implementation changes appear in plan
