@@ -1,379 +1,81 @@
 ---
 name: orchestrate-implementation
-description: Use when executing implementation plans or multi-file coding changes through delegated subagents, especially work needing parallel ownership lanes, independent code review, review-fix workers, and evidence-based completion.
+description: Use when delegated implementation needs bounded workers, independent review, or review fixes.
 ---
 
 # Orchestrate Implementation
 
-Act only as orchestrator. Delegate implementation, testing, validation, review, and review fixes. Read enough context to partition work, resolve ownership, monitor progress, and assess evidence completeness. Make no product-code edits. Perform no substantive code review.
+Role contract for implementation workers, reviewers, and review-fix workers. Parent/supervisor owns task flow and Git. Shared recovery and integration behavior lives in [`$loop-orchestrator`](../loop-orchestrator/SKILL.md).
 
-Own canonical worker, reviewer, and fix-worker prompt and response formats. When executing plan from `$write-orchestrator-coding-plan`, map work-packet data into templates below. Ignore copied or embedded prompt schemas in plans.
+## Ownership and profiles
 
-This file owns execution sequence and child templates only. Before child dispatch/report acceptance, load relevant [communication-contract branch](../loop-orchestrator/references/communication-contracts.md). On baseline, freeze, recovery, or transition branch, load named [state-and-recovery section](../loop-orchestrator/references/state-and-recovery.md).
+- Parent/supervisor is sole Git owner for task branch and worktree. Parent creates or selects worktree, stages, commits, freezes, verifies scope, and runs final validation.
+- Child implementation and fix workers edit assigned owned paths only. They perform no Git mutation, staging, committing, branch/worktree mutation, or freeze.
+- One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared files, contracts, generated or serialized assets, and validation environments.
+- Parent closes writer barrier before stage, commit, freeze, review, or shared validation.
+- Reviewer inspects exact frozen SHA read-only. Reviewer performs no edits or tests unless dispatch explicitly assigns them.
+- User and `AGENTS.md` profile requirements win. Otherwise use suitable available role: implementation defaults to `luna_max`, reviewer uses fresh exact `sol_medium`, and fix uses fresh exact `luna_max`. Required profile unavailability -> `blocked`; do not substitute silently.
 
-Use standard Markdown, never JSON. Apply `$llm-oriented-markdowns` to every subagent prompt and require same style for responses. Include only task-critical details and exact identifiers.
+## Dispatch contract
 
-## Execution Ownership
+Each dispatch has one-use identity and task facts. Include:
 
-- plan supervisor: performs plan-branch Git actions at writer barriers; creates no nested worker worktree.
-- direct owner: invoking orchestrator/LP acting as direct-route plan supervisor and sole task branch/worktree Git owner. Creates isolated task branch/worktree from exact baseline; stages and commits child edits; closes child edit leases; freezes exact head; runs or delegates final checks; hands off exact task head. Performs no product edits or substantive review. LP alone performs authority-gated user/original/default-branch merge.
-- implementation and review-fix workers: child edit leases; edit owned files only. No Git operations, branch/worktree mutation, staging, or commits. Parallel child leases are allowed only for disjoint owned paths; one active child edit lease per owned path.
-- reviewer: inspect frozen state only. No edits or Git operations.
-- merging supervisor: performs integration-branch Git actions through merger contract.
+- `execution_id`: unique ID, never reused
+- `assigned_agent`: exact agent identity; include `role` (`implementation`, `reviewer`, or `fix`)
+- `task`: bounded task name and `done_condition`
+- `objective`: requested outcome and exclusions
+- `baseline_sha`: full 40-character SHA
+- `branch`, `worktree`: exact branch name and absolute worktree path
+- `owned_paths`, `protected_paths`: exact repository-relative paths or symbols
+- `dependencies`: accepted SHAs or `None`
+- `allowed_git_ops`: exact operations and target; writer/fix workers -> `None`, reviewer -> read-only inspection when assigned
+- `checks`: required commands/workflows and evidence locations
 
-Parent/child identities, Git authority, leases, and freeze invariants: [state and recovery](../loop-orchestrator/references/state-and-recovery.md). This file adds role-local actions only.
+Reviewer dispatch also carries exact `frozen_sha` and review boundary. Fix dispatch carries `pre_fix_frozen_sha`, accepted finding IDs, and finding-owned paths.
 
-## Roles
+Workers receive task-local context, objective, done condition, scope, dependencies, constraints, checks, and proof bar. Stop before unowned edits; request narrow named scope. Route foreign-path findings to owning worker.
 
-- implementation: exact `luna_max` profile. Maximum-effort worker.
-- review: exact `sol_medium` profile. Independent code reviewer.
-- review fixes: fresh `luna_max` worker. Never original worker or reviewer.
-- orchestrator: decomposition, dispatch, blocker resolution, evidence accounting, final synthesis only.
+## Return and acceptance
 
-Never substitute profiles. Never absorb delegated work when slots, tools, or agents fail. Report blocker or retry delegation.
+Return in any readable heading order. Repeat dispatch `execution_id`, `assigned_agent`, `role`, and `task` unchanged. Include:
 
-## Workflow
+- `status`: `complete` or `blocked`
+- `changed_paths`: implementation/fix paths and concise changes, or `reviewed_sha` for reviewer
+- `checks`: command/workflow, observed result, and evidence path
+- `blocker`, `needed_action`: exact blocker and one action or recheck fact when `blocked`; `None` when complete
 
-### 0. Select route
+Parent accepts only when current execution identity plus observed collaboration, Git, branch, worktree, baseline/head, and scope facts match dispatch. Reject late, replaced, or foreign results; preserve report as hint only. Parent verifies report claims against files and Git. A report cannot promote itself by changing fields.
 
-Invoking orchestrator selects route through [`$loop-orchestrator` Direct route](../loop-orchestrator/SKILL.md#direct-route) before execution.
+## Implementation worker
 
-Direct execution:
+Use one implementation worker per ready owned scope. Worker sequence:
 
-`one worktree -> one writer lane -> writer barrier -> one review -> fresh fix worker if needed -> final validation -> handoff`
+1. Read dispatch facts and inspect assigned/protected paths.
+2. Implement objective within owned paths. Keep unrelated changes untouched. Use project-required tools and APIs.
+3. Run assigned checks; capture command, result, and reproducible evidence.
+4. Return identity, `complete` with changed paths and proof, or `blocked` with exact scope request and needed action.
 
-Apply direct transient state from [Direct Route And Canonical Pointers](../loop-orchestrator/references/state-and-recovery.md#direct-route-and-canonical-pointers). Durable plan execution begins only from accepted pre-provisioned plan binding.
+Success flow: dispatch -> edit/check owned scope -> worker `complete` -> parent verifies paths and closes writer barrier -> parent stages, commits, and freezes exact SHA -> reviewer dispatch.
 
-Completion: route, worktree, owner, and review boundary are named before dispatch.
+## Reviewer
 
-### 1. Partition
+After writer barrier, parent dispatches an independent fresh exact `sol_medium` reviewer with exact `frozen_sha`. Reviewer performs read-only Git/file inspection against that SHA only. No edits or tests unless explicitly assigned. Reviewer checks correctness, regressions, security, scope, validation gaps, and proof discrimination. Report Critical/High findings only; assign each finding to exact path/symbol and required fix. Return `reviewed_sha`, verdict, finding evidence, and checks/evidence.
 
-Convert request or plan into smallest coherent lanes. Default to one coherent plan-wide lane; split only for disjoint writes, real dependency, independent recovery, or a needed early contract boundary.
+Review pass: no Critical/High finding -> parent final validation. Finding -> parent accepts or rejects finding using observed facts, then dispatches fresh fix worker for accepted scope.
 
-For each lane define:
+## Review-fix worker
 
-- objective and acceptance criteria
-- owned files, symbols, or subsystem
-- protected scope
-- dependencies and start condition
-- required validation
-- proof needed to discriminate changed behavior from pre-change behavior
+Parent dispatches fresh exact `luna_max` fix worker with `pre_fix_frozen_sha`, accepted Critical/High findings, exact finding-owned paths, acceptance criteria, and required checks. Fix worker:
 
-Prefer non-overlapping ownership. Parallel lanes edit only owned files. Serialize shared files, shared contracts, mutable serialized assets, and validation environments. Lane consuming upstream contract waits for accepted upstream review/fix state, not worker completion alone.
+- edits accepted finding paths only; stop and request scope for any other path
+- performs no Git mutation or review
+- supplies proof that each accepted finding is fixed and unrelated scope preserved
+- returns finding disposition, changed paths, checks/evidence, residual risk, or exact blocker/action
 
-Completion: every requirement maps to one named lane; ownership and dependency edges explicit.
+No fix re-review. Parent closes writer barrier, stages, commits, and freezes post-fix exact SHA; reruns checks invalidated by fix and runs final validation at that committed SHA. Pre-fix review does not cover post-fix behavior.
 
-### 2. Dispatch implementation
+## Parent final validation
 
-Spawn one `luna_max` worker per ready lane with Worker Prompt Template. Give task-local context only. Include plan ID, exact dispatch identity, baseline SHA, branch/worktree, paths, constraints, acceptance criteria, proof bar, and response schema. Worker owns file edits only; plan supervisor retains all Git ownership.
+Parent runs required final checks at exact current committed SHA and clean worktree. Bind each check to command, working directory, observed result, and evidence. Accept only matching branch/worktree, scope, clean status, and head. Missing or drifted fact -> `blocked` with evidence and needed action.
 
-Monitor reports. Request missing evidence or clarification from same worker when implementation scope stays unchanged.
-
-Completion: every lane reports completed work with proof or exact blocker; no writer lease remains active for a lane entering review.
-
-### 3. Resolve blockers
-
-Treat ownership blockers as healthy scope control. Worker must stop before editing unowned scope and request exact extra file, symbol, or call-site.
-
-Grant narrow, named extra scope when needed and conflict-free. Update ownership map before work resumes. Never grant broad subsystem access when one expression, symbol, or file suffices.
-
-Keep cross-lane findings in owning lane. Route foreign-file work to its owner. When owned provider or API boundary can make untouched consumers safe by default, prefer that local contract hardening over foreign-lane edits.
-
-Completion: each blocker resolved by narrow scope grant, owner routing, safe local boundary change, or explicit unresolved status.
-
-### Pre-review semantic conflicts
-
-On behavior, contract, architecture, or acceptance conflict before review, apply exactly one disposition from [Baselines, Worktrees, And Freeze](../loop-orchestrator/references/state-and-recovery.md#baselines-worktrees-and-freeze). Parent closes affected edit leases and performs any discard/checkpoint Git action; replacement implementation child uses Worker Prompt Template with fresh identity and selected exact baseline. Normal writer barrier and review remain due. Fix Worker becomes legal only after accepted `critical` or `high` review finding.
-
-Completion: every pre-review semantic conflict has exactly one disposition; every redispatch starts from represented clean commit; normal writer barrier and review remain due.
-
-### Lease recovery
-
-On child stall, termination, or ambiguous writes, apply matching confirmed, unconfirmed writer, or read-only branch in [Idempotency](../loop-orchestrator/references/state-and-recovery.md#idempotency). Reconcile termination and Git before replacement.
-
-Completion: no two live plan-supervisor attempts share one branch/worktree; no two live child leases share one owned path; every replacement and preserved commit is recorded.
-
-### 4. Writer barrier
-
-Close every active edit lease before review or shared-project validation. Parent Git owner (durable plan supervisor or direct owner) then:
-
-- reconciles owned paths and Git state;
-- stages and commits implementation (or accepted fixes);
-- records exact full frozen head SHA, commit list, and clean status;
-- prevents further writer mutation until a fresh lease is authorized.
-
-Bind review evidence, validation evidence, and requirement claims to frozen head SHA. Repository-wide validation starts only after barrier. Downstream lane needing upstream contract waits for accepted upstream review/fix state and frozen evidence. Any post-freeze mutation invalidates affected evidence and requires a new barrier.
-
-Completion: all writers closed; one observed clean committed frozen head exists; no review or shared validation starts before this point.
-
-### 5. Dispatch reviews
-
-After writer barrier, spawn independent `sol_medium` reviewer with Reviewer Prompt Template against exact frozen head. Default to one plan-wide review. Add early lane review only when downstream contract consumption requires it; each review boundary runs once.
-
-Reviewer judges correctness, regressions, security, validation gaps, and proof quality. Report only `critical` or `high` findings. Reviewer must decide whether tests fail against relevant pre-change behavior, not accept passing tests as sufficient proof.
-
-Orchestrator checks review response completeness only. Orchestrator does not inspect code as substitute review.
-
-Completion: every review boundary has one independent report naming frozen head; no reviewer observes mutable writer state.
-
-### 6. Dispatch review fixes
-
-Group compatible in-lane findings. Spawn fresh `luna_max` worker with Fix Worker Prompt Template. Give exact findings, owned scope, acceptance criteria, and required validation.
-
-Fix worker edits only. Run at most one accepted fix cycle per review boundary. Do not send fixes for another review. After fixes, repeat writer barrier: parent Git owner stages, commits, reconciles clean status, and freezes exact post-fix head. Fix worker reports pre-fix frozen head plus `Final frozen head: pending_plan_supervisor_freeze`; parent Git owner binds final behavior proof to post-fix frozen head. Final validation covers invalidated behavior. Report unresolved findings or proof gaps as residual risk.
-
-Completion: every accepted finding maps to proven fix or explicit unresolved status; one review pass per boundary; no fix re-review.
-
-### 7. Final-state validation
-
-Run assigned final checks only after final writer barrier. Bind every check to exact final frozen head SHA and record command, working directory, observed result, and artifact. Re-run only checks invalidated by a named post-freeze change. Parent Git owner accepts only committed clean exact head with no live lease able to mutate it.
-
-Completion: final checks pass at one frozen head, or exact blocker and invalidated evidence are recorded; branch, worktree, and evidence reconcile.
-
-### 8. Report
-
-Return user-facing outcome from agent evidence. Include:
-
-- selected route and exact final frozen head
-- delivered lanes and key files
-- validation and discriminatory proof
-- review findings and fix disposition
-- unresolved risks or blockers
-- every environment trap encountered
-- every wasted subagent run or miscommunication
-
-Write exact `None reported` for empty trap or waste sections. Keep empty markers compact; do not invent verbose `None` trees. Never hide failed, duplicated, blocked, wrongly scoped, or preventable runs.
-
-Completion: every requirement, finding, trap, and run accounted for.
-
-## Proof Rules
-
-- assertion is not proof. Require commands, observed output, diffs, screenshots, logs, or other reproducible artifacts.
-- bug fix: require red-green evidence where safe and practical. In isolated owned scope, restore relevant pre-change behavior, observe targeted case fail, restore intended change byte-identically, observe pass.
-- negative control: use only when safe. Do not mutate serialized assets temporarily; use alternate discriminatory evidence when rollback is unsafe or impractical, and record reason.
-- test quality: show test would reject relevant pre-change behavior. Passing only on changed code is insufficient.
-- final state: prove intended change restored after negative control and unrelated state preserved at named frozen head.
-- reviewer: inspect evidence provenance and discrimination, not worker confidence language.
-
-## Run Accounting
-
-Environment trap: environment behavior that blocked, distorted, or slowed work. Capture agent, lane, exact error or symptom, trigger, workaround, impact, and suggested permanent fix. Examples: tool/version mismatch, editor lock, sandbox boundary, path quoting, missing dependency, hidden generated state, flaky command.
-
-Wasted run: run producing no useful implementation or review because of preventable orchestration failure. Capture agent, lane, cause, cost or delay, recovery, and prompt/workflow change. Include duplicate dispatch, wrong profile, missing context, conflicting ownership, ambiguous acceptance criteria, or unusable response format.
-
-Miscommunication: prompt or handoff ambiguity causing rework, wrong scope, or missing proof. Record separately even when run still produced useful work.
-
-## Worker Prompt Template
-
-Context, plan, lane, and review boundary route work only. Every nested dispatch/result identifies child and parent independently: `Entity: child_task:{child_task_id}` plus `Parent: plan:{plan_id}` for plan/direct context or `Parent: integration:{integration_id}` for integration context. Direct route uses run-scoped transient IDs. Every response repeats identity and routing fields unchanged. Reviewer and fix-worker `Review boundary`: `lane-contract | plan-wide | integration-wide`.
-
-Raw response mapping: [Canonical Report Transitions](../loop-orchestrator/references/state-and-recovery.md#canonical-report-transitions). Context never changes role/task-kind mapping. Pre-review semantic conflict uses implementation worker contract.
-
-```text
-Role: implementation worker
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: implementation | integration_conflict
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: {sha256_digest | None}
-Incoming accepted SHA: {full_sha | None}
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Objective: {objective}
-Owned scope: {exact_files_symbols_or_subsystem}
-Protected scope: {must_not_edit}
-Dependencies: {inputs_and_start_state}
-Read scope: {focused_paths_and_symbols}
-Required changes:
-- {implementation_action}
-Constraints:
-- {lane_specific_rule}
-Acceptance criteria:
-- {criterion}
-Required validation:
-- {command_or_check}
-Required proof:
-- {discriminatory_evidence}
-
-Implement and validate owned lane. Edit owned files only. Do not run Git operations or mutate branch/worktree, stage, commit, or freeze. Preserve unrelated work. Stop before unowned edits; request narrow named scope. Report cross-lane findings without editing foreign scope.
-
-Respond exactly:
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: implementation | integration_conflict
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: {sha256_digest | None}
-Incoming accepted SHA: {full_sha | None}
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Status: complete | blocked
-Changed:
-- {file_or_symbol}: {change}
-Proof:
-- {command_or_artifact}: {observed_result}
-Negative control:
-- {pre_change_failure_and_post_change_restoration | reason_not_run_and_alternate_evidence}
-Validation:
-- {check}: pass | fail — {result}
-Blockers or scope requests:
-- {exact_scope_and_reason | None}
-Cross-lane findings:
-- {owner_or_scope}: {finding | None}
-Environment traps:
-- {trigger; exact symptom; workaround; impact; permanent_fix | None}
-Waste or miscommunication:
-- {cause; impact; recovery; prevention | None}
-```
-
-## Reviewer Prompt Template
-
-```text
-Role: code reviewer. Review only; make no edits.
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: review | combined_review
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: None
-Incoming accepted SHA: None
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Frozen review head: {full_sha}
-Review boundary: {lane-contract | plan-wide | integration-wide}
-Objective: {objective}
-Owned review scope: {exact_files_symbols_or_diff}
-Acceptance criteria:
-- {criterion}
-Worker evidence:
-{worker_report_or_artifact_paths}
-
-Review exact frozen review head only. Run no Git operations, tests, or edits. Review correctness, regressions, security, validation gaps, and proof discrimination. Report only `critical` or `high` findings. Verify supplied tests would reject relevant pre-change behavior. Trace cross-lane impact, but keep findings assigned to owning lane. Parent Git owner records `Frozen review head` as reviewed head; post-fix barrier records separate final frozen head.
-
-Respond exactly:
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: review | combined_review
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: None
-Incoming accepted SHA: None
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Frozen review head: {full_sha}
-Review boundary: {lane-contract | plan-wide | integration-wide}
-Verdict: pass | findings
-Findings:
-- {id} | {critical | high} | {owner_scope} | {file:line} | {defect} | {impact} | {evidence} | {required_fix}
-Proof assessment:
-- {evidence}: discriminates | does_not_discriminate — {reason}
-Cross-lane findings:
-- {target_owner_or_scope}: {finding | None}
-Environment traps:
-- {trigger; exact symptom; workaround; impact; permanent_fix | None}
-Waste or miscommunication:
-- {cause; impact; recovery; prevention | None}
-```
-
-## Fix Worker Prompt Template
-
-```text
-Role: review-fix worker. No later review run follows; supply complete final proof.
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: review_fix | integration_fix
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: None
-Incoming accepted SHA: None
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Pre-fix frozen head: {full_sha}
-Review boundary: {lane-contract | plan-wide | integration-wide}
-Owned scope: {exact_files_symbols_or_subsystem}
-Protected scope: {must_not_edit}
-Findings:
-- {finding_id}: {required_fix_and_evidence}
-Acceptance criteria:
-- {criterion}
-Required validation:
-- {command_or_check}
-
-For fixes, `Baseline` must equal `Pre-fix frozen head`; both name exact reviewed state before fix edits. Parent Git owner records reviewed head separately from post-fix final frozen head. Fix accepted findings in owned scope. Edit files only. Do not run Git operations or mutate branch/worktree, stage, commit, or freeze. Preserve unrelated work. Stop before unowned edits; request narrow named scope. Report cross-lane findings without editing foreign scope. Parent Git owner freezes post-fix state before final validation.
-
-Respond exactly:
-Context: plan | integration
-Plan: {plan_id | direct_route | None for integration}
-Lane: {lane_id | plan-wide | integration-wide}
-Entity: child_task:{child_task_id}
-Parent: plan:{plan_id} | integration:{integration_id}
-Parent attempt: {active_parent_attempt_id}
-Task kind: review_fix | integration_fix
-Dispatch: {dispatch_id}
-Attempt: {attempt_id}
-Lease: {lease_id}
-Entity generation: {positive_integer}
-Baseline: {full_sha}
-Input state digest: None
-Incoming accepted SHA: None
-Branch: {exact_branch}
-Worktree: {absolute_path}
-Pre-fix frozen head: {full_sha}
-Review boundary: {lane-contract | plan-wide | integration-wide}
-Final frozen head: pending_plan_supervisor_freeze
-Status: complete | blocked
-Finding disposition:
-- {finding_id}: fixed | unresolved — {change_or_reason}
-Changed:
-- {file_or_symbol}: {change}
-Proof:
-- {command_or_artifact}: {observed_result}
-Negative control:
-- {pre_fix_failure_and_final_restoration | reason_not_run_and_alternate_evidence}
-Validation:
-- {check}: pass | fail — {result}
-Residual risks:
-- {risk | None}
-Blockers or scope requests:
-- {exact_scope_and_reason | None}
-Environment traps:
-- {trigger; exact symptom; workaround; impact; permanent_fix | None}
-Waste or miscommunication:
-- {cause; impact; recovery; prevention | None}
-```
+Finding/fix flow: frozen SHA -> fresh reviewer -> Critical/High finding -> accepted narrow path -> fresh fix worker -> proof -> parent commit/freeze -> rerun invalidated checks -> final validation; no re-review.
