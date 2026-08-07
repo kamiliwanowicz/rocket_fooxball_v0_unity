@@ -28,7 +28,7 @@ Default: one isolated worktree, one Git owner, few bounded workers.
 4. Dispatch bounded workers. Parallel work requires disjoint paths and stable inputs. Serialize shared files, contracts, generated or serialized assets, migrations, and product decisions.
 5. Stop writers, verify scope, and clean abandoned work. One active writer per path. Parent closes writer barrier before staging or committing.
 6. Commit and freeze clean worktree at exact full SHA. Independent read-only review starts only from this SHA.
-7. Review frozen SHA. Report Critical/High findings only. Accepted finding -> one fresh fix worker; fix worker edits only and supplies proof. No fix re-review; pre-fix review never covers post-fix SHA.
+7. Review frozen SHA. Report Critical/High findings only. Accepted finding -> one fresh fix worker; fix worker edits only and returns changed paths, proof/check evidence, and finding disposition. Parent closes writer barrier, verifies scope, stages/commits, freezes and records new clean SHA, then reruns invalidated checks and final validation. Do not re-review fix; pre-fix review never covers post-fix SHA.
 8. Rerun checks invalidated by fix, then validate exact final SHA, clean status, scope, and evidence.
 9. Handoff exact SHA, changed paths, checks, residual risks, and authority needed for user-branch merge.
 
@@ -38,7 +38,7 @@ For one coherent task with stable ownership: inspect -> inline core facts -> one
 
 ## Multi-plan path
 
-Use only when split pays lifecycle cost. Each task gets one worktree, one Git owner, exact baseline SHA, disjoint writable paths, protected paths, dependencies, and checks. Dependent task starts only after accepted upstream SHA. Integrator merges exact accepted SHAs in declared order; shared/generated assets stay serialized. See [task breakdown](agents/task-breakdown.md) and [merging](agents/merging.md).
+Use only when split pays lifecycle cost. Each task gets one worktree, one Git owner, exact baseline SHA, disjoint writable paths, protected paths, dependencies, and checks. Dependent task starts only after accepted upstream SHA. Integrator merges exact accepted SHAs in declared order; shared/generated assets stay serialized. Require independent final combined review of exact clean integrated SHA for every multi-plan integration, conflict resolution, or integration-owned edit. Reuse review evidence only for one unchanged already-reviewed plan with still-valid checks/evidence and no integration change. See [task breakdown](agents/task-breakdown.md) and [merging](agents/merging.md).
 
 ## Dispatch contract
 
@@ -68,7 +68,7 @@ Reject late, replaced, or foreign results when current execution identity, Git f
 
 ## Recovery
 
-Read [state and recovery](references/state-and-recovery.md) when resuming, handling ambiguity, or running long/multi-worktree work. Optional checkpoint contains facts only and lives under Git common dir. Git and tool observations override stale checkpoint. Preserve reachable commits; inspect ambiguous operation before repeating it. Stop writers before cleanup; remove worktrees or branches only after useful SHAs remain reachable and no active writer can mutate accepted work.
+Read [state and recovery](references/state-and-recovery.md) when resuming, handling ambiguity, or running long/multi-worktree work. Optional checkpoint contains facts only and lives under Git common dir. Git and tool observations override stale checkpoint. Preserve reachable commits; inspect ambiguous operation before repeating it. Stop writers before cleanup; remove worktrees or branches only after useful SHAs remain reachable and no active writer can mutate accepted work. Target drift during integration -> integrator returns `blocked` with observed target HEAD and performs no further mutation. LP provisions and binds fresh isolated branch/worktree from observed target baseline with exact allowed Git operations, accepted SHAs, and new single-use execution ID before retry.
 
 ## Completion
 

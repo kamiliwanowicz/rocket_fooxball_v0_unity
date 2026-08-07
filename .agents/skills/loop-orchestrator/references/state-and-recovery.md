@@ -22,7 +22,7 @@ Uncertain writer identity, overlapping scope, or abandoned process -> interrupt 
 
 ## Review and fix binding
 
-Independent read-only review starts from clean committed exact full SHA. Reviewer records reviewed SHA and Critical/High findings only. Accepted finding receives one fresh fix worker with narrow path scope. Fix worker returns changed paths, proof, and new clean full SHA. No fix re-review; rerun checks invalidated by fix. Pre-fix review never proves post-fix SHA.
+Independent read-only review starts from clean committed exact full SHA. Reviewer records reviewed SHA and Critical/High findings only. Accepted finding receives one fresh fix worker with narrow path scope. Fix worker returns changed paths, proof/check evidence, and finding disposition only. Parent closes writer barrier, verifies scope, stages/commits, freezes and records new clean full SHA, then reruns invalidated checks and final validation. Do not re-review fix; pre-fix review never proves post-fix SHA.
 
 ## Recovery bootstrap
 
@@ -32,7 +32,7 @@ On resume, inspect Git and collaboration tools first. Treat checkpoint as stale 
 
 ## Target drift and integration recovery
 
-Integrator rereads target branch HEAD immediately before merge and final handoff. Fast-forward only when target remains expected or is ancestor of candidate. Target divergence -> stop, isolate reintegration worktree, reapply exact accepted SHAs, invalidate affected checks, and rerun them at new SHA. User branch remains unchanged without explicit authority binding target and candidate SHA.
+Integrator rereads target branch HEAD immediately before merge and final handoff. Fast-forward only when target remains expected or is ancestor of candidate. Target divergence -> integrator stops current attempt, records observed target HEAD, returns `blocked`, and performs no further Git or file mutation. LP provisions and binds fresh isolated branch/worktree from observed target baseline with exact allowed Git operations, accepted SHAs, and new single-use execution ID before fresh reintegration. Mark prior checks invalid; rerun at new SHA. User branch remains unchanged without explicit authority binding target and candidate SHA.
 
 ## Cleanup
 
