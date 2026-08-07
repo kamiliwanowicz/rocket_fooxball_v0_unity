@@ -30,23 +30,32 @@ Nested report enums and pointers map only through field-level rules in [state an
 
 Nested agent -> immediate parent -> `LP`. Nested agents address neither user nor durable ledger. Only `LP` requests user decisions and writes durable state.
 
-## Result identity and CAS
+## Result Identity And Acceptance
 
 Every dispatch and result carries one identity tuple:
 
-`{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha}`
+`{dispatch_id, attempt_id, lease_id, entity_generation, baseline_sha, input_state_digest, incoming_accepted_sha}`
 
 - `dispatch_id`, `attempt_id`, `lease_id`: exact active IDs
 - `entity_generation`: current positive generation for entity; replacement/supersession/lease closure advances or closes generation
-- `baseline_sha`: relevant full SHA, not global ledger revision; `None` only for blocked task-breakdown attempt with unavailable baseline
+- `baseline_sha`: exact committed full SHA, not global ledger revision; `None` only for blocked task-breakdown attempt with unavailable baseline
+- `input_state_digest`, `incoming_accepted_sha`: integration-conflict child binding; `None` for every other dispatch
+
+Durable child tuple also carries:
+
+- `Entity: child_task:{child_task_id}`
+- `Parent: plan:{plan_id} | integration:{integration_id}`
+- `Parent attempt: {active_parent_attempt_id}`
+- parent branch/worktree, role, task kind, scope, and review boundary when applicable
 
 Result acceptance:
 
-1. Match tuple against active dispatch, attempt, lease, entity generation, and relevant baseline.
-2. Reconcile Git and evidence against baseline/frozen state; blocked task-breakdown attempt with `baseline_sha: None` records blocker evidence instead of fabricated Git facts.
-3. Re-read latest ledger revision; apply latest-revision CAS and append event.
-4. If CAS loses unrelated update, re-read and retry. Keep result eligible.
-5. Reject on entity mutation, supersession, lease closure, baseline change, stale generation, or relevant Git drift.
+1. Match tuple against active entity, dispatch, attempt, lease, generation, baseline, and optional conflict fields.
+2. For child result, match child identity and active parent attempt/worktree without closing parent lease. Apply conflict digest acceptance from [state and recovery](state-and-recovery.md) when task kind is `integration_conflict`.
+3. Reconcile Git and evidence against baseline/frozen state; blocked task-breakdown attempt with `baseline_sha: None` records blocker evidence instead of fabricated Git facts.
+4. Re-read latest ledger revision; apply latest-revision CAS and append event.
+5. If CAS loses unrelated update, re-read and retry. Keep result eligible.
+6. Reject on entity mutation, supersession, lease closure, baseline/binding change, stale generation, or relevant Git drift.
 
 Global revision changes alone never reject result. Two parallel results dispatched from same revision may both accept in either completion order when tuples and relevant baselines remain valid. Late result from closed/expired/interrupted attempt is rejected and preserved as incident evidence.
 
@@ -58,13 +67,13 @@ Global revision changes alone never reject result. Two parallel results dispatch
 - planner -> `$write-orchestrator-coding-plan` plus Planner Return below
 - plan supervisor -> `$orchestrate-implementation` plus Plan Supervisor Return below
 - merging supervisor -> full [merging report](../agents/merging.md)
-- implementation/reviewer/review-fix worker -> canonical prompts/reports in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md); copy no worker schema here
-- final-stage combined reviewer/integration fixer -> canonical Reviewer/Fix Worker templates in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md); use `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: integration:{integration_id}`, and `Review boundary: integration-wide`; merging supervisor owns child dispatch and Git operations
-- direct route -> canonical `$orchestrate-implementation` worker/reviewer/fix contracts; no durable multi-plan ceremony
+- implementation/reviewer/review-fix worker -> canonical prompts/reports in [`$orchestrate-implementation`](../../orchestrate-implementation/SKILL.md) plus durable child identity overlay below; copy no worker schema here
+- final-stage combined reviewer/integration fixer -> same linked templates plus `Context: integration`, `Plan: None`, `Lane: integration-wide`, `Entity: child_task:{child_task_id}`, `Parent: integration:{integration_id}`, and `Review boundary: integration-wide`; merging supervisor owns child dispatch and Git operations
+- direct route -> canonical linked worker/reviewer/fix contracts plus transient direct child identity; no durable multi-plan ceremony
 
 Exactly one role contract and one legal response artifact per dispatch. Every action, writable target, Git operation, input state, authority boundary, output artifact contract, and done condition appears once.
 
-Final-stage child source mapping is role- and context-locked: combined reviewer `Verdict: pass | findings` -> durable `reported_outcome: review_passed | changes_required`; integration fixer `Status: complete | blocked` -> `fix_complete | blocked`; pre-review semantic-conflict implementation worker `Status: complete | blocked` -> `implementation_complete | blocked`. Match exact `integration:{integration_id}` entity and `integration-wide` lane/boundary. Unlisted role, context, entity, lane, or source enum rejects.
+Source-outcome and ledger-field mappings live only in [Canonical Report Transitions](state-and-recovery.md#canonical-report-transitions). Dispatch supplies raw linked-contract enum; acceptance applies exact state mapping.
 
 ### Build dispatch
 
@@ -80,6 +89,8 @@ Lease: {lease_id}; {expires_at}
 Entity: {entity_kind}:{entity_id}
 Entity generation: {positive_integer}
 Baseline: {full_sha | None when blocked task-breakdown baseline is unavailable}
+Input state digest: {sha256_digest | None}
+Incoming accepted SHA: {full_sha | None}
 Branch: {exact_branch | None}
 Worktree: {absolute_path | None}
 Owned scope:
@@ -96,6 +107,19 @@ Completion criterion:
 ```
 
 Plan-supervisor dispatch also includes plan ID, accepted plan digest, requirement IDs, slot budget, validation boundary, exact branch/worktree, and `P0: verify_preprovisioned`. Standalone planning may use `P0: create_standalone`. Merging dispatch also includes integration ID, ordered accepted plan heads, conflict policy, required joint checks, and user-branch authority state.
+
+Durable nested child dispatch uses linked `$orchestrate-implementation` role template plus exact identity fields:
+
+```text
+Entity: child_task:{child_task_id}
+Parent: plan:{plan_id} | integration:{integration_id}
+Parent attempt: {active_parent_attempt_id}
+Task kind: implementation | review | review_fix | integration_conflict | combined_review | integration_fix
+Input state digest: {sha256_digest | None}
+Incoming accepted SHA: {full_sha | None}
+```
+
+Child report repeats identity fields unchanged. Child branch/worktree equal active parent facts. Integration-conflict dispatch/report uses nonnull digest and incoming SHA; other child dispatches/reports use `None`. Direct route allocates transient direct plan/child IDs by [Direct Route And Canonical Pointers](state-and-recovery.md#direct-route-and-canonical-pointers); no new phase or durable record.
 
 Plan-supervisor authorization: Git operations only on own plan branch/worktree; stage, commit, clean check, and freeze accepted head. Planner writes immutable plan artifact under control worktree and performs no product Git operation. Workers/reviewers/fix workers edit owned files only and perform no Git operations.
 
@@ -190,13 +214,13 @@ Waste or miscommunication:
 
 `complete` requires non-`None` `Head`, `Reviewed head`, and `Final frozen head`; `Head` and `Final frozen head` equal observed final branch `HEAD`; clean worktree; `Writer barrier: closed`; every planned commit; every requirement `delivered`; every review `pass` or `findings_resolved`; and every required validation `pass` at `Final frozen head`. Without a post-review fix, `Reviewed head` equals `Final frozen head`. `findings_resolved` permits a different `Final frozen head` only when each accepted finding has fix proof and invalidated final validation binds to that head; child `Final frozen head: pending_plan_supervisor_freeze` never counts as completion evidence; never rewrite review evidence or dispatch a fix re-review. Writer barrier closes all active edit leases before review or shared-project validation. Review evidence names `Reviewed head`; final validation and accepted fix proof name `Final frozen head`. Default one plan-wide review; add early lane review only before downstream contract consumption. One pass per review boundary; fresh fix worker supplies proof; no fix re-review. `blocked` preserves completed dispositions and names remaining owner/action.
 
-Nested plan-supervisor mapping is deterministic: `Head` and `Final frozen head` -> `plans[plan].accepted.head_sha`; `Reviews: pass` -> `plans[plan].review.status: accepted` with `plans[plan].review.reviewed_head_sha`, evidence, and no open finding; `findings_resolved` -> the same status with every linked finding `fixed | rejected`, disposition evidence, fix proof, and final validation at `Final frozen head`; `Reviews: blocked` -> `plans[plan].review.status: failed`, `plans[plan].status: blocked`, and blocker. `Requirements: delivered` -> `requirements[id].status: satisfied`; `blocked` -> `blocked` plus blocker. `Writer barrier: closed | blocked` -> `writer_barrier` gate `accepted | failed`. `Validation: pass | fail | not_run` -> `plans[plan].validation.status: pass | fail | not_run`; `not_run` requires blocker. Unlisted role/field/enum combinations reject; pointers must name exact evidence and state SHA.
+Plan Supervisor Return acceptance uses [Canonical Report Transitions](state-and-recovery.md#canonical-report-transitions). Pointers must name exact evidence and state SHA.
 
 ## Merging report
 
 Return one artifact: full exact [merging report](../agents/merging.md). No wrapper or local schema override. Canonical report owns identity, stage, status, merge results, final substates, checks, clean state, blockers, and accounting.
 
-Final-stage contract: merger owns `merge -> combined review when due -> integration fix at most once -> final verification`. Final `complete` maps directly to `READY_FOR_USER_MERGE`; no separate top-level dispatch/result. Single-plan final merge with unchanged head may reuse accepted plan-wide review. Combined review is due only for multi-plan integration, conflict resolution, integration fixes, or invalidated cross-plan evidence. Ordinary fix never triggers re-review.
+Merger procedure owns stage order. Durable gate/nullability/field writes use [Canonical Report Transitions](state-and-recovery.md#canonical-report-transitions); aggregate report references accepted child fields without rewriting them.
 
 User branch: merger reports integration head only plus `not_authorized` or `authorized_pending_lp`. `LP` alone merges exact SHA into explicitly authorized user/original/default branch and records observed before/after heads. Merger cannot claim user-branch merge complete.
 
@@ -206,7 +230,7 @@ Completion: validate canonical merging report against active lease, integration 
 
 ### 1. Validate shape
 
-Select one legal role artifact. Apply linked syntax to linked artifact and local syntax here. Validate headings, order, enums, identity tuple, identifiers, completeness, path form, empty markers, and surrounding-prose rule. Recompute digest by contract semantics.
+Select one legal role artifact. Apply linked syntax to linked artifact and local syntax here. Validate headings, order, enums, identity tuple, identifiers, completeness, path form, empty markers, and surrounding-prose rule. Validate digests by owning contract; integration-conflict input digest uses stored-binding acceptance from [state and recovery](state-and-recovery.md), not current-worktree recomputation.
 
 Done: one artifact passes; no duplicate envelope, extension, unknown field, missing field, malformed value, or contradiction.
 
@@ -214,7 +238,7 @@ Done: one artifact passes; no duplicate envelope, extension, unknown field, miss
 
 Match result tuple against active dispatch, attempt, lease, entity generation, and relevant baseline. Confirm lease valid and owned by reporting agent. Reject stale, duplicate, superseded, closed, interrupted, expired, or foreign result.
 
-Same-worktree replacement requires confirmed termination plus reconciled Git. If old writer remains unconfirmed, quarantine old branch/worktree; replacement gets new branch/worktree from last accepted SHA. Never share write authority. Late result is incident evidence, never completion evidence.
+Replacement and quarantine follow child/parent recovery in [state and recovery](state-and-recovery.md#idempotency). Acceptance rejects late result; preserve it as incident evidence.
 
 Done: exactly one active matching tuple; no stale result eligible.
 
@@ -240,7 +264,7 @@ Done: no uncovered, duplicated, conflicting, or silently dropped item.
 
 ### 6. Decide
 
-Re-read latest durable ledger. Apply latest-revision CAS. Accept matching identity once. If unrelated revision changed, retry CAS without invalidating result. If relevant entity/baseline/lease changed, reject result and preserve evidence. Record one acceptance or one actionable rejection event.
+Re-read latest durable ledger. Apply latest-revision CAS. Accept matching identity once. Child acceptance closes child lifecycle only. If unrelated revision changed, retry CAS without invalidating result. If relevant entity/baseline/binding/lease changed, reject result and preserve evidence. Record one acceptance or one actionable rejection event.
 
 Done: accepted result cannot mutate accepted state; rejection names exact field, observed mismatch, required value, and proof.
 
