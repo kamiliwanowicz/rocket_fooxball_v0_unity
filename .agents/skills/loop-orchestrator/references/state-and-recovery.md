@@ -6,6 +6,8 @@ Every loop run uses one durable state document:
 
 `run_id` is globally unique for repository. Never reuse another run directory, including missing/corrupt-state recovery. Product tree contains no orchestration state.
 
+State contains current run facts only: bound plan worktrees and integration worktree. No repository-wide worktree inventory.
+
 ## Ownership and truth
 
 LP is sole state writer. Breakdown, planner, execution orchestrator, workers, reviewers, fixes, and merging agent read state and return facts for LP recording. Concurrent state edits are invalid.
@@ -158,7 +160,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
 3. Rehash every accepted artifact; compare digest/size.
-4. Inspect each recorded branch/worktree: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
+4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
 7. Resume first incomplete mandatory stage. Never repeat completed work whose artifact/SHA/check facts remain valid.
@@ -166,7 +168,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 Missing or corrupt state:
 
 - stop new dispatches and writers whose ownership is uncertain;
-- inspect Git common run directory, branches/worktrees, reachable commits, artifacts, and live agents;
+- inspect Git common run directory, exact run-provisioned branches/worktrees proven by run evidence, reachable commits, artifacts, and live agents;
 - recover only facts supported by Git/live observations and artifact hashes;
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
@@ -185,6 +187,6 @@ Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git
 
 ## Cleanup and completion
 
-Stop/verify writers before cleanup. Remove temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
+Stop/verify writers before cleanup. Remove current run's temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
 
 Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged, integration worktree clean, final checks bound final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.

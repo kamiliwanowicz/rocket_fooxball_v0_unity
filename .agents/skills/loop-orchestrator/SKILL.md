@@ -30,6 +30,8 @@ Profile unavailable -> current attempt `blocked`; LP records blocker and recheck
 
 User branch stays unchanged until explicit authority binds target branch and candidate SHA. Approval remains required for user-branch merge, destructive action, material scope or behavior change, external mutation, secrets, migration, or dirty-work overwrite.
 
+Worktree scope is closed: current run's plan worktrees plus integration worktree. Query and verify exact bound paths/branches only. Keep unrelated repository worktrees outside discovery, state, dispatch context, reports, and cleanup. Inspect target checkout only when needed to establish baseline, dirty overlap, or user-branch merge authority; never persist unrelated worktree inventory.
+
 ## INIT
 
 1. Read request, repository instructions, cited sources, dirty paths, current branch, full baseline SHA, checks, and authority.
