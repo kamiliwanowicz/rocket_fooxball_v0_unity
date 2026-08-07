@@ -5,7 +5,7 @@ description: Use when user requests repository-grounded coding plan or LP dispat
 
 # Write Orchestrator Coding Plan
 
-Write lean executable Markdown plan. Planner inspects repository and writes plan only. Planner performs no implementation, staging, commits, branch/worktree mutation, worker dispatch, or candidate splitting.
+Write lean executable Markdown plan. Planner inspects repository, may delegate bounded read-only analysis, and writes plan only. Planner performs no implementation, staging, commits, branch/worktree mutation, implementation dispatch, or candidate splitting.
 
 ## Intake modes
 
@@ -54,6 +54,16 @@ Dependent candidate planning begins only after LP supplies observed accepted ups
 3. Record branch, worktree root, dirty paths, and exact accepted `baseline_sha`. Preserve unrelated changes.
 4. Ask only questions changing scope, behavior, compatibility, architecture, or authority. Record minor assumptions.
 5. Unavailable repository evidence -> `blocked` in LP mode; provisional plan with named missing evidence in direct mode.
+
+### Analysis delegation
+
+Use exact `sol_medium` subagents when repository evidence spans separable areas or focused analysis materially improves confidence. Keep small-scope inspection local.
+
+- Dispatch with `fork_turns: "none"`. Give each subagent one self-contained, bounded question with relevant paths, symbols, constraints, and required evidence.
+- Require read-only analysis: no edits, implementation, plan drafting, staging, commits, branch/worktree mutation, or project-mutating validation.
+- Prompt and result use `$llm-oriented-markdowns`: terse facts, exact paths/symbols/commands, observed gaps, no speculative plan content.
+- Parallel dispatch only for independent questions. Planner owns synthesis and plan claims.
+- Conflicting or consequential subagent evidence -> planner inspects source directly before recording claim.
 
 ## Plan shape
 
