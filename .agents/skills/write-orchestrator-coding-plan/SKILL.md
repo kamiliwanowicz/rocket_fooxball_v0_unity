@@ -96,6 +96,7 @@ Every plan contains:
 - scope: included behavior/files and explicit exclusions.
 - findings: repository facts, constraints, gaps, proposed paths.
 - decisions: implementation choices, assumptions, and unresolved material questions.
+- execution graph: mandatory task/review/gate dependency graph showing sequential and parallel execution, fan-out, join conditions, and downstream gates.
 - tasks: bounded ordered work with enough coding detail to remove non-local worker decisions.
 - review checkpoints: every task maps to one checkpoint; default per worker; grouped checkpoint records covered tasks/workers, join condition, dependency gate, and technical rationale.
 - checks: command/workflow, owner, run point, expected result, evidence, invalidation.
@@ -143,6 +144,16 @@ Dependencies: [accepted full SHAs or None]
 - decision: [chosen approach and reason]
 - question: [material unresolved choice] | None
 
+## Execution Graph
+`START -> T1 -> CP1 -> {T2 -> CP2 || T3 -> CP3} -> JOIN1 -> T4 -> CP4 -> FINAL`
+
+- notation: `->` sequential; `||` parallel; `{...}` parallel fan-out/fan-in; `+` requires every named predecessor
+- gates: `START` -> [entry condition]; `JOIN1` -> [join condition]; `FINAL` -> [completion condition]
+- rule: include every task and review checkpoint exactly once; use only IDs defined in this plan
+- rule: parallel branches require disjoint writable paths, stable inputs, independent acceptance, and an explicit join gate
+- rule: shared paths/contracts/assets, generated or serialized outputs, migrations, and product decisions remain sequential
+- rule: a single-task plan still includes `START -> T1 -> CP1 -> FINAL`
+
 ## Tasks
 ### T1: [coherent result]
 - objective: [single bounded implementation outcome]
@@ -160,8 +171,8 @@ Dependencies: [accepted full SHAs or None]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
 - return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
-## Execution
-- workers: [ordered/parallel worker assignment and join order]
+## Execution Assignments
+- workers: [task ID -> worker identity; parallel lane when any]
 - review_checkpoints: [checkpoint ID -> covered tasks/workers -> trigger/join condition -> dependency gate -> grouped rationale or per-worker default]
 
 ## Final Verification
@@ -178,6 +189,7 @@ Dependencies: [accepted full SHAs or None]
 ## Done Criteria
 - every covered requirement maps to task, owner, check, and proof;
 - every task passes implementation design gate;
+- Execution Graph includes every task and review checkpoint exactly once and makes every sequential dependency, parallel lane, and join gate explicit;
 - every implementation worker maps to one review checkpoint; grouped checkpoints include stronger-boundary rationale;
 - exact baseline and dependencies are factual;
 - execution route uses immutable accepted artifact and `$orchestrate-implementation`;
@@ -212,6 +224,7 @@ Needed LP Action or Recheck: [one action/fact or None]
 
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
+- Verify `## Execution Graph` exists, matches task/checkpoint dependencies, and never parallelizes overlapping ownership or unstable inputs.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
 - Run `git diff --check -- .agents/skills/write-orchestrator-coding-plan/SKILL.md .agents/skills/loop-orchestrator/agents/task-breakdown.md`.
