@@ -222,11 +222,11 @@ def add_forward_wedge(name, material, parts):
         (8.5, -10.0, 6.55),
     )
     faces = (
-        (0, 2, 1),
-        (3, 4, 5),
-        (0, 1, 4, 3),
-        (1, 2, 5, 4),
-        (2, 0, 3, 5),
+        (0, 1, 2),
+        (3, 5, 4),
+        (0, 3, 4, 1),
+        (1, 4, 5, 2),
+        (2, 5, 3, 0),
     )
     mesh = bpy.data.meshes.new(f"{name}Mesh")
     mesh.from_pydata(verts, (), faces)
@@ -425,6 +425,92 @@ def connected_component_count(bm):
     return count
 
 
+def audit_component_winding(obj):
+    """Prove closed-component orientation instead of relying on aggregate volume."""
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.normal_update()
+    remaining = set(bm.verts)
+    components = []
+    while remaining:
+        seed = remaining.pop()
+        component_vertices = {seed}
+        component_faces = set()
+        stack = [seed]
+        while stack:
+            vertex = stack.pop()
+            for edge in vertex.link_edges:
+                for face in edge.link_faces:
+                    component_faces.add(face)
+                other = edge.other_vert(vertex)
+                if other in remaining:
+                    remaining.remove(other)
+                    component_vertices.add(other)
+                    stack.append(other)
+
+        edge_directions = {}
+        for face in component_faces:
+            for loop in face.loops:
+                edge_directions.setdefault(loop.edge, []).append(
+                    (loop.vert, loop.link_loop_next.vert)
+                )
+        inconsistent_edges = []
+        for edge, directions in edge_directions.items():
+            if len(directions) != 2:
+                inconsistent_edges.append((edge.index, len(directions)))
+                continue
+            first_start, first_end = directions[0]
+            second_start, second_end = directions[1]
+            if first_start is not second_end or first_end is not second_start:
+                inconsistent_edges.append((edge.index, 2))
+        if inconsistent_edges:
+            raise RuntimeError(
+                f"Inconsistent face winding on {obj.name} component: edges={inconsistent_edges[:8]}"
+            )
+
+        ordered_vertices = sorted(component_vertices, key=lambda vertex: vertex.index)
+        ordered_faces = sorted(component_faces, key=lambda face: face.index)
+        reference = sum((vertex.co for vertex in ordered_vertices), Vector()) / len(
+            ordered_vertices
+        )
+        signed_volume = 0.0
+        for face in ordered_faces:
+            vertices = [loop.vert.co - reference for loop in face.loops]
+            anchor = vertices[0]
+            for index in range(1, len(vertices) - 1):
+                signed_volume += anchor.dot(vertices[index].cross(vertices[index + 1])) / 6.0
+        minimum = Vector(
+            tuple(min(vertex.co[index] for vertex in component_vertices) for index in range(3))
+        )
+        maximum = Vector(
+            tuple(max(vertex.co[index] for vertex in component_vertices) for index in range(3))
+        )
+        if not math.isfinite(signed_volume) or signed_volume <= 1e-9:
+            raise RuntimeError(
+                f"Normals/winding failed on {obj.name} component: signed_volume={signed_volume}"
+            )
+        component = {
+            "vertices": len(component_vertices),
+            "faces": len(component_faces),
+            "minimum": tuple(round(value, 6) for value in minimum),
+            "maximum": tuple(round(value, 6) for value in maximum),
+            "signed_volume": round(signed_volume, 6),
+        }
+        components.append(component)
+
+    components.sort(key=lambda component: (component["minimum"], component["maximum"]))
+    for index, component in enumerate(components):
+        component["index"] = index
+        print(
+            f"AUDIT component {obj.name}[{component['index']}]: "
+            f"bounds_min={component['minimum']}, bounds_max={component['maximum']}, "
+            f"vertices={component['vertices']}, faces={component['faces']}, "
+            f"signed_volume={component['signed_volume']:.6f}, winding=outward"
+        )
+    bm.free()
+    return components
+
+
 def audit_goal_opening(part_bounds):
     opening_half_width = MODULE_CONTRACTS["ArenaGoalShell"]["opening"]["half_width"]
     opening_height = MODULE_CONTRACTS["ArenaGoalShell"]["opening"]["height"]
@@ -507,8 +593,35 @@ def audit_module(obj, expected_part_count):
         raise RuntimeError(
             f"Unexpected loose shell count on {obj.name}: {components} != declared {expected_part_count}"
         )
+    component_winding = audit_component_winding(obj)
+    if len(component_winding) != components:
+        raise RuntimeError(
+            f"Winding component count failed on {obj.name}: "
+            f"{len(component_winding)} != {components}"
+        )
     if not math.isfinite(signed_volume) or signed_volume <= 1e-9:
-        raise RuntimeError(f"Normals/winding failed on {obj.name}: signed_volume={signed_volume}")
+        raise RuntimeError(f"Aggregate signed volume failed on {obj.name}: signed_volume={signed_volume}")
+    if obj.name == "ArenaGoalShell":
+        marker_minimum = (7.0, -10.0, 5.45)
+        marker_maximum = (10.0, -9.42, 6.55)
+        marker_components = [
+            component
+            for component in component_winding
+            if all(
+                abs(component["minimum"][index] - marker_minimum[index]) <= 1e-6
+                and abs(component["maximum"][index] - marker_maximum[index]) <= 1e-6
+                for index in range(3)
+            )
+        ]
+        if len(marker_components) != 1:
+            raise RuntimeError(
+                f"GoalForwardMarker winding component not uniquely identified: {marker_components}"
+            )
+        marker = marker_components[0]
+        print(
+            f"AUDIT component GoalForwardMarker: signed_volume={marker['signed_volume']:.6f}, "
+            "winding=outward"
+        )
 
     obj.data.calc_loop_triangles()
     triangles = len(obj.data.loop_triangles)
@@ -545,6 +658,7 @@ def audit_module(obj, expected_part_count):
         "triangles": triangles,
         "triangle_max": contract["triangle_max"],
         "components": components,
+        "component_winding": component_winding,
         "slots": list(contract["slots"]),
         "uv": "UVMap",
         "vertex_color": "ArenaVariation",
