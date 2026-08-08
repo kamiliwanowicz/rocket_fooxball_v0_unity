@@ -404,11 +404,8 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("LocalPlayerHidden layer must be excluded from player camera culling.");
             }
-            var hiddenHead = FindNamedTransform(worldVisual, "CharacterHead");
-            if (hiddenHead == null || hiddenHead.gameObject.layer != hiddenLayer)
-            {
-                throw new InvalidOperationException("CharacterHead must be assigned to LocalPlayerHidden.");
-            }
+            ValidateLayerRecursively(worldVisual.gameObject, hiddenLayer, "WorldVisual");
+            ValidateLayerExcluded(viewmodels.gameObject, hiddenLayer, "Viewmodels");
             ValidateCrosshair(camera);
             ValidateTrail(AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath));
             ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath));
@@ -515,15 +512,10 @@ namespace RocketFooxball.Editor
             worldAnimator.runtimeAnimatorController = EnsureAnimatorController(WorldControllerPath, CharacterModelPath);
             worldAnimator.avatar = FindImportedAvatar(CharacterModelPath);
             worldAnimator.applyRootMotion = false;
-            var headVisual = worldVisual.transform.Find("CharacterHead");
-            if (headVisual == null)
-            {
-                headVisual = FindNamedTransform(worldVisual.transform, "CharacterHead");
-            }
-            if (headVisual != null)
-            {
-                SetLayerRecursively(headVisual.gameObject, hiddenLayer);
-            }
+            // Hide the complete imported world model from the local player's camera.
+            // The imported eye/head and body meshes are separate branches, so hiding
+            // only CharacterHead leaves the rest of the model rendered in first person.
+            SetLayerRecursively(worldVisual, hiddenLayer);
 
             var viewmodels = new GameObject("Viewmodels").transform;
             viewmodels.SetParent(camera.transform, false);
@@ -1402,6 +1394,32 @@ namespace RocketFooxball.Editor
         {
             root.layer = layer;
             for (var i = 0; i < root.transform.childCount; i++) SetLayerRecursively(root.transform.GetChild(i).gameObject, layer);
+        }
+
+        private static void ValidateLayerRecursively(GameObject root, int expectedLayer, string label)
+        {
+            var transforms = root.GetComponentsInChildren<Transform>(true);
+            for (var i = 0; i < transforms.Length; i++)
+            {
+                var item = transforms[i].gameObject;
+                if (item.layer != expectedLayer)
+                {
+                    throw new InvalidOperationException(label + " hierarchy must use LocalPlayerHidden: " + item.name);
+                }
+            }
+        }
+
+        private static void ValidateLayerExcluded(GameObject root, int excludedLayer, string label)
+        {
+            var transforms = root.GetComponentsInChildren<Transform>(true);
+            for (var i = 0; i < transforms.Length; i++)
+            {
+                var item = transforms[i].gameObject;
+                if (item.layer == excludedLayer)
+                {
+                    throw new InvalidOperationException(label + " hierarchy must remain visible to the player camera: " + item.name);
+                }
+            }
         }
 
         private static PhysicsMaterial GetOrCreatePhysicMaterial()
