@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -30,7 +29,7 @@ namespace RocketFooxball
         public bool CanFire => simulationEnabled && cooldownRemaining <= 0f && projectilePrefab != null;
 
         /// <summary>Raised once after a projectile is initialized, registered, and cooldown is assigned.</summary>
-        public event Action RocketLaunched;
+        public event System.Action RocketLaunched;
 
         private void Awake()
         {
