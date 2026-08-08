@@ -53,6 +53,13 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Unity batch runs: use `Start-Process -Wait -PassThru`, capture exit code, and confirm project process and lock release before next run.
 - Unity IDE churn: compare pre/post status; remove only newly generated untracked IDE files and preserve prior changes.
 
+## Unity execution speed
+
+- Worktree path budget: create Unity worktrees near drive root, such as `C:\wt\<id>`. Existing long worktree -> verified junction or `subst` drive; use same short project path for every Unity command and process-ownership check.
+- Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
+- Validation batching: finish static edits and accepted review fixes before Unity launch, then run only checks invalidated by final diff. Explicit task or plan checks override.
+- Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
+
 ## Validation
 
 - Tests deferred pending redesigned strategy. Add or require tests only when user requests them.
