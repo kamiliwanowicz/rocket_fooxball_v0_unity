@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace RocketFooxball
@@ -143,8 +144,17 @@ namespace RocketFooxball
                 return false;
             }
 
-            return ball.ApplyKick(direction, player != null ? player.Velocity : Vector3.zero, speedFraction, playerMomentumShare);
+            var succeeded = ball.ApplyKick(direction, player != null ? player.Velocity : Vector3.zero, speedFraction, playerMomentumShare);
+            if (succeeded)
+            {
+                KickSucceeded?.Invoke();
+            }
+
+            return succeeded;
         }
+
+        /// <summary>Raised once when a kick attempt successfully applies ball velocity.</summary>
+        public event Action KickSucceeded;
 
         private bool IsWithinPlayerReach()
         {
