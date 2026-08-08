@@ -44,6 +44,10 @@ namespace RocketFooxball.Editor
         private const string ParticleShaderPath = ShadersPath + "/RetroParticle.shader";
         private const string BallSurfacePath = MaterialsPath + "/BallSurface.physicMaterial";
         private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
+        private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/RocketLauncher.cs";
+        private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
+        private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
+        private const int ManifestSchemaVersion = 1;
         private const string BuildMarkerPrefix = "MovementLabGeneratedT5_";
         private const float BallPrefabScale = 4.32f;
         private const float BallRadius = 2.16f;
@@ -90,6 +94,11 @@ namespace RocketFooxball.Editor
             ExplosionPrefabPath
         };
 
+        // Fingerprint every builder-owned output and the importer/project state
+        // that can change how those outputs are interpreted. The manifest and
+        // its .meta are intentionally excluded to avoid a self-hash loop.
+        private static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
+
         private sealed class GoalBuild
         {
             public GameObject Root;
@@ -105,9 +114,57 @@ namespace RocketFooxball.Editor
             public Collider[] Shields;
         }
 
+        [Serializable]
+        private sealed class MovementLabBuildManifest
+        {
+            public int schemaVersion;
+            public string sourceSignature;
+            public string generatedOutputFingerprint;
+            public string unityVersion;
+            public string[] fingerprintPaths;
+        }
+
+        private static string[] CreateGeneratedFingerprintPaths()
+        {
+            var paths = new List<string>();
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+            {
+                paths.Add(GeneratedYamlAssetPaths[i]);
+            }
+
+            var generatedSourcePaths = new[]
+            {
+                RocketModelPath,
+                CharacterModelPath,
+                FpsKickModelPath,
+                WeaponModelPath,
+                GrassTexturePath,
+                BallTexturePath,
+                ExplosionTexturePath,
+                SmokeTexturePath
+            };
+            for (var i = 0; i < generatedSourcePaths.Length; i++)
+            {
+                paths.Add(generatedSourcePaths[i]);
+                paths.Add(generatedSourcePaths[i] + ".meta");
+            }
+
+            paths.Add("ProjectSettings/EditorBuildSettings.asset");
+            paths.Add("ProjectSettings/DynamicsManager.asset");
+            paths.Add("ProjectSettings/TimeManager.asset");
+            paths.Sort(StringComparer.Ordinal);
+            return paths.ToArray();
+        }
+
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
+            var builderSignature = ComputeBuilderSignature();
+            if (TryReuseGeneratedState(builderSignature))
+            {
+                return;
+            }
+
             EnsureFolders();
 
             ConfigureTextureImporters();
@@ -135,23 +192,10 @@ namespace RocketFooxball.Editor
             var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
             if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
             if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
-            var builderSignature = ComputeBuilderSignature();
             RegisterBuildScene();
             Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
             SetProjectFixedTimestep();
-
-            // Reuse only a scene carrying the current builder signature and passing
-            // the full generated-scene validator. Any source change or stale/missing
-            // generated requirement falls through to authoritative scene rebuild.
-            if (TryOpenExistingGeneratedScene(builderSignature))
-            {
-                AssetDatabase.SaveAssets();
-                NormalizeGeneratedYamlWhitespace();
-                Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath + " (existing T5 scene reused)");
-                return;
-            }
 
             GameObject explosionPrefabProbe = null;
             try
@@ -255,6 +299,12 @@ namespace RocketFooxball.Editor
             }
             AssetDatabase.SaveAssets();
             NormalizeGeneratedYamlWhitespace();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            ValidateMovementLabInternal(false, builderSignature, false);
+            var generatedOutputFingerprint = ComputeGeneratedOutputFingerprint();
+            WriteBuildManifest(builderSignature, generatedOutputFingerprint);
+            AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            ValidateMovementLabInternal(true, builderSignature, false);
             Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath);
         }
 
@@ -262,6 +312,16 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]
         public static void ValidateMovementLab()
         {
+            ValidateMovementLabInternal(true, ComputeBuilderSignature(), true);
+        }
+
+        private static void ValidateMovementLabInternal(bool includeManifest, string builderSignature, bool logSuccess)
+        {
+            if (includeManifest)
+            {
+                ValidateManifestAndFingerprint(builderSignature);
+            }
+
             EnsureAssetExists(PrefabPath);
             EnsureAssetExists(BallPrefabPath);
             EnsureAssetExists(RocketPrefabPath);
@@ -299,7 +359,7 @@ namespace RocketFooxball.Editor
             Require(matchObject, "MatchController root");
             Require(explosionObject, "ExplosionResolver root");
             Require(hudObject, "DebugHUD root");
-            Require(GameObject.Find(GetBuildMarkerName(ComputeBuilderSignature())), "T5 build marker");
+            Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "T5 build marker");
 
             var playerMotor = Require(player.GetComponent<PlayerMotor>(), "PlayerMotor");
             var input = Require(player.GetComponent<PlayerInputReader>(), "PlayerInputReader");
@@ -480,7 +540,10 @@ namespace RocketFooxball.Editor
             ValidatePhysicsAndBuildSettings();
             ValidateNoMissingComponents(scene);
 
-            Debug.Log("Rocket Fooxball Movement Lab validation succeeded: " + ScenePath);
+            if (logSuccess)
+            {
+                Debug.Log("Rocket Fooxball Movement Lab validation succeeded: " + ScenePath);
+            }
         }
 
         private static GameObject BuildPlayerPrefab(GameObject rocketPrefab)
@@ -907,44 +970,217 @@ namespace RocketFooxball.Editor
             light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
         }
 
-        private static bool TryOpenExistingGeneratedScene(string builderSignature)
+        private static bool TryReuseGeneratedState(string builderSignature)
         {
-            if (!File.Exists(ScenePath))
-            {
-                return false;
-            }
-
-            var active = SceneManager.GetActiveScene();
-            if (active.path != ScenePath)
-            {
-                active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-            }
-            if (!active.IsValid() || GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
-            {
-                return false;
-            }
-
-            // Validation is the stale-content gate. It checks every generated
-            // object, reference, prefab, material, physics setting, and build
-            // scene before allowing byte-stable reuse.
             try
             {
-                ValidateMovementLab();
+                ValidateManifestAndFingerprint(builderSignature);
+                var active = SceneManager.GetActiveScene();
+                if (active.path != ScenePath)
+                {
+                    active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                }
+                if (!active.IsValid())
+                {
+                    return RejectGeneratedReuse("generated scene is invalid");
+                }
+                if (GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
+                {
+                    return RejectGeneratedReuse("scene marker is missing or stale");
+                }
+
+                // Full validation is intentionally read-only. A successful
+                // result permits the caller to return before every write path.
+                ValidateMovementLabInternal(true, builderSignature, false);
+                Debug.Log("Rocket Fooxball Movement Lab reused generated state: " + ScenePath);
                 return true;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                return false;
+                return RejectGeneratedReuse(exception.Message);
             }
         }
 
-        private static string ComputeBuilderSignature()
+        private static bool RejectGeneratedReuse(string reason)
+        {
+            var detail = string.IsNullOrEmpty(reason) ? "unknown stale state" : reason;
+            Debug.Log("Rocket Fooxball Movement Lab generated state stale; rebuilding: " + detail);
+            return false;
+        }
+
+        private static void ValidateManifestAndFingerprint(string builderSignature)
+        {
+            var projectRoot = ResolveProjectRoot();
+            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
+            if (!File.Exists(manifestAbsolutePath))
+            {
+                throw new InvalidOperationException("build manifest is missing: " + ManifestPath);
+            }
+
+            MovementLabBuildManifest manifest;
+            try
+            {
+                manifest = JsonUtility.FromJson<MovementLabBuildManifest>(File.ReadAllText(manifestAbsolutePath));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException("build manifest could not be parsed: " + exception.Message);
+            }
+
+            if (manifest == null)
+            {
+                throw new InvalidOperationException("build manifest is empty");
+            }
+            if (manifest.schemaVersion != ManifestSchemaVersion)
+            {
+                throw new InvalidOperationException("build manifest schema is stale");
+            }
+            if (!string.Equals(manifest.sourceSignature, builderSignature, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("build manifest source signature is stale");
+            }
+            if (!string.Equals(manifest.unityVersion, Application.unityVersion, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("build manifest Unity version is stale");
+            }
+            if (manifest.fingerprintPaths == null || manifest.fingerprintPaths.Length != GeneratedFingerprintPaths.Length)
+            {
+                throw new InvalidOperationException("build manifest fingerprint path list is stale");
+            }
+            for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
+            {
+                var expectedPath = GeneratedFingerprintPaths[i];
+                var manifestPath = manifest.fingerprintPaths[i];
+                if (!string.Equals(manifestPath, expectedPath, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeRepositoryRelativePath(manifestPath), manifestPath, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("build manifest fingerprint path list is stale");
+                }
+            }
+
+            var actualFingerprint = ComputeGeneratedOutputFingerprint();
+            if (!string.Equals(manifest.generatedOutputFingerprint, actualFingerprint, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("generated output fingerprint is stale");
+            }
+        }
+
+        private static string ComputeGeneratedOutputFingerprint()
+        {
+            var projectRoot = ResolveProjectRoot();
+            using (var sha = SHA256.Create())
+            {
+                for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
+                {
+                    var relativePath = NormalizeRepositoryRelativePath(GeneratedFingerprintPaths[i]);
+                    var absolutePath = GetAbsoluteProjectPath(projectRoot, relativePath);
+                    if (!File.Exists(absolutePath))
+                    {
+                        throw new InvalidOperationException("Missing generated fingerprint file: " + relativePath);
+                    }
+
+                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
+                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
+                    var bytes = File.ReadAllBytes(absolutePath);
+                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+                    var separator = new byte[] { 0 };
+                    sha.TransformBlock(separator, 0, separator.Length, separator, 0);
+                }
+                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                return BitConverter.ToString(sha.Hash).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static void WriteBuildManifest(string builderSignature, string generatedOutputFingerprint)
+        {
+            var projectRoot = ResolveProjectRoot();
+            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
+            var manifestDirectory = Path.GetDirectoryName(manifestAbsolutePath);
+            if (string.IsNullOrEmpty(manifestDirectory))
+            {
+                throw new InvalidOperationException("Unable to resolve build manifest directory.");
+            }
+            Directory.CreateDirectory(manifestDirectory);
+
+            var manifest = new MovementLabBuildManifest
+            {
+                schemaVersion = ManifestSchemaVersion,
+                sourceSignature = builderSignature,
+                generatedOutputFingerprint = generatedOutputFingerprint,
+                unityVersion = Application.unityVersion,
+                fingerprintPaths = (string[])GeneratedFingerprintPaths.Clone()
+            };
+            var json = JsonUtility.ToJson(manifest, true);
+            var bytes = new System.Text.UTF8Encoding(false).GetBytes(json + "\n");
+            var temporaryPath = manifestAbsolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+
+                if (File.Exists(manifestAbsolutePath))
+                {
+                    File.Replace(temporaryPath, manifestAbsolutePath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, manifestAbsolutePath);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private static DirectoryInfo ResolveProjectRoot()
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
             if (projectRoot == null)
             {
                 throw new InvalidOperationException("Unable to resolve Unity project root.");
             }
+            return projectRoot;
+        }
+
+        private static string GetAbsoluteProjectPath(DirectoryInfo projectRoot, string repositoryRelativePath)
+        {
+            var normalizedPath = NormalizeRepositoryRelativePath(repositoryRelativePath);
+            return Path.Combine(projectRoot.FullName, normalizedPath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private static string NormalizeRepositoryRelativePath(string repositoryRelativePath)
+        {
+            if (string.IsNullOrEmpty(repositoryRelativePath) || Path.IsPathRooted(repositoryRelativePath) || repositoryRelativePath.IndexOf(':') >= 0)
+            {
+                throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+            }
+
+            var normalizedPath = repositoryRelativePath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/');
+            for (var i = 0; i < segments.Length; i++)
+            {
+                if (segments[i].Length == 0 || segments[i] == "." || segments[i] == "..")
+                {
+                    throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+                }
+            }
+            if (!normalizedPath.StartsWith("Assets/", StringComparison.Ordinal) && !normalizedPath.StartsWith("ProjectSettings/", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+            }
+            return normalizedPath;
+        }
+
+        private static string ComputeBuilderSignature()
+        {
+            var projectRoot = ResolveProjectRoot();
 
             var sourcePaths = new[]
             {
@@ -959,10 +1195,12 @@ namespace RocketFooxball.Editor
                 "Assets/_Game/Scripts/Runtime/BallMotor.cs",
                 "Assets/_Game/Scripts/Runtime/ExplosionResolver.cs",
                 "Assets/_Game/Scripts/Runtime/RocketProjectile.cs",
+                RocketLauncherSourcePath,
                 "Tools/Blender/generate_retro_textures.py",
                 "Tools/Blender/generate_low_poly_character.py",
                 "Tools/Blender/generate_fps_kick_rig.py",
-                "Tools/Blender/generate_fps_rocket_launcher.py"
+                "Tools/Blender/generate_fps_rocket_launcher.py",
+                RocketGeneratorSourcePath
             };
             Array.Sort(sourcePaths, StringComparer.Ordinal);
             using (var sha = SHA256.Create())
@@ -2141,6 +2379,7 @@ namespace RocketFooxball.Editor
             EnsureFolder("Assets/_Game/Prefabs");
             EnsureFolder("Assets/_Game/Models");
             EnsureFolder("Assets/_Game/Scenes");
+            EnsureFolder("Assets/_Game/Generated");
         }
 
         private static void EnsureFolder(string path)
