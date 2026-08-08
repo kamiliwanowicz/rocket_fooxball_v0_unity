@@ -438,7 +438,7 @@ MonoBehaviour:
   airForwardScale: 0.35
   bhopSoftCapMultiplier: 2.5
   hardCapMultiplier: 3
-  jumpVelocity: 6.75
+  jumpVelocity: 4.5
   jumpsToHardCap: 4
   coyoteTime: 0.08
   jumpBufferTime: 0.1
@@ -520,8 +520,9 @@ MonoBehaviour:
   look: {fileID: 5313289886365503098}
   aimCamera: {fileID: 4927503976345080273}
   ball: {fileID: 0}
-  kickRange: 3
+  kickRange: 4.5
   contactReachPadding: 1
+  contactReachScale: 1.5
   coneTotalDegrees: 35
   cooldown: 0.4
   inputBuffer: 0.5
@@ -540,8 +541,11 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.PlayerPresentation
   kick: {fileID: 257512934034810264}
+  motor: {fileID: 1460595302204604614}
+  launcher: {fileID: 6044168052179503180}
   worldAnimator: {fileID: 3628309390587425086}
   fpsKickAnimator: {fileID: 478921308551082322}
+  weaponVisual: {fileID: 5624750891740908958}
 --- !u!1 &6465395014025363059
 GameObject:
   m_ObjectHideFlags: 0
@@ -681,8 +685,8 @@ Camera:
   m_GameObject: {fileID: 7353942073518467462}
   m_Enabled: 1
   serializedVersion: 2
-  m_ClearFlags: 1
-  m_BackGroundColor: {r: 0.19215687, g: 0.3019608, b: 0.4745098, a: 0}
+  m_ClearFlags: 2
+  m_BackGroundColor: {r: 0.72, g: 0.88, b: 0.96, a: 1}
   m_projectionMatrixMode: 1
   m_GateFitMode: 2
   m_FOVAxisMode: 0
@@ -704,7 +708,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.03
-  far clip plane: 1000
+  far clip plane: 180
   field of view: 75
   orthographic: 0
   orthographic size: 5
