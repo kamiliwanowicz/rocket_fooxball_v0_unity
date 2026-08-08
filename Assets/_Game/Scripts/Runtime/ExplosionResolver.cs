@@ -16,6 +16,9 @@ namespace RocketFooxball
         [Header("Feedback")]
         [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = 0.8f;
 
+        [Header("Presentation")]
+        [SerializeField] private ExplosionVfx explosionVfxPrefab;
+
         private readonly Collider[] overlapBuffer = new Collider[128];
         private readonly PlayerMotor[] playerTargets = new PlayerMotor[16];
         private readonly Collider[] playerTargetColliders = new Collider[16];
@@ -30,6 +33,12 @@ namespace RocketFooxball
         /// <summary>Resolves one rocket blast at origin. Impact-owned gameplay targets still receive the blast.</summary>
         public void ResolveExplosion(Vector3 origin, RocketProjectile source = null, Collider impactCollider = null)
         {
+            if (explosionVfxPrefab != null)
+            {
+                var explosionVfx = Instantiate(explosionVfxPrefab, origin, Quaternion.identity);
+                explosionVfx?.Play();
+            }
+
             var overlapCount = Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
             var playerCount = 0;
             var ballCount = 0;

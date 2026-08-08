@@ -12,6 +12,7 @@ namespace RocketFooxball
         [SerializeField] private Rigidbody body;
         [SerializeField] private Collider projectileCollider;
         [SerializeField] private ExplosionResolver explosionResolver;
+        [SerializeField] private RocketTrailVfx trailVfx;
 
         private Transform ownerRoot;
         private RocketLauncher launcher;
@@ -124,6 +125,7 @@ namespace RocketFooxball
             simulationEnabled = false;
             var explosionPosition = hitPoint != Vector3.zero ? hitPoint : (body != null ? body.position : transform.position);
             launcher?.UnregisterProjectile(this);
+            trailVfx?.DetachAndFade();
             explosionResolver?.ResolveExplosion(explosionPosition, this, hitCollider);
             Destroy(gameObject);
             return true;
@@ -143,6 +145,10 @@ namespace RocketFooxball
             if (projectileCollider == null)
             {
                 projectileCollider = GetComponent<Collider>();
+            }
+            if (trailVfx == null)
+            {
+                trailVfx = GetComponentInChildren<RocketTrailVfx>(true);
             }
         }
 
