@@ -397,8 +397,8 @@ namespace RocketFooxball.Editor
             ValidateImportedVisual(fpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual");
             ValidateNoPhysics(weaponVisual.gameObject, "WeaponVisual");
             ValidateNoPhysics(fpsVisual.gameObject, "FpsKickVisual");
-            ValidateAnimatorController(worldAnimator, WorldControllerPath);
-            ValidateAnimatorController(fpsAnimator, FpsControllerPath);
+            ValidateAnimatorController(worldAnimator, WorldControllerPath, CharacterModelPath);
+            ValidateAnimatorController(fpsAnimator, FpsControllerPath, FpsKickModelPath);
             var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
             if (hiddenLayer < 0 || (camera.cullingMask & (1 << hiddenLayer)) != 0)
             {
@@ -1305,9 +1305,27 @@ namespace RocketFooxball.Editor
         private static AnimationClip FindImportedClip(string modelPath, string name)
         {
             var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
+
+            // Prefer an exact imported take name. Model importers commonly prefix
+            // clips with the source model name, so a broad substring match can
+            // bind e.g. "FpsKickRig|Idle" to the Kick state just because the
+            // model prefix contains "Kick".
             for (var i = 0; i < assets.Length; i++)
             {
-                if (assets[i] is AnimationClip clip && clip.name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return clip;
+                if (assets[i] is AnimationClip clip && string.Equals(clip.name, name, StringComparison.OrdinalIgnoreCase)) return clip;
+            }
+
+            // Fall back to a delimiter-safe take suffix ("|Idle", "@Kick",
+            // etc.). The character before the take must be a non-alphanumeric
+            // delimiter; this excludes model-prefix substrings such as
+            // "FpsKickRig|Idle" when looking for Kick.
+            for (var i = 0; i < assets.Length; i++)
+            {
+                if (!(assets[i] is AnimationClip clip)) continue;
+                var clipName = clip.name;
+                if (clipName.Length <= name.Length || !clipName.EndsWith(name, StringComparison.OrdinalIgnoreCase)) continue;
+                var delimiter = clipName[clipName.Length - name.Length - 1];
+                if (!char.IsLetterOrDigit(delimiter)) return clip;
             }
             return null;
         }
@@ -1687,7 +1705,7 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void ValidateAnimatorController(Animator animator, string path)
+        private static void ValidateAnimatorController(Animator animator, string path, string modelPath)
         {
             var controller = animator.runtimeAnimatorController as AnimatorController;
             if (controller == null || AssetDatabase.GetAssetPath(controller) != path)
@@ -1712,9 +1730,11 @@ namespace RocketFooxball.Editor
                 if (states[i].state.name == "Kick") kickState = states[i].state;
             }
             if (!idle || !kick || stateMachine.anyStateTransitions.Length == 0) throw new InvalidOperationException("Animator controller states/transitions incomplete: " + path);
-            if (idleState.motion == null || kickState.motion == null || idleState.motion.name.IndexOf("Idle", StringComparison.OrdinalIgnoreCase) < 0 || kickState.motion.name.IndexOf("Kick", StringComparison.OrdinalIgnoreCase) < 0)
+            var expectedIdle = FindImportedClip(modelPath, "Idle");
+            var expectedKick = FindImportedClip(modelPath, "Kick");
+            if (expectedIdle == null || expectedKick == null || expectedIdle == expectedKick || idleState.motion == null || kickState.motion == null || idleState.motion != expectedIdle || kickState.motion != expectedKick || idleState.motion == kickState.motion)
             {
-                throw new InvalidOperationException("Animator controller clip bindings incomplete: " + path);
+                throw new InvalidOperationException("Animator controller clip bindings incomplete or non-distinct: " + path);
             }
             for (var i = 0; i < stateMachine.anyStateTransitions.Length; i++)
             {
