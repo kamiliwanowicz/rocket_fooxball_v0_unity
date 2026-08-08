@@ -3,7 +3,8 @@
   "rootNamespace": "RocketFooxball.Editor",
   "references": [
     "RocketFooxball.Runtime",
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "UnityEngine.UI"
   ],
   "includePlatforms": [
     "Editor"
