@@ -2,11 +2,13 @@ using UnityEngine;
 
 namespace RocketFooxball
 {
-    /// <summary>Locks gameplay simulation to source prototype's 60 Hz and gravity contract.</summary>
+    /// <summary>Locks gameplay simulation to the shared 60 Hz and gravity contract.</summary>
     public static class GamePhysicsSettings
     {
         public const float FixedDeltaTime = 1f / 60f;
-        public const float GravityMagnitude = 16.875f;
+        // Keep one shared gravity source for CharacterController and Rigidbody
+        // simulation. Prototype gravity is reduced by 30% for the current feel.
+        public const float GravityMagnitude = 16.875f * 0.7f;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Apply()

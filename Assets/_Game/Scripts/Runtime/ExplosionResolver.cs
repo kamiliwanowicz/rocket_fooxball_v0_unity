@@ -6,11 +6,15 @@ namespace RocketFooxball
     public sealed class ExplosionResolver : MonoBehaviour
     {
         [Header("Blast")]
-        [SerializeField, Min(0.1f)] private float blastRadius = 4.5f;
+        [SerializeField, Min(0.1f)] private float blastRadius = 5.85f;
         [SerializeField, Min(0f)] private float playerImpulseStrength = 24f;
         [SerializeField, Min(0f)] private float ballImpulseStrength = 16f;
         [SerializeField, Range(0f, 1f)] private float occludedForce = 0.25f;
         [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
+
+        [Header("Rocket Jump")]
+        [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.75f;
+        [SerializeField, Min(0f)] private float underfootUpwardImpulseScale = 1f;
         [SerializeField] private Collider[] goalShieldColliders;
 
         [Header("Feedback")]
@@ -83,22 +87,8 @@ namespace RocketFooxball
 
                 var strength = falloff * (IsOccluded(origin, targetCollider, targetCollider.ClosestPoint(origin), false, impactCollider) ? occludedForce : 1f);
                 var target = playerTargets[i];
-                var center = target.transform.position;
-                var direction = center - origin;
-                if (direction.sqrMagnitude <= 0.000001f)
-                {
-                    direction = Vector3.up;
-                }
-                else
-                {
-                    direction.Normalize();
-                }
-                if (direction.y < 0.25f)
-                {
-                    direction = (direction + Vector3.up * playerUpBias).normalized;
-                }
-
-                target.AddExternalImpulse(direction * (playerImpulseStrength * strength));
+                var impulse = ComputePlayerImpulse(target, origin, playerImpulseStrength * strength);
+                target.AddExternalImpulse(impulse);
                 var feedback = target.GetComponent<PlayerCameraFeedback>();
                 feedback?.RequestBlastShake(Mathf.Clamp01(strength * cameraFeedbackScale));
             }
@@ -127,6 +117,68 @@ namespace RocketFooxball
                 }
                 target.QueueImpulse(direction.normalized * (ballImpulseStrength * strength));
             }
+        }
+
+        private Vector3 ComputePlayerImpulse(PlayerMotor target, Vector3 origin, float strength)
+        {
+            var radialDirection = target.transform.position - origin;
+            if (radialDirection.sqrMagnitude <= 0.000001f)
+            {
+                radialDirection = Vector3.up;
+            }
+            else
+            {
+                radialDirection.Normalize();
+            }
+
+            if (!TryGetUnderfootFacing(target, origin, out var facing))
+            {
+                if (radialDirection.y < 0.25f)
+                {
+                    radialDirection = (radialDirection + Vector3.up * playerUpBias).normalized;
+                }
+                return radialDirection * strength;
+            }
+
+            // Floor/leg blasts preserve upward impulse while adding forward force
+            // from player yaw. Camera pitch never controls rocket-jump direction.
+            var underfootImpulse = facing * underfootForwardImpulseScale + Vector3.up * underfootUpwardImpulseScale;
+            if (underfootImpulse.sqrMagnitude <= 0.000001f)
+            {
+                return Vector3.up * strength;
+            }
+            return underfootImpulse * strength;
+        }
+
+        private bool TryGetUnderfootFacing(PlayerMotor target, Vector3 origin, out Vector3 facing)
+        {
+            facing = Vector3.ProjectOnPlane(target.transform.forward, Vector3.up);
+            if (facing.sqrMagnitude <= 0.000001f)
+            {
+                return false;
+            }
+            facing.Normalize();
+
+            var controller = target.GetComponent<CharacterController>();
+            if (controller == null)
+            {
+                return false;
+            }
+
+            var bounds = controller.bounds;
+            var horizontalOffset = Vector3.ProjectOnPlane(origin - bounds.center, Vector3.up);
+            var maxHorizontalDistance = Mathf.Max(controller.radius * 1.5f, 0.05f);
+            if (horizontalOffset.sqrMagnitude > maxHorizontalDistance * maxHorizontalDistance)
+            {
+                return false;
+            }
+
+            // Foot capsule zone plus a small below-feet margin defines
+            // underfoot. Side/upper-body blasts retain radial response.
+            var feetY = bounds.min.y;
+            var minY = feetY - controller.radius;
+            var maxY = feetY + controller.radius;
+            return origin.y >= minY && origin.y <= maxY;
         }
 
         /// <summary>Compatibility alias for projectile owners.</summary>

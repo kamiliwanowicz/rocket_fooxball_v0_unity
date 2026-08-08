@@ -45,6 +45,19 @@ namespace RocketFooxball.Editor
         private const string BallSurfacePath = MaterialsPath + "/BallSurface.physicMaterial";
         private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
         private const string BuildMarkerPrefix = "MovementLabGeneratedT5_";
+        private const float BallPrefabScale = 4.32f;
+        private const float BallRadius = 2.16f;
+        private const float BallSpawnHeight = BallRadius;
+        private const float BlastRadius = 5.85f;
+        private const float BlastVisualScale = 1.30f;
+        private const float GoalAxisPosition = 64f;
+        private const float PlayerSpawnOffset = 3f;
+        private const float GoalFreezeDuration = 5f;
+        private const float CelebrationOrbitRadius = 5.5f;
+        private const float CelebrationOrbitHeight = 2.5f;
+        private const float CelebrationLookHeight = 1.05f;
+        private const float CelebrationOrbitDegrees = 360f;
+        private const float CelebrationFov = 60f;
 
         // Keep this list limited to assets authored by this builder. Unity can
         // serialize empty fields with trailing spaces in both the asset and
@@ -157,20 +170,22 @@ namespace RocketFooxball.Editor
             var explosionResolver = explosionObject.AddComponent<ExplosionResolver>();
             SetObjectArray(explosionResolver, "goalShieldColliders", arena.Shields);
             SetObjectReference(explosionResolver, "explosionVfxPrefab", explosionPrefab);
-            SetFloat(explosionResolver, "blastRadius", 4.5f);
+            SetFloat(explosionResolver, "blastRadius", BlastRadius);
             SetFloat(explosionResolver, "playerImpulseStrength", 24f);
             SetFloat(explosionResolver, "ballImpulseStrength", 16f);
             SetFloat(explosionResolver, "occludedForce", 0.25f);
             SetFloat(explosionResolver, "playerUpBias", 0.18f);
+            SetFloat(explosionResolver, "underfootForwardImpulseScale", 0.75f);
+            SetFloat(explosionResolver, "underfootUpwardImpulseScale", 1f);
             SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
 
             var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
             player.name = "Player";
-            player.transform.SetPositionAndRotation(new Vector3(0f, 0f, 3f), Quaternion.LookRotation(Vector3.back, Vector3.up));
+            player.transform.SetPositionAndRotation(new Vector3(PlayerSpawnOffset, 0f, 0f), Quaternion.LookRotation(Vector3.left, Vector3.up));
 
             var ball = (GameObject)PrefabUtility.InstantiatePrefab(ballPrefab);
             ball.name = "Ball";
-            ball.transform.SetPositionAndRotation(new Vector3(0f, 0.72f, 0f), Quaternion.identity);
+            ball.transform.SetPositionAndRotation(new Vector3(0f, BallSpawnHeight, 0f), Quaternion.identity);
 
             var playerMotor = player.GetComponent<PlayerMotor>();
             var playerInput = player.GetComponent<PlayerInputReader>();
@@ -209,9 +224,9 @@ namespace RocketFooxball.Editor
             SetObjectReference(match, "kick", kick);
             SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
             SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-            SetFloat(match, "goalFreezeDuration", 5f);
-            SetVector3(match, "ballResetPosition", Vector3.zero);
-            SetVector3(match, "playerResetPosition", new Vector3(0f, 0f, 3f));
+            SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+            SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+            SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
             SetVector3(match, "resetLookTarget", Vector3.zero);
             arena.NorthGoal.Trigger.SetMatch(match);
             arena.SouthGoal.Trigger.SetMatch(match);
@@ -294,9 +309,9 @@ namespace RocketFooxball.Editor
             var kick = Require(player.GetComponent<BallKick>(), "BallKick");
             var camera = Require(player.GetComponentInChildren<Camera>(true), "Player camera");
             Require(player.GetComponent<CharacterController>(), "Player CharacterController");
-            if (Vector3.Distance(player.transform.position, new Vector3(0f, 0f, 3f)) > 0.001f || Vector3.Dot(player.transform.forward, Vector3.back) < 0.999f)
+            if (Vector3.Distance(player.transform.position, new Vector3(PlayerSpawnOffset, 0f, 0f)) > 0.001f || Vector3.Dot(player.transform.forward, Vector3.left) < 0.999f)
             {
-                throw new InvalidOperationException("Player spawn must be neutral midfield offset facing centered ball.");
+                throw new InvalidOperationException("Player spawn must be neutral midfield offset on goal axis facing centered ball.");
             }
 
             var ballMotor = Require(ball.GetComponent<BallMotor>(), "BallMotor");
@@ -311,10 +326,15 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("Ball collider is missing shared BallSurface material.");
             }
+            if (Vector3.Distance(ball.transform.position, new Vector3(0f, BallSpawnHeight, 0f)) > 0.001f)
+            {
+                throw new InvalidOperationException("Ball spawn/reset height must match the enlarged ball radius.");
+            }
 
             var resolver = Require(explosionObject.GetComponent<ExplosionResolver>(), "ExplosionResolver");
             var match = Require(matchObject.GetComponent<MatchController>(), "MatchController");
             var hud = Require(hudObject.GetComponent<MovementDebugHud>(), "MovementDebugHud");
+            ValidateSerializedFloat(resolver, "blastRadius", BlastRadius, "ExplosionResolver.blastRadius");
             var goals = UnityEngine.Object.FindObjectsByType<GoalTrigger>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             if (goals.Length != 2)
             {
@@ -344,6 +364,15 @@ namespace RocketFooxball.Editor
             }
             Require(north, "North goal");
             Require(south, "South goal");
+            if (Vector3.Distance(north.transform.position, new Vector3(-GoalAxisPosition, 0f, 0f)) > 0.01f ||
+                Vector3.Distance(south.transform.position, new Vector3(GoalAxisPosition, 0f, 0f)) > 0.01f ||
+                Vector3.Dot(north.transform.forward, Vector3.left) < 0.999f ||
+                Vector3.Dot(south.transform.forward, Vector3.right) < 0.999f)
+            {
+                throw new InvalidOperationException("Goals must face across longest arena axis at opposite furthest walls.");
+            }
+            ValidateSerializedVector3(north, "planeNormal", Vector3.right, "NorthGoal.planeNormal");
+            ValidateSerializedVector3(south, "planeNormal", Vector3.right, "SouthGoal.planeNormal");
 
             var northShield = Require(north.transform.Find("Shield"), "North goal Shield").GetComponent<Collider>();
             var southShield = Require(south.transform.Find("Shield"), "South goal Shield").GetComponent<Collider>();
@@ -366,6 +395,11 @@ namespace RocketFooxball.Editor
             ValidateReference(launcher, "explosionResolver", resolver, "RocketLauncher.explosionResolver");
             ValidateReference(cameraFeedback, "player", playerMotor, "PlayerCameraFeedback.player");
             ValidateReference(cameraFeedback, "targetCamera", camera, "PlayerCameraFeedback.targetCamera");
+            ValidateSerializedFloat(cameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "PlayerCameraFeedback.celebrationOrbitRadius");
+            ValidateSerializedFloat(cameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "PlayerCameraFeedback.celebrationOrbitHeight");
+            ValidateSerializedFloat(cameraFeedback, "celebrationLookHeight", CelebrationLookHeight, "PlayerCameraFeedback.celebrationLookHeight");
+            ValidateSerializedFloat(cameraFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "PlayerCameraFeedback.celebrationOrbitDegrees");
+            ValidateSerializedFloat(cameraFeedback, "celebrationFov", CelebrationFov, "PlayerCameraFeedback.celebrationFov");
             ValidateReference(kick, "input", input, "BallKick.input");
             ValidateReference(kick, "player", playerMotor, "BallKick.player");
             ValidateReference(kick, "look", look, "BallKick.look");
@@ -428,6 +462,9 @@ namespace RocketFooxball.Editor
             ValidateReference(match, "kick", kick, "MatchController.kick");
             ValidateReference(match, "northGoal", north, "MatchController.northGoal");
             ValidateReference(match, "southGoal", south, "MatchController.southGoal");
+            ValidateSerializedFloat(match, "goalFreezeDuration", GoalFreezeDuration, "MatchController.goalFreezeDuration");
+            ValidateSerializedVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f), "MatchController.ballResetPosition");
+            ValidateSerializedVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f), "MatchController.playerResetPosition");
             ValidateReference(hud, "player", playerMotor, "HUD.player");
             ValidateReference(hud, "ball", ballMotor, "HUD.ball");
             ValidateReference(hud, "launcher", launcher, "HUD.launcher");
@@ -557,8 +594,8 @@ namespace RocketFooxball.Editor
             SetObjectReference(kick, "player", motor);
             SetObjectReference(kick, "look", look);
             SetObjectReference(kick, "aimCamera", camera);
-            SetFloat(kick, "kickRange", 1.35f);
-            SetFloat(kick, "contactReachPadding", 0.20f);
+            SetFloat(kick, "kickRange", 3.00f);
+            SetFloat(kick, "contactReachPadding", 1.00f);
             SetFloat(kick, "coneTotalDegrees", 35f);
             SetFloat(kick, "cooldown", 0.40f);
             SetFloat(kick, "inputBuffer", 0.50f);
@@ -566,6 +603,11 @@ namespace RocketFooxball.Editor
             SetFloat(kick, "playerMomentumShare", 0.20f);
             SetFloat(feedback, "baseFov", 75f);
             SetFloat(feedback, "maxFov", 84f);
+            SetFloat(feedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
+            SetFloat(feedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
+            SetFloat(feedback, "celebrationLookHeight", CelebrationLookHeight);
+            SetFloat(feedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
+            SetFloat(feedback, "celebrationFov", CelebrationFov);
             SetObjectReference(presentation, "kick", kick);
             SetObjectReference(presentation, "worldAnimator", worldAnimator);
             SetObjectReference(presentation, "fpsKickAnimator", fpsAnimator);
@@ -579,7 +621,7 @@ namespace RocketFooxball.Editor
         {
             var root = GameObject.CreatePrimitive(PrimitiveType.Sphere);
             root.name = "Ball";
-            root.transform.localScale = Vector3.one * 1.44f;
+            root.transform.localScale = Vector3.one * BallPrefabScale;
             root.GetComponent<Renderer>().sharedMaterial = ballMaterial;
             var collider = root.GetComponent<SphereCollider>();
             collider.sharedMaterial = ballSurface;
@@ -678,6 +720,8 @@ namespace RocketFooxball.Editor
         private static ExplosionVfx BuildExplosionVfxPrefab()
         {
             var root = new GameObject("ExplosionVfx");
+            // Keep blast readability aligned with the 30% gameplay radius increase.
+            root.transform.localScale = Vector3.one * BlastVisualScale;
             var explosionMaterial = GetOrCreateParticleMaterial("Explosion", new Color(1f, 0.24f, 0.06f, 0.90f), AssetDatabase.LoadAssetAtPath<Texture2D>(ExplosionTexturePath));
             var smokeMaterial = GetOrCreateParticleMaterial("Smoke", new Color(0.42f, 0.40f, 0.36f, 0.64f), AssetDatabase.LoadAssetAtPath<Texture2D>(SmokeTexturePath));
             var systems = new List<ParticleSystem>();
@@ -733,26 +777,29 @@ namespace RocketFooxball.Editor
         {
             var arena = new GameObject("Arena");
             CreateSolid("Floor", arena.transform, new Vector3(0f, -0.5f, 0f), new Vector3(130f, 1f, 90f), floorMaterial, ballSurface);
-            const float sideSpan = 46.5f;
-            CreateSolid("NorthWallWest", arena.transform, new Vector3(-41.75f, 4f, -44.5f), new Vector3(sideSpan, 8f, 1f), wallMaterial, ballSurface);
-            CreateSolid("NorthWallEast", arena.transform, new Vector3(41.75f, 4f, -44.5f), new Vector3(sideSpan, 8f, 1f), wallMaterial, ballSurface);
-            CreateSolid("SouthWallWest", arena.transform, new Vector3(-41.75f, 4f, 44.5f), new Vector3(sideSpan, 8f, 1f), wallMaterial, ballSurface);
-            CreateSolid("SouthWallEast", arena.transform, new Vector3(41.75f, 4f, 44.5f), new Vector3(sideSpan, 8f, 1f), wallMaterial, ballSurface);
-            CreateSolid("EastWall", arena.transform, new Vector3(64.5f, 4f, 0f), new Vector3(1f, 8f, 88f), wallMaterial, ballSurface);
-            CreateSolid("WestWall", arena.transform, new Vector3(-64.5f, 4f, 0f), new Vector3(1f, 8f, 88f), wallMaterial, ballSurface);
+            // Longest arena axis runs along X. Goals occupy opposite X ends;
+            // north/south walls therefore remain solid while end walls split
+            // around each goal opening.
+            CreateSolid("NorthWall", arena.transform, new Vector3(0f, 4f, -44.5f), new Vector3(130f, 8f, 1f), wallMaterial, ballSurface);
+            CreateSolid("SouthWall", arena.transform, new Vector3(0f, 4f, 44.5f), new Vector3(130f, 8f, 1f), wallMaterial, ballSurface);
+            const float endWallSegmentSpan = 26.5f;
+            CreateSolid("WestWallNorth", arena.transform, new Vector3(-64.5f, 4f, -31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
+            CreateSolid("WestWallSouth", arena.transform, new Vector3(-64.5f, 4f, 31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
+            CreateSolid("EastWallNorth", arena.transform, new Vector3(64.5f, 4f, -31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
+            CreateSolid("EastWallSouth", arena.transform, new Vector3(64.5f, 4f, 31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
 
             CreateSolid("RampWest", arena.transform, new Vector3(-31f, 2.1f, 2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, 0f, 0f));
             CreateSolid("RampEast", arena.transform, new Vector3(31f, 2.1f, -2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(15f, 0f, 0f));
 
             var markings = new GameObject("Markings").transform;
             markings.SetParent(arena.transform, false);
-            CreateMarking("CenterLine", markings, Vector3.zero, new Vector3(0.25f, 0.02f, 88f), markingMaterial);
-            CreateMarking("NorthBox", markings, new Vector3(0f, 0.015f, -29f), new Vector3(36f, 0.02f, 0.25f), markingMaterial);
-            CreateMarking("SouthBox", markings, new Vector3(0f, 0.015f, 29f), new Vector3(36f, 0.02f, 0.25f), markingMaterial);
+            CreateMarking("CenterLine", markings, Vector3.zero, new Vector3(126f, 0.02f, 0.25f), markingMaterial);
+            CreateMarking("WestBox", markings, new Vector3(-29f, 0.015f, 0f), new Vector3(0.25f, 0.02f, 36f), markingMaterial);
+            CreateMarking("EastBox", markings, new Vector3(29f, 0.015f, 0f), new Vector3(0.25f, 0.02f, 36f), markingMaterial);
             CreateMarking("CenterSpot", markings, new Vector3(0f, 0.015f, 0f), new Vector3(1f, 0.02f, 1f), markingMaterial);
 
-            var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, -44f, frameMaterial, shieldMaterial, wallMaterial, ballSurface);
-            var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, 44f, frameMaterial, shieldMaterial, wallMaterial, ballSurface);
+            var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), frameMaterial, shieldMaterial, wallMaterial, ballSurface);
+            var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), frameMaterial, shieldMaterial, wallMaterial, ballSurface);
             north.Root.transform.SetParent(arena.transform, true);
             south.Root.transform.SetParent(arena.transform, true);
 
@@ -764,8 +811,8 @@ namespace RocketFooxball.Editor
             CreateContainment("WestContainment", containment, new Vector3(-69f, 5f, 0f), new Vector3(1f, 20f, 120f), ballSurface);
             CreateContainment("NorthContainment", containment, new Vector3(0f, 5f, -59f), new Vector3(140f, 20f, 1f), ballSurface);
             CreateContainment("SouthContainment", containment, new Vector3(0f, 5f, 59f), new Vector3(140f, 20f, 1f), ballSurface);
-            CreateContainment("NorthGoalOpeningContainment", containment, new Vector3(0f, 3.5f, -57f), new Vector3(38f, 8f, 1f), ballSurface);
-            CreateContainment("SouthGoalOpeningContainment", containment, new Vector3(0f, 3.5f, 57f), new Vector3(38f, 8f, 1f), ballSurface);
+            CreateContainment("WestGoalOpeningContainment", containment, new Vector3(-67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
+            CreateContainment("EastGoalOpeningContainment", containment, new Vector3(67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
 
             return new ArenaBuild
             {
@@ -776,17 +823,17 @@ namespace RocketFooxball.Editor
             };
         }
 
-        private static GoalBuild BuildGoal(string name, GoalTrigger.GoalSide side, float z, Material frameMaterial, Material shieldMaterial, Material wallMaterial, PhysicsMaterial ballSurface)
+        private static GoalBuild BuildGoal(string name, GoalTrigger.GoalSide side, Vector3 position, Quaternion rotation, Material frameMaterial, Material shieldMaterial, Material wallMaterial, PhysicsMaterial ballSurface)
         {
             var root = new GameObject(name);
-            root.transform.position = new Vector3(0f, 0f, z);
+            root.transform.SetPositionAndRotation(position, rotation);
             var triggerCollider = root.AddComponent<BoxCollider>();
             var trigger = root.AddComponent<GoalTrigger>();
             triggerCollider.isTrigger = true;
             triggerCollider.center = new Vector3(0f, 3.5f, 0f);
             triggerCollider.size = new Vector3(36f, 7f, 0.5f);
             SetEnum(trigger, "goalSide", side == GoalTrigger.GoalSide.North ? "North" : "South");
-            SetVector3(trigger, "planeNormal", Vector3.forward);
+            SetVector3(trigger, "planeNormal", Vector3.right);
             SetFloat(trigger, "openingHalfWidth", 18f);
             SetFloat(trigger, "openingMinHeight", 0f);
             SetFloat(trigger, "openingMaxHeight", 7f);
@@ -799,10 +846,11 @@ namespace RocketFooxball.Editor
             CreateSolid("FrameWest", root.transform, new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
             CreateSolid("FrameEast", root.transform, new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
             CreateSolid("FrameTop", root.transform, new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), frameMaterial, ballSurface);
-            CreateSolid("RecessWest", root.transform, new Vector3(-18.5f, 3.5f, side == GoalTrigger.GoalSide.North ? -4.5f : 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
-            CreateSolid("RecessEast", root.transform, new Vector3(18.5f, 3.5f, side == GoalTrigger.GoalSide.North ? -4.5f : 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
-            CreateSolid("RecessFloor", root.transform, new Vector3(0f, -0.25f, side == GoalTrigger.GoalSide.North ? -4.5f : 4.5f), new Vector3(37f, 0.5f, 9f), wallMaterial, ballSurface);
-            CreateSolid("RecessBack", root.transform, new Vector3(0f, 3.5f, side == GoalTrigger.GoalSide.North ? -9f : 9f), new Vector3(37f, 7f, 1f), wallMaterial, ballSurface);
+            // Local +Z points outward for both rotated goal roots.
+            CreateSolid("RecessWest", root.transform, new Vector3(-18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
+            CreateSolid("RecessEast", root.transform, new Vector3(18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
+            CreateSolid("RecessFloor", root.transform, new Vector3(0f, -0.25f, 4.5f), new Vector3(37f, 0.5f, 9f), wallMaterial, ballSurface);
+            CreateSolid("RecessBack", root.transform, new Vector3(0f, 3.5f, 9f), new Vector3(37f, 7f, 1f), wallMaterial, ballSurface);
             return new GoalBuild { Root = root, Trigger = trigger, Shield = shield.GetComponent<Collider>() };
         }
 
@@ -1473,7 +1521,7 @@ namespace RocketFooxball.Editor
             }
             if (Mathf.Abs(Physics.gravity.y + GamePhysicsSettings.GravityMagnitude) > 0.0001f || Mathf.Abs(Physics.gravity.x) > 0.0001f || Mathf.Abs(Physics.gravity.z) > 0.0001f)
             {
-                throw new InvalidOperationException("Physics gravity does not match -16.875 m/s².");
+                throw new InvalidOperationException("Physics gravity does not match shared GamePhysicsSettings.");
             }
             var scenes = EditorBuildSettings.scenes;
             if (scenes.Length != 1 || scenes[0].path != ScenePath || !scenes[0].enabled)
@@ -1594,6 +1642,13 @@ namespace RocketFooxball.Editor
                     ValidateReference(prefabFeedback, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerCameraFeedback.targetCamera");
                     ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
                     ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
+                    ValidateSerializedFloat(prefabFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "Player prefab PlayerCameraFeedback.celebrationOrbitRadius");
+                    ValidateSerializedFloat(prefabFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "Player prefab PlayerCameraFeedback.celebrationOrbitHeight");
+                    ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
+                    ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
+                    ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
+                    ValidateSerializedFloat(prefabKick, "kickRange", 3.00f, "Player prefab BallKick.kickRange");
+                    ValidateSerializedFloat(prefabKick, "contactReachPadding", 1.00f, "Player prefab BallKick.contactReachPadding");
                     var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
                     ValidateCrosshair(prefabCamera);
                     ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual").gameObject, "Player prefab WeaponVisual");
@@ -1606,9 +1661,12 @@ namespace RocketFooxball.Editor
                     var motor = Require(root.GetComponent<BallMotor>(), "Ball prefab BallMotor");
                     ValidateReference(motor, "body", body, "Ball prefab BallMotor.body");
                     ValidateReference(motor, "ballCollider", collider, "Ball prefab BallMotor.ballCollider");
-                    if (body.isKinematic != !dynamicBody || body.collisionDetectionMode != CollisionDetectionMode.ContinuousDynamic || collider.sharedMaterial != ballSurface)
+                    var sphere = collider as SphereCollider;
+                    var worldRadius = sphere != null ? sphere.radius * root.transform.lossyScale.x : 0f;
+                    if (body.isKinematic != !dynamicBody || body.collisionDetectionMode != CollisionDetectionMode.ContinuousDynamic || collider.sharedMaterial != ballSurface ||
+                        Vector3.Distance(root.transform.localScale, Vector3.one * BallPrefabScale) > 0.001f || Mathf.Abs(worldRadius - BallRadius) > 0.001f)
                     {
-                        throw new InvalidOperationException("Ball prefab Rigidbody/collider settings invalid.");
+                        throw new InvalidOperationException("Ball prefab Rigidbody/collider/scale settings invalid.");
                     }
                     var renderer = Require(root.GetComponent<Renderer>(), "Ball prefab renderer");
                     var material = renderer.sharedMaterial;
@@ -1796,6 +1854,10 @@ namespace RocketFooxball.Editor
         private static void ValidateExplosionPrefab(GameObject prefab)
         {
             if (prefab == null) throw new InvalidOperationException("Explosion prefab unavailable.");
+            if (Vector3.Distance(prefab.transform.localScale, Vector3.one * BlastVisualScale) > 0.001f)
+            {
+                throw new InvalidOperationException("Explosion VFX scale must track the enlarged blast radius.");
+            }
             var effect = Require(prefab.GetComponent<ExplosionVfx>(), "ExplosionVfx");
             var systems = prefab.GetComponentsInChildren<ParticleSystem>(true);
             if (systems.Length != 4) throw new InvalidOperationException("Explosion VFX must contain Flash/FireChunks/Sparks/Smoke systems.");
@@ -1887,6 +1949,26 @@ namespace RocketFooxball.Editor
             if (property == null || property.propertyType != SerializedPropertyType.ObjectReference || property.objectReferenceValue != expected)
             {
                 throw new InvalidOperationException(label + " reference is broken.");
+            }
+        }
+
+        private static void ValidateSerializedFloat(UnityEngine.Object target, string propertyName, float expected, string label)
+        {
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.Float || Mathf.Abs(property.floatValue - expected) > 0.001f)
+            {
+                throw new InvalidOperationException(label + " tuning mismatch.");
+            }
+        }
+
+        private static void ValidateSerializedVector3(UnityEngine.Object target, string propertyName, Vector3 expected, string label)
+        {
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.Vector3 || Vector3.Distance(property.vector3Value, expected) > 0.001f)
+            {
+                throw new InvalidOperationException(label + " tuning mismatch.");
             }
         }
 

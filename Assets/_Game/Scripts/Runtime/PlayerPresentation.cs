@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace RocketFooxball
 {
-    /// <summary>Bridges successful ball contact to world and FPS-only kick animation triggers.</summary>
+    /// <summary>Bridges every kick input to world and FPS-only kick animation triggers.</summary>
     public sealed class PlayerPresentation : MonoBehaviour
     {
         [Header("References")]
@@ -22,7 +22,7 @@ namespace RocketFooxball
 
             if (kick != null && !subscribed)
             {
-                kick.KickSucceeded += OnKickSucceeded;
+                kick.KickAttempted += OnKickAttempted;
                 subscribed = true;
             }
         }
@@ -31,12 +31,12 @@ namespace RocketFooxball
         {
             if (kick != null && subscribed)
             {
-                kick.KickSucceeded -= OnKickSucceeded;
+                kick.KickAttempted -= OnKickAttempted;
                 subscribed = false;
             }
         }
 
-        private void OnKickSucceeded()
+        private void OnKickAttempted()
         {
             if (worldAnimator != null && worldAnimator.isActiveAndEnabled)
             {

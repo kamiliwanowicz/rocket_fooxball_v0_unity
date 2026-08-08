@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace RocketFooxball
 {
-    /// <summary>Single owner for score, goal freeze, gameplay gate, and reset timing.</summary>
+    /// <summary>Single owner for score, goal freeze, gameplay gate, celebration camera, and reset timing.</summary>
     public sealed class MatchController : MonoBehaviour
     {
         public enum MatchState
@@ -25,8 +25,8 @@ namespace RocketFooxball
 
         [Header("Reset")]
         [SerializeField, Min(0.1f)] private float goalFreezeDuration = 5f;
-        [SerializeField] private Vector3 ballResetPosition = Vector3.zero;
-        [SerializeField] private Vector3 playerResetPosition = new Vector3(0f, 0f, 3f);
+        [SerializeField] private Vector3 ballResetPosition = new Vector3(0f, 2.16f, 0f);
+        [SerializeField] private Vector3 playerResetPosition = new Vector3(3f, 0f, 0f);
         [SerializeField] private Vector3 resetLookTarget = Vector3.zero;
 
         private MatchState state = MatchState.Playing;
@@ -97,6 +97,7 @@ namespace RocketFooxball
             freezeRemaining = Mathf.Max(goalFreezeDuration, 0.1f);
             SetGameplayEnabled(false);
             launcher?.DestroyAllProjectiles();
+            cameraFeedback?.BeginGoalCelebration(freezeRemaining);
         }
 
         /// <summary>Compatibility alias for goal owners.</summary>
@@ -121,6 +122,7 @@ namespace RocketFooxball
         /// <summary>Immediate reset command; normal flow calls after unscaled freeze.</summary>
         public void ResetMatch()
         {
+            cameraFeedback?.EndGoalCelebration();
             state = MatchState.Reset;
             SetGameplayEnabled(false);
             launcher?.DestroyAllProjectiles();

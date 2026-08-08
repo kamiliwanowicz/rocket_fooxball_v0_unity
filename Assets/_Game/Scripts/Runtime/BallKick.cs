@@ -14,8 +14,10 @@ namespace RocketFooxball
         [SerializeField] private BallMotor ball;
 
         [Header("Kick")]
-        [SerializeField, Min(0.1f)] private float kickRange = 1.35f;
-        [SerializeField, Min(0f)] private float contactReachPadding = 0.20f;
+        // Ball diameter is now 3x the prior POC size. Keep aim/contact reach
+        // forgiving enough for that larger surface without adding aim assist.
+        [SerializeField, Min(0.1f)] private float kickRange = 3.00f;
+        [SerializeField, Min(0f)] private float contactReachPadding = 1.00f;
         [SerializeField, Range(1f, 89f)] private float coneTotalDegrees = 35f;
         [SerializeField, Min(0.01f)] private float cooldown = 0.40f;
         [SerializeField, Min(0.01f)] private float inputBuffer = 0.50f;
@@ -47,11 +49,17 @@ namespace RocketFooxball
             var deltaTime = Time.fixedDeltaTime;
             cooldownRemaining = Mathf.Max(cooldownRemaining - deltaTime, 0f);
 
-            if (input != null && input.ConsumeKickPressed() && !attemptPending && cooldownRemaining <= 0f)
+            if (input != null && input.ConsumeKickPressed())
             {
-                attemptPending = true;
-                bufferRemaining = inputBuffer;
-                cooldownRemaining = cooldown;
+                // Animation represents the kick input itself. Contact remains
+                // conditional in TryKickNow and BallMotor.ApplyKick.
+                KickAttempted?.Invoke();
+                if (!attemptPending && cooldownRemaining <= 0f)
+                {
+                    attemptPending = true;
+                    bufferRemaining = inputBuffer;
+                    cooldownRemaining = cooldown;
+                }
             }
 
             if (!attemptPending)
@@ -155,6 +163,9 @@ namespace RocketFooxball
 
         /// <summary>Raised once when a kick attempt successfully applies ball velocity.</summary>
         public event Action KickSucceeded;
+
+        /// <summary>Raised for every fresh kick input, before contact eligibility is checked.</summary>
+        public event Action KickAttempted;
 
         private bool IsWithinPlayerReach()
         {

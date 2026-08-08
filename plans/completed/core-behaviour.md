@@ -18,7 +18,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Core Physics Contract [COMPLETED]
 
-- implemented: `CharacterController` player, `60 Hz` fixed step, gravity magnitude `16.875`, visible shell, ramps, `Rigidbody` ball, hidden failsafe containment, shared `PhysicsMaterial`, MovementLab scene/builder, debug HUD -> `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/GamePhysicsSettings.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/MovementDebugHud.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`, `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Prefabs/Ball.prefab`, `Assets/_Game/Materials/BallSurface.physicMaterial`
+- implemented: `CharacterController` player, `60 Hz` fixed step, gravity magnitude `11.8125` (30% below prior `16.875`), visible shell, ramps, `Rigidbody` ball, hidden failsafe containment, shared `PhysicsMaterial`, MovementLab scene/builder, debug HUD -> `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/GamePhysicsSettings.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/MovementDebugHud.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`, `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Prefabs/Ball.prefab`, `Assets/_Game/Materials/BallSurface.physicMaterial`
 - player: `CharacterController`
 - ball: `Rigidbody`
 - gravity: same strength for player and ball
@@ -117,9 +117,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Explosion Model [COMPLETED]
 
-- implemented: shared radius/falloff, surface-distance targeting, clear/occluded force, shield-transparent ball occlusion, additive player/ball impulses, visual shake -> `Assets/_Game/Scripts/Runtime/ExplosionResolver.cs`, `Assets/_Game/Scripts/Runtime/PlayerCameraFeedback.cs`
+- implemented: shared `5.85 m` radius/falloff (30% above prior `4.5 m`), surface-distance targeting, clear/occluded force, shield-transparent ball occlusion, additive player/ball impulses, enlarged blast VFX, visual shake -> `Assets/_Game/Scripts/Runtime/ExplosionResolver.cs`, `Assets/_Game/Scripts/Runtime/PlayerCameraFeedback.cs`
 
-- blast radius: about `2-2.5x` player height
+- blast radius: `5.85 m`; shared player/ball gameplay radius and `1.3x` VFX scale
 - falloff: smooth maximum-to-zero falloff
 - distance metric: nearest target-collider surface, not body centre
 - direct hit: maximum blast strength
@@ -129,7 +129,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - radius: shared between player and ball
 - force multipliers: separate player and ball tuning
 - stacking: fully additive with existing velocity and other same-fixed-step impulses
-- player direction: mostly radial plus small upward bias for blast below or beside player
+- player direction: underfoot blast adds player-facing forward impulse (`0.75x`) plus upward impulse (`1x`); side/upper-body blast stays radial with small upward bias
 - ball direction: purely radial; no automatic upward bias
 - ideal floor rocket-jump: fast launch reaching about `4x` normal-jump height before added jump or double-jump impulses
 - direct rocket-ball contact: explosion only; no extra impact kick
@@ -139,7 +139,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 - implemented: dynamic `Rigidbody`, continuous collision, shared surface, rolling resistance, speed cap, queued impulses, reset/freeze state -> `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Prefabs/Ball.prefab`, `Assets/_Game/Materials/BallSurface.physicMaterial`
 
-- size: about waist-height diameter
+- size: `4.32 m` diameter (`3x` prior `1.44 m` POC ball); reset/spawn centre `y=2.16`
 - normal jump: clears ball comfortably
 - collision: solid obstacle; player never phases through ball
 - authority: player can move ball; ball cannot impart meaningful velocity change to player
@@ -166,10 +166,10 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Active Kick [COMPLETED]
 
-- implemented: fresh press, `500 ms` buffer, `0.40 s` cooldown, range/cone gate, crosshair direction, incoming redirect, cap, airborne use -> `Assets/_Game/Scripts/Runtime/BallKick.cs`
+- implemented: fresh press, per-press attempt animation, `500 ms` buffer, `0.40 s` cooldown, enlarged-ball reach/cone gate, crosshair direction, incoming redirect, cap, airborne use -> `Assets/_Game/Scripts/Runtime/BallKick.cs`, `Assets/_Game/Scripts/Runtime/PlayerPresentation.cs`
 
-- input: fresh press per attempt; holding never repeats
-- range: about half player width beyond physical contact
+- input: fresh press per attempt; every fresh press animates; holding never repeats
+- range: `3.00 m` aim reach plus `1.00 m` contact padding
 - eligibility cone: about `35 degrees` total around crosshair
 - direction: exact crosshair direction
 - aim assistance: none
@@ -205,7 +205,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Goals [COMPLETED]
 
-- implemented: symmetric north/south goal openings, trigger plane, one-entry latch, visible shield/frame/recess, ball-only shield collision ignore, opposing score callback -> `Assets/_Game/Scripts/Runtime/GoalTrigger.cs`, `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`
+- implemented: symmetric goal openings on longest X axis (`x=-64` and `x=64`; enum sides remain North/South), trigger plane, one-entry latch, visible shield/frame/recess, ball-only shield collision ignore, opposing score callback -> `Assets/_Game/Scripts/Runtime/GoalTrigger.cs`, `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`
 
 - active goals: both
 - score ownership: ball entering either goal awards opposing side; own goals possible
@@ -221,14 +221,15 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Goal Celebration And Reset [COMPLETED]
 
-- implemented: `5 s` unscaled goal freeze, input/owner gate, rocket cleanup, ball/player/goal/camera reset -> `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`
+- implemented: `5 s` unscaled goal freeze, `360°` camera orbit around player, input/owner gate, rocket cleanup, ball/player/goal/camera reset with full pose/FOV/culling/overlay restoration -> `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Scripts/Runtime/PlayerCameraFeedback.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`
 
 - score trigger -> freeze physics and gameplay input for `5 s`
-- frozen frame: scoring moment held for clear feedback
+- frozen frame: scoring moment held while camera orbits player once
 - active rockets: destroy immediately
 - reset ball: centre position, zero `Rigidbody.linearVelocity`, zero `Rigidbody.angularVelocity`
 - reset player: neutral midfield position, short offset from ball, face ball, zero motor velocity
 - reset action state: clear jump buffer, kick buffer, fire state, cooldowns
+- camera reset: restore original parent, local pose, FOV, culling mask, viewmodels, and crosshair
 - kickoff countdown: none
 - post-freeze: controls resume immediately
 
@@ -240,7 +241,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - jump press within `100 ms` before landing -> queued normal jump on contact
 - airborne press within `100 ms` of landing with air-jump available -> double-jump wins; buffer consumed immediately
 - held jump -> no repeated normal jump or double-jump
-- kick press -> start cooldown and one `500 ms` eligibility buffer
+- kick press -> animate every fresh press; eligible press starts cooldown and one `500 ms` eligibility buffer
 - held kick -> no repeat
 - held fire -> launch whenever launcher cooldown permits
 - goal freeze -> disable gameplay actions and clear held/queued state before kickoff

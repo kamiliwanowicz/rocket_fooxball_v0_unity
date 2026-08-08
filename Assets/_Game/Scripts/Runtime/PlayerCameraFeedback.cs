@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace RocketFooxball
 {
-    /// <summary>Visual-only player feedback. Owns camera local position and field of view.</summary>
+    /// <summary>Visual-only player feedback. Sole owner of camera pose, FOV, shake, and goal orbit.</summary>
     public sealed class PlayerCameraFeedback : MonoBehaviour
     {
         [Header("References")]
@@ -18,17 +18,41 @@ namespace RocketFooxball
         [SerializeField, Min(0.01f)] private float shakeDuration = 0.18f;
         [SerializeField, Min(0f)] private float shakeFrequency = 28f;
 
+        [Header("Goal Celebration Orbit")]
+        [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = 5.5f;
+        [SerializeField, Min(0f)] private float celebrationOrbitHeight = 2.5f;
+        [SerializeField, Min(0f)] private float celebrationLookHeight = 1.05f;
+        [SerializeField, Min(0f)] private float celebrationOrbitDegrees = 360f;
+        [SerializeField, Min(1f)] private float celebrationFov = 60f;
+
         private Transform cameraTransform;
         private Vector3 neutralLocalPosition;
+        private Quaternion neutralLocalRotation = Quaternion.identity;
         private float shakeRemaining;
         private float shakeStrength;
         private float shakeElapsed;
         private float shakePhase;
 
+        private bool goalCelebrationActive;
+        private float goalCelebrationElapsed;
+        private float goalCelebrationDuration;
+        private float goalCelebrationStartAngle;
+        private Transform goalCelebrationOriginalParent;
+        private Vector3 goalCelebrationOriginalLocalPosition;
+        private Quaternion goalCelebrationOriginalLocalRotation;
+        private float goalCelebrationOriginalFov;
+        private int goalCelebrationOriginalCullingMask;
+        private GameObject goalCelebrationViewmodels;
+        private GameObject goalCelebrationCrosshair;
+        private bool goalCelebrationViewmodelsWasActive;
+        private bool goalCelebrationCrosshairWasActive;
+        private bool goalCelebrationStateCaptured;
+
         public PlayerMotor Player => player;
         public Camera TargetCamera => targetCamera;
         public float CurrentFov => targetCamera != null ? targetCamera.fieldOfView : baseFov;
         public Vector3 NeutralLocalPosition => neutralLocalPosition;
+        public bool IsGoalCelebrating => goalCelebrationActive;
 
         private void Awake()
         {
@@ -55,6 +79,12 @@ namespace RocketFooxball
                 return;
             }
 
+            if (goalCelebrationActive)
+            {
+                UpdateGoalCelebrationOrbit(Time.unscaledDeltaTime);
+                return;
+            }
+
             var speedT = 0f;
             if (player != null)
             {
@@ -63,6 +93,105 @@ namespace RocketFooxball
 
             targetCamera.fieldOfView = Mathf.Lerp(baseFov, Mathf.Max(baseFov, maxFov), speedT);
             ApplyShake(Time.unscaledDeltaTime);
+        }
+
+        /// <summary>Detaches and orbits the camera around the frozen player for one goal celebration.</summary>
+        public void BeginGoalCelebration(float duration)
+        {
+            CacheReferences();
+            if (goalCelebrationActive || targetCamera == null || cameraTransform == null || player == null)
+            {
+                return;
+            }
+
+            shakeRemaining = 0f;
+            shakeStrength = 0f;
+            shakeElapsed = 0f;
+            shakePhase = 0f;
+            cameraTransform.localPosition = neutralLocalPosition;
+            cameraTransform.localRotation = neutralLocalRotation;
+
+            goalCelebrationOriginalParent = cameraTransform.parent;
+            goalCelebrationOriginalLocalPosition = cameraTransform.localPosition;
+            goalCelebrationOriginalLocalRotation = cameraTransform.localRotation;
+            goalCelebrationOriginalFov = targetCamera.fieldOfView;
+            goalCelebrationOriginalCullingMask = targetCamera.cullingMask;
+            goalCelebrationViewmodels = FindDescendant("Viewmodels");
+            goalCelebrationCrosshair = FindDescendant("CrosshairCanvas");
+            goalCelebrationViewmodelsWasActive = goalCelebrationViewmodels != null && goalCelebrationViewmodels.activeSelf;
+            goalCelebrationCrosshairWasActive = goalCelebrationCrosshair != null && goalCelebrationCrosshair.activeSelf;
+            goalCelebrationStateCaptured = true;
+
+            if (goalCelebrationViewmodels != null)
+            {
+                goalCelebrationViewmodels.SetActive(false);
+            }
+            if (goalCelebrationCrosshair != null)
+            {
+                goalCelebrationCrosshair.SetActive(false);
+            }
+
+            var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
+            if (hiddenLayer >= 0)
+            {
+                targetCamera.cullingMask |= 1 << hiddenLayer;
+            }
+
+            var flatForward = Vector3.ProjectOnPlane(player.transform.forward, Vector3.up);
+            if (flatForward.sqrMagnitude <= 0.000001f)
+            {
+                flatForward = Vector3.forward;
+            }
+            flatForward.Normalize();
+            var startOffset = -flatForward * Mathf.Max(celebrationOrbitRadius, 0.1f);
+            goalCelebrationStartAngle = Mathf.Atan2(startOffset.z, startOffset.x);
+            goalCelebrationElapsed = 0f;
+            goalCelebrationDuration = Mathf.Max(duration, 0.1f);
+            goalCelebrationActive = true;
+
+            // Detach once, then this component owns world pose until EndGoalCelebration.
+            cameraTransform.SetParent(null, true);
+            targetCamera.fieldOfView = Mathf.Max(celebrationFov, 1f);
+            UpdateGoalCelebrationOrbit(0f);
+        }
+
+        /// <summary>Restores parent, local pose, culling, and first-person overlays after celebration.</summary>
+        public void EndGoalCelebration()
+        {
+            if (!goalCelebrationStateCaptured)
+            {
+                goalCelebrationActive = false;
+                return;
+            }
+
+            goalCelebrationActive = false;
+            if (cameraTransform != null)
+            {
+                cameraTransform.SetParent(goalCelebrationOriginalParent, false);
+                cameraTransform.localPosition = goalCelebrationOriginalLocalPosition;
+                cameraTransform.localRotation = goalCelebrationOriginalLocalRotation;
+            }
+            if (targetCamera != null)
+            {
+                targetCamera.fieldOfView = goalCelebrationOriginalFov;
+                targetCamera.cullingMask = goalCelebrationOriginalCullingMask;
+            }
+            if (goalCelebrationViewmodels != null)
+            {
+                goalCelebrationViewmodels.SetActive(goalCelebrationViewmodelsWasActive);
+            }
+            if (goalCelebrationCrosshair != null)
+            {
+                goalCelebrationCrosshair.SetActive(goalCelebrationCrosshairWasActive);
+            }
+
+            goalCelebrationElapsed = 0f;
+            goalCelebrationDuration = 0f;
+            goalCelebrationStartAngle = 0f;
+            goalCelebrationOriginalParent = null;
+            goalCelebrationViewmodels = null;
+            goalCelebrationCrosshair = null;
+            goalCelebrationStateCaptured = false;
         }
 
         /// <summary>Requests deterministic, decaying positional shake. Rotation and aim remain unchanged.</summary>
@@ -90,9 +219,10 @@ namespace RocketFooxball
             RequestBlastShake(normalizedStrength);
         }
 
-        /// <summary>Restores neutral camera position/FOV and clears pending shake.</summary>
+        /// <summary>Ends any celebration orbit, restores neutral camera pose/FOV, and clears pending shake.</summary>
         public void ResetFeedback()
         {
+            EndGoalCelebration();
             shakeRemaining = 0f;
             shakeStrength = 0f;
             shakeElapsed = 0f;
@@ -101,6 +231,7 @@ namespace RocketFooxball
             if (cameraTransform != null)
             {
                 cameraTransform.localPosition = neutralLocalPosition;
+                cameraTransform.localRotation = neutralLocalRotation;
             }
             if (targetCamera != null)
             {
@@ -133,7 +264,46 @@ namespace RocketFooxball
             if (cameraTransform != null)
             {
                 neutralLocalPosition = cameraTransform.localPosition;
+                neutralLocalRotation = cameraTransform.localRotation;
             }
+        }
+
+        private void UpdateGoalCelebrationOrbit(float deltaTime)
+        {
+            if (!goalCelebrationActive || targetCamera == null || cameraTransform == null || player == null)
+            {
+                return;
+            }
+
+            goalCelebrationElapsed = Mathf.Min(goalCelebrationElapsed + Mathf.Max(deltaTime, 0f), goalCelebrationDuration);
+            var progress = Mathf.Clamp01(goalCelebrationElapsed / Mathf.Max(goalCelebrationDuration, 0.0001f));
+            var angle = goalCelebrationStartAngle + progress * celebrationOrbitDegrees * Mathf.Deg2Rad;
+            var orbitCenter = player.transform.position + Vector3.up * Mathf.Max(celebrationLookHeight, 0f);
+            var horizontalOffset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * Mathf.Max(celebrationOrbitRadius, 0.1f);
+            var cameraPosition = player.transform.position + horizontalOffset + Vector3.up * Mathf.Max(celebrationOrbitHeight, 0f);
+            var lookDirection = orbitCenter - cameraPosition;
+            if (lookDirection.sqrMagnitude <= 0.000001f)
+            {
+                lookDirection = Vector3.forward;
+            }
+
+            cameraTransform.position = cameraPosition;
+            cameraTransform.rotation = Quaternion.LookRotation(lookDirection.normalized, Vector3.up);
+            targetCamera.fieldOfView = Mathf.Max(celebrationFov, 1f);
+        }
+
+        private GameObject FindDescendant(string childName)
+        {
+            var children = GetComponentsInChildren<Transform>(true);
+            for (var i = 0; i < children.Length; i++)
+            {
+                if (children[i].name == childName)
+                {
+                    return children[i].gameObject;
+                }
+            }
+
+            return null;
         }
 
         private void ApplyShake(float deltaTime)

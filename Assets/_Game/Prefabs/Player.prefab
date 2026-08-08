@@ -480,6 +480,11 @@ MonoBehaviour:
   shakeAmplitude: 0.06
   shakeDuration: 0.18
   shakeFrequency: 28
+  celebrationOrbitRadius: 5.5
+  celebrationOrbitHeight: 2.5
+  celebrationLookHeight: 1.05
+  celebrationOrbitDegrees: 360
+  celebrationFov: 60
 --- !u!114 &6044168052179503180
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -517,8 +522,8 @@ MonoBehaviour:
   look: {fileID: 5313289886365503098}
   aimCamera: {fileID: 4927503976345080273}
   ball: {fileID: 0}
-  kickRange: 1.35
-  contactReachPadding: 0.2
+  kickRange: 2
+  contactReachPadding: 0.45
   coneTotalDegrees: 35
   cooldown: 0.4
   inputBuffer: 0.5
