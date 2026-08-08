@@ -15,6 +15,10 @@ MESH_NAMES = ("CharacterBody", "CharacterArmor", "CharacterHead", "CharacterEye"
 ACTION_NAMES = ("Idle", "Kick")
 TARGET_BOUNDS = (0.75, 0.45, 1.75)
 MIN_OVERLAP = 0.005
+KICK_START = 1
+KICK_CONTACT = 5
+KICK_END = 12
+MIN_FORWARD_EXTENSION = 0.04
 
 # Authored before geometry. Each pair names joined solids and required AABB overlap.
 CONNECTION_MAP = (
@@ -176,11 +180,11 @@ def make_actions(rig):
     kick = bpy.data.actions.new("Kick")
     kick.use_fake_user = True
     for frame, thigh, shin, foot in (
-        (1, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
+        (KICK_START, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
         (3, (math.radians(-22), 0, 0), (math.radians(38), 0, 0), (math.radians(-10), 0, 0)),
-        (5, (math.radians(67), 0, 0), (math.radians(-42), 0, 0), (math.radians(18), 0, 0)),
+        (KICK_CONTACT, (math.radians(-68), 0, 0), (math.radians(-42), 0, 0), (math.radians(18), 0, 0)),
         (8, (math.radians(22), 0, 0), (math.radians(-8), 0, 0), (0, 0, 0)),
-        (12, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
+        (KICK_END, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
     ):
         key_rotation(kick, rig, "Thigh.R", frame, thigh)
         key_rotation(kick, rig, "Shin.R", frame, shin)
@@ -249,6 +253,37 @@ def audit_connections(bounds):
             raise RuntimeError(f"Connection {first}->{second} overlap {overlap:.6f}m below {required:.6f}m on {axis}")
 
 
+def evaluated_group_bounds(meshes, rig, action, frame, group_name):
+    """Return evaluated world bounds for vertices weighted to one deform bone."""
+    rig.animation_data.action = action
+    bpy.context.scene.frame_set(frame)
+    bpy.context.view_layer.update()
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    points = []
+    for obj in meshes:
+        group_indices = {group.index for group in obj.vertex_groups if group.name == group_name}
+        if not group_indices:
+            continue
+        vertex_indices = {
+            vertex.index
+            for vertex in obj.data.vertices
+            if any(weight.group in group_indices and weight.weight > 1e-6 for weight in vertex.groups)
+        }
+        if not vertex_indices:
+            continue
+        evaluated = obj.evaluated_get(depsgraph)
+        deformed = evaluated.to_mesh()
+        try:
+            points.extend(evaluated.matrix_world @ deformed.vertices[index].co for index in vertex_indices)
+        finally:
+            evaluated.to_mesh_clear()
+    if not points:
+        raise RuntimeError(f"No evaluated vertices found for deform group {group_name}")
+    low = Vector((min(point.x for point in points), min(point.y for point in points), min(point.z for point in points)))
+    high = Vector((max(point.x for point in points), max(point.y for point in points), max(point.z for point in points)))
+    return low, high
+
+
 def audit(meshes, rig, actions):
     all_points = []
     total_vertices = 0
@@ -302,7 +337,7 @@ def audit(meshes, rig, actions):
         raise RuntimeError("Declared action audit failed")
     kick = bpy.data.actions["Kick"]
     duration = (kick.frame_range[1] - kick.frame_range[0]) / 30.0
-    contact_ratio = (5.0 - kick.frame_range[0]) / (kick.frame_range[1] - kick.frame_range[0])
+    contact_ratio = (KICK_CONTACT - kick.frame_range[0]) / (kick.frame_range[1] - kick.frame_range[0])
     if not 0.30 <= duration <= 0.38 or not 0.35 <= contact_ratio <= 0.45:
         raise RuntimeError(f"Kick timing invalid: {duration:.3f}s contact {contact_ratio:.3f}")
     for action in actions:
@@ -312,10 +347,25 @@ def audit(meshes, rig, actions):
     for bone_name in ("Thigh.R", "Shin.R", "Foot.R"):
         curves = [curve for curve in kick.fcurves if f'pose.bones["{bone_name}"]' in curve.data_path]
         for curve in curves:
-            if abs(curve.evaluate(1.0) - curve.evaluate(12.0)) > 1e-7:
+            if abs(curve.evaluate(KICK_START) - curve.evaluate(KICK_END)) > 1e-7:
                 raise RuntimeError(f"Kick final pose mismatch: {bone_name}")
+    idle_foot_low, idle_foot_high = evaluated_group_bounds(meshes, rig, bpy.data.actions["Idle"], KICK_START, "Foot.R")
+    contact_foot_low, contact_foot_high = evaluated_group_bounds(meshes, rig, kick, KICK_CONTACT, "Foot.R")
+    forward_extension = idle_foot_low.y - contact_foot_low.y
+    if forward_extension < MIN_FORWARD_EXTENSION:
+        raise RuntimeError(
+            "Kick contact does not extend right foot forward in Blender -Y: "
+            f"idle_min_y={idle_foot_low.y:.4f} contact_min_y={contact_foot_low.y:.4f} "
+            f"extension={forward_extension:.4f}m"
+        )
     print(f"AUDIT bounds min={tuple(round(v, 4) for v in low)} max={tuple(round(v, 4) for v in high)} dimensions={tuple(round(v, 4) for v in dimensions)}")
     print(f"AUDIT vertices={total_vertices} triangles={total_triangles} actions=Idle(loop),Kick(non-loop) duration={duration:.3f}s contact={contact_ratio:.3f}")
+    print(
+        "AUDIT contact_forward="
+        f"idle_min_y={idle_foot_low.y:.6f} contact_min_y={contact_foot_low.y:.6f} "
+        f"extension={forward_extension:.6f}m right_foot_bounds_contact="
+        f"{tuple(round(v, 6) for v in contact_foot_low)}..{tuple(round(v, 6) for v in contact_foot_high)}"
+    )
     print("AUDIT weights=normalized max_influences=1 unweighted=0 connections=13 overlap>=0.005m")
     return low, high, total_vertices, total_triangles
 
@@ -330,8 +380,9 @@ def render_previews(meshes, rig, low, high):
     scene.render.image_settings.file_format = "PNG"
     scene.world = bpy.data.worlds.new("PreviewWorld")
     scene.world.color = (0.035, 0.04, 0.05)
-    scene.frame_set(1)
     rig.animation_data.action = bpy.data.actions["Idle"]
+    scene.frame_set(KICK_START)
+    bpy.context.view_layer.update()
 
     bpy.ops.object.light_add(type="AREA", location=(2.5, -3.5, 4.0))
     key = bpy.context.object
@@ -365,6 +416,18 @@ def render_previews(meshes, rig, low, high):
         bpy.ops.render.render(write_still=True)
         if not os.path.isfile(scene.render.filepath) or os.path.getsize(scene.render.filepath) == 0:
             raise RuntimeError(f"Preview render failed: {scene.render.filepath}")
+    rig.animation_data.action = bpy.data.actions["Kick"]
+    scene.frame_set(KICK_CONTACT)
+    bpy.context.view_layer.update()
+    camera.location = views["front"]
+    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+    scene.render.filepath = os.path.join(PREVIEW_DIR, "contact-front.png")
+    bpy.ops.render.render(write_still=True)
+    if not os.path.isfile(scene.render.filepath) or os.path.getsize(scene.render.filepath) == 0:
+        raise RuntimeError(f"Contact preview render failed: {scene.render.filepath}")
+    rig.animation_data.action = bpy.data.actions["Idle"]
+    scene.frame_set(KICK_START)
+    bpy.context.view_layer.update()
     bpy.data.objects.remove(camera, do_unlink=True)
     bpy.data.objects.remove(key, do_unlink=True)
     bpy.data.objects.remove(fill, do_unlink=True)
@@ -400,7 +463,7 @@ def save_and_export(meshes, rig):
         raise RuntimeError("FBX export missing or empty")
     print(f"OUTPUT blend={BLEND_PATH} bytes={os.path.getsize(BLEND_PATH)}")
     print(f"OUTPUT fbx={FBX_PATH} bytes={os.path.getsize(FBX_PATH)}")
-    print(f"OUTPUT previews={PREVIEW_DIR} count=6")
+    print(f"OUTPUT previews={PREVIEW_DIR} count=7 required_views=6 contact=contact-front.png")
 
 
 def main():
