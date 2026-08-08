@@ -197,6 +197,12 @@ namespace RocketFooxball
             body.linearVelocity = Vector3.zero;
             body.angularVelocity = Vector3.zero;
             body.Sleep();
+            // A reset invalidates the motion captured by a preceding freeze, but
+            // keeps the stored kinematic mode so ordinary freeze/unfreeze still
+            // restores its body configuration. Re-enable therefore starts from
+            // this reset frame instead of replaying scoring-frame velocity.
+            preFreezeVelocity = Vector3.zero;
+            preFreezeAngularVelocity = Vector3.zero;
             ClearQueuedState();
         }
 

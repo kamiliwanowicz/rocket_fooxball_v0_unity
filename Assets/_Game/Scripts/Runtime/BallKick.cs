@@ -14,6 +14,7 @@ namespace RocketFooxball
 
         [Header("Kick")]
         [SerializeField, Min(0.1f)] private float kickRange = 1.35f;
+        [SerializeField, Min(0f)] private float contactReachPadding = 0.20f;
         [SerializeField, Range(1f, 89f)] private float coneTotalDegrees = 35f;
         [SerializeField, Min(0.01f)] private float cooldown = 0.40f;
         [SerializeField, Min(0.01f)] private float inputBuffer = 0.50f;
@@ -108,7 +109,17 @@ namespace RocketFooxball
             var direction = GetAimDirection();
             var toBall = ball.transform.position - origin;
             var distance = toBall.magnitude;
-            if (distance > kickRange || distance <= 0.0001f)
+            if (distance <= 0.0001f || !IsWithinPlayerReach())
+            {
+                return false;
+            }
+
+            // The camera is above and behind the physical player contact point.
+            // Gate the aim ray by ball-surface distance, then gate physical reach
+            // separately so ordinary grounded contact plus a small extension is
+            // eligible without adding aim assistance.
+            var ballSurfacePoint = ball.BallCollider.ClosestPoint(origin);
+            if (Vector3.Distance(origin, ballSurfacePoint) > kickRange)
             {
                 return false;
             }
@@ -133,6 +144,24 @@ namespace RocketFooxball
             }
 
             return ball.ApplyKick(direction, player != null ? player.Velocity : Vector3.zero, speedFraction, playerMomentumShare);
+        }
+
+        private bool IsWithinPlayerReach()
+        {
+            if (player == null || ball == null || ball.BallCollider == null)
+            {
+                return false;
+            }
+
+            var controller = player.GetComponent<CharacterController>();
+            var playerCenter = controller != null
+                ? controller.transform.TransformPoint(controller.center)
+                : player.transform.position;
+            var playerRadius = controller != null ? controller.radius : 0.4f;
+            var ballBounds = ball.BallCollider.bounds;
+            var ballRadius = Mathf.Max(ballBounds.extents.x, ballBounds.extents.y, ballBounds.extents.z);
+            var maximumCenterDistance = playerRadius + ballRadius + Mathf.Max(contactReachPadding, 0f);
+            return Vector3.Distance(playerCenter, ball.transform.position) <= maximumCenterDistance;
         }
 
         private void CacheReferences()

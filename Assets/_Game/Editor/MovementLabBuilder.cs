@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using RocketFooxball;
 using UnityEditor;
@@ -23,7 +24,8 @@ namespace RocketFooxball.Editor
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private const string MaterialsPath = "Assets/_Game/Materials";
         private const string BallSurfacePath = MaterialsPath + "/BallSurface.physicMaterial";
-        private const string BuildMarkerName = "MovementLabGeneratedT3";
+        private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
+        private const string BuildMarkerPrefix = "MovementLabGeneratedT3_";
 
         // Keep this list limited to assets authored by this builder. Unity can
         // serialize empty fields with trailing spaces in both the asset and
@@ -82,14 +84,16 @@ namespace RocketFooxball.Editor
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
-            // Unity assigns new local file IDs when a scene is recreated. Reuse an
-            // already generated T3 scene on later builder invocations so a clean
-            // second build is byte-stable while first build remains authoritative.
-            if (TryOpenExistingGeneratedScene())
+            var builderSignature = ComputeBuilderSignature();
+            RegisterBuildScene();
+            Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
+            SetProjectFixedTimestep();
+
+            // Reuse only a scene carrying the current builder signature and passing
+            // the full generated-scene validator. Any source change or stale/missing
+            // generated requirement falls through to authoritative scene rebuild.
+            if (TryOpenExistingGeneratedScene(builderSignature))
             {
-                RegisterBuildScene();
-                Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
-                SetProjectFixedTimestep();
                 AssetDatabase.SaveAssets();
                 NormalizeGeneratedYamlWhitespace();
                 Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath + " (existing T3 scene reused)");
@@ -176,13 +180,10 @@ namespace RocketFooxball.Editor
             SetObjectReference(hudComponent, "kick", kick);
             SetObjectReference(hudComponent, "match", match);
 
-            new GameObject(BuildMarkerName);
+            new GameObject(GetBuildMarkerName(builderSignature));
 
             ConfigureSceneLight();
             EditorSceneManager.SaveScene(scene, ScenePath);
-            RegisterBuildScene();
-            Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
-            SetProjectFixedTimestep();
             AssetDatabase.SaveAssets();
             NormalizeGeneratedYamlWhitespace();
             Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath);
@@ -216,7 +217,7 @@ namespace RocketFooxball.Editor
             Require(matchObject, "MatchController root");
             Require(explosionObject, "ExplosionResolver root");
             Require(hudObject, "DebugHUD root");
-            Require(GameObject.Find(BuildMarkerName), "T3 build marker");
+            Require(GameObject.Find(GetBuildMarkerName(ComputeBuilderSignature())), "T3 build marker");
 
             var playerMotor = Require(player.GetComponent<PlayerMotor>(), "PlayerMotor");
             var input = Require(player.GetComponent<PlayerInputReader>(), "PlayerInputReader");
@@ -396,6 +397,7 @@ namespace RocketFooxball.Editor
             SetObjectReference(kick, "look", look);
             SetObjectReference(kick, "aimCamera", camera);
             SetFloat(kick, "kickRange", 1.35f);
+            SetFloat(kick, "contactReachPadding", 0.20f);
             SetFloat(kick, "coneTotalDegrees", 35f);
             SetFloat(kick, "cooldown", 0.40f);
             SetFloat(kick, "inputBuffer", 0.50f);
@@ -585,7 +587,7 @@ namespace RocketFooxball.Editor
             light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
         }
 
-        private static bool TryOpenExistingGeneratedScene()
+        private static bool TryOpenExistingGeneratedScene(string builderSignature)
         {
             if (!File.Exists(ScenePath))
             {
@@ -597,7 +599,50 @@ namespace RocketFooxball.Editor
             {
                 active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             }
-            return active.IsValid() && GameObject.Find(BuildMarkerName) != null;
+            if (!active.IsValid() || GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
+            {
+                return false;
+            }
+
+            // Validation is the stale-content gate. It checks every generated
+            // object, reference, prefab, material, physics setting, and build
+            // scene before allowing byte-stable reuse.
+            try
+            {
+                ValidateMovementLab();
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static string ComputeBuilderSignature()
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath);
+            if (projectRoot == null)
+            {
+                throw new InvalidOperationException("Unable to resolve Unity project root.");
+            }
+
+            var absolutePath = Path.Combine(projectRoot.FullName, BuilderSourcePath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(absolutePath))
+            {
+                throw new InvalidOperationException("Missing builder source: " + BuilderSourcePath);
+            }
+
+            using (var sha = SHA256.Create())
+            using (var stream = File.OpenRead(absolutePath))
+            {
+                var hash = sha.ComputeHash(stream);
+                return BitConverter.ToString(hash).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static string GetBuildMarkerName(string builderSignature)
+        {
+            return BuildMarkerPrefix + builderSignature;
         }
 
         private static void RegisterBuildScene()

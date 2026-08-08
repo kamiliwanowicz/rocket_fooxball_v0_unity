@@ -216,6 +216,7 @@ MonoBehaviour:
   aimCamera: {fileID: 4927503976345080273}
   ball: {fileID: 0}
   kickRange: 1.35
+  contactReachPadding: 0.2
   coneTotalDegrees: 35
   cooldown: 0.4
   inputBuffer: 0.5

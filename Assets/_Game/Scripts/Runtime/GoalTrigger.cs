@@ -30,6 +30,10 @@ namespace RocketFooxball
         private float previousSignedDistance;
         private bool previousDistanceValid;
         private bool entryLatched;
+        private bool ballInsideTrigger;
+        private int previousNonZeroSide;
+
+        private const float PlaneDeadband = 0.0001f;
 
         public GoalSide Side => goalSide;
         public bool EntryLatched => entryLatched;
@@ -63,44 +67,71 @@ namespace RocketFooxball
                 return;
             }
 
+            var signedDistance = SignedDistance(ball.transform.position);
+            if (ballInsideTrigger && Mathf.Abs(signedDistance) > rearmDistance)
+            {
+                ballInsideTrigger = false;
+            }
+
             if (entryLatched)
             {
-                if (match == null && Mathf.Abs(SignedDistance(ball.transform.position)) > rearmDistance)
+                if (Mathf.Abs(signedDistance) > rearmDistance)
                 {
                     entryLatched = false;
                     previousDistanceValid = false;
+                    previousNonZeroSide = 0;
                 }
-                return;
             }
 
-            var signedDistance = SignedDistance(ball.transform.position);
             if (!previousDistanceValid)
             {
                 previousSignedDistance = signedDistance;
+                previousNonZeroSide = SignOutsideDeadband(signedDistance);
                 previousDistanceValid = true;
                 return;
             }
 
-            var crossed = Mathf.Abs(signedDistance) <= 0.02f || previousSignedDistance * signedDistance < 0f;
-            if (crossed && IsInsideOpening(ball.transform.position))
+            var currentNonZeroSide = SignOutsideDeadband(signedDistance);
+            var crossed = previousNonZeroSide != 0 && currentNonZeroSide != 0 && previousNonZeroSide != currentNonZeroSide;
+            if (!entryLatched && crossed && IsInsideOpening(ball.transform.position))
             {
                 TryScore();
             }
 
             previousSignedDistance = signedDistance;
+            if (currentNonZeroSide != 0)
+            {
+                previousNonZeroSide = currentNonZeroSide;
+            }
         }
 
         private void OnTriggerEnter(Collider other)
         {
-            if (entryLatched || other == null || ball == null)
+            if (other == null || ball == null)
             {
                 return;
             }
 
             var otherBall = other.GetComponentInParent<BallMotor>();
-            if (otherBall == ball && IsInsideOpening(ball.transform.position))
+            if (otherBall == ball)
             {
-                TryScore();
+                // Trigger entry only observes the candidate. Scoring remains
+                // gated by the signed ball-centre plane crossing in FixedUpdate.
+                ballInsideTrigger = true;
+            }
+        }
+
+        private void OnTriggerExit(Collider other)
+        {
+            if (other == null || ball == null)
+            {
+                return;
+            }
+
+            var otherBall = other.GetComponentInParent<BallMotor>();
+            if (otherBall == ball)
+            {
+                ballInsideTrigger = false;
             }
         }
 
@@ -110,6 +141,8 @@ namespace RocketFooxball
             entryLatched = false;
             previousDistanceValid = false;
             previousSignedDistance = 0f;
+            previousNonZeroSide = 0;
+            ballInsideTrigger = false;
         }
 
         /// <summary>Compatibility alias for reset owners.</summary>
@@ -150,6 +183,19 @@ namespace RocketFooxball
         {
             var local = transform.InverseTransformPoint(worldPosition);
             return Mathf.Abs(local.x) <= openingHalfWidth && local.y >= openingMinHeight && local.y <= openingMaxHeight;
+        }
+
+        private static int SignOutsideDeadband(float value)
+        {
+            if (value > PlaneDeadband)
+            {
+                return 1;
+            }
+            if (value < -PlaneDeadband)
+            {
+                return -1;
+            }
+            return 0;
         }
 
         private Vector3 GetPlanePosition()
