@@ -20,6 +20,7 @@ namespace RocketFooxball.Editor
         private const string PrefabPath = "Assets/_Game/Prefabs/Player.prefab";
         private const string BallPrefabPath = "Assets/_Game/Prefabs/Ball.prefab";
         private const string RocketPrefabPath = "Assets/_Game/Prefabs/Rocket.prefab";
+        private const string RocketModelPath = "Assets/_Game/Models/LowPolyRocket.fbx";
         private const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         private const string MaterialsPath = "Assets/_Game/Materials";
@@ -196,6 +197,7 @@ namespace RocketFooxball.Editor
             EnsureAssetExists(PrefabPath);
             EnsureAssetExists(BallPrefabPath);
             EnsureAssetExists(RocketPrefabPath);
+            EnsureAssetExists(RocketModelPath);
             EnsureAssetExists(ScenePath);
             EnsureAssetExists(BallSurfacePath);
 
@@ -443,11 +445,27 @@ namespace RocketFooxball.Editor
 
         private static GameObject BuildRocketPrefab(Material rocketMaterial)
         {
-            var root = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            root.name = "Rocket";
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(RocketModelPath);
+            if (model == null)
+            {
+                throw new InvalidOperationException("Missing rocket model: " + RocketModelPath);
+            }
+
+            var root = new GameObject("Rocket");
             root.transform.localScale = Vector3.one * 0.24f;
-            root.GetComponent<Renderer>().sharedMaterial = rocketMaterial;
-            var collider = root.GetComponent<SphereCollider>();
+            var collider = root.AddComponent<SphereCollider>();
+            var visual = (GameObject)PrefabUtility.InstantiatePrefab(model);
+            visual.name = "Visual";
+            visual.transform.SetParent(root.transform, false);
+            var renderers = visual.GetComponentsInChildren<Renderer>(true);
+            if (renderers.Length == 0)
+            {
+                throw new InvalidOperationException("Rocket model contains no renderers: " + RocketModelPath);
+            }
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].sharedMaterial = rocketMaterial;
+            }
             var body = root.AddComponent<Rigidbody>();
             body.useGravity = false;
             body.isKinematic = true;
@@ -806,11 +824,71 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Rocket prefab Rigidbody settings invalid.");
                     }
+                    var visual = Require(root.transform.Find("Visual"), "Rocket prefab imported Visual");
+                    var meshFilters = visual.GetComponentsInChildren<MeshFilter>(true);
+                    if (meshFilters.Length == 0)
+                    {
+                        throw new InvalidOperationException("Rocket prefab Visual contains no mesh filters.");
+                    }
+                    for (var i = 0; i < meshFilters.Length; i++)
+                    {
+                        var mesh = meshFilters[i].sharedMesh;
+                        if (mesh == null || AssetDatabase.GetAssetPath(mesh) != RocketModelPath)
+                        {
+                            throw new InvalidOperationException("Rocket prefab Visual must use imported rocket mesh.");
+                        }
+                        Require(meshFilters[i].GetComponent<Renderer>(), "Rocket prefab imported mesh renderer");
+                    }
+                    ValidateRocketVisualForward(root.transform, meshFilters);
+                    var components = root.GetComponentsInChildren<Component>(true);
+                    for (var i = 0; i < components.Length; i++)
+                    {
+                        if (components[i] == null)
+                        {
+                            throw new InvalidOperationException("Rocket prefab contains a missing component.");
+                        }
+                    }
                 }
             }
             finally
             {
                 PrefabUtility.UnloadPrefabContents(root);
+            }
+        }
+
+        private static void ValidateRocketVisualForward(Transform rocketRoot, MeshFilter[] meshFilters)
+        {
+            var localBounds = new Bounds();
+            var hasBounds = false;
+            for (var i = 0; i < meshFilters.Length; i++)
+            {
+                var meshBounds = meshFilters[i].sharedMesh.bounds;
+                var center = meshBounds.center;
+                var extents = meshBounds.extents;
+                for (var x = -1; x <= 1; x += 2)
+                {
+                    for (var y = -1; y <= 1; y += 2)
+                    {
+                        for (var z = -1; z <= 1; z += 2)
+                        {
+                            var meshPoint = center + Vector3.Scale(extents, new Vector3(x, y, z));
+                            var rocketPoint = rocketRoot.InverseTransformPoint(meshFilters[i].transform.TransformPoint(meshPoint));
+                            if (hasBounds)
+                            {
+                                localBounds.Encapsulate(rocketPoint);
+                            }
+                            else
+                            {
+                                localBounds = new Bounds(rocketPoint, Vector3.zero);
+                                hasBounds = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if (!hasBounds || localBounds.size.z <= localBounds.size.x || localBounds.size.z <= localBounds.size.y || localBounds.max.z <= -localBounds.min.z)
+            {
+                throw new InvalidOperationException("Rocket prefab imported mesh must point along local +Z.");
             }
         }
 
@@ -978,6 +1056,7 @@ namespace RocketFooxball.Editor
             EnsureFolder("Assets/_Game");
             EnsureFolder(MaterialsPath);
             EnsureFolder("Assets/_Game/Prefabs");
+            EnsureFolder("Assets/_Game/Models");
             EnsureFolder("Assets/_Game/Scenes");
         }
 
