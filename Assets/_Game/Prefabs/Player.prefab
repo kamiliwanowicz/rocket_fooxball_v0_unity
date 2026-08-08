@@ -439,11 +439,9 @@ MonoBehaviour:
   bhopSoftCapMultiplier: 2.5
   hardCapMultiplier: 3
   jumpVelocity: 6.75
+  jumpsToHardCap: 4
   coyoteTime: 0.08
   jumpBufferTime: 0.1
-  airJumpEnabled: 1
-  airJumpVelocity: 6.75
-  airJumpHorizontalImpulse: 2
   input: {fileID: 4153586482274664226}
 --- !u!114 &5313289886365503098
 MonoBehaviour:
@@ -527,7 +525,7 @@ MonoBehaviour:
   coneTotalDegrees: 35
   cooldown: 0.4
   inputBuffer: 0.5
-  speedFraction: 0.7
+  speedFraction: 0.91
   playerMomentumShare: 0.2
 --- !u!114 &8872308828828672900
 MonoBehaviour:

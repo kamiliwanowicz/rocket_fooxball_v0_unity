@@ -16,18 +16,20 @@ namespace RocketFooxball
         [Header("Kick")]
         // Ball diameter is now 3x the prior POC size. Keep aim/contact reach
         // forgiving enough for that larger surface without adding aim assist.
-        [SerializeField, Min(0.1f)] private float kickRange = 3.00f;
+        [SerializeField, Min(0.1f)] private float kickRange = 4.50f;
         [SerializeField, Min(0f)] private float contactReachPadding = 1.00f;
+        [SerializeField, Min(1f)] private float contactReachScale = 1.50f;
         [SerializeField, Range(1f, 89f)] private float coneTotalDegrees = 35f;
         [SerializeField, Min(0.01f)] private float cooldown = 0.40f;
         [SerializeField, Min(0.01f)] private float inputBuffer = 0.50f;
-        [SerializeField, Range(0f, 1f)] private float speedFraction = 0.70f;
+        [SerializeField, Range(0f, 1f)] private float speedFraction = 0.91f;
         [SerializeField, Range(0f, 1f)] private float playerMomentumShare = 0.20f;
 
         private float cooldownRemaining;
         private float bufferRemaining;
         private bool attemptPending;
         private bool simulationEnabled = true;
+        private const float Epsilon = 0.000001f;
 
         public float CooldownRemaining => Mathf.Max(cooldownRemaining, 0f);
         public float BufferRemaining => Mathf.Max(bufferRemaining, 0f);
@@ -139,7 +141,12 @@ namespace RocketFooxball
                 return false;
             }
 
-            if (Physics.Raycast(origin, direction, out var hit, kickRange, ~0, QueryTriggerInteraction.Ignore))
+            // Unity raycasts do not report a collider that already contains the
+            // ray origin. At high player speed the camera can enter this large
+            // ball briefly, so treat that overlap as ball contact instead of
+            // leaving the buffered kick pending until the camera exits again.
+            var aimOriginInsideBall = (ballSurfacePoint - origin).sqrMagnitude <= Epsilon;
+            if (!aimOriginInsideBall && Physics.Raycast(origin, direction, out var hit, kickRange, ~0, QueryTriggerInteraction.Ignore))
             {
                 var hitBall = hit.collider.GetComponentInParent<BallMotor>();
                 if (hitBall != ball)
@@ -147,7 +154,7 @@ namespace RocketFooxball
                     return false;
                 }
             }
-            else
+            else if (!aimOriginInsideBall)
             {
                 return false;
             }
@@ -181,7 +188,8 @@ namespace RocketFooxball
             var playerRadius = controller != null ? controller.radius : 0.4f;
             var ballBounds = ball.BallCollider.bounds;
             var ballRadius = Mathf.Max(ballBounds.extents.x, ballBounds.extents.y, ballBounds.extents.z);
-            var maximumCenterDistance = playerRadius + ballRadius + Mathf.Max(contactReachPadding, 0f);
+            var baseCenterDistance = playerRadius + ballRadius + Mathf.Max(contactReachPadding, 0f);
+            var maximumCenterDistance = baseCenterDistance * Mathf.Max(contactReachScale, 1f);
             return Vector3.Distance(playerCenter, ball.transform.position) <= maximumCenterDistance;
         }
 

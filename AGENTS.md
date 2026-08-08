@@ -57,7 +57,9 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 
 - Worktree path budget: create Unity worktrees near drive root, such as `C:\wt\<id>`. Existing long worktree -> verified junction or `subst` drive; use same short project path for every Unity command and process-ownership check.
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
-- Validation batching: finish static edits and accepted review fixes before Unity launch, then run only checks invalidated by final diff. Explicit task or plan checks override.
+- C# inner loop: run targeted Unity test command when test exists; Unity Test Framework import/compile is sufficient before test execution. Otherwise run compile-only Unity batch launch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
+- `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
+- Validation batching: finish static edits and accepted review fixes before Unity launch. Run builder/build/validate checks once at checkpoint or final validation, limited to checks invalidated by final diff. Explicit task or plan checks override.
 - Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
 
 ## Validation

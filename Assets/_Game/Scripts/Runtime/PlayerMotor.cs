@@ -26,12 +26,10 @@ namespace RocketFooxball
         [SerializeField, Min(1f)] private float hardCapMultiplier = 3f;
 
         [Header("Jump")]
-        [SerializeField, Min(0f)] private float jumpVelocity = 6.75f;
+        [SerializeField, Min(0f)] private float jumpVelocity = 4.50f;
+        [SerializeField, Min(1)] private int jumpsToHardCap = 4;
         [SerializeField, Min(0f)] private float coyoteTime = 0.08f;
         [SerializeField, Min(0f)] private float jumpBufferTime = 0.10f;
-        [SerializeField] private bool airJumpEnabled = true;
-        [SerializeField, Min(0f)] private float airJumpVelocity = 6.75f;
-        [SerializeField, Min(0f)] private float airJumpHorizontalImpulse = 2f;
         [SerializeField] private PlayerInputReader input;
 
         private const float MaxGroundedFallVelocity = -0.1f;
@@ -43,7 +41,6 @@ namespace RocketFooxball
         private Vector3 groundNormalThisStep = Vector3.up;
         private float coyoteTimer;
         private float jumpBufferTimer;
-        private bool airJumpAvailable;
         private bool hasGroundContact;
         private bool groundContactThisStep;
         private bool simulationEnabled = true;
@@ -59,7 +56,6 @@ namespace RocketFooxball
         public bool IsGrounded => controller != null && controller.isGrounded;
         public bool HasGroundContact => hasGroundContact;
         public Vector3 GroundNormal => hasGroundContact ? groundNormal : Vector3.up;
-        public bool IsAirJumpAvailable => airJumpAvailable;
         public bool SimulationEnabled => simulationEnabled;
 
         private void Awake()
@@ -95,7 +91,6 @@ namespace RocketFooxball
 
             if (grounded)
             {
-                airJumpAvailable = true;
                 coyoteTimer = coyoteTime;
             }
             else
@@ -104,10 +99,10 @@ namespace RocketFooxball
             }
             jumpBufferTimer = Mathf.Max(jumpBufferTimer - deltaTime, 0f);
 
-            var jumpedThisStep = TryConsumeJump(grounded);
             var move = input != null ? input.Move : Vector2.zero;
             var strafeDirection = Mathf.Abs(move.x) > 0.001f ? transform.right * Mathf.Sign(move.x) : Vector3.zero;
             var forwardDirection = Mathf.Abs(move.y) > 0.001f ? transform.forward * Mathf.Sign(move.y) : Vector3.zero;
+            var jumpedThisStep = TryConsumeJump(grounded, strafeDirection + forwardDirection);
 
             if (grounded && !jumpedThisStep)
             {
@@ -199,7 +194,6 @@ namespace RocketFooxball
             queuedExternalImpulse = Vector3.zero;
             coyoteTimer = 0f;
             jumpBufferTimer = 0f;
-            airJumpAvailable = false;
             groundContactThisStep = false;
             hasGroundContact = false;
             groundNormal = Vector3.up;
@@ -295,7 +289,7 @@ namespace RocketFooxball
             SetHorizontalVelocity(horizontal);
         }
 
-        private bool TryConsumeJump(bool grounded)
+        private bool TryConsumeJump(bool grounded, Vector3 wishDirection)
         {
             if (jumpBufferTimer <= 0f)
             {
@@ -304,24 +298,26 @@ namespace RocketFooxball
             if (grounded || coyoteTimer > 0f)
             {
                 velocity.y = jumpVelocity;
+                ApplyJumpForwardBoost(wishDirection);
                 jumpBufferTimer = 0f;
                 coyoteTimer = 0f;
                 return true;
             }
-            if (!airJumpEnabled || !airJumpAvailable)
+            return false;
+        }
+
+        /// <summary>Adds one quarter-cap forward gain so four uninterrupted hops can reach maximum speed.</summary>
+        private void ApplyJumpForwardBoost(Vector3 wishDirection)
+        {
+            var horizontal = HorizontalVelocity();
+            var boostDirection = wishDirection;
+            if (boostDirection.sqrMagnitude <= Epsilon)
             {
-                return false;
+                boostDirection = horizontal.sqrMagnitude > Epsilon ? horizontal : transform.forward;
             }
 
-            airJumpAvailable = false;
-            jumpBufferTimer = 0f;
-            velocity.y += airJumpVelocity;
-            var horizontal = HorizontalVelocity();
-            if (horizontal.sqrMagnitude > Epsilon && airJumpHorizontalImpulse > 0f)
-            {
-                SetHorizontalVelocity(horizontal + horizontal.normalized * airJumpHorizontalImpulse);
-            }
-            return true;
+            var speedGain = HardCap / Mathf.Max(jumpsToHardCap, 1);
+            SetHorizontalVelocity(horizontal + boostDirection.normalized * speedGain);
         }
 
         private void ApplyQueuedExternalImpulse()

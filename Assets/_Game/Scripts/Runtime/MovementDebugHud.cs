@@ -55,7 +55,6 @@ namespace RocketFooxball
                        $"H Speed: {speed:F1} m/s ({speed / Mathf.Max(player.HardCap, 0.001f) * 100f:F0}% cap)\n" +
                        $"V Speed: {velocity.y:F1} m/s\n" +
                        $"Grounded: {(controller != null && controller.isGrounded ? "YES" : "NO")}\n" +
-                       $"Air Jump: {(player.IsAirJumpAvailable ? "READY" : "USED")}\n" +
                        $"Caps: base {player.BaseSpeed:F0} | soft {player.SoftCap:F0} | hard {player.HardCap:F0}\n";
 
             if (ball != null)
@@ -81,7 +80,7 @@ namespace RocketFooxball
                 text += "\n";
             }
 
-            text += "WASD Move | Mouse Look | Space Jump/Double-Jump | LMB Fire | RMB Kick | Esc Release Mouse";
+            text += "WASD Move | Mouse Look | Space Jump | LMB Fire | RMB Kick | Esc Release Mouse";
             GUI.Label(new Rect(16f, 16f, 700f, 260f), text, labelStyle);
         }
     }

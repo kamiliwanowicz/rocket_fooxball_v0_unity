@@ -582,6 +582,8 @@ namespace RocketFooxball.Editor
             SetObjectReference(input, "actions", actions);
             SetObjectReference(motor, "input", input);
             SetFloat(motor, "bhopSoftCapMultiplier", 2.5f);
+            SetFloat(motor, "jumpVelocity", 4.50f);
+            SetInteger(motor, "jumpsToHardCap", 4);
             SetObjectReference(look, "input", input);
             SetObjectReference(look, "head", head);
             SetObjectReference(feedback, "player", motor);
@@ -596,12 +598,13 @@ namespace RocketFooxball.Editor
             SetObjectReference(kick, "player", motor);
             SetObjectReference(kick, "look", look);
             SetObjectReference(kick, "aimCamera", camera);
-            SetFloat(kick, "kickRange", 3.00f);
+            SetFloat(kick, "kickRange", 4.50f);
             SetFloat(kick, "contactReachPadding", 1.00f);
+            SetFloat(kick, "contactReachScale", 1.50f);
             SetFloat(kick, "coneTotalDegrees", 35f);
             SetFloat(kick, "cooldown", 0.40f);
             SetFloat(kick, "inputBuffer", 0.50f);
-            SetFloat(kick, "speedFraction", 0.70f);
+            SetFloat(kick, "speedFraction", 0.91f);
             SetFloat(kick, "playerMomentumShare", 0.20f);
             SetFloat(feedback, "baseFov", 75f);
             SetFloat(feedback, "maxFov", 84f);
@@ -950,8 +953,10 @@ namespace RocketFooxball.Editor
                 ParticleShaderPath,
                 "Assets/_Game/Scripts/Runtime/ExplosionVfx.cs",
                 "Assets/_Game/Scripts/Runtime/RocketTrailVfx.cs",
+                "Assets/_Game/Scripts/Runtime/PlayerMotor.cs",
                 "Assets/_Game/Scripts/Runtime/PlayerPresentation.cs",
                 "Assets/_Game/Scripts/Runtime/BallKick.cs",
+                "Assets/_Game/Scripts/Runtime/BallMotor.cs",
                 "Assets/_Game/Scripts/Runtime/ExplosionResolver.cs",
                 "Assets/_Game/Scripts/Runtime/RocketProjectile.cs",
                 "Tools/Blender/generate_retro_textures.py",
@@ -1635,6 +1640,7 @@ namespace RocketFooxball.Editor
                 {
                     Require(root.GetComponent<CharacterController>(), "Player prefab CharacterController");
                     var input = Require(root.GetComponent<PlayerInputReader>(), "Player prefab PlayerInputReader");
+                    var prefabMotor = Require(root.GetComponent<PlayerMotor>(), "Player prefab PlayerMotor");
                     ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
                     var prefabLauncher = Require(root.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
                     var prefabKick = Require(root.GetComponent<BallKick>(), "Player prefab BallKick");
@@ -1650,8 +1656,12 @@ namespace RocketFooxball.Editor
                     ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
                     ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
                     ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
-                    ValidateSerializedFloat(prefabKick, "kickRange", 3.00f, "Player prefab BallKick.kickRange");
+                    ValidateSerializedFloat(prefabMotor, "jumpVelocity", 4.50f, "Player prefab PlayerMotor.jumpVelocity");
+                    ValidateSerializedFloat(prefabKick, "kickRange", 4.50f, "Player prefab BallKick.kickRange");
                     ValidateSerializedFloat(prefabKick, "contactReachPadding", 1.00f, "Player prefab BallKick.contactReachPadding");
+                    ValidateSerializedFloat(prefabKick, "contactReachScale", 1.50f, "Player prefab BallKick.contactReachScale");
+                    ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", 4, "Player prefab PlayerMotor.jumpsToHardCap");
+                    ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
                     var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
                     ValidateCrosshair(prefabCamera);
                     ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual").gameObject, "Player prefab WeaponVisual");
@@ -1965,6 +1975,16 @@ namespace RocketFooxball.Editor
             }
         }
 
+        private static void ValidateSerializedInteger(UnityEngine.Object target, string propertyName, int expected, string label)
+        {
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.Integer || property.intValue != expected)
+            {
+                throw new InvalidOperationException(label + " tuning mismatch.");
+            }
+        }
+
         private static void ValidateSerializedVector3(UnityEngine.Object target, string propertyName, Vector3 expected, string label)
         {
             var serialized = new SerializedObject(target);
@@ -2067,6 +2087,18 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException(target.GetType().Name + " has no serialized float '" + propertyName + "'.");
             }
             property.floatValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetInteger(UnityEngine.Object target, string propertyName, int value)
+        {
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.Integer)
+            {
+                throw new InvalidOperationException(target.GetType().Name + " has no serialized integer '" + propertyName + "'.");
+            }
+            property.intValue = value;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

@@ -116,7 +116,7 @@ namespace RocketFooxball
         }
 
         /// <summary>Applies aimed kick velocity while preserving useful incoming momentum.</summary>
-        public bool ApplyKick(Vector3 aimDirection, Vector3 playerVelocity, float speedFraction = 0.70f, float playerMomentumShare = 0.20f)
+        public bool ApplyKick(Vector3 aimDirection, Vector3 playerVelocity, float speedFraction = 0.91f, float playerMomentumShare = 0.20f)
         {
             if (body == null || !simulationEnabled || !IsFinite(aimDirection) || aimDirection.sqrMagnitude <= Epsilon)
             {
@@ -133,6 +133,10 @@ namespace RocketFooxball
 
             var momentum = Mathf.Clamp(Vector3.Dot(playerVelocity, direction), 0f, HardCap * 0.25f) * Mathf.Clamp01(playerMomentumShare);
             var kickVelocity = HardCap * Mathf.Clamp(speedFraction, 0f, 1f);
+            // A successful kick supersedes contact-assist impulses accumulated while
+            // the player was touching the ball. Letting those fire one step later
+            // made high-speed kicks feel delayed and unpredictable.
+            queuedImpulse = Vector3.zero;
             body.linearVelocity = current + direction * (kickVelocity + momentum);
             ClampVelocity();
             return true;
