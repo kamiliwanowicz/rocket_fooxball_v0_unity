@@ -13,7 +13,7 @@ namespace RocketFooxball
         [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
 
         [Header("Rocket Jump")]
-        [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.75f;
+        [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
         [SerializeField, Min(0f)] private float underfootUpwardImpulseScale = 1f;
         [SerializeField] private Collider[] goalShieldColliders;
 

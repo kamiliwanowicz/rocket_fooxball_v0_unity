@@ -71,6 +71,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
 - Report only validation actually run. Preserve unrelated user work.
+- User handoff: always include one standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.` or `NO MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.` Choose required when user must run Unity menu command; choose not required when agent completed build or change does not invalidate generated lab.
 
 ## AI project
 - This is AI-native project, build exclusive by AI agents. So whatever you write, make it AI agents fiendly. 

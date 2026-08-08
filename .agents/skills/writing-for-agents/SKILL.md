@@ -1,6 +1,6 @@
 ---
 name: writing-for-agents
-description: Writing documents for agents. Use when creating or editing skills, or modifying AGENTS.md or CLAUDE.md.
+description: Use when creating or editing agent-facing skills, AGENTS.md, CLAUDE.md, or implementation plans.
 ---
 
 Reference for writing any document an agent consumes — a skill, an `AGENTS.md` / `CLAUDE.md`, a doc reached by a pointer. The packaging differs; the writing does not: the same levers make each one predictable — the agent taking the same _process_ every run, not producing the same output.
@@ -8,6 +8,10 @@ Reference for writing any document an agent consumes — a skill, an `AGENTS.md`
 AI-oriented `.md` or `.mdc` writing/editing -> invoke `/llm-oriented-markdowns` before modifying files; apply its rules through final diff.
 
 When the document you're writing is a skill, read [`SKILL-MECHANICS.md`](SKILL-MECHANICS.md) for frontmatter, invocation choice, and router skills.
+
+## Plan worker profiles
+
+Implementation plan containing Blender model design -> assign exact `sol_high` only to implementation worker that designs model. Keep model design in distinct task when ownership permits. Animation-only Blender work, reviewers, fix workers, and final validation follow normal project profile rules. Record model-design worker profile in task owner plus execution assignments.
 
 ## Context pointers
 

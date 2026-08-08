@@ -175,7 +175,7 @@ namespace RocketFooxball.Editor
             SetFloat(explosionResolver, "ballImpulseStrength", 16f);
             SetFloat(explosionResolver, "occludedForce", 0.25f);
             SetFloat(explosionResolver, "playerUpBias", 0.18f);
-            SetFloat(explosionResolver, "underfootForwardImpulseScale", 0.75f);
+            SetFloat(explosionResolver, "underfootForwardImpulseScale", 0.5625f);
             SetFloat(explosionResolver, "underfootUpwardImpulseScale", 1f);
             SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
 
@@ -558,7 +558,8 @@ namespace RocketFooxball.Editor
             viewmodels.SetParent(camera.transform, false);
             viewmodels.localPosition = Vector3.zero;
             viewmodels.localRotation = Quaternion.identity;
-            var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(0.28f, -0.22f, 0.55f), Quaternion.identity, Vector3.one);
+            // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
+            var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
             var weaponMetal = GetOrCreateRetroMaterial("WeaponMetal", new Color(0.38f, 0.055f, 0.045f), null, Vector2.one);
             var weaponDark = GetOrCreateRetroMaterial("WeaponDark", new Color(0.018f, 0.012f, 0.014f), null, Vector2.one);
             var weaponAccent = GetOrCreateRetroMaterial("WeaponAccent", new Color(0.82f, 0.70f, 0.48f), null, Vector2.one);
@@ -580,6 +581,7 @@ namespace RocketFooxball.Editor
 
             SetObjectReference(input, "actions", actions);
             SetObjectReference(motor, "input", input);
+            SetFloat(motor, "bhopSoftCapMultiplier", 2.5f);
             SetObjectReference(look, "input", input);
             SetObjectReference(look, "head", head);
             SetObjectReference(feedback, "player", motor);
@@ -788,8 +790,9 @@ namespace RocketFooxball.Editor
             CreateSolid("EastWallNorth", arena.transform, new Vector3(64.5f, 4f, -31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
             CreateSolid("EastWallSouth", arena.transform, new Vector3(64.5f, 4f, 31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
 
-            CreateSolid("RampWest", arena.transform, new Vector3(-31f, 2.1f, 2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, 0f, 0f));
-            CreateSolid("RampEast", arena.transform, new Vector3(31f, 2.1f, -2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(15f, 0f, 0f));
+            // Each ramp rises from midfield toward its nearest X-axis goal.
+            CreateSolid("RampWest", arena.transform, new Vector3(-22f, 2.1f, 2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, -90f, 0f));
+            CreateSolid("RampEast", arena.transform, new Vector3(22f, 2.1f, -2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, 90f, 0f));
 
             var markings = new GameObject("Markings").transform;
             markings.SetParent(arena.transform, false);

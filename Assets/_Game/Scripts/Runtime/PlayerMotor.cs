@@ -22,7 +22,7 @@ namespace RocketFooxball
         [SerializeField, Min(1f)] private float airStrafePower = 2f;
         [SerializeField, Min(0f)] private float airSteerRateDegrees = 420f;
         [SerializeField, Range(0f, 1f)] private float airForwardScale = 0.35f;
-        [SerializeField, Min(1f)] private float bhopSoftCapMultiplier = 2f;
+        [SerializeField, Min(1f)] private float bhopSoftCapMultiplier = 2.5f;
         [SerializeField, Min(1f)] private float hardCapMultiplier = 3f;
 
         [Header("Jump")]

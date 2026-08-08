@@ -436,7 +436,7 @@ MonoBehaviour:
   airStrafePower: 2
   airSteerRateDegrees: 420
   airForwardScale: 0.35
-  bhopSoftCapMultiplier: 2
+  bhopSoftCapMultiplier: 2.5
   hardCapMultiplier: 3
   jumpVelocity: 6.75
   coyoteTime: 0.08
@@ -522,8 +522,8 @@ MonoBehaviour:
   look: {fileID: 5313289886365503098}
   aimCamera: {fileID: 4927503976345080273}
   ball: {fileID: 0}
-  kickRange: 2
-  contactReachPadding: 0.45
+  kickRange: 3
+  contactReachPadding: 1
   coneTotalDegrees: 35
   cooldown: 0.4
   inputBuffer: 0.5
@@ -1265,7 +1265,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 2e879bd5e76d0f942866c9c5071f66eb, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 0.55
+      value: 0.34
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 2e879bd5e76d0f942866c9c5071f66eb, type: 3}
       propertyPath: m_LocalRotation.w
