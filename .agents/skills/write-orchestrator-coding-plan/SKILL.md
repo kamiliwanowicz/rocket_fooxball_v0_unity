@@ -114,10 +114,12 @@ Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as e
 
 ## Output shape
 
+Every written plan uses `Status: accepted`. Document status does not claim LP digest acceptance.
+
 ```markdown
 # [Scope] Coding Plan
 
-Status: proposed
+Status: accepted
 Source: [request or breakdown candidate]
 Run ID: [run_id or direct]
 Plan ID: [plan_id or direct]
