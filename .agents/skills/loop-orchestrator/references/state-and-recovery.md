@@ -24,8 +24,12 @@ Before every dispatch and after every accepted result, LP:
 
 1. Build complete next state bytes in unique temporary file inside run directory.
 2. Flush and close temporary file.
-3. Atomically replace existing `state.md`; first write atomically renames temporary file to `state.md`.
-4. Reopen `state.md`; verify readable run ID and intended phase/status before continuing.
+3. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
+4. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
+5. Keep backup until verification passes.
+6. Reopen `state.md`; verify readable run ID and intended phase/status before continuing.
+
+State field change -> build complete next document. Targeted text patch must match section plus exact field key exactly once. Zero or multiple matches -> stop. After replacement, verify intended field, expected phase, and unchanged neighboring identifiers.
 
 Partial write, rename failure, or verification mismatch -> no dispatch. Preserve old readable state and return blocker evidence. Never let another agent repair state.
 
