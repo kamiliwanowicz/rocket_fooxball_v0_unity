@@ -44,27 +44,22 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
 - Reject unrelated reserialization, GUID churn, and prefab/scene changes after Editor saves.
-- One Unity Editor process per project. Close interactive Editor before batch mutation.
 
-## Technical Issues
+## Unity execution
 
-- Computer Use prohibited for every task; never use related `sky.documentation` / `node_repl` tooling.
-- Orchestrator state writes: follow `.agents/skills/loop-orchestrator/references/state-and-recovery.md` atomic-write contract.
-- Unity batch runs: use `Start-Process -Wait -PassThru`, capture exit code, and confirm project process and lock release before next run.
-- Unity IDE churn: compare pre/post status; remove only newly generated untracked IDE files and preserve prior changes.
-
-## Unity execution speed
-
-- Worktree path budget: create Unity worktrees near drive root, such as `C:\wt\<id>`. Existing long worktree -> verified junction or `subst` drive; use same short project path for every Unity command and process-ownership check.
+- Tooling: no Computer Use or related `sky.documentation` / `node_repl` tools.
+- Unity worktrees: use short paths such as `C:\wt\<id>`. Existing long path -> verified junction or `subst` drive. Use same short project path for all Unity commands and process checks.
+- Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture exit code -> confirm process and project lock release.
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
-- C# inner loop: run targeted Unity test command when test exists; Unity Test Framework import/compile is sufficient before test execution. Otherwise run compile-only Unity batch launch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
+- C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
-- Validation batching: finish static edits and accepted review fixes before Unity launch. Run builder/build/validate checks once at checkpoint or final validation, limited to checks invalidated by final diff. Explicit task or plan checks override.
 - Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
+- IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
 ## Validation
 
-- Tests deferred pending redesigned strategy. Add or require tests only when user requests them.
+- Test creation deferred unless user requests it. Run relevant existing tests.
+- Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
 - Builder-generated change: run build twice from same SHA. Build 2 must reuse existing outputs; compare hashes for owned scenes, prefabs, controllers, materials, and importer metadata. Any mismatch -> nondeterministic build bug.
@@ -72,9 +67,9 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
-- Report only validation actually run. Preserve unrelated user work.
-- User handoff: always include one standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.` or `NO MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.` Choose required when user must run Unity menu command; choose not required when agent completed build or change does not invalidate generated lab.
+- Report only checks run.
+- When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`
 
-## AI project
-- This is AI-native project, build exclusive by AI agents. So whatever you write, make it AI agents fiendly. 
-- Write self-documenting code. Leave short comments or class/method description if they can help agents understand why something was build in that way - only if it brings value. 
+## Code clarity
+
+- Write self-documenting code. Add short comments or class/method descriptions only for non-obvious intent.
