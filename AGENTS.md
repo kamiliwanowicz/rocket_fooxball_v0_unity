@@ -27,31 +27,9 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 4. Visual polish last
 
 ## Graphics and performance
-
-- Target system: HP EliteBook 840 14 inch G11 Notebook PC; Intel Core Ultra 5 135U (12 cores, 14 logical processors); integrated Intel Graphics; 32 GB RAM; 1920x1200 at 60 Hz.
-- POC must run smoothly at 1920x1200 on target system.
 - Default to simple, low-cost graphics: primitive geometry, basic URP materials, limited effects.
 - Preserve upgrade path for considerably higher visual fidelity when requested.
 - Add higher-cost graphics only after measuring target-system performance; keep scalable quality options or fallbacks.
-
-## MVP
-
-- Enclosed arena + two goals
-- One controllable player + physics ball
-- Rocket launcher, rocket-jumping, explosions affecting ball
-- Goal detection, score, reset, debug HUD
-- Primitive geometry, simple URP materials
-
-## Scope limits
-
-Exclude unless requested:
-
-- Multiplayer/networking, accounts, progression, inventory, classes
-- Extra weapons, realistic football rules, advanced AI
-- Detailed characters, animation, procedural levels
-- New third-party assets/plugins, advanced shaders, post-processing, destruction
-
-Expand scope only after core interaction validates.
 
 ## Repository layout
 
@@ -108,6 +86,14 @@ Batch rebuild, with matching Unity executable:
 
 Builder overwrites `Assets/_Game/Prefabs/Player.prefab` and `Assets/_Game/Scenes/MovementLab.unity`, updates materials/build scene/fixed timestep. Run only when task intends those changes. Inspect generated diff and log. Omit `-nographics` unless command is known not to require graphics/shader initialization.
 
+## Technical Issues
+
+- UI automation: Computer Use prohibited for every task. Never invoke, initialize, probe, or troubleshoot Computer Use or related `sky.documentation` / `node_repl` tooling. Use Unity batch mode, Editor scripts, automated Play Mode tests, logs, or serialized-asset inspection. Interactive-only evidence -> report unavailable and keep non-blocking. User may supply evidence; Computer Use prohibition still applies when interactive evidence requested.
+- Windows orchestrator state replacement: write complete temp file beside destination. Existing destination -> call `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real, unique backup path; never pass `$null` backup. Missing destination -> call `[System.IO.File]::Move($tempPath, $statePath)`. Read state back before deleting backup or advancing phase.
+- State field updates: avoid unconstrained regex or global string replacement. Match section plus exact field key; require exactly one match. Zero or multiple matches -> stop. After atomic write, reread file and assert intended field value, expected phase, and unchanged neighboring identifiers.
+- Unity process completion: launch batch Editor through `Start-Process -Wait -PassThru`; capture exit code. `-Wait` required so Windows waits for spawned process tree. Before another Unity command, confirm no Unity process for project remains and project lock is released. Never start overlapping Editor runs.
+- Unity IDE-file churn: capture pre-run `git status --short` plus state of `.vscode/`, `*.slnx`, `*.sln`, and `*.csproj`. After batch run, inspect status again. Remove only newly generated untracked IDE files; restore tracked IDE files only when clean before run and changed solely by Unity generation. Preserve all pre-existing user changes. Never use broad `git clean` or blanket restore.
+
 ## Validation
 
 Tests intentionally deferred until test strategy is redesigned. Do not add tests or require current automated tests for completion unless user requests them.
@@ -115,7 +101,7 @@ Tests intentionally deferred until test strategy is redesigned. Do not add tests
 Validate changes proportionally:
 
 - C# change: Unity script compile with zero Console errors.
-- Movement/input change: play `Assets/_Game/Scenes/MovementLab.unity`; verify affected controls, collision, jump states, HUD, and frame-rate independence.
+- Movement/input change: require Unity compile plus relevant batch builder/validator checks. Interactive MovementLab playtest provides optional feel, visual readability, HUD appearance, and target-device performance feedback.
 - Scene/prefab/editor-tool change: run intended editor workflow, save, reopen affected asset, inspect Console/batch log and Git diff.
 - Project/package setting change: restart Unity when required; confirm URP, Input System, build scene, and assembly compilation remain intact.
 - Documentation-only change: inspect diff; Unity launch unnecessary.
@@ -134,7 +120,7 @@ python -m pip install --user PyYAML
 
 Do not claim Unity validation unless Editor or batch command actually ran. Report skipped validation and reason.
 
-Future test redesign should favor pure deterministic math tests, scene-level smoke/invariant checks, and playtests. Do not assert exact simulated positions or test subjective feel/rendering.
+Future test redesign should favor pure deterministic math tests plus automated scene-level smoke/invariant checks. Keep subjective feel/rendering and target-device performance outside completion criteria. Do not assert exact simulated positions.
 
 ## Generated state
 
@@ -142,6 +128,6 @@ Never edit, review as source, or commit generated/local state:
 
 - `Library/`, `Temp/`, `Obj/`, `Logs/`, `UserSettings/`
 - `Build/`, `Builds/`, `MemoryCaptures/`, `Recordings/`
-- generated IDE files such as `*.csproj`, `*.sln`, `*.suo`, `.vs/`
+- generated IDE files such as `*.csproj`, `*.sln`, `*.slnx`, `*.suo`, `.vs/`, `.vscode/`
 
 Commit relevant source assets, `.meta` files, package manifests, and intentional `ProjectSettings/` changes. Preserve unrelated user work in dirty worktrees.

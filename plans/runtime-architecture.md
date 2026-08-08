@@ -9,7 +9,7 @@ Cross-component ownership and dependency contract only. Behaviour, tuning, slice
 - Leaf gameplay components report narrow events upward. Leaves never own score or coordinated reset.
 - `MatchController` alone owns score, match state, gameplay-gate policy, and reset timing.
 
-## Planned ownership
+## Runtime ownership
 
 - `BallMotor`: ball `Rigidbody`, velocity mutation, cap, resistance, contact response, containment, reset
 - `RocketLauncher`: held-fire cooldown, spawn, active-projectile tracking, cleanup execution
