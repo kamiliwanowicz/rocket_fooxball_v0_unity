@@ -117,5 +117,52 @@ namespace RocketFooxball
             var limited = horizontal.normalized * hardCap;
             return new Vector3(limited.x, velocity.y, limited.z);
         }
+
+        /// <summary>Returns true when a contact normal is within a walkable slope limit.</summary>
+        public static bool IsWalkableNormal(Vector3 normal, float slopeLimitDegrees)
+        {
+            if (normal.sqrMagnitude <= Epsilon || slopeLimitDegrees <= 0f)
+            {
+                return false;
+            }
+
+            var clampedSlope = Mathf.Clamp(slopeLimitDegrees, 0f, 89.9f);
+            return Vector3.Dot(normal.normalized, Vector3.up) >= Mathf.Cos(clampedSlope * Mathf.Deg2Rad);
+        }
+
+        /// <summary>Projects direction onto a plane and keeps direction-only semantics.</summary>
+        public static Vector3 ProjectDirectionOnPlane(Vector3 direction, Vector3 planeNormal)
+        {
+            if (direction.sqrMagnitude <= Epsilon || planeNormal.sqrMagnitude <= Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            var projected = Vector3.ProjectOnPlane(direction, planeNormal.normalized);
+            return projected.sqrMagnitude <= Epsilon ? Vector3.zero : projected.normalized;
+        }
+
+        /// <summary>Projects a vector onto a plane while retaining its original magnitude.</summary>
+        public static Vector3 ProjectOnPlanePreserveMagnitude(Vector3 vector, Vector3 planeNormal)
+        {
+            if (vector.sqrMagnitude <= Epsilon || planeNormal.sqrMagnitude <= Epsilon)
+            {
+                return vector;
+            }
+
+            var projected = Vector3.ProjectOnPlane(vector, planeNormal.normalized);
+            if (projected.sqrMagnitude <= Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            return projected.normalized * vector.magnitude;
+        }
+
+        /// <summary>Alias for callers that describe ground motion as a tangent projection.</summary>
+        public static Vector3 ProjectVelocityAlongGround(Vector3 velocity, Vector3 groundNormal)
+        {
+            return ProjectOnPlanePreserveMagnitude(velocity, groundNormal);
+        }
     }
 }

@@ -24,7 +24,7 @@ namespace RocketFooxball
 
         public Vector2 Move => gameplayInputEnabled && moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
         public Vector2 Look => gameplayInputEnabled && lookAction != null ? lookAction.ReadValue<Vector2>() : Vector2.zero;
-        public bool FireHeld => fireHeld;
+        public bool FireHeld => gameplayInputEnabled && fireHeld;
         public bool CursorCaptured => Cursor.lockState == CursorLockMode.Locked;
         public bool GameplayInputEnabled => gameplayInputEnabled;
 
@@ -171,6 +171,20 @@ namespace RocketFooxball
             kickPressed = false;
             fireHeld = false;
             suppressFireUntilRelease = fireAction != null && fireAction.IsPressed();
+        }
+
+        /// <summary>Clears all gameplay intents without changing cursor ownership.</summary>
+        public void ResetInputState()
+        {
+            ClearGameplayState();
+            releaseCursorRequested = false;
+            captureCursorRequested = false;
+        }
+
+        /// <summary>Compatibility alias for reset owners.</summary>
+        public void ClearInputState()
+        {
+            ResetInputState();
         }
 
         private void OnJumpStarted(InputAction.CallbackContext _)

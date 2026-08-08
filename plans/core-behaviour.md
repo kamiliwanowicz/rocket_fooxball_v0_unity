@@ -8,15 +8,17 @@ Goal: test responsive Quake II-like movement, rocket traversal, physical ball co
 
 Runtime ownership and dependency source of truth: `plans/runtime-architecture.md`. This document owns behaviour contracts, tuning targets, and implementation status only.
 
-Status: behaviour decisions confirmed. Movement-lab slice shipped: `60 Hz` physics setup, `CharacterController` locomotion, normal jump, bunny-hop, air control, double-jump, mouse look, normalized Move/Look/Jump/Fire/Kick/cursor Input System bridge, player prefab, enclosed arena shell, editor builder, debug HUD. AI-readiness P1-P3 shipped and batch-validated: runtime contracts, input/gravity normalization, package cleanup, retired AI Assistant settings, PC renderer effects/resolution baseline. Manual MovementLab smoke remains pending, so future gameplay gate remains closed. Ball, rockets, explosions, body contact, kick consumer, goals, scoring, celebration/reset unbuilt.
+Status: behaviour decisions confirmed. Runtime T1/T2 owners and T3 generated MovementLab state implemented. User baseline smoke confirms prior movement controls, collision, jumps, HUD, frame-rate behavior, zero Console errors. T3 builder and fresh validator pass in batch. Integrated gameplay playtest remains pending; unverified feel/interaction claims stay open.
 
-Section status: `COMPLETED` -> section contract implemented; `PARTIAL` -> subset implemented; `FUTURE` -> no implementation. Per-section `implemented:` line records shipped scope and owning files.
+Workflow record (2026-08-08): Unity `6000.5.6f1`; authoritative builder `Logs/core-behaviour-build.log` exit `0`, marker `Rocket Fooxball Movement Lab built`; second builder `Logs/core-behaviour-build-second.log` exit `0`, current builder-signature scene passed full stale-content validation and was reused, generated hashes stable; fresh validator `Logs/core-behaviour-validate.log` exit `0`, marker `Rocket Fooxball Movement Lab validation succeeded`; protected paths unchanged; baseline `.meta` GUIDs unchanged; no duplicate GUIDs. Batch-only worker evidence. Tooling finding: Unity license access-token warning only; compile/build/validator clean. Product finding: no integrated Play mode observation. Residual: full Play mode matrix, target FPS, and Console observation require interactive run.
+
+Section status: `COMPLETED` -> contract implemented and observed; `PARTIAL` -> implementation exists but proof remains open. Per-section `implemented:` line records shipped scope and owning files.
 
 Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adjust through playtesting without changing behaviour contract.
 
 ## Core Physics Contract [PARTIAL]
 
-- implemented: `CharacterController` player, `60 Hz` fixed step, gravity magnitude `16.875`, player prefab, visible enclosed floor/walls, MovementLab scene and builder, debug HUD -> `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/GamePhysicsSettings.cs`, `Assets/_Game/Scripts/Runtime/MovementDebugHud.cs`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Editor/MovementLabBuilder.cs`; `Rigidbody` ball, hidden failsafe containment, ramps, shared ball surface `PhysicMaterial` pending
+- implemented: `CharacterController` player, `60 Hz` fixed step, gravity magnitude `16.875`, visible shell, ramps, `Rigidbody` ball, hidden failsafe containment, shared `PhysicsMaterial`, MovementLab scene/builder, debug HUD -> `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/GamePhysicsSettings.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/MovementDebugHud.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`, `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Prefabs/Ball.prefab`, `Assets/_Game/Materials/BallSurface.physicMaterial`; interactive proof pending
 - player: `CharacterController`
 - ball: `Rigidbody`
 - gravity: same strength for player and ball
@@ -24,11 +26,11 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - frame-rate policy: deterministic movement and impulses in `FixedUpdate()` using `Time.fixedDeltaTime`
 - arena collision: visible geometry explains normal impacts
 - containment: invisible failsafe colliders directly behind visible arena walls or openings
-- surface policy: uniform ball friction and bounce across floor, walls, ramps, goal frames through shared `PhysicMaterial` settings
+- surface policy: uniform ball friction and bounce across floor, walls, ramps, goal frames through shared `PhysicsMaterial` settings
 
 ## Player Ground Movement [PARTIAL]
 
-- implemented: base speed `10 m/s`, `0.125 s` base-speed acceleration target, about `0.20 s` no-input stop, overspeed friction, momentum-sensitive turn scrub, grounded steering, wall slide -> `Assets/_Game/Scripts/Runtime/MovementMath.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`; ramp velocity projection and ramp-exit launch pending
+- implemented: base speed `10 m/s`, `0.125 s` base-speed acceleration target, about `0.20 s` no-input stop, overspeed friction, momentum-sensitive turn scrub, grounded steering, wall slide, ramp velocity projection, ramp-exit launch -> `Assets/_Game/Scripts/Runtime/MovementMath.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`; interactive proof pending
 - feel: fast Quake II-style arena athlete
 - base-speed acceleration: reach base run speed in `0.10-0.15 s`
 - no-input stop: stop grounded player in about `0.20 s`
@@ -71,7 +73,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Double-Jump [PARTIAL]
 
-- implemented: one air jump per grounded sequence, ground refresh, ledge preservation, additive `6.75 m/s` vertical impulse, additive `2 m/s` current-horizontal-direction impulse -> `PlayerMotor.TryConsumeJump()`; external rocket impulse integration pending
+- implemented: one air jump per grounded sequence, ground refresh, ledge preservation, additive `6.75 m/s` vertical impulse, additive `2 m/s` current-horizontal-direction impulse, additive external rocket impulse -> `PlayerMotor.TryConsumeJump()`, `PlayerMotor.AddExternalImpulse()`; interactive proof pending
 - count: one airborne jump per grounded movement sequence
 - refresh: ground contact only
 - ledge case: walking off ledge preserves airborne jump after coyote window expires
@@ -82,7 +84,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Player Speed Limits And Camera [PARTIAL]
 
-- implemented: horizontal `3x` hard cap -> `MovementMath.ClampHorizontal()`; yaw/pitch mouse look, cursor capture, static `75`-degree FOV, no camera bob or roll -> `Assets/_Game/Scripts/Runtime/PlayerLook.cs`, `Assets/_Game/Prefabs/Player.prefab`; speed-based FOV feedback and blast shake pending
+- implemented: horizontal `3x` hard cap -> `MovementMath.ClampHorizontal()`; yaw/pitch mouse look, cursor capture, no bob/roll, speed FOV, visual blast shake -> `Assets/_Game/Scripts/Runtime/PlayerLook.cs`, `Assets/_Game/Scripts/Runtime/PlayerCameraFeedback.cs`, `Assets/_Game/Prefabs/Player.prefab`; interactive proof pending
 - player hard cap: about `3x` base run speed
 - cap purpose: physics safety only; rockets can exceed bunny-hop soft cap
 - blast aim effect: no mechanical camera rotation
@@ -91,7 +93,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - camera bob: none
 - camera roll: none
 
-## Rocket Launcher [FUTURE]
+## Rocket Launcher [PARTIAL]
+
+- implemented: builder-authored rocket prefab, held-fire cooldown, crosshair spawn, constant world flight, owner/rocket collision ignore, active-projectile cleanup -> `Assets/_Game/Scripts/Runtime/RocketLauncher.cs`, `Assets/_Game/Scripts/Runtime/RocketProjectile.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`, `Assets/_Game/Prefabs/Rocket.prefab`; interactive proof pending
 
 - ammunition: unlimited
 - reload: none
@@ -111,7 +115,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - missed rocket: containment boundary supplies eventual impact; no off-map escape
 - goal/reset: destroy all active rockets on score
 
-## Explosion Model [FUTURE]
+## Explosion Model [PARTIAL]
+
+- implemented: shared radius/falloff, surface-distance targeting, clear/occluded force, shield-transparent ball occlusion, additive player/ball impulses, visual shake -> `Assets/_Game/Scripts/Runtime/ExplosionResolver.cs`, `Assets/_Game/Scripts/Runtime/PlayerCameraFeedback.cs`; interactive proof pending
 
 - blast radius: about `2-2.5x` player height
 - falloff: smooth maximum-to-zero falloff
@@ -129,7 +135,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - direct rocket-ball contact: explosion only; no extra impact kick
 - goal shield: transparent to ball-directed blast force despite blocking rockets
 
-## Ball Body [FUTURE]
+## Ball Body [PARTIAL]
+
+- implemented: dynamic `Rigidbody`, continuous collision, shared surface, rolling resistance, speed cap, queued impulses, reset/freeze state -> `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Prefabs/Ball.prefab`, `Assets/_Game/Materials/BallSurface.physicMaterial`; interactive proof pending
 
 - size: about waist-height diameter
 - normal jump: clears ball comfortably
@@ -143,7 +151,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - visual angular motion: normal `Rigidbody` rolling only
 - high-speed collision: use continuous collision detection or equivalent anti-tunnelling setup
 
-## Assisted Body Contact [FUTURE]
+## Assisted Body Contact [PARTIAL]
+
+- implemented: real `CharacterController` hit notification, velocity-directed capped contact assist -> `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`; interactive proof pending
 
 - trigger: real player-ball collision only
 - magnetic attraction: none
@@ -154,7 +164,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - player response: retain player velocity except normal solid-collision projection needed to prevent overlap
 - intent: remove snagging and run-over instability without creating possession lock
 
-## Active Kick [FUTURE]
+## Active Kick [PARTIAL]
+
+- implemented: fresh press, `500 ms` buffer, `0.40 s` cooldown, range/cone gate, crosshair direction, incoming redirect, cap, airborne use -> `Assets/_Game/Scripts/Runtime/BallKick.cs`; interactive proof pending
 
 - input: fresh press per attempt; holding never repeats
 - range: about half player width beyond physical contact
@@ -180,7 +192,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - miss semantics: miss consumes attempt and cooldown
 - fire overlap: allowed
 
-## Rocket-Ball Balance [FUTURE]
+## Rocket-Ball Balance [PARTIAL]
+
+- implemented: resolver ball impulse/falloff and kick comparison tuning -> `Assets/_Game/Scripts/Runtime/ExplosionResolver.cs`, `Assets/_Game/Scripts/Runtime/BallKick.cs`; interactive proof pending
 
 - perfect close rocket blast: powerful but below kick strength
 - stationary close-blast target: ball travels roughly half arena before collision or rolling decay
@@ -189,7 +203,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 - rocket launch direction: explosion-origin-to-ball-centre radial vector
 - grounded downward force: normal collision response can absorb downward component; no hidden lift correction
 
-## Goals [FUTURE]
+## Goals [PARTIAL]
+
+- implemented: symmetric north/south goal openings, trigger plane, one-entry latch, visible shield/frame/recess, ball-only shield collision ignore, opposing score callback -> `Assets/_Game/Scripts/Runtime/GoalTrigger.cs`, `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`; interactive proof pending
 
 - active goals: both
 - score ownership: ball entering either goal awards opposing side; own goals possible
@@ -203,7 +219,9 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
   - does not reduce blast force applied to ball
 - goal frame: solid, uniform arena bounce
 
-## Goal Celebration And Reset [FUTURE]
+## Goal Celebration And Reset [PARTIAL]
+
+- implemented: `5 s` unscaled goal freeze, input/owner gate, rocket cleanup, ball/player/goal/camera reset -> `Assets/_Game/Scripts/Runtime/MatchController.cs`, `Assets/_Game/Scripts/Runtime/BallMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Editor/MovementLabBuilder.cs`; interactive proof pending
 
 - score trigger -> freeze physics and gameplay input for `5 s`
 - frozen frame: scoring moment held for clear feedback
@@ -216,7 +234,7 @@ Tuning values: initial targets. Expose as serialized Unity Inspector fields. Adj
 
 ## Input Resolution Rules [PARTIAL]
 
-- implemented: Input System Move/Look value reads, fresh Jump/Kick press capture, held Fire state, cursor release/capture intents, actual `Cursor.lockState` capture authority, recapture-click Fire suppression, gameplay gate clear, grounded/coyote normal-jump priority, airborne double-jump priority, `100 ms` landing buffer, held-jump non-repeat -> `Assets/InputSystem_Actions.inputactions`, `Assets/_Game/Scripts/Runtime/PlayerInputReader.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/PlayerLook.cs`; launcher, kick, goal-freeze consumers pending
+- implemented: Input System Move/Look reads, fresh Jump/Kick capture, held Fire, cursor intents, gameplay gate clear, jump priority/buffering, launcher/kick/goal-freeze consumers -> `Assets/InputSystem_Actions.inputactions`, `Assets/_Game/Scripts/Runtime/PlayerInputReader.cs`, `Assets/_Game/Scripts/Runtime/PlayerMotor.cs`, `Assets/_Game/Scripts/Runtime/RocketLauncher.cs`, `Assets/_Game/Scripts/Runtime/BallKick.cs`, `Assets/_Game/Scripts/Runtime/MatchController.cs`; interactive proof pending
 - jump press while grounded or within coyote window -> normal jump
 - jump press while airborne with air-jump available -> double-jump
 - jump press within `100 ms` before landing -> queued normal jump on contact
