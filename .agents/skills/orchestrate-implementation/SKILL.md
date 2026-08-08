@@ -1,18 +1,18 @@
 ---
 name: orchestrate-implementation
-description: Use when LP delegates one accepted coding plan or delegated implementation needs bounded workers, independent review, fixes, and exact-SHA validation.
+description: Use when active agent must orchestrate one accepted coding plan through bounded implementation workers, independent reviewers, fixes, and exact-SHA validation.
 ---
 
 # Orchestrate Implementation
 
-Execution-orchestrator contract for one accepted coding plan. LP-dispatched execution orchestrator uses exact `sol_high` and becomes sole Git owner for bound plan branch/worktree. It dispatches implementation, reviewer, and fix workers; owns writer barriers, commits, freezes, scope checks, and final validation. LP owns run state, cross-plan coordination, merging-agent dispatch, and user-branch authority.
+Invocation makes active agent execution orchestrator for one accepted coding plan. Active agent coordinates plan directly and remains sole Git owner for bound plan branch/worktree. It dispatches only implementation workers, reviewers, and fix workers; owns writer barriers, commits, freezes, scope checks, dependency gates, and final validation. Orchestration stays with active agent through completion or blocker return; never dispatch or hand off another orchestrator. LP owns run state, cross-plan coordination, merging-agent dispatch, and user-branch authority.
 
 ## LP handoff contract
 
 LP dispatch binds:
 
 - `run_id`, stable `plan_id`, unique `attempt_id`;
-- assigned exact execution-orchestrator identity, role, profile `sol_high`;
+- assigned active-agent identity, role `execution orchestrator`, profile `sol_high`;
 - accepted plan artifact absolute path, SHA-256 digest, byte size;
 - covered requirement IDs and objective;
 - exact accepted baseline SHA and accepted dependency SHAs;
@@ -20,23 +20,24 @@ LP dispatch binds:
 - owned/protected paths;
 - checks, proof boundary, evidence locations;
 - allowed Git operations limited to plan branch/worktree;
-- LP state-file path, read-only for execution orchestrator.
+- LP state-file path, read-only for active execution orchestrator.
 
-Missing/mismatched field -> `blocked` before product mutation.
+Missing/mismatched field, including active-agent identity or role -> `blocked` before product mutation.
 
 ## Artifact gate
 
 Before first worker dispatch:
 
-1. Read LP state and dispatch identity.
+1. Read LP state and verify dispatch assigns role `execution orchestrator` and profile `sol_high` to active agent.
 2. Verify artifact path exists, byte size matches, SHA-256 matches accepted digest, and artifact identity/baseline/dependencies match dispatch.
 3. Verify worktree/branch, clean status, HEAD, baseline, dependencies, ownership, and allowed Git operations.
 
-Digest or identity mismatch -> `blocked` with observed digest/size and needed LP action. Perform no product mutation or worker dispatch. Accepted artifact remains immutable throughout attempt; rehash before final return. Post-dispatch mismatch invalidates attempt.
+Digest, identity, or role mismatch -> `blocked` with observed digest/size and needed LP action. Perform no product mutation or worker dispatch. Accepted artifact remains immutable throughout attempt; rehash before final return. Post-dispatch mismatch invalidates attempt.
 
 ## Ownership and profiles
 
-- Execution orchestrator: sole Git owner for plan worktree. Creates no sibling plan/integration worktrees and never mutates user branch.
+- Active execution orchestrator: sole Git owner for plan worktree and coordinator for every plan checkpoint. Creates no sibling plan/integration worktrees and never mutates user branch.
+- Child roles: implementation worker, reviewer, or fix worker only. Active execution orchestrator retains plan sequencing, worker coordination, result acceptance, Git operations, review gates, finding disposition, and final validation.
 - Implementation/fix workers: edit assigned owned paths only; no Git staging, commits, branch/worktree operations, or state edits.
 - One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared contracts, generated/serialized assets, migrations, and shared validation environments.
 - Reviewer: fresh exact `sol_medium` per review checkpoint; read-only exact frozen SHA.
@@ -44,7 +45,7 @@ Digest or identity mismatch -> `blocked` with observed digest/size and needed LP
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
-Execution orchestrator closes writer barrier before Git mutation, freeze, review, or shared validation.
+Active execution orchestrator closes writer barrier before Git mutation, freeze, review, or shared validation.
 
 ## Child dispatch contract
 
@@ -81,13 +82,13 @@ Review scope: checkpoint diff from `review_base_sha` to `frozen_sha`, plus Criti
 6. Stop fix writer, close barrier, verify scope, stage, commit, and freeze new clean full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance from post-fix head.
 7. Repeat steps 1-6 until every checkpoint has verdict and finding disposition. Run final checks at exact committed HEAD. Rehash accepted plan artifact. Verify clean worktree, branch, baseline ancestry, dependencies, owned path diff, and requirements.
 
-Any required unowned edit, plan decomposition change, dependency drift, artifact mismatch, or product decision outside accepted plan -> `blocked` with needed LP action. Execution orchestrator never expands plan or edits LP state.
+Any required unowned edit, plan decomposition change, dependency drift, artifact mismatch, or product decision outside accepted plan -> `blocked` with needed LP action. Active execution orchestrator never expands plan or edits LP state.
 
 ## Return to LP
 
 Return concise facts:
 
-- same `run_id`, `plan_id`, `attempt_id`, assigned identity, role `execution orchestrator`, profile `sol_high`;
+- same `run_id`, `plan_id`, `attempt_id`, assigned active-agent identity, role `execution orchestrator`, profile `sol_high`;
 - `status: complete | blocked`;
 - artifact path, accepted digest/size, observed final digest/size;
 - exact baseline, dependency SHAs, branch, worktree;
@@ -97,4 +98,4 @@ Return concise facts:
 - checks: command/workflow, working directory, observed result, evidence, exact SHA;
 - blocker, evidence, and one needed LP action/recheck when blocked.
 
-`complete` requires artifact match, exact committed head, clean worktree, owned-only diff, every worker covered by completed checkpoint review/fix flow, and passing final checks. LP verifies Git and artifact facts before acceptance. Execution orchestrator returns plan SHA only; merging agent handles integration.
+`complete` requires artifact match, exact committed head, clean worktree, owned-only diff, every worker covered by completed checkpoint review/fix flow, and passing final checks. LP verifies Git and artifact facts before acceptance. Active execution orchestrator returns plan SHA only; merging agent handles integration.
