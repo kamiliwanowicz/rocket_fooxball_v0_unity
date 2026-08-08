@@ -40,6 +40,9 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Preserve `.meta` files and GUIDs. Move or delete asset and `.meta` together.
 - Prefer `MovementLabBuilder` or Unity Editor APIs over direct serialized-YAML edits.
 - Builder-owned change -> edit source/builder -> rebuild -> validate -> inspect diff. Manual generated-asset edits are not authoritative.
+- Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
+- Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
+- Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
 - Reject unrelated reserialization, GUID churn, and prefab/scene changes after Editor saves.
 - One Unity Editor process per project. Close interactive Editor before batch mutation.
 
@@ -55,7 +58,13 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Tests deferred pending redesigned strategy. Add or require tests only when user requests them.
 - C# changes: Unity compile with zero Console errors.
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
+- Builder-generated change: run build twice from same SHA. Build 2 must reuse existing outputs; compare hashes for owned scenes, prefabs, controllers, materials, and importer metadata. Any mismatch -> nondeterministic build bug.
+- Run `ValidateMovementLab()` in separate Unity process after build 2. Build success alone does not prove persisted references or bindings.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
 - Report only validation actually run. Preserve unrelated user work.
+
+## AI project
+- This is AI-native project, build exclusive by AI agents. So whatever you write, make it AI agents fiendly. 
+- Write self-documenting code. Leave short comments or class/method description if they can help agents understand why something was build in that way - only if it brings value. 
