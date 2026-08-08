@@ -72,10 +72,10 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 
 - Tasks use smallest coherent implementation units: one algorithm, state machine, API contract, asset-wiring cluster, or tightly coupled combination.
 - Split task when parts require separate design reasoning, can compile/prove at distinct barriers, or contain distinct failure domains. Order shared-path tasks serially.
-- Parallel task steps require disjoint writable paths, stable inputs, independent acceptance, and explicit join order.
+- Parallel tasks require same launch head, disjoint paths, stable inputs, independent acceptance, and explicit fan-in. Cross-lane dependency or shared validation environment -> serial edge.
 - Shared files, contracts, generated/serialized assets, migrations, and product decisions stay serialized.
 - Default review boundary: one unique checkpoint after each expected implementation worker. Group multiple workers only when joined chunk is more meaningful to review than partial worker states; name covered tasks, join condition, and technical rationale. Reviewer-call reduction is insufficient rationale.
-- Parallel workers require one grouped review checkpoint. Downstream dependencies wait for checkpoint verdict/fix disposition.
+- Fan-out launches every ready sibling together. Parallel workers keep per-worker checkpoints; branch checkpoint gates fan-in, not sibling launch. Group only under rule above.
 - Candidate dependencies use accepted SHAs supplied by LP.
 - Assigned candidate exceeding detailed design capacity -> decomposition mismatch; LP mode returns `blocked` with `fresh task-breakdown`. Produce no shallow catch-all task.
 
@@ -152,7 +152,8 @@ Dependencies: [accepted full SHAs or None]
 - notation: `->` sequential; `||` parallel; `{...}` parallel fan-out/fan-in; `+` requires every named predecessor
 - gates: `START` -> [entry condition]; `JOIN1` -> [join condition]; `FINAL` -> [completion condition]
 - rule: include every task and review checkpoint exactly once; use only IDs defined in this plan
-- rule: parallel branches require disjoint writable paths, stable inputs, independent acceptance, and an explicit join gate
+- rule: fan-out launches every branch when predecessor passes; branch checkpoint gates join, not sibling launch
+- rule: parallel branches require disjoint paths, stable inputs, independent acceptance, and explicit join gate
 - rule: shared paths/contracts/assets, generated or serialized outputs, migrations, and product decisions remain sequential
 - rule: a single-task plan still includes `START -> T1 -> CP1 -> FINAL`
 
@@ -226,7 +227,7 @@ Needed LP Action or Recheck: [one action/fact or None]
 
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
-- Verify `## Execution Graph` exists, matches task/checkpoint dependencies, and never parallelizes overlapping ownership or unstable inputs.
+- Verify `## Execution Graph` matches dependencies, launches fan-out siblings together, and never parallelizes overlapping paths, unstable inputs, or shared validation environments.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
 - Run `git diff --check -- .agents/skills/write-orchestrator-coding-plan/SKILL.md .agents/skills/loop-orchestrator/agents/task-breakdown.md`.

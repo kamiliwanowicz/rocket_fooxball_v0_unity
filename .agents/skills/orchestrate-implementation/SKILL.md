@@ -76,7 +76,7 @@ Active execution orchestrator closes writer barrier before Git mutation, freeze,
 
 Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer), checks, proof/evidence boundary, and plan identity/path/digest.
 
-Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
+Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
 
 Child return repeats identity and role unchanged:
 
@@ -89,19 +89,19 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 
 ## Review checkpoints
 
-Default: one review checkpoint after each implementation worker returns. Close writer barrier, verify scope, commit accepted worker changes, require owned paths clean, freeze exact SHA, then dispatch fresh exact `sol_medium` reviewer before next implementation worker.
+Default: one checkpoint per implementation worker. Close writer barrier, verify scope, commit, freeze exact SHA, review before dependent work.
 
 Accepted plan may group multiple implementation workers into one checkpoint only when combined chunk creates stronger review boundary than partial worker states. Plan must name checkpoint, covered tasks/workers, join condition, and technical rationale. Valid rationale: producer/consumer contract, coordinated code/serialized asset wiring, or another state whose partial review lacks meaningful proof. Throughput or fewer reviewer calls is insufficient. Missing explicit grouped checkpoint -> per-worker review.
 
-Parallel workers belong to one explicit grouped checkpoint. Wait for every covered worker, stop writers, close barrier, verify combined scope, commit, require owned paths clean, and freeze before review. No downstream worker crosses checkpoint dependency gate before verdict/fix disposition.
+Plan fan-out -> launch every ready sibling after shared predecessors. Wait all, close writer barrier, commit one wave freeze, then run declared checkpoints. Branch checkpoint gates fan-in, not sibling launch. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
 
-Review scope: checkpoint diff from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted checkpoint head without re-review. Next checkpoint uses post-fix head as `review_base_sha`.
+Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
 
 ## Execution loop
 
-1. Parse tasks and review checkpoints. Missing grouping -> one checkpoint per implementation worker. Dispatch bounded workers for next checkpoint only. Parallel dispatch only where plan explicitly proves disjoint ownership, stable inputs, and grouped review boundary.
-2. Verify covered child reports against files, Git, scope, checks, and live identity. Stop writers. Close writer barrier. Require checkpoint join condition.
-3. Stage only accepted owned paths. Commit checkpoint work. Verify owned paths clean, initial unrelated status preserved, scope, and exact full frozen SHA.
+1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
+2. Verify covered child reports against files, Git, scope, checks, and live identity. Wave -> wait all workers. Stop writers, close barrier, require join condition.
+3. Stage accepted owned paths. Commit checkpoint or wave. Verify owned paths clean, initial unrelated status preserved, scope, and exact frozen SHA.
 4. Dispatch fresh exact `sol_medium` reviewer for checkpoint. Reviewer reports Critical/High findings only and performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> advance to next checkpoint or final validation. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
 6. Stop fix writer, close barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance from post-fix head.
