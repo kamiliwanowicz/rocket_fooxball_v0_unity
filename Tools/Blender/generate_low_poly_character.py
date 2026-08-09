@@ -12,7 +12,24 @@ BLEND_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "LowPolyCharacter
 FBX_PATH = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Models", "LowPolyCharacter.fbx")
 PREVIEW_DIR = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "LowPolyCharacter")
 MESH_NAMES = ("CharacterBody", "CharacterArmor", "CharacterHead", "CharacterEye")
-ACTION_NAMES = ("Idle", "Kick")
+ACTION_NAMES = ("Idle", "Run", "Jump", "Fall", "Land", "Kick")
+ACTION_RANGES = {
+    "Idle": (1, 30),
+    "Run": (1, 20),
+    "Jump": (1, 12),
+    "Fall": (1, 15),
+    "Land": (1, 10),
+    "Kick": (1, 12),
+}
+LOOP_ACTIONS = {"Idle", "Run"}
+CONTACT_SHEET_ACTIONS = ("Run", "Jump", "Fall", "Land", "Kick")
+CONTACT_SHEET_FRAMES = {
+    "Run": (1, 6, 11, 16, 20),
+    "Jump": (1, 4, 7, 10, 12),
+    "Fall": (1, 5, 9, 13, 15),
+    "Land": (1, 3, 5, 8, 10),
+    "Kick": (1, 3, 5, 8, 12),
+}
 TARGET_BOUNDS = (0.75, 0.45, 1.75)
 MIN_OVERLAP = 0.005
 KICK_START = 1
@@ -160,25 +177,296 @@ def attach_mesh(obj, rig):
 
 def key_rotation(action, rig, bone_name, frame, rotation):
     rig.animation_data.action = action
+    bpy.context.scene.frame_set(frame)
     pose = rig.pose.bones[bone_name]
     pose.rotation_mode = "XYZ"
     pose.rotation_euler = rotation
     pose.keyframe_insert("rotation_euler", frame=frame, group=bone_name)
 
 
+def key_pose(action, rig, frame, rotations):
+    """Key only deform-bone rotations; Root and Pelvis stay curve-free."""
+    rig.animation_data.action = action
+    bpy.context.scene.frame_set(frame)
+    for pose in rig.pose.bones:
+        if pose.name in {"Root", "Pelvis"}:
+            continue
+        pose.rotation_mode = "XYZ"
+        pose.rotation_euler = rotations.get(pose.name, (0.0, 0.0, 0.0))
+        pose.keyframe_insert("rotation_euler", frame=frame, group=pose.name)
+
+
+def new_action(name, loop_intent):
+    action = bpy.data.actions.new(name)
+    action.use_fake_user = True
+    # These source-side flags make the intended Unity importer settings auditable
+    # without changing the stable action names or generated FBX contract.
+    action["loop_intent"] = bool(loop_intent)
+    action["root_locked"] = True
+    action["frame_rate"] = 30
+    return action
+
+
 def make_actions(rig):
     rig.animation_data_create()
-    idle = bpy.data.actions.new("Idle")
-    idle.use_fake_user = True
-    idle.frame_range
-    for frame in (1, 30):
-        key_rotation(idle, rig, "Chest", frame, (0.0, 0.0, 0.0))
-        key_rotation(idle, rig, "Thigh.R", frame, (0.0, 0.0, 0.0))
-        key_rotation(idle, rig, "Shin.R", frame, (0.0, 0.0, 0.0))
-        key_rotation(idle, rig, "Foot.R", frame, (0.0, 0.0, 0.0))
 
-    kick = bpy.data.actions.new("Kick")
-    kick.use_fake_user = True
+    idle = new_action("Idle", True)
+    for frame in ACTION_RANGES["Idle"]:
+        key_pose(idle, rig, frame, {"Chest": (0.0, 0.0, 0.0)})
+
+    run = new_action("Run", True)
+    run_poses = {
+        1: {
+            "Thigh.R": (math.radians(-28), 0.0, 0.0),
+            "Shin.R": (math.radians(20), 0.0, 0.0),
+            "Foot.R": (math.radians(-8), 0.0, 0.0),
+            "Thigh.L": (math.radians(28), 0.0, 0.0),
+            "Shin.L": (math.radians(-20), 0.0, 0.0),
+            "Foot.L": (math.radians(8), 0.0, 0.0),
+            "UpperArm.R": (math.radians(26), 0.0, 0.0),
+            "Forearm.R": (math.radians(-12), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-26), 0.0, 0.0),
+            "Forearm.L": (math.radians(12), 0.0, 0.0),
+        },
+        6: {
+            "Thigh.R": (math.radians(4), 0.0, 0.0),
+            "Shin.R": (math.radians(4), 0.0, 0.0),
+            "Foot.R": (math.radians(-2), 0.0, 0.0),
+            "Thigh.L": (math.radians(-4), 0.0, 0.0),
+            "Shin.L": (math.radians(-4), 0.0, 0.0),
+            "Foot.L": (math.radians(2), 0.0, 0.0),
+            "UpperArm.R": (math.radians(-4), 0.0, 0.0),
+            "Forearm.R": (math.radians(-2), 0.0, 0.0),
+            "UpperArm.L": (math.radians(4), 0.0, 0.0),
+            "Forearm.L": (math.radians(2), 0.0, 0.0),
+        },
+        11: {
+            "Thigh.R": (math.radians(28), 0.0, 0.0),
+            "Shin.R": (math.radians(-20), 0.0, 0.0),
+            "Foot.R": (math.radians(8), 0.0, 0.0),
+            "Thigh.L": (math.radians(-28), 0.0, 0.0),
+            "Shin.L": (math.radians(20), 0.0, 0.0),
+            "Foot.L": (math.radians(-8), 0.0, 0.0),
+            "UpperArm.R": (math.radians(-26), 0.0, 0.0),
+            "Forearm.R": (math.radians(12), 0.0, 0.0),
+            "UpperArm.L": (math.radians(26), 0.0, 0.0),
+            "Forearm.L": (math.radians(-12), 0.0, 0.0),
+        },
+        16: {
+            "Thigh.R": (math.radians(-4), 0.0, 0.0),
+            "Shin.R": (math.radians(-4), 0.0, 0.0),
+            "Foot.R": (math.radians(2), 0.0, 0.0),
+            "Thigh.L": (math.radians(4), 0.0, 0.0),
+            "Shin.L": (math.radians(4), 0.0, 0.0),
+            "Foot.L": (math.radians(-2), 0.0, 0.0),
+            "UpperArm.R": (math.radians(4), 0.0, 0.0),
+            "Forearm.R": (math.radians(2), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-4), 0.0, 0.0),
+            "Forearm.L": (math.radians(-2), 0.0, 0.0),
+        },
+        20: {
+            "Thigh.R": (math.radians(-28), 0.0, 0.0),
+            "Shin.R": (math.radians(20), 0.0, 0.0),
+            "Foot.R": (math.radians(-8), 0.0, 0.0),
+            "Thigh.L": (math.radians(28), 0.0, 0.0),
+            "Shin.L": (math.radians(-20), 0.0, 0.0),
+            "Foot.L": (math.radians(8), 0.0, 0.0),
+            "UpperArm.R": (math.radians(26), 0.0, 0.0),
+            "Forearm.R": (math.radians(-12), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-26), 0.0, 0.0),
+            "Forearm.L": (math.radians(12), 0.0, 0.0),
+        },
+    }
+    for frame, rotations in run_poses.items():
+        key_pose(run, rig, frame, rotations)
+
+    jump = new_action("Jump", False)
+    jump_poses = {
+        1: {
+            "Chest": (math.radians(-6), 0.0, 0.0),
+            "Thigh.R": (math.radians(-18), 0.0, 0.0),
+            "Shin.R": (math.radians(34), 0.0, 0.0),
+            "Foot.R": (math.radians(-12), 0.0, 0.0),
+            "Thigh.L": (math.radians(-18), 0.0, 0.0),
+            "Shin.L": (math.radians(34), 0.0, 0.0),
+            "Foot.L": (math.radians(-12), 0.0, 0.0),
+            "UpperArm.R": (math.radians(18), 0.0, 0.0),
+            "UpperArm.L": (math.radians(18), 0.0, 0.0),
+        },
+        4: {
+            "Chest": (math.radians(-10), 0.0, 0.0),
+            "Thigh.R": (math.radians(-28), 0.0, 0.0),
+            "Shin.R": (math.radians(48), 0.0, 0.0),
+            "Foot.R": (math.radians(-18), 0.0, 0.0),
+            "Thigh.L": (math.radians(-28), 0.0, 0.0),
+            "Shin.L": (math.radians(48), 0.0, 0.0),
+            "Foot.L": (math.radians(-18), 0.0, 0.0),
+            "UpperArm.R": (math.radians(28), 0.0, 0.0),
+            "UpperArm.L": (math.radians(28), 0.0, 0.0),
+        },
+        7: {
+            "Chest": (math.radians(4), 0.0, 0.0),
+            "Thigh.R": (math.radians(10), 0.0, 0.0),
+            "Shin.R": (math.radians(-10), 0.0, 0.0),
+            "Foot.R": (math.radians(4), 0.0, 0.0),
+            "Thigh.L": (math.radians(10), 0.0, 0.0),
+            "Shin.L": (math.radians(-10), 0.0, 0.0),
+            "Foot.L": (math.radians(4), 0.0, 0.0),
+            "UpperArm.R": (math.radians(-20), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-20), 0.0, 0.0),
+        },
+        10: {
+            "Chest": (math.radians(6), 0.0, 0.0),
+            "Thigh.R": (math.radians(4), 0.0, 0.0),
+            "Shin.R": (math.radians(-4), 0.0, 0.0),
+            "Foot.R": (math.radians(2), 0.0, 0.0),
+            "Thigh.L": (math.radians(4), 0.0, 0.0),
+            "Shin.L": (math.radians(-4), 0.0, 0.0),
+            "Foot.L": (math.radians(2), 0.0, 0.0),
+            "UpperArm.R": (math.radians(-24), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-24), 0.0, 0.0),
+        },
+        12: {
+            "Chest": (math.radians(3), 0.0, 0.0),
+            "Thigh.R": (math.radians(2), 0.0, 0.0),
+            "Shin.R": (math.radians(-2), 0.0, 0.0),
+            "Foot.R": (math.radians(1), 0.0, 0.0),
+            "Thigh.L": (math.radians(2), 0.0, 0.0),
+            "Shin.L": (math.radians(-2), 0.0, 0.0),
+            "Foot.L": (math.radians(1), 0.0, 0.0),
+            "UpperArm.R": (math.radians(-14), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-14), 0.0, 0.0),
+        },
+    }
+    for frame, rotations in jump_poses.items():
+        key_pose(jump, rig, frame, rotations)
+
+    fall = new_action("Fall", False)
+    fall_poses = {
+        1: {
+            "Chest": (math.radians(5), 0.0, 0.0),
+            "Thigh.R": (math.radians(-14), 0.0, 0.0),
+            "Shin.R": (math.radians(20), 0.0, 0.0),
+            "Foot.R": (math.radians(-7), 0.0, 0.0),
+            "Thigh.L": (math.radians(14), 0.0, 0.0),
+            "Shin.L": (math.radians(-20), 0.0, 0.0),
+            "Foot.L": (math.radians(7), 0.0, 0.0),
+            "UpperArm.R": (math.radians(22), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-22), 0.0, 0.0),
+        },
+        5: {
+            "Chest": (math.radians(5), 0.0, 0.0),
+            "Thigh.R": (math.radians(-12), 0.0, 0.0),
+            "Shin.R": (math.radians(17), 0.0, 0.0),
+            "Foot.R": (math.radians(-6), 0.0, 0.0),
+            "Thigh.L": (math.radians(12), 0.0, 0.0),
+            "Shin.L": (math.radians(-17), 0.0, 0.0),
+            "Foot.L": (math.radians(6), 0.0, 0.0),
+            "UpperArm.R": (math.radians(20), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-20), 0.0, 0.0),
+        },
+        9: {
+            "Chest": (math.radians(4), 0.0, 0.0),
+            "Thigh.R": (math.radians(-10), 0.0, 0.0),
+            "Shin.R": (math.radians(15), 0.0, 0.0),
+            "Foot.R": (math.radians(-5), 0.0, 0.0),
+            "Thigh.L": (math.radians(10), 0.0, 0.0),
+            "Shin.L": (math.radians(-15), 0.0, 0.0),
+            "Foot.L": (math.radians(5), 0.0, 0.0),
+            "UpperArm.R": (math.radians(18), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-18), 0.0, 0.0),
+        },
+        13: {
+            "Chest": (math.radians(3), 0.0, 0.0),
+            "Thigh.R": (math.radians(-8), 0.0, 0.0),
+            "Shin.R": (math.radians(12), 0.0, 0.0),
+            "Foot.R": (math.radians(-4), 0.0, 0.0),
+            "Thigh.L": (math.radians(8), 0.0, 0.0),
+            "Shin.L": (math.radians(-12), 0.0, 0.0),
+            "Foot.L": (math.radians(4), 0.0, 0.0),
+            "UpperArm.R": (math.radians(16), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-16), 0.0, 0.0),
+        },
+        15: {
+            "Chest": (math.radians(2), 0.0, 0.0),
+            "Thigh.R": (math.radians(-7), 0.0, 0.0),
+            "Shin.R": (math.radians(10), 0.0, 0.0),
+            "Foot.R": (math.radians(-3), 0.0, 0.0),
+            "Thigh.L": (math.radians(7), 0.0, 0.0),
+            "Shin.L": (math.radians(-10), 0.0, 0.0),
+            "Foot.L": (math.radians(3), 0.0, 0.0),
+            "UpperArm.R": (math.radians(14), 0.0, 0.0),
+            "UpperArm.L": (math.radians(-14), 0.0, 0.0),
+        },
+    }
+    for frame, rotations in fall_poses.items():
+        key_pose(fall, rig, frame, rotations)
+
+    land = new_action("Land", False)
+    land_poses = {
+        1: {
+            "Chest": (math.radians(-4), 0.0, 0.0),
+            "Thigh.R": (math.radians(-24), 0.0, 0.0),
+            "Shin.R": (math.radians(40), 0.0, 0.0),
+            "Foot.R": (math.radians(-14), 0.0, 0.0),
+            "Thigh.L": (math.radians(-24), 0.0, 0.0),
+            "Shin.L": (math.radians(40), 0.0, 0.0),
+            "Foot.L": (math.radians(-14), 0.0, 0.0),
+            "UpperArm.R": (math.radians(14), 0.0, 0.0),
+            "UpperArm.L": (math.radians(14), 0.0, 0.0),
+        },
+        3: {
+            "Chest": (math.radians(-8), 0.0, 0.0),
+            "Thigh.R": (math.radians(-32), 0.0, 0.0),
+            "Shin.R": (math.radians(52), 0.0, 0.0),
+            "Foot.R": (math.radians(-18), 0.0, 0.0),
+            "Thigh.L": (math.radians(-32), 0.0, 0.0),
+            "Shin.L": (math.radians(52), 0.0, 0.0),
+            "Foot.L": (math.radians(-18), 0.0, 0.0),
+            "UpperArm.R": (math.radians(22), 0.0, 0.0),
+            "UpperArm.L": (math.radians(22), 0.0, 0.0),
+        },
+        5: {
+            "Chest": (math.radians(-4), 0.0, 0.0),
+            "Thigh.R": (math.radians(-18), 0.0, 0.0),
+            "Shin.R": (math.radians(28), 0.0, 0.0),
+            "Foot.R": (math.radians(-10), 0.0, 0.0),
+            "Thigh.L": (math.radians(-18), 0.0, 0.0),
+            "Shin.L": (math.radians(28), 0.0, 0.0),
+            "Foot.L": (math.radians(-10), 0.0, 0.0),
+            "UpperArm.R": (math.radians(10), 0.0, 0.0),
+            "UpperArm.L": (math.radians(10), 0.0, 0.0),
+        },
+        8: {
+            "Chest": (math.radians(-1), 0.0, 0.0),
+            "Thigh.R": (math.radians(-5), 0.0, 0.0),
+            "Shin.R": (math.radians(8), 0.0, 0.0),
+            "Foot.R": (math.radians(-3), 0.0, 0.0),
+            "Thigh.L": (math.radians(-5), 0.0, 0.0),
+            "Shin.L": (math.radians(8), 0.0, 0.0),
+            "Foot.L": (math.radians(-3), 0.0, 0.0),
+            "UpperArm.R": (math.radians(3), 0.0, 0.0),
+            "UpperArm.L": (math.radians(3), 0.0, 0.0),
+        },
+        10: {
+            "Chest": (0.0, 0.0, 0.0),
+            "Thigh.R": (0.0, 0.0, 0.0),
+            "Shin.R": (0.0, 0.0, 0.0),
+            "Foot.R": (0.0, 0.0, 0.0),
+            "Thigh.L": (0.0, 0.0, 0.0),
+            "Shin.L": (0.0, 0.0, 0.0),
+            "Foot.L": (0.0, 0.0, 0.0),
+            "UpperArm.R": (0.0, 0.0, 0.0),
+            "Forearm.R": (0.0, 0.0, 0.0),
+            "UpperArm.L": (0.0, 0.0, 0.0),
+            "Forearm.L": (0.0, 0.0, 0.0),
+        },
+    }
+    for frame, rotations in land_poses.items():
+        key_pose(land, rig, frame, rotations)
+
+    # Keep the existing kick timing and contact pose unchanged.
+    kick = new_action("Kick", False)
     for frame, thigh, shin, foot in (
         (KICK_START, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
         (3, (math.radians(-22), 0, 0), (math.radians(38), 0, 0), (math.radians(-10), 0, 0)),
@@ -186,19 +474,23 @@ def make_actions(rig):
         (8, (math.radians(22), 0, 0), (math.radians(-8), 0, 0), (0, 0, 0)),
         (KICK_END, (0, 0, 0), (0, 0, 0), (0, 0, 0)),
     ):
-        key_rotation(kick, rig, "Thigh.R", frame, thigh)
-        key_rotation(kick, rig, "Shin.R", frame, shin)
-        key_rotation(kick, rig, "Foot.R", frame, foot)
+        key_pose(
+            kick,
+            rig,
+            frame,
+            {"Thigh.R": thigh, "Shin.R": shin, "Foot.R": foot},
+        )
 
+    actions = (idle, run, jump, fall, land, kick)
     rig.animation_data.action = idle
-    for action in (idle, kick):
+    for action in actions:
         track = rig.animation_data.nla_tracks.new()
         track.name = action.name
         strip = track.strips.new(action.name, int(action.frame_range[0]), action)
         strip.action_frame_start = action.frame_range[0]
         strip.action_frame_end = action.frame_range[1]
         track.mute = True
-    return idle, kick
+    return actions
 
 
 def build_character():
@@ -335,15 +627,63 @@ def audit(meshes, rig, actions):
         raise RuntimeError(f"Triangle budget invalid: {total_triangles}")
     if tuple(action.name for action in actions) != ACTION_NAMES or {action.name for action in bpy.data.actions} != set(ACTION_NAMES):
         raise RuntimeError("Declared action audit failed")
+
+    for action in actions:
+        expected_start, expected_end = ACTION_RANGES[action.name]
+        actual_start, actual_end = (int(round(value)) for value in action.frame_range)
+        if (actual_start, actual_end) != (expected_start, expected_end):
+            raise RuntimeError(
+                f"Action range invalid: {action.name} expected {expected_start}..{expected_end} "
+                f"got {actual_start}..{actual_end}"
+            )
+        if bool(action.get("loop_intent", False)) != (action.name in LOOP_ACTIONS):
+            raise RuntimeError(f"Loop intent invalid: {action.name}")
+        if not bool(action.get("root_locked", False)) or int(action.get("frame_rate", 0)) != 30:
+            raise RuntimeError(f"Action source metadata invalid: {action.name}")
+        for curve in action.fcurves:
+            if any(
+                token in curve.data_path
+                for token in (
+                    'pose.bones["Root"].location',
+                    'pose.bones["Pelvis"].location',
+                    'pose.bones["Root"].rotation',
+                    'pose.bones["Pelvis"].rotation',
+                )
+            ):
+                raise RuntimeError(f"Root or pelvis motion authored: {action.name} {curve.data_path}")
+
+        max_rotation = max(
+            (abs(key.co[1]) for curve in action.fcurves for key in curve.keyframe_points),
+            default=0.0,
+        )
+        if action.name != "Idle" and max_rotation < math.radians(3.0):
+            raise RuntimeError(f"Meaningful limb displacement missing: {action.name}")
+
+        if action.name in LOOP_ACTIONS:
+            for curve in action.fcurves:
+                if abs(curve.evaluate(expected_start) - curve.evaluate(expected_end)) > 1e-7:
+                    raise RuntimeError(f"Cyclic endpoint mismatch: {action.name} {curve.data_path}[{curve.array_index}]")
+
+    run = bpy.data.actions["Run"]
+    required_run_curves = {
+        'pose.bones["Thigh.R"].rotation_euler',
+        'pose.bones["Thigh.L"].rotation_euler',
+        'pose.bones["UpperArm.R"].rotation_euler',
+        'pose.bones["UpperArm.L"].rotation_euler',
+    }
+    if not required_run_curves.issubset({curve.data_path for curve in run.fcurves}):
+        raise RuntimeError("Run opposing limb curves missing")
+
+    land = bpy.data.actions["Land"]
+    for curve in land.fcurves:
+        if abs(curve.evaluate(ACTION_RANGES["Land"][1])) > 1e-7:
+            raise RuntimeError(f"Land end pose is not idle-compatible: {curve.data_path}[{curve.array_index}]")
+
     kick = bpy.data.actions["Kick"]
     duration = (kick.frame_range[1] - kick.frame_range[0]) / 30.0
     contact_ratio = (KICK_CONTACT - kick.frame_range[0]) / (kick.frame_range[1] - kick.frame_range[0])
     if not 0.30 <= duration <= 0.38 or not 0.35 <= contact_ratio <= 0.45:
         raise RuntimeError(f"Kick timing invalid: {duration:.3f}s contact {contact_ratio:.3f}")
-    for action in actions:
-        for curve in action.fcurves:
-            if curve.data_path in {'pose.bones["Root"].location', 'pose.bones["Pelvis"].location', 'pose.bones["Root"].rotation_euler', 'pose.bones["Pelvis"].rotation_euler'}:
-                raise RuntimeError("Root or pelvis motion authored")
     for bone_name in ("Thigh.R", "Shin.R", "Foot.R"):
         curves = [curve for curve in kick.fcurves if f'pose.bones["{bone_name}"]' in curve.data_path]
         for curve in curves:
@@ -359,19 +699,77 @@ def audit(meshes, rig, actions):
             f"extension={forward_extension:.4f}m"
         )
     print(f"AUDIT bounds min={tuple(round(v, 4) for v in low)} max={tuple(round(v, 4) for v in high)} dimensions={tuple(round(v, 4) for v in dimensions)}")
-    print(f"AUDIT vertices={total_vertices} triangles={total_triangles} actions=Idle(loop),Kick(non-loop) duration={duration:.3f}s contact={contact_ratio:.3f}")
+    print(
+        f"AUDIT vertices={total_vertices} triangles={total_triangles} "
+        "actions=Idle[1..30](loop),Run[1..20](loop),Jump[1..12],Fall[1..15],Land[1..10],"
+        f"Kick[1..12](non-loop) duration={duration:.3f}s contact={contact_ratio:.3f}"
+    )
     print(
         "AUDIT contact_forward="
         f"idle_min_y={idle_foot_low.y:.6f} contact_min_y={contact_foot_low.y:.6f} "
         f"extension={forward_extension:.6f}m right_foot_bounds_contact="
         f"{tuple(round(v, 6) for v in contact_foot_low)}..{tuple(round(v, 6) for v in contact_foot_high)}"
     )
-    print("AUDIT weights=normalized max_influences=1 unweighted=0 connections=13 overlap>=0.005m")
+    print("AUDIT root_curves=none pelvis_curves=none loop_endpoints=equal weights=normalized max_influences=1 unweighted=0 connections=13 overlap>=0.005m")
     return low, high, total_vertices, total_triangles
 
 
+def _require_preview(path, label):
+    if not os.path.isfile(path) or os.path.getsize(path) == 0:
+        raise RuntimeError(f"{label} render failed: {path}")
+
+
+def _save_contact_sheet(scene, rig, camera, target, action_name, frames):
+    """Render a side-view frame strip so each non-idle action is inspectable."""
+    frame_width = 256
+    frame_height = 256
+    scene.render.resolution_x = frame_width
+    scene.render.resolution_y = frame_height
+    scene.render.resolution_percentage = 100
+    camera.location = (3.4, 0.0, 0.95)
+    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+    action = bpy.data.actions[action_name]
+    frame_paths = []
+    for index, frame in enumerate(frames):
+        rig.animation_data.action = action
+        scene.frame_set(frame)
+        bpy.context.view_layer.update()
+        path = os.path.join(PREVIEW_DIR, f"{action_name.lower()}-{index + 1}.png")
+        scene.render.filepath = path
+        bpy.ops.render.render(write_still=True)
+        _require_preview(path, f"{action_name} frame {frame}")
+        frame_paths.append(path)
+
+    sheet_width = frame_width * len(frame_paths)
+    sheet = bpy.data.images.new(f"{action_name}ContactSheet", width=sheet_width, height=frame_height, alpha=True)
+    sheet_pixels = [0.0] * (sheet_width * frame_height * 4)
+    for index, path in enumerate(frame_paths):
+        source = bpy.data.images.load(path, check_existing=False)
+        source_pixels = [0.0] * (frame_width * frame_height * 4)
+        source.pixels.foreach_get(source_pixels)
+        for row in range(frame_height):
+            source_start = row * frame_width * 4
+            target_start = (row * sheet_width + index * frame_width) * 4
+            sheet_pixels[target_start:target_start + frame_width * 4] = source_pixels[source_start:source_start + frame_width * 4]
+        bpy.data.images.remove(source)
+    sheet.pixels.foreach_set(sheet_pixels)
+    sheet_path = os.path.join(PREVIEW_DIR, f"contact-{action_name.lower()}.png")
+    sheet.filepath_raw = sheet_path
+    sheet.file_format = "PNG"
+    sheet.save()
+    _require_preview(sheet_path, f"{action_name} contact sheet")
+    bpy.data.images.remove(sheet)
+    for path in frame_paths:
+        os.remove(path)
+
+
 def render_previews(meshes, rig, low, high):
+    del meshes  # Geometry remains untouched; the evaluated rig drives only preview poses.
     os.makedirs(PREVIEW_DIR, exist_ok=True)
+    for filename in os.listdir(PREVIEW_DIR):
+        if filename.lower().endswith(".png"):
+            os.remove(os.path.join(PREVIEW_DIR, filename))
+
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE_NEXT"
     scene.render.resolution_x = 512
@@ -381,7 +779,7 @@ def render_previews(meshes, rig, low, high):
     scene.world = bpy.data.worlds.new("PreviewWorld")
     scene.world.color = (0.035, 0.04, 0.05)
     rig.animation_data.action = bpy.data.actions["Idle"]
-    scene.frame_set(KICK_START)
+    scene.frame_set(ACTION_RANGES["Idle"][0])
     bpy.context.view_layer.update()
 
     bpy.ops.object.light_add(type="AREA", location=(2.5, -3.5, 4.0))
@@ -410,23 +808,21 @@ def render_previews(meshes, rig, low, high):
         "three-quarter": (2.5, -2.8, 1.65),
     }
     for name, location in views.items():
+        rig.animation_data.action = bpy.data.actions["Idle"]
+        scene.frame_set(ACTION_RANGES["Idle"][0])
         camera.location = location
         camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
+        scene.render.resolution_x = 512
+        scene.render.resolution_y = 512
         scene.render.filepath = os.path.join(PREVIEW_DIR, name + ".png")
         bpy.ops.render.render(write_still=True)
-        if not os.path.isfile(scene.render.filepath) or os.path.getsize(scene.render.filepath) == 0:
-            raise RuntimeError(f"Preview render failed: {scene.render.filepath}")
-    rig.animation_data.action = bpy.data.actions["Kick"]
-    scene.frame_set(KICK_CONTACT)
-    bpy.context.view_layer.update()
-    camera.location = views["front"]
-    camera.rotation_euler = (target - camera.location).to_track_quat("-Z", "Y").to_euler()
-    scene.render.filepath = os.path.join(PREVIEW_DIR, "contact-front.png")
-    bpy.ops.render.render(write_still=True)
-    if not os.path.isfile(scene.render.filepath) or os.path.getsize(scene.render.filepath) == 0:
-        raise RuntimeError(f"Contact preview render failed: {scene.render.filepath}")
+        _require_preview(scene.render.filepath, name)
+
+    for action_name in CONTACT_SHEET_ACTIONS:
+        _save_contact_sheet(scene, rig, camera, target, action_name, CONTACT_SHEET_FRAMES[action_name])
+
     rig.animation_data.action = bpy.data.actions["Idle"]
-    scene.frame_set(KICK_START)
+    scene.frame_set(ACTION_RANGES["Idle"][0])
     bpy.context.view_layer.update()
     bpy.data.objects.remove(camera, do_unlink=True)
     bpy.data.objects.remove(key, do_unlink=True)
@@ -463,7 +859,10 @@ def save_and_export(meshes, rig):
         raise RuntimeError("FBX export missing or empty")
     print(f"OUTPUT blend={BLEND_PATH} bytes={os.path.getsize(BLEND_PATH)}")
     print(f"OUTPUT fbx={FBX_PATH} bytes={os.path.getsize(FBX_PATH)}")
-    print(f"OUTPUT previews={PREVIEW_DIR} count=7 required_views=6 contact=contact-front.png")
+    print(
+        f"OUTPUT previews={PREVIEW_DIR} count=11 required_views=6 "
+        "contact_sheets=contact-run.png,contact-jump.png,contact-fall.png,contact-land.png,contact-kick.png"
+    )
 
 
 def main():

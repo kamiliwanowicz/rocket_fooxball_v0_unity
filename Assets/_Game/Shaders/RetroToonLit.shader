@@ -6,6 +6,13 @@ Shader "RocketFooxball/RetroToonLit"
         [MainColor] _BaseColor("Base Color", Color) = (1, 1, 1, 1)
         _ShadowColor("Shadow Color", Color) = (0.08, 0.12, 0.24, 1)
         _LightSteps("Light Steps", Range(1, 3)) = 3
+        _AmbientColor("Ambient Color", Color) = (0.08, 0.18, 0.24, 1)
+        _AmbientStrength("Ambient Strength", Range(0, 1)) = 0.35
+        _RimColor("Rim Color", Color) = (0.20, 0.86, 0.92, 1)
+        _RimPower("Rim Power", Range(0.5, 8)) = 3
+        _RimStrength("Rim Strength", Range(0, 1)) = 0.20
+        _EmissionColor("Emission Color", Color) = (0, 0, 0, 1)
+        _EmissionStrength("Emission Strength", Range(0, 2)) = 0
     }
 
     SubShader
@@ -29,6 +36,7 @@ Shader "RocketFooxball/RetroToonLit"
             #pragma vertex RetroToonVertex
             #pragma fragment RetroToonFragment
             #pragma multi_compile_instancing
+            #pragma multi_compile_fog
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/RealtimeLights.hlsl"
@@ -41,6 +49,13 @@ Shader "RocketFooxball/RetroToonLit"
                 half4 _BaseColor;
                 half4 _ShadowColor;
                 half _LightSteps;
+                half4 _AmbientColor;
+                half _AmbientStrength;
+                half4 _RimColor;
+                half _RimPower;
+                half _RimStrength;
+                half4 _EmissionColor;
+                half _EmissionStrength;
             CBUFFER_END
 
             struct Attributes
@@ -55,9 +70,11 @@ Shader "RocketFooxball/RetroToonLit"
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
-                float3 normalWS : TEXCOORD0;
-                float2 uv : TEXCOORD1;
+                float3 positionWS : TEXCOORD0;
+                float3 normalWS : TEXCOORD1;
+                float2 uv : TEXCOORD2;
                 float4 color : COLOR;
+                half fogFactor : TEXCOORD3;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
                 UNITY_VERTEX_OUTPUT_STEREO
             };
@@ -69,10 +86,12 @@ Shader "RocketFooxball/RetroToonLit"
                 UNITY_TRANSFER_INSTANCE_ID(input, output);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
 
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionCS = TransformWorldToHClip(output.positionWS);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
                 output.uv = TRANSFORM_TEX(input.uv, _BaseMap);
                 output.color = input.color;
+                output.fogFactor = ComputeFogFactor(output.positionCS.z);
                 return output;
             }
 
@@ -86,19 +105,28 @@ Shader "RocketFooxball/RetroToonLit"
 
                 Light mainLight = GetMainLight();
                 half3 normalWS = SafeNormalize(input.normalWS);
-                half ndotl = saturate(dot(normalWS, SafeNormalize(mainLight.direction)));
+                half3 lightDirection = SafeNormalize(mainLight.direction);
+                half ndotl = saturate(dot(normalWS, lightDirection));
 
-                // _LightSteps is deliberately clamped to the three-band retro range.
+                // Quantized direct bands keep silhouettes readable at low resolution.
                 half steps = clamp(_LightSteps, 1.0h, 3.0h);
                 half band = saturate(floor(ndotl * steps) / max(steps - 1.0h, 1.0h));
-                half3 lightTint = lerp(_ShadowColor.rgb, mainLight.color, band);
+                half3 direct = lerp(_ShadowColor.rgb, mainLight.color, band);
+                half3 ambient = _AmbientColor.rgb * saturate(_AmbientStrength);
 
-                return half4(albedo * lightTint, 1.0h);
+                half3 viewDirection = SafeNormalize(GetWorldSpaceViewDir(input.positionWS));
+                half rimTerm = pow(saturate(1.0h - dot(normalWS, viewDirection)), max(_RimPower, 0.5h));
+                half3 rim = _RimColor.rgb * (rimTerm * saturate(_RimStrength));
+                half3 emission = _EmissionColor.rgb * max(_EmissionStrength, 0.0h);
+
+                half3 color = albedo * (ambient + direct * mainLight.distanceAttenuation);
+                color += rim + emission;
+                color = MixFog(color, input.fogFactor);
+                return half4(color, 1.0h);
             }
             ENDHLSL
         }
 
-        // Keep depth compatibility with future URP renderer configurations.
         Pass
         {
             Name "DepthOnly"
@@ -117,7 +145,6 @@ Shader "RocketFooxball/RetroToonLit"
             ENDHLSL
         }
 
-        // Keep shadow compatibility with future URP renderer configurations.
         Pass
         {
             Name "ShadowCaster"

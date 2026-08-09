@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
 
 namespace RocketFooxball.Editor
 {
@@ -24,6 +25,7 @@ namespace RocketFooxball.Editor
         private const string BallPrefabPath = "Assets/_Game/Prefabs/Ball.prefab";
         private const string RocketPrefabPath = "Assets/_Game/Prefabs/Rocket.prefab";
         private const string RocketModelPath = "Assets/_Game/Models/LowPolyRocket.fbx";
+        private const string ArenaKitModelPath = "Assets/_Game/Models/ArenaKit.fbx";
         private const string CharacterModelPath = "Assets/_Game/Models/LowPolyCharacter.fbx";
         private const string FpsKickModelPath = "Assets/_Game/Models/FpsKickRig.fbx";
         private const string WeaponModelPath = "Assets/_Game/Models/FpsRocketLauncher.fbx";
@@ -40,10 +42,19 @@ namespace RocketFooxball.Editor
         private const string BallTexturePath = TexturesPath + "/RetroBall.png";
         private const string ExplosionTexturePath = TexturesPath + "/RetroExplosion.png";
         private const string SmokeTexturePath = TexturesPath + "/RetroSmoke.png";
+        private const string WallTexturePath = TexturesPath + "/RetroWall.png";
+        private const string TrimTexturePath = TexturesPath + "/RetroTrim.png";
+        private const string HazardTexturePath = TexturesPath + "/RetroHazard.png";
+        private const string ShieldTexturePath = TexturesPath + "/RetroShield.png";
         private const string ToonShaderPath = ShadersPath + "/RetroToonLit.shader";
         private const string ParticleShaderPath = ShadersPath + "/RetroParticle.shader";
+        private const string ShieldShaderPath = ShadersPath + "/RetroShield.shader";
         private const string BallSurfacePath = MaterialsPath + "/BallSurface.physicMaterial";
         private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
+        private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/RocketLauncher.cs";
+        private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
+        private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
+        private const int ManifestSchemaVersion = 1;
         private const string BuildMarkerPrefix = "MovementLabGeneratedT5_";
         private const float BallPrefabScale = 4.32f;
         private const float BallRadius = 2.16f;
@@ -70,11 +81,19 @@ namespace RocketFooxball.Editor
             ScenePath,
             MaterialsPath + "/Floor.mat",
             MaterialsPath + "/Wall.mat",
+            MaterialsPath + "/Trim.mat",
+            MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat",
             MaterialsPath + "/Ball.mat",
             MaterialsPath + "/Rocket.mat",
             MaterialsPath + "/GoalFrame.mat",
             MaterialsPath + "/Shield.mat",
+            MaterialsPath + "/ShieldBlue.mat",
+            MaterialsPath + "/ShieldRed.mat",
+            MaterialsPath + "/ArenaPrimary.mat",
+            MaterialsPath + "/ArenaTrim.mat",
+            MaterialsPath + "/ArenaHazard.mat",
+            MaterialsPath + "/ArenaGlow.mat",
             BallSurfacePath,
             MaterialsPath + "/Explosion.mat",
             MaterialsPath + "/Smoke.mat",
@@ -88,6 +107,17 @@ namespace RocketFooxball.Editor
             WorldControllerPath,
             FpsControllerPath,
             ExplosionPrefabPath
+        };
+
+        // Fingerprint every builder-owned output and the importer/project state
+        // that can change how those outputs are interpreted. The manifest and
+        // its .meta are intentionally excluded to avoid a self-hash loop.
+        private static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
+        private static readonly string[] GeneratedImporterMetadataPaths =
+        {
+            RocketModelPath + ".meta", ArenaKitModelPath + ".meta", CharacterModelPath + ".meta", FpsKickModelPath + ".meta", WeaponModelPath + ".meta",
+            GrassTexturePath + ".meta", WallTexturePath + ".meta", TrimTexturePath + ".meta", HazardTexturePath + ".meta", ShieldTexturePath + ".meta",
+            BallTexturePath + ".meta", ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta"
         };
 
         private sealed class GoalBuild
@@ -105,22 +135,122 @@ namespace RocketFooxball.Editor
             public Collider[] Shields;
         }
 
+        private readonly struct MaterialSpecification
+        {
+            public readonly string Name;
+            public readonly string ShaderName;
+            public readonly Texture2D Texture;
+            public readonly Vector2 TextureScale;
+            public readonly Color BaseColor;
+            public readonly Color ShadowColor;
+            public readonly Color AmbientColor;
+            public readonly float AmbientStrength;
+            public readonly Color RimColor;
+            public readonly float RimPower;
+            public readonly float RimStrength;
+            public readonly Color EmissionColor;
+            public readonly float EmissionStrength;
+
+            public MaterialSpecification(string name, string shaderName, Texture2D texture, Vector2 textureScale,
+                Color baseColor, Color shadowColor, Color ambientColor, float ambientStrength,
+                Color rimColor, float rimPower, float rimStrength, Color emissionColor, float emissionStrength)
+            {
+                Name = name;
+                ShaderName = shaderName;
+                Texture = texture;
+                TextureScale = textureScale;
+                BaseColor = baseColor;
+                ShadowColor = shadowColor;
+                AmbientColor = ambientColor;
+                AmbientStrength = ambientStrength;
+                RimColor = rimColor;
+                RimPower = rimPower;
+                RimStrength = rimStrength;
+                EmissionColor = emissionColor;
+                EmissionStrength = emissionStrength;
+            }
+        }
+
+        [Serializable]
+        private sealed class MovementLabBuildManifest
+        {
+            public int schemaVersion;
+            public string sourceSignature;
+            public string generatedOutputFingerprint;
+            public string unityVersion;
+            public string[] fingerprintPaths;
+        }
+
+        private static string[] CreateGeneratedFingerprintPaths()
+        {
+            var paths = new List<string>();
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+            {
+                paths.Add(GeneratedYamlAssetPaths[i]);
+            }
+
+            var generatedSourcePaths = new[]
+            {
+                RocketModelPath,
+                CharacterModelPath,
+                FpsKickModelPath,
+                WeaponModelPath,
+                ArenaKitModelPath,
+                GrassTexturePath,
+                WallTexturePath,
+                TrimTexturePath,
+                HazardTexturePath,
+                ShieldTexturePath,
+                BallTexturePath,
+                ExplosionTexturePath,
+                SmokeTexturePath
+            };
+            for (var i = 0; i < generatedSourcePaths.Length; i++)
+            {
+                paths.Add(generatedSourcePaths[i]);
+                paths.Add(generatedSourcePaths[i] + ".meta");
+            }
+
+            paths.Add("ProjectSettings/EditorBuildSettings.asset");
+            paths.Add("ProjectSettings/DynamicsManager.asset");
+            paths.Add("ProjectSettings/TimeManager.asset");
+            paths.Sort(StringComparer.Ordinal);
+            return paths.ToArray();
+        }
+
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
+            var builderSignature = ComputeBuilderSignature();
+            if (TryReuseGeneratedState(builderSignature))
+            {
+                return;
+            }
+
             EnsureFolders();
 
             ConfigureTextureImporters();
             ConfigureModelImporters();
 
             var ballSurface = GetOrCreatePhysicMaterial();
-            var floorMaterial = GetOrCreateRetroMaterial("Floor", new Color(0.30f, 0.42f, 0.17f), AssetDatabase.LoadAssetAtPath<Texture2D>(GrassTexturePath), new Vector2(32.5f, 22.5f));
-            var wallMaterial = GetOrCreateRetroMaterial("Wall", new Color(0.16f, 0.22f, 0.34f), null, Vector2.one);
-            var markingMaterial = GetOrCreateRetroMaterial("Marking", new Color(0.92f, 0.84f, 0.66f), null, Vector2.one);
-            var ballMaterial = GetOrCreateRetroMaterial("Ball", new Color(0.95f, 0.53f, 0.08f), AssetDatabase.LoadAssetAtPath<Texture2D>(BallTexturePath), Vector2.one);
-            var rocketMaterial = GetOrCreateRetroMaterial("Rocket", new Color(0.95f, 0.23f, 0.08f), null, Vector2.one);
-            var frameMaterial = GetOrCreateRetroMaterial("GoalFrame", new Color(0.82f, 0.70f, 0.48f), null, Vector2.one);
-            var shieldMaterial = GetOrCreateRetroMaterial("Shield", new Color(0.15f, 0.8f, 0.95f), null, Vector2.one);
+            var shadow = new Color(0.32f, 0.44f, 0.62f, 1f);
+            var ambient = new Color(0.72f, 0.86f, 1.00f, 1f);
+            var rim = new Color(0.20f, 0.86f, 0.92f, 1f);
+            var floorMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Floor", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(GrassTexturePath), new Vector2(32.5f, 22.5f), new Color(0.96f, 1f, 1f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var wallMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Wall", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(WallTexturePath), new Vector2(8f, 2f), new Color(0.90f, 0.95f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var trimMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Trim", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(TrimTexturePath), new Vector2(4f, 1f), new Color(0.10f, 0.75f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, new Color(0.10f, 0.85f, 1f, 1f), 0.35f));
+            var hazardMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Hazard", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(HazardTexturePath), new Vector2(4f, 1f), new Color(1.00f, 0.72f, 0.12f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var markingMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Marking", "RocketFooxball/RetroToonLit", null, Vector2.one, new Color(1.00f, 0.96f, 0.78f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var ballMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Ball", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(BallTexturePath), Vector2.one, new Color(1f, 1f, 1f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var rocketMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Rocket", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(TrimTexturePath), Vector2.one, new Color(1.00f, 0.22f, 0.20f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var frameMaterial = trimMaterial;
+            var shieldMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("Shield", "RocketFooxball/RetroToonLit", null, Vector2.one, new Color(0.10f, 0.75f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var arenaPrimaryMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("ArenaPrimary", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(WallTexturePath), Vector2.one, new Color(0.90f, 0.95f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var arenaTrimMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("ArenaTrim", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(TrimTexturePath), Vector2.one, new Color(0.10f, 0.75f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, new Color(0.10f, 0.85f, 1f, 1f), 0.40f));
+            var arenaHazardMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("ArenaHazard", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(HazardTexturePath), Vector2.one, new Color(1.00f, 0.72f, 0.12f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, Color.clear, 0f));
+            var arenaGlowMaterial = GetOrCreateRetroMaterial(new MaterialSpecification("ArenaGlow", "RocketFooxball/RetroToonLit", AssetDatabase.LoadAssetAtPath<Texture2D>(TrimTexturePath), Vector2.one, new Color(0.10f, 0.85f, 1.00f, 1f), shadow, ambient, 0.55f, rim, 3f, 0.12f, new Color(0.10f, 0.95f, 0.88f, 1f), 0.65f));
+            var shieldBlueMaterial = GetOrCreateShieldMaterial("ShieldBlue", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+            var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
 
             var rocketPrefab = BuildRocketPrefab(rocketMaterial);
             AssetDatabase.SaveAssets();
@@ -135,23 +265,10 @@ namespace RocketFooxball.Editor
             var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
             if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
             if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
 
-            var builderSignature = ComputeBuilderSignature();
             RegisterBuildScene();
             Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
             SetProjectFixedTimestep();
-
-            // Reuse only a scene carrying the current builder signature and passing
-            // the full generated-scene validator. Any source change or stale/missing
-            // generated requirement falls through to authoritative scene rebuild.
-            if (TryOpenExistingGeneratedScene(builderSignature))
-            {
-                AssetDatabase.SaveAssets();
-                NormalizeGeneratedYamlWhitespace();
-                Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath + " (existing T5 scene reused)");
-                return;
-            }
 
             GameObject explosionPrefabProbe = null;
             try
@@ -165,7 +282,7 @@ namespace RocketFooxball.Editor
                 UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
             }
 
-            var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface);
+            var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, shieldBlueMaterial, shieldRedMaterial);
             var explosionObject = new GameObject("ExplosionResolver");
             var explosionResolver = explosionObject.AddComponent<ExplosionResolver>();
             SetObjectArray(explosionResolver, "goalShieldColliders", arena.Shields);
@@ -255,6 +372,12 @@ namespace RocketFooxball.Editor
             }
             AssetDatabase.SaveAssets();
             NormalizeGeneratedYamlWhitespace();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            ValidateMovementLabInternal(false, builderSignature, false);
+            var generatedOutputFingerprint = ComputeGeneratedOutputFingerprint();
+            WriteBuildManifest(builderSignature, generatedOutputFingerprint);
+            AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            ValidateMovementLabInternal(true, builderSignature, false);
             Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath);
         }
 
@@ -262,10 +385,21 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]
         public static void ValidateMovementLab()
         {
+            ValidateMovementLabInternal(true, ComputeBuilderSignature(), true);
+        }
+
+        private static void ValidateMovementLabInternal(bool includeManifest, string builderSignature, bool logSuccess)
+        {
+            if (includeManifest)
+            {
+                ValidateManifestAndFingerprint(builderSignature);
+            }
+
             EnsureAssetExists(PrefabPath);
             EnsureAssetExists(BallPrefabPath);
             EnsureAssetExists(RocketPrefabPath);
             EnsureAssetExists(RocketModelPath);
+            EnsureAssetExists(ArenaKitModelPath);
             EnsureAssetExists(CharacterModelPath);
             EnsureAssetExists(FpsKickModelPath);
             EnsureAssetExists(WeaponModelPath);
@@ -275,6 +409,11 @@ namespace RocketFooxball.Editor
             EnsureAssetExists(SmokeTexturePath);
             EnsureAssetExists(ToonShaderPath);
             EnsureAssetExists(ParticleShaderPath);
+            EnsureAssetExists(ShieldShaderPath);
+            EnsureAssetExists(WallTexturePath);
+            EnsureAssetExists(TrimTexturePath);
+            EnsureAssetExists(HazardTexturePath);
+            EnsureAssetExists(ShieldTexturePath);
             EnsureAssetExists(WorldControllerPath);
             EnsureAssetExists(FpsControllerPath);
             EnsureAssetExists(ExplosionPrefabPath);
@@ -299,7 +438,7 @@ namespace RocketFooxball.Editor
             Require(matchObject, "MatchController root");
             Require(explosionObject, "ExplosionResolver root");
             Require(hudObject, "DebugHUD root");
-            Require(GameObject.Find(GetBuildMarkerName(ComputeBuilderSignature())), "T5 build marker");
+            Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "T5 build marker");
 
             var playerMotor = Require(player.GetComponent<PlayerMotor>(), "PlayerMotor");
             var input = Require(player.GetComponent<PlayerInputReader>(), "PlayerInputReader");
@@ -308,6 +447,8 @@ namespace RocketFooxball.Editor
             var launcher = Require(player.GetComponent<RocketLauncher>(), "RocketLauncher");
             var kick = Require(player.GetComponent<BallKick>(), "BallKick");
             var camera = Require(player.GetComponentInChildren<Camera>(true), "Player camera");
+            if (camera.clearFlags != CameraClearFlags.SolidColor || Mathf.Abs(camera.backgroundColor.r - 0.72f) > 0.001f || Mathf.Abs(camera.backgroundColor.g - 0.88f) > 0.001f || Mathf.Abs(camera.backgroundColor.b - 0.96f) > 0.001f || Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.farClipPlane - 180f) > 0.01f) throw new InvalidOperationException("Gameplay camera bright-scene contract invalid.");
+            if (RenderSettings.skybox != null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Trilight || !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f || Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f) throw new InvalidOperationException("Scene environment contract invalid.");
             Require(player.GetComponent<CharacterController>(), "Player CharacterController");
             if (Vector3.Distance(player.transform.position, new Vector3(PlayerSpawnOffset, 0f, 0f)) > 0.001f || Vector3.Dot(player.transform.forward, Vector3.left) < 0.999f)
             {
@@ -374,8 +515,8 @@ namespace RocketFooxball.Editor
             ValidateSerializedVector3(north, "planeNormal", Vector3.right, "NorthGoal.planeNormal");
             ValidateSerializedVector3(south, "planeNormal", Vector3.right, "SouthGoal.planeNormal");
 
-            var northShield = Require(north.transform.Find("Shield"), "North goal Shield").GetComponent<Collider>();
-            var southShield = Require(south.transform.Find("Shield"), "South goal Shield").GetComponent<Collider>();
+            var northShield = Require(north.transform.Find("ShieldCollider"), "North goal ShieldCollider").GetComponent<Collider>();
+            var southShield = Require(south.transform.Find("ShieldCollider"), "South goal ShieldCollider").GetComponent<Collider>();
             Require(northShield, "North goal shield collider");
             Require(southShield, "South goal shield collider");
             if (northShield.isTrigger || southShield.isTrigger)
@@ -410,6 +551,8 @@ namespace RocketFooxball.Editor
 
             var presentation = Require(player.GetComponent<PlayerPresentation>(), "PlayerPresentation");
             ValidateReference(presentation, "kick", kick, "PlayerPresentation.kick");
+            ValidateReference(presentation, "motor", playerMotor, "PlayerPresentation.motor");
+            ValidateReference(presentation, "launcher", launcher, "PlayerPresentation.launcher");
             var worldVisual = Require(player.transform.Find("WorldVisual"), "Player WorldVisual");
             var worldAnimator = Require(worldVisual.GetComponent<Animator>(), "World Animator");
             ValidateReference(presentation, "worldAnimator", worldAnimator, "PlayerPresentation.worldAnimator");
@@ -418,6 +561,7 @@ namespace RocketFooxball.Editor
             var fpsVisual = Require(viewmodels.Find("FpsKickVisual"), "FpsKickVisual");
             var fpsAnimator = Require(fpsVisual.GetComponent<Animator>(), "FPS Animator");
             ValidateReference(presentation, "fpsKickAnimator", fpsAnimator, "PlayerPresentation.fpsKickAnimator");
+            ValidateReference(presentation, "weaponVisual", weaponVisual, "PlayerPresentation.weaponVisual");
             if (worldAnimator.applyRootMotion || fpsAnimator.applyRootMotion)
             {
                 throw new InvalidOperationException("Player visual animators must not apply root motion.");
@@ -431,7 +575,7 @@ namespace RocketFooxball.Editor
             ValidateImportedVisual(fpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual");
             ValidateNoPhysics(weaponVisual.gameObject, "WeaponVisual");
             ValidateNoPhysics(fpsVisual.gameObject, "FpsKickVisual");
-            ValidateAnimatorController(worldAnimator, WorldControllerPath, CharacterModelPath);
+            ValidateWorldAnimatorController(worldAnimator, WorldControllerPath, CharacterModelPath);
             ValidateAnimatorController(fpsAnimator, FpsControllerPath, FpsKickModelPath);
             var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
             if (hiddenLayer < 0 || (camera.cullingMask & (1 << hiddenLayer)) != 0)
@@ -475,12 +619,17 @@ namespace RocketFooxball.Editor
             ValidatePrefab(BallPrefabPath, "Ball", true, ballSurface);
             ValidatePrefab(RocketPrefabPath, "Rocket", false, null);
             ValidateArenaMaterials(arena, ballSurface);
+            ValidateArenaArchitecture(arena);
             ValidateTextureImporterContracts();
             ValidateModelImporterContracts();
+            ValidateRenderPipelineSettings();
             ValidatePhysicsAndBuildSettings();
             ValidateNoMissingComponents(scene);
 
-            Debug.Log("Rocket Fooxball Movement Lab validation succeeded: " + ScenePath);
+            if (logSuccess)
+            {
+                Debug.Log("Rocket Fooxball Movement Lab validation succeeded: " + ScenePath);
+            }
         }
 
         private static GameObject BuildPlayerPrefab(GameObject rocketPrefab)
@@ -527,6 +676,9 @@ namespace RocketFooxball.Editor
             camera.tag = "MainCamera";
             camera.fieldOfView = 75f;
             camera.nearClipPlane = 0.03f;
+            camera.farClipPlane = 180f;
+            camera.clearFlags = CameraClearFlags.SolidColor;
+            camera.backgroundColor = new Color(0.72f, 0.88f, 0.96f, 1f);
             camera.gameObject.AddComponent<AudioListener>();
             var muzzle = new GameObject("RocketMuzzle").transform;
             muzzle.SetParent(camera.transform, false);
@@ -546,7 +698,7 @@ namespace RocketFooxball.Editor
             {
                 worldAnimator = worldVisual.AddComponent<Animator>();
             }
-            worldAnimator.runtimeAnimatorController = EnsureAnimatorController(WorldControllerPath, CharacterModelPath);
+            worldAnimator.runtimeAnimatorController = EnsureWorldAnimatorController(WorldControllerPath, CharacterModelPath);
             worldAnimator.avatar = FindImportedAvatar(CharacterModelPath);
             worldAnimator.applyRootMotion = false;
             // Hide the complete imported world model from the local player's camera.
@@ -582,7 +734,9 @@ namespace RocketFooxball.Editor
             SetObjectReference(input, "actions", actions);
             SetObjectReference(motor, "input", input);
             SetFloat(motor, "bhopSoftCapMultiplier", 2.5f);
-            SetFloat(motor, "jumpVelocity", 4.50f);
+            // Keep gameplay tuning at the approved review baseline. Presentation
+            // changes must not silently retune movement or ball control.
+            SetFloat(motor, "jumpVelocity", 6.75f);
             SetInteger(motor, "jumpsToHardCap", 4);
             SetObjectReference(look, "input", input);
             SetObjectReference(look, "head", head);
@@ -598,9 +752,8 @@ namespace RocketFooxball.Editor
             SetObjectReference(kick, "player", motor);
             SetObjectReference(kick, "look", look);
             SetObjectReference(kick, "aimCamera", camera);
-            SetFloat(kick, "kickRange", 4.50f);
+            SetFloat(kick, "kickRange", 3.00f);
             SetFloat(kick, "contactReachPadding", 1.00f);
-            SetFloat(kick, "contactReachScale", 1.50f);
             SetFloat(kick, "coneTotalDegrees", 35f);
             SetFloat(kick, "cooldown", 0.40f);
             SetFloat(kick, "inputBuffer", 0.50f);
@@ -614,8 +767,11 @@ namespace RocketFooxball.Editor
             SetFloat(feedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
             SetFloat(feedback, "celebrationFov", CelebrationFov);
             SetObjectReference(presentation, "kick", kick);
+            SetObjectReference(presentation, "motor", motor);
+            SetObjectReference(presentation, "launcher", launcher);
             SetObjectReference(presentation, "worldAnimator", worldAnimator);
             SetObjectReference(presentation, "fpsKickAnimator", fpsAnimator);
+            SetObjectReference(presentation, "weaponVisual", weaponVisual.transform);
 
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
             UnityEngine.Object.DestroyImmediate(root);
@@ -775,10 +931,16 @@ namespace RocketFooxball.Editor
             var renderer = child.GetComponent<ParticleSystemRenderer>();
             renderer.material = material;
             renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            var sheet = system.textureSheetAnimation;
+            sheet.enabled = true;
+            sheet.numTilesX = 4;
+            sheet.numTilesY = 4;
+            sheet.animation = ParticleSystemAnimationType.WholeSheet;
+            sheet.frameOverTime = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(1f, 1f)));
             return system;
         }
 
-        private static ArenaBuild BuildArena(Material floorMaterial, Material wallMaterial, Material markingMaterial, Material frameMaterial, Material shieldMaterial, PhysicsMaterial ballSurface)
+        private static ArenaBuild BuildArena(Material floorMaterial, Material wallMaterial, Material markingMaterial, Material frameMaterial, Material shieldMaterial, PhysicsMaterial ballSurface, Material arenaPrimaryMaterial, Material arenaTrimMaterial, Material arenaHazardMaterial, Material arenaGlowMaterial, Material northShieldMaterial, Material southShieldMaterial)
         {
             var arena = new GameObject("Arena");
             CreateSolid("Floor", arena.transform, new Vector3(0f, -0.5f, 0f), new Vector3(130f, 1f, 90f), floorMaterial, ballSurface);
@@ -804,8 +966,8 @@ namespace RocketFooxball.Editor
             CreateMarking("EastBox", markings, new Vector3(29f, 0.015f, 0f), new Vector3(0.25f, 0.02f, 36f), markingMaterial);
             CreateMarking("CenterSpot", markings, new Vector3(0f, 0.015f, 0f), new Vector3(1f, 0.02f, 1f), markingMaterial);
 
-            var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), frameMaterial, shieldMaterial, wallMaterial, ballSurface);
-            var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), frameMaterial, shieldMaterial, wallMaterial, ballSurface);
+            var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), frameMaterial, northShieldMaterial, wallMaterial, ballSurface);
+            var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), frameMaterial, southShieldMaterial, wallMaterial, ballSurface);
             north.Root.transform.SetParent(arena.transform, true);
             south.Root.transform.SetParent(arena.transform, true);
 
@@ -819,6 +981,8 @@ namespace RocketFooxball.Editor
             CreateContainment("SouthContainment", containment, new Vector3(0f, 5f, 59f), new Vector3(140f, 20f, 1f), ballSurface);
             CreateContainment("WestGoalOpeningContainment", containment, new Vector3(-67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
             CreateContainment("EastGoalOpeningContainment", containment, new Vector3(67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
+
+            BuildArenaArchitecture(arena.transform, north, south, new[] { arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial });
 
             return new ArenaBuild
             {
@@ -847,17 +1011,109 @@ namespace RocketFooxball.Editor
             SetObjectReference(trigger, "planeReference", root.transform);
             SetObjectReference(trigger, "openingTrigger", triggerCollider);
 
-            var shield = CreateSolid("Shield", root.transform, new Vector3(0f, 3.5f, 0f), new Vector3(36f, 7f, 0.4f), shieldMaterial, ballSurface);
-            shield.GetComponent<Renderer>().sharedMaterial = shieldMaterial;
-            CreateSolid("FrameWest", root.transform, new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
-            CreateSolid("FrameEast", root.transform, new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
-            CreateSolid("FrameTop", root.transform, new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), frameMaterial, ballSurface);
+            var shield = new GameObject("ShieldCollider");
+            shield.transform.SetParent(root.transform, false);
+            shield.transform.localPosition = new Vector3(0f, 3.5f, 0f);
+            var shieldCollider = shield.AddComponent<BoxCollider>();
+            shieldCollider.size = new Vector3(36f, 7f, 0.4f);
+            shieldCollider.sharedMaterial = ballSurface;
+            var shieldVisual = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            shieldVisual.name = "ShieldVisual";
+            shieldVisual.transform.SetParent(root.transform, false);
+            shieldVisual.transform.localPosition = new Vector3(0f, 3.5f, -0.22f);
+            shieldVisual.transform.localScale = new Vector3(36f, 7f, 1f);
+            UnityEngine.Object.DestroyImmediate(shieldVisual.GetComponent<Collider>());
+            shieldVisual.GetComponent<Renderer>().sharedMaterial = shieldMaterial;
+            var frameWest = CreateSolid("FrameWest", root.transform, new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
+            var frameEast = CreateSolid("FrameEast", root.transform, new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
+            var frameTop = CreateSolid("FrameTop", root.transform, new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), frameMaterial, ballSurface);
+            frameWest.GetComponent<Renderer>().enabled = false;
+            frameEast.GetComponent<Renderer>().enabled = false;
+            frameTop.GetComponent<Renderer>().enabled = false;
             // Local +Z points outward for both rotated goal roots.
             CreateSolid("RecessWest", root.transform, new Vector3(-18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
             CreateSolid("RecessEast", root.transform, new Vector3(18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), wallMaterial, ballSurface);
             CreateSolid("RecessFloor", root.transform, new Vector3(0f, -0.25f, 4.5f), new Vector3(37f, 0.5f, 9f), wallMaterial, ballSurface);
-            CreateSolid("RecessBack", root.transform, new Vector3(0f, 3.5f, 9f), new Vector3(37f, 7f, 1f), wallMaterial, ballSurface);
-            return new GoalBuild { Root = root, Trigger = trigger, Shield = shield.GetComponent<Collider>() };
+            var recessBack = CreateSolid("RecessBack", root.transform, new Vector3(0f, 3.5f, 9f), new Vector3(37f, 7f, 1f), wallMaterial, ballSurface);
+            var recesses = root.GetComponentsInChildren<Renderer>(true);
+            for (var i = 0; i < recesses.Length; i++)
+            {
+                if (recesses[i].gameObject.name.StartsWith("Recess", StringComparison.Ordinal)) recesses[i].enabled = false;
+            }
+            return new GoalBuild { Root = root, Trigger = trigger, Shield = shieldCollider };
+        }
+
+        private static void BuildArenaArchitecture(Transform arenaRoot, GoalBuild northGoal, GoalBuild southGoal, Material[] arenaMaterials)
+        {
+            var architecture = new GameObject("Architecture").transform;
+            architecture.SetParent(arenaRoot, false);
+
+            var northShell = CreateArenaKitVisual(architecture, "NorthGoalShell", "ArenaGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), arenaMaterials);
+            var southShell = CreateArenaKitVisual(architecture, "SouthGoalShell", "ArenaGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), arenaMaterials);
+            northShell.transform.localScale = Vector3.one;
+            southShell.transform.localScale = Vector3.one;
+
+            CreateArenaKitVisual(architecture, "WestRampRails", "ArenaRampRails", new Vector3(-22f, 2.55f, 2f), Quaternion.Euler(-15f, -90f, 0f), arenaMaterials);
+            CreateArenaKitVisual(architecture, "EastRampRails", "ArenaRampRails", new Vector3(22f, 2.55f, -2f), Quaternion.Euler(-15f, 90f, 0f), arenaMaterials);
+
+            // Wall pylons at a readable eight-metre cadence. They are renderer-only
+            // and deliberately stop short of the goal shells/openings.
+            // Keep pylon placement symmetric while leaving the outer two
+            // goal-adjacent pairs to the goal-shell visuals.
+            for (var x = -40f; x <= 40f; x += 8f)
+            {
+                CreateArenaKitVisual(architecture, "NorthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, -45.25f), Quaternion.identity, arenaMaterials);
+                CreateArenaKitVisual(architecture, "SouthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, 45.25f), Quaternion.identity, arenaMaterials);
+            }
+
+            // A symmetric nine-per-wall truss cadence keeps the complete
+            // loaded scene inside the strict MeshRenderer budget.
+            for (var x = -48f; x <= 48f; x += 12f)
+            {
+                CreateArenaKitVisual(architecture, "NorthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, -45.0f), Quaternion.identity, arenaMaterials);
+                CreateArenaKitVisual(architecture, "SouthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, 45.0f), Quaternion.identity, arenaMaterials);
+            }
+
+            CreateArenaKitVisual(architecture, "NorthScoreboard", "ArenaScoreboard", new Vector3(-64f, 12f, -2.5f), Quaternion.Euler(0f, -90f, 0f), arenaMaterials);
+            CreateArenaKitVisual(architecture, "SouthScoreboard", "ArenaScoreboard", new Vector3(64f, 12f, 2.5f), Quaternion.Euler(0f, 90f, 0f), arenaMaterials);
+        }
+
+        private static GameObject CreateArenaKitVisual(Transform parent, string name, string meshName, Vector3 localPosition, Quaternion localRotation, Material[] arenaMaterials)
+        {
+            var mesh = FindArenaKitMesh(meshName);
+            var visual = new GameObject(name);
+            visual.transform.SetParent(parent, false);
+            visual.transform.localPosition = localPosition;
+            visual.transform.localRotation = localRotation;
+            visual.transform.localScale = Vector3.one;
+            var filter = visual.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+            var renderer = visual.AddComponent<MeshRenderer>();
+            renderer.sharedMaterials = ResolveArenaKitMaterials(meshName, arenaMaterials);
+            visual.isStatic = true;
+            return visual;
+        }
+
+        private static Mesh FindArenaKitMesh(string meshName)
+        {
+            var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
+            for (var i = 0; i < assets.Length; i++)
+            {
+                var mesh = assets[i] as Mesh;
+                if (mesh != null && string.Equals(mesh.name, meshName + "Mesh", StringComparison.Ordinal)) return mesh;
+                if (mesh != null && string.Equals(mesh.name, meshName, StringComparison.Ordinal)) return mesh;
+            }
+            var names = new List<string>();
+            for (var i = 0; i < assets.Length; i++) if (assets[i] != null) names.Add(assets[i].name + "[" + assets[i].GetType().Name + "]");
+            throw new InvalidOperationException("Missing ArenaKit mesh subasset: " + meshName + "; imported assets=" + string.Join(",", names.ToArray()));
+        }
+
+        private static Material[] ResolveArenaKitMaterials(string meshName, Material[] allMaterials)
+        {
+            if (allMaterials == null || allMaterials.Length != 4) throw new InvalidOperationException("ArenaKit material palette is incomplete.");
+            if (meshName == "ArenaWallPylon" || meshName == "ArenaScoreboard") return new[] { allMaterials[0], allMaterials[1], allMaterials[3] };
+            if (meshName == "ArenaPerimeterTruss") return new[] { allMaterials[0], allMaterials[1] };
+            return new[] { allMaterials[0], allMaterials[1], allMaterials[2], allMaterials[3] };
         }
 
         private static GameObject CreateSolid(string name, Transform parent, Vector3 position, Vector3 size, Material material, PhysicsMaterial ballSurface, Quaternion rotation = default)
@@ -897,60 +1153,247 @@ namespace RocketFooxball.Editor
 
         private static void ConfigureSceneLight()
         {
+            RenderSettings.skybox = null;
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.72f, 0.88f, 1.00f, 1f);
+            RenderSettings.ambientEquatorColor = new Color(0.52f, 0.68f, 0.82f, 1f);
+            RenderSettings.ambientGroundColor = new Color(0.28f, 0.38f, 0.48f, 1f);
+            RenderSettings.ambientIntensity = 1f;
+            RenderSettings.fog = true;
+            RenderSettings.fogColor = new Color(0.72f, 0.88f, 0.96f, 1f);
+            RenderSettings.fogMode = FogMode.Linear;
+            RenderSettings.fogStartDistance = 75f;
+            RenderSettings.fogEndDistance = 170f;
             var light = UnityEngine.Object.FindFirstObjectByType<Light>();
             if (light == null)
             {
                 return;
             }
             light.type = LightType.Directional;
-            light.intensity = 1.1f;
+            light.color = new Color(1.00f, 0.96f, 0.90f, 1f);
+            light.intensity = 1.2f;
             light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
+            light.shadows = LightShadows.None;
         }
 
-        private static bool TryOpenExistingGeneratedScene(string builderSignature)
+        private static bool TryReuseGeneratedState(string builderSignature)
         {
-            if (!File.Exists(ScenePath))
-            {
-                return false;
-            }
-
-            var active = SceneManager.GetActiveScene();
-            if (active.path != ScenePath)
-            {
-                active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-            }
-            if (!active.IsValid() || GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
-            {
-                return false;
-            }
-
-            // Validation is the stale-content gate. It checks every generated
-            // object, reference, prefab, material, physics setting, and build
-            // scene before allowing byte-stable reuse.
             try
             {
-                ValidateMovementLab();
+                ValidateManifestAndFingerprint(builderSignature);
+                var active = SceneManager.GetActiveScene();
+                if (active.path != ScenePath)
+                {
+                    active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                }
+                if (!active.IsValid())
+                {
+                    return RejectGeneratedReuse("generated scene is invalid");
+                }
+                if (GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
+                {
+                    return RejectGeneratedReuse("scene marker is missing or stale");
+                }
+
+                // Full validation is intentionally read-only. A successful
+                // result permits the caller to return before every write path.
+                ValidateMovementLabInternal(true, builderSignature, false);
+                Debug.Log("Rocket Fooxball Movement Lab reused generated state: " + ScenePath);
                 return true;
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                return false;
+                return RejectGeneratedReuse(exception.Message);
             }
         }
 
-        private static string ComputeBuilderSignature()
+        private static bool RejectGeneratedReuse(string reason)
+        {
+            var detail = string.IsNullOrEmpty(reason) ? "unknown stale state" : reason;
+            Debug.Log("Rocket Fooxball Movement Lab generated state stale; rebuilding: " + detail);
+            return false;
+        }
+
+        private static void ValidateManifestAndFingerprint(string builderSignature)
+        {
+            var projectRoot = ResolveProjectRoot();
+            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
+            if (!File.Exists(manifestAbsolutePath))
+            {
+                throw new InvalidOperationException("build manifest is missing: " + ManifestPath);
+            }
+
+            MovementLabBuildManifest manifest;
+            try
+            {
+                manifest = JsonUtility.FromJson<MovementLabBuildManifest>(File.ReadAllText(manifestAbsolutePath));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException("build manifest could not be parsed: " + exception.Message);
+            }
+
+            if (manifest == null)
+            {
+                throw new InvalidOperationException("build manifest is empty");
+            }
+            if (manifest.schemaVersion != ManifestSchemaVersion)
+            {
+                throw new InvalidOperationException("build manifest schema is stale");
+            }
+            if (!string.Equals(manifest.sourceSignature, builderSignature, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("build manifest source signature is stale");
+            }
+            if (!string.Equals(manifest.unityVersion, Application.unityVersion, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("build manifest Unity version is stale");
+            }
+            if (manifest.fingerprintPaths == null || manifest.fingerprintPaths.Length != GeneratedFingerprintPaths.Length)
+            {
+                throw new InvalidOperationException("build manifest fingerprint path list is stale");
+            }
+            for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
+            {
+                var expectedPath = GeneratedFingerprintPaths[i];
+                var manifestPath = manifest.fingerprintPaths[i];
+                if (!string.Equals(manifestPath, expectedPath, StringComparison.Ordinal) ||
+                    !string.Equals(NormalizeRepositoryRelativePath(manifestPath), manifestPath, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("build manifest fingerprint path list is stale");
+                }
+            }
+
+            var actualFingerprint = ComputeGeneratedOutputFingerprint();
+            if (!string.Equals(manifest.generatedOutputFingerprint, actualFingerprint, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("generated output fingerprint is stale");
+            }
+        }
+
+        private static string ComputeGeneratedOutputFingerprint()
+        {
+            var projectRoot = ResolveProjectRoot();
+            using (var sha = SHA256.Create())
+            {
+                for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
+                {
+                    var relativePath = NormalizeRepositoryRelativePath(GeneratedFingerprintPaths[i]);
+                    var absolutePath = GetAbsoluteProjectPath(projectRoot, relativePath);
+                    if (!File.Exists(absolutePath))
+                    {
+                        throw new InvalidOperationException("Missing generated fingerprint file: " + relativePath);
+                    }
+
+                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
+                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
+                    var bytes = File.ReadAllBytes(absolutePath);
+                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+                    var separator = new byte[] { 0 };
+                    sha.TransformBlock(separator, 0, separator.Length, separator, 0);
+                }
+                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+                return BitConverter.ToString(sha.Hash).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static void WriteBuildManifest(string builderSignature, string generatedOutputFingerprint)
+        {
+            var projectRoot = ResolveProjectRoot();
+            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
+            var manifestDirectory = Path.GetDirectoryName(manifestAbsolutePath);
+            if (string.IsNullOrEmpty(manifestDirectory))
+            {
+                throw new InvalidOperationException("Unable to resolve build manifest directory.");
+            }
+            Directory.CreateDirectory(manifestDirectory);
+
+            var manifest = new MovementLabBuildManifest
+            {
+                schemaVersion = ManifestSchemaVersion,
+                sourceSignature = builderSignature,
+                generatedOutputFingerprint = generatedOutputFingerprint,
+                unityVersion = Application.unityVersion,
+                fingerprintPaths = (string[])GeneratedFingerprintPaths.Clone()
+            };
+            var json = JsonUtility.ToJson(manifest, true);
+            var bytes = new System.Text.UTF8Encoding(false).GetBytes(json + "\n");
+            var temporaryPath = manifestAbsolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
+                {
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+
+                if (File.Exists(manifestAbsolutePath))
+                {
+                    File.Replace(temporaryPath, manifestAbsolutePath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, manifestAbsolutePath);
+                }
+            }
+            finally
+            {
+                if (File.Exists(temporaryPath))
+                {
+                    File.Delete(temporaryPath);
+                }
+            }
+        }
+
+        private static DirectoryInfo ResolveProjectRoot()
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
             if (projectRoot == null)
             {
                 throw new InvalidOperationException("Unable to resolve Unity project root.");
             }
+            return projectRoot;
+        }
+
+        private static string GetAbsoluteProjectPath(DirectoryInfo projectRoot, string repositoryRelativePath)
+        {
+            var normalizedPath = NormalizeRepositoryRelativePath(repositoryRelativePath);
+            return Path.Combine(projectRoot.FullName, normalizedPath.Replace('/', Path.DirectorySeparatorChar));
+        }
+
+        private static string NormalizeRepositoryRelativePath(string repositoryRelativePath)
+        {
+            if (string.IsNullOrEmpty(repositoryRelativePath) || Path.IsPathRooted(repositoryRelativePath) || repositoryRelativePath.IndexOf(':') >= 0)
+            {
+                throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+            }
+
+            var normalizedPath = repositoryRelativePath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/');
+            for (var i = 0; i < segments.Length; i++)
+            {
+                if (segments[i].Length == 0 || segments[i] == "." || segments[i] == "..")
+                {
+                    throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+                }
+            }
+            if (!normalizedPath.StartsWith("Assets/", StringComparison.Ordinal) && !normalizedPath.StartsWith("ProjectSettings/", StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Unsafe generated fingerprint path: " + repositoryRelativePath);
+            }
+            return normalizedPath;
+        }
+
+        private static string ComputeBuilderSignature()
+        {
+            var projectRoot = ResolveProjectRoot();
 
             var sourcePaths = new[]
             {
                 BuilderSourcePath,
                 ToonShaderPath,
                 ParticleShaderPath,
+                ShieldShaderPath,
                 "Assets/_Game/Scripts/Runtime/ExplosionVfx.cs",
                 "Assets/_Game/Scripts/Runtime/RocketTrailVfx.cs",
                 "Assets/_Game/Scripts/Runtime/PlayerMotor.cs",
@@ -959,10 +1402,13 @@ namespace RocketFooxball.Editor
                 "Assets/_Game/Scripts/Runtime/BallMotor.cs",
                 "Assets/_Game/Scripts/Runtime/ExplosionResolver.cs",
                 "Assets/_Game/Scripts/Runtime/RocketProjectile.cs",
+                RocketLauncherSourcePath,
                 "Tools/Blender/generate_retro_textures.py",
+                "Tools/Blender/generate_arena_kit.py",
                 "Tools/Blender/generate_low_poly_character.py",
                 "Tools/Blender/generate_fps_kick_rig.py",
-                "Tools/Blender/generate_fps_rocket_launcher.py"
+                "Tools/Blender/generate_fps_rocket_launcher.py",
+                RocketGeneratorSourcePath
             };
             Array.Sort(sourcePaths, StringComparer.Ordinal);
             using (var sha = SHA256.Create())
@@ -972,6 +1418,23 @@ namespace RocketFooxball.Editor
                     var relativePath = sourcePaths[i].Replace('\\', '/');
                     var absolutePath = Path.Combine(projectRoot.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
                     if (!File.Exists(absolutePath)) throw new InvalidOperationException("Missing signature source: " + relativePath);
+                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
+                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
+                    var bytes = File.ReadAllBytes(absolutePath);
+                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
+                }
+                var generatedSourcePaths = new[]
+                {
+                    ArenaKitModelPath, RocketModelPath, GrassTexturePath, WallTexturePath,
+                    TrimTexturePath, HazardTexturePath, ShieldTexturePath, BallTexturePath,
+                    ExplosionTexturePath, SmokeTexturePath
+                };
+                Array.Sort(generatedSourcePaths, StringComparer.Ordinal);
+                for (var i = 0; i < generatedSourcePaths.Length; i++)
+                {
+                    var relativePath = generatedSourcePaths[i].Replace('\\', '/');
+                    var absolutePath = Path.Combine(projectRoot.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(absolutePath)) throw new InvalidOperationException("Missing generated signature source: " + relativePath);
                     var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
                     sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
                     var bytes = File.ReadAllBytes(absolutePath);
@@ -994,13 +1457,17 @@ namespace RocketFooxball.Editor
 
         private static Material GetOrCreateRetroMaterial(string name, Color color, Texture2D texture, Vector2 textureScale)
         {
-            var path = MaterialsPath + "/" + name + ".mat";
+            return GetOrCreateRetroMaterial(new MaterialSpecification(name, "RocketFooxball/RetroToonLit", texture, textureScale,
+                color, new Color(0.32f, 0.44f, 0.62f, 1f), new Color(0.72f, 0.86f, 1f, 1f), 0.55f,
+                new Color(0.20f, 0.86f, 0.92f, 1f), 3f, 0.12f, Color.clear, 0f));
+        }
+
+        private static Material GetOrCreateRetroMaterial(MaterialSpecification specification)
+        {
+            var path = MaterialsPath + "/" + specification.Name + ".mat";
             var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-            var shader = Shader.Find("RocketFooxball/RetroToonLit");
-            if (shader == null)
-            {
-                throw new InvalidOperationException("RocketFooxball/RetroToonLit shader is unavailable.");
-            }
+            var shader = Shader.Find(specification.ShaderName);
+            if (shader == null) throw new InvalidOperationException("Missing material shader: " + specification.ShaderName);
             if (material == null)
             {
                 material = new Material(shader);
@@ -1010,11 +1477,40 @@ namespace RocketFooxball.Editor
             {
                 material.shader = shader;
             }
-            material.SetColor("_BaseColor", color);
-            material.SetColor("_ShadowColor", new Color(0.08f, 0.12f, 0.24f, 1f));
+            material.SetColor("_BaseColor", specification.BaseColor);
+            material.SetColor("_ShadowColor", specification.ShadowColor);
             material.SetFloat("_LightSteps", 3f);
-            material.SetTexture("_BaseMap", texture != null ? texture : Texture2D.whiteTexture);
-            material.SetTextureScale("_BaseMap", textureScale);
+            material.SetColor("_AmbientColor", specification.AmbientColor);
+            material.SetFloat("_AmbientStrength", specification.AmbientStrength);
+            material.SetColor("_RimColor", specification.RimColor);
+            material.SetFloat("_RimPower", specification.RimPower);
+            material.SetFloat("_RimStrength", specification.RimStrength);
+            material.SetColor("_EmissionColor", specification.EmissionColor);
+            material.SetFloat("_EmissionStrength", specification.EmissionStrength);
+            material.SetTexture("_BaseMap", specification.Texture != null ? specification.Texture : Texture2D.whiteTexture);
+            material.SetTextureScale("_BaseMap", specification.TextureScale);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        private static Material GetOrCreateShieldMaterial(string name, Color baseColor, Color emissionColor)
+        {
+            var path = MaterialsPath + "/" + name + ".mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            var shader = Shader.Find("RocketFooxball/RetroShield");
+            if (shader == null) throw new InvalidOperationException("RocketFooxball/RetroShield shader is unavailable.");
+            if (material == null)
+            {
+                material = new Material(shader);
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.shader = shader;
+            material.SetTexture("_BaseMap", AssetDatabase.LoadAssetAtPath<Texture2D>(ShieldTexturePath));
+            material.SetColor("_BaseColor", baseColor);
+            material.SetColor("_EmissionColor", emissionColor);
+            material.SetFloat("_PulseSpeed", 1.2f);
+            material.SetFloat("_ScanScale", 3f);
+            material.SetFloat("_Alpha", 0.52f);
             EditorUtility.SetDirty(material);
             return material;
         }
@@ -1047,7 +1543,11 @@ namespace RocketFooxball.Editor
         private static void ConfigureTextureImporters()
         {
             ConfigureTextureImporter(GrassTexturePath, true);
+            ConfigureTextureImporter(WallTexturePath, true);
+            ConfigureTextureImporter(TrimTexturePath, true);
+            ConfigureTextureImporter(HazardTexturePath, true);
             ConfigureTextureImporter(BallTexturePath, true);
+            ConfigureTextureImporter(ShieldTexturePath, false);
             ConfigureTextureImporter(ExplosionTexturePath, false);
             ConfigureTextureImporter(SmokeTexturePath, false);
         }
@@ -1065,6 +1565,21 @@ namespace RocketFooxball.Editor
             if (!importer.mipmapEnabled) { importer.mipmapEnabled = true; changed = true; }
             if (importer.filterMode != FilterMode.Bilinear) { importer.filterMode = FilterMode.Bilinear; changed = true; }
             if (importer.anisoLevel != 0) { importer.anisoLevel = 0; changed = true; }
+            var authoredWidth = importer.maxTextureSize;
+            if (path == GrassTexturePath || path == WallTexturePath || path == TrimTexturePath || path == HazardTexturePath || path == ShieldTexturePath || path == ExplosionTexturePath || path == SmokeTexturePath) authoredWidth = 128;
+            if (path == BallTexturePath) authoredWidth = 256;
+            if (importer.maxTextureSize != authoredWidth) { importer.maxTextureSize = authoredWidth; changed = true; }
+            var settings = new TextureImporterSettings();
+            importer.ReadTextureSettings(settings);
+            if (!settings.ignoreMipmapLimit) { settings.ignoreMipmapLimit = true; importer.SetTextureSettings(settings); changed = true; }
+            var platform = importer.GetDefaultPlatformTextureSettings();
+            if (platform.maxTextureSize != authoredWidth || platform.overridden)
+            {
+                platform.maxTextureSize = authoredWidth;
+                platform.overridden = false;
+                importer.SetPlatformTextureSettings(platform);
+                changed = true;
+            }
             var wrap = repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
             if (importer.wrapMode != wrap) { importer.wrapMode = wrap; changed = true; }
             if (changed)
@@ -1078,6 +1593,8 @@ namespace RocketFooxball.Editor
             ConfigureRigModelImporter(CharacterModelPath, true);
             ConfigureRigModelImporter(FpsKickModelPath, false);
             ConfigureStaticModelImporter(WeaponModelPath);
+            ConfigureStaticModelImporter(RocketModelPath);
+            ConfigureStaticModelImporter(ArenaKitModelPath);
         }
 
         private static void ConfigureRigModelImporter(string path, bool character)
@@ -1112,20 +1629,33 @@ namespace RocketFooxball.Editor
                 syntheticClips = true;
             }
 
+            var expectedNames = character ? new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" } : new[] { "Idle", "Kick" };
+            var expectedLoops = character ? new[] { true, true, false, false, false, false } : new[] { true, false };
+            var expectedStarts = character ? new[] { 1f, 1f, 1f, 1f, 1f, 1f } : new[] { 1f, 1f };
+            var expectedEnds = character ? new[] { 30f, 20f, 12f, 15f, 10f, 12f } : new[] { 31f, 11f };
             var clips = new List<ModelImporterClipAnimation>();
-            for (var i = 0; i < sourceClips.Length; i++)
+            for (var expectedIndex = 0; expectedIndex < expectedNames.Length; expectedIndex++)
             {
-                var source = sourceClips[i];
-                var sourceName = source.name ?? string.Empty;
-                var clipName = sourceName.IndexOf("Kick", StringComparison.OrdinalIgnoreCase) >= 0 ? "Kick" : sourceName.IndexOf("Idle", StringComparison.OrdinalIgnoreCase) >= 0 ? "Idle" : string.Empty;
-                if (!syntheticClips && clipName.Length == 0)
+                ModelImporterClipAnimation source = null;
+                for (var sourceIndex = 0; sourceIndex < sourceClips.Length; sourceIndex++)
                 {
-                    continue;
+                    var sourceName = sourceClips[sourceIndex].name ?? string.Empty;
+                    if (string.Equals(sourceName, expectedNames[expectedIndex], StringComparison.OrdinalIgnoreCase) ||
+                        (sourceName.EndsWith(expectedNames[expectedIndex], StringComparison.OrdinalIgnoreCase) && sourceName.Length > expectedNames[expectedIndex].Length && !char.IsLetterOrDigit(sourceName[sourceName.Length - expectedNames[expectedIndex].Length - 1])))
+                    {
+                        source = sourceClips[sourceIndex];
+                        break;
+                    }
                 }
-                if (syntheticClips) clipName = i == 0 ? "Idle" : "Kick";
-                source.name = clipName;
-                source.takeName = clipName;
-                source.loopTime = clipName == "Idle";
+                if (source == null)
+                {
+                    source = new ModelImporterClipAnimation();
+                }
+                source.name = expectedNames[expectedIndex];
+                source.takeName = expectedNames[expectedIndex];
+                source.firstFrame = expectedStarts[expectedIndex];
+                source.lastFrame = expectedEnds[expectedIndex];
+                source.loopTime = expectedLoops[expectedIndex];
                 source.lockRootRotation = true;
                 source.keepOriginalOrientation = true;
                 source.lockRootHeightY = true;
@@ -1134,19 +1664,8 @@ namespace RocketFooxball.Editor
                 source.keepOriginalPositionXZ = true;
                 source.heightFromFeet = false;
                 source.hasAdditiveReferencePose = false;
-                var duplicate = false;
-                for (var j = 0; j < clips.Count; j++) duplicate |= clips[j].name == source.name;
-                if (!duplicate) clips.Add(source);
+                clips.Add(source);
             }
-            if (clips.Count != 2)
-            {
-                clips.Clear();
-                var idle = new ModelImporterClipAnimation { name = "Idle", takeName = "Idle", firstFrame = 1f, lastFrame = character ? 30f : 31f, loopTime = true };
-                var kick = new ModelImporterClipAnimation { name = "Kick", takeName = "Kick", firstFrame = 1f, lastFrame = character ? 12f : 11f, loopTime = false };
-                clips.Add(idle);
-                clips.Add(kick);
-            }
-            clips.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
             var configured = clips.ToArray();
             if (!ClipsEqual(importer.clipAnimations, configured))
             {
@@ -1164,7 +1683,7 @@ namespace RocketFooxball.Editor
             if (a == null || b == null || a.Length != b.Length) return false;
             for (var i = 0; i < a.Length; i++)
             {
-                if (a[i].name != b[i].name || a[i].loopTime != b[i].loopTime || a[i].lockRootRotation != b[i].lockRootRotation || a[i].lockRootHeightY != b[i].lockRootHeightY || a[i].lockRootPositionXZ != b[i].lockRootPositionXZ)
+                if (a[i].name != b[i].name || Mathf.Abs(a[i].firstFrame - b[i].firstFrame) > 0.001f || Mathf.Abs(a[i].lastFrame - b[i].lastFrame) > 0.001f || a[i].loopTime != b[i].loopTime || a[i].lockRootRotation != b[i].lockRootRotation || a[i].lockRootHeightY != b[i].lockRootHeightY || a[i].lockRootPositionXZ != b[i].lockRootPositionXZ)
                 {
                     return false;
                 }
@@ -1348,6 +1867,394 @@ namespace RocketFooxball.Editor
             EditorUtility.SetDirty(kickToIdle);
             EditorUtility.SetDirty(controller);
             return controller;
+        }
+
+        private static RuntimeAnimatorController EnsureWorldAnimatorController(string path, string modelPath)
+        {
+            var clipNames = new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" };
+            var clips = new AnimationClip[clipNames.Length];
+            for (var i = 0; i < clipNames.Length; i++)
+            {
+                clips[i] = FindImportedClip(modelPath, clipNames[i]);
+                if (clips[i] == null) throw new InvalidOperationException("Missing imported world clip " + clipNames[i] + " for " + modelPath);
+            }
+
+            var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+            if (controller == null)
+            {
+                controller = AnimatorController.CreateAnimatorControllerAtPath(path);
+                RebuildWorldAnimatorController(controller, clips);
+            }
+            else if (!IsWorldAnimatorControllerExact(controller, clips, out _))
+            {
+                // Repair in place. Deleting/recreating the main asset changes
+                // its GUID and leaves stale controller subassets behind.
+                RebuildWorldAnimatorController(controller, clips);
+            }
+            return controller;
+        }
+
+        private static void RebuildWorldAnimatorController(AnimatorController controller, AnimationClip[] clips)
+        {
+            if (controller == null || clips == null || clips.Length != 6) throw new InvalidOperationException("World animator rebuild inputs are invalid.");
+
+            while (controller.layers.Length > 1) controller.RemoveLayer(controller.layers.Length - 1);
+            if (controller.layers.Length == 0) controller.AddLayer("Base Layer");
+
+            var layer = controller.layers[0];
+            layer.name = "Base Layer";
+            var stateMachine = layer.stateMachine;
+            if (stateMachine == null)
+            {
+                controller.RemoveLayer(0);
+                controller.AddLayer("Base Layer");
+                layer = controller.layers[0];
+                stateMachine = layer.stateMachine;
+            }
+            if (stateMachine == null) throw new InvalidOperationException("World animator base state machine is unavailable.");
+
+            var anyTransitions = stateMachine.anyStateTransitions;
+            for (var i = 0; i < anyTransitions.Length; i++) stateMachine.RemoveAnyStateTransition(anyTransitions[i]);
+            var existingStates = stateMachine.states;
+            for (var i = 0; i < existingStates.Length; i++)
+            {
+                var transitions = existingStates[i].state != null ? existingStates[i].state.transitions : Array.Empty<AnimatorStateTransition>();
+                for (var j = 0; j < transitions.Length; j++) existingStates[i].state.RemoveTransition(transitions[j]);
+                if (existingStates[i].state != null) stateMachine.RemoveState(existingStates[i].state);
+            }
+            var childStateMachines = stateMachine.stateMachines;
+            for (var i = 0; i < childStateMachines.Length; i++) stateMachine.RemoveStateMachine(childStateMachines[i].stateMachine);
+
+            while (controller.parameters.Length > 0) controller.RemoveParameter(0);
+            controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            controller.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("VerticalSpeed", AnimatorControllerParameterType.Float);
+            controller.AddParameter("Kick", AnimatorControllerParameterType.Trigger);
+
+            var idle = stateMachine.AddState("Idle");
+            var run = stateMachine.AddState("Run");
+            var jump = stateMachine.AddState("Jump");
+            var fall = stateMachine.AddState("Fall");
+            var land = stateMachine.AddState("Land");
+            var kick = stateMachine.AddState("Kick");
+            stateMachine.defaultState = idle;
+            idle.motion = clips[0];
+            run.motion = clips[1];
+            jump.motion = clips[2];
+            fall.motion = clips[3];
+            land.motion = clips[4];
+            kick.motion = clips[5];
+
+            AddAnimatorConditionTransition(idle, run, AnimatorConditionMode.Greater, 0.30f, "Speed");
+            AddAnimatorConditionTransition(run, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
+            AddAirTransitions(idle, jump, fall);
+            AddAirTransitions(run, jump, fall);
+            AddAirTransitions(land, jump, fall);
+            AddAnimatorConditionTransition(jump, fall, AnimatorConditionMode.Less, 0f, "VerticalSpeed");
+            AddAnimatorConditionTransition(jump, land, AnimatorConditionMode.If, 0f, "Grounded");
+            var fallToJump = AddAnimatorConditionTransition(fall, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
+            fallToJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
+            var fallToLand = AddAnimatorConditionTransition(fall, land, AnimatorConditionMode.If, 0f, "Grounded");
+            var landToIdle = AddAnimatorConditionTransition(land, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
+            landToIdle.hasExitTime = true;
+            landToIdle.exitTime = 0.65f;
+            var landToRun = AddAnimatorConditionTransition(land, run, AnimatorConditionMode.Greater, 0.20f, "Speed");
+            landToRun.hasExitTime = true;
+            landToRun.exitTime = 0.65f;
+            var anyKick = stateMachine.AddAnyStateTransition(kick);
+            anyKick.hasExitTime = false;
+            anyKick.exitTime = 0f;
+            anyKick.duration = 0.02f;
+            anyKick.offset = 0f;
+            anyKick.canTransitionToSelf = false;
+            anyKick.AddCondition(AnimatorConditionMode.If, 0f, "Kick");
+            var kickToIdle = AddAnimatorConditionTransition(kick, idle, AnimatorConditionMode.If, 0f, "Grounded");
+            kickToIdle.hasExitTime = true;
+            kickToIdle.exitTime = 1f;
+            kickToIdle.AddCondition(AnimatorConditionMode.Less, 0.20f, "Speed");
+            var kickToRun = AddAnimatorConditionTransition(kick, run, AnimatorConditionMode.If, 0f, "Grounded");
+            kickToRun.hasExitTime = true;
+            kickToRun.exitTime = 1f;
+            kickToRun.AddCondition(AnimatorConditionMode.Greater, 0.20f, "Speed");
+            var kickToJump = AddAnimatorConditionTransition(kick, jump, AnimatorConditionMode.IfNot, 0f, "Grounded");
+            kickToJump.hasExitTime = true;
+            kickToJump.exitTime = 1f;
+            kickToJump.AddCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
+            var kickToFall = AddAnimatorConditionTransition(kick, fall, AnimatorConditionMode.IfNot, 0f, "Grounded");
+            kickToFall.hasExitTime = true;
+            kickToFall.exitTime = 1f;
+            kickToFall.AddCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
+
+            controller.layers[0] = layer;
+            CleanupWorldAnimatorSubassets(controller, stateMachine);
+            EditorUtility.SetDirty(stateMachine);
+            EditorUtility.SetDirty(controller);
+        }
+
+        private static void CleanupWorldAnimatorSubassets(AnimatorController controller, AnimatorStateMachine stateMachine)
+        {
+            var keep = new HashSet<UnityEngine.Object> { controller, stateMachine };
+            var states = stateMachine.states;
+            for (var i = 0; i < states.Length; i++)
+            {
+                if (states[i].state == null) continue;
+                keep.Add(states[i].state);
+                var transitions = states[i].state.transitions;
+                for (var j = 0; j < transitions.Length; j++) keep.Add(transitions[j]);
+            }
+            var anyTransitions = stateMachine.anyStateTransitions;
+            for (var i = 0; i < anyTransitions.Length; i++) keep.Add(anyTransitions[i]);
+
+            var subassets = AssetDatabase.LoadAllAssetsAtPath(AssetDatabase.GetAssetPath(controller));
+            for (var i = 0; i < subassets.Length; i++)
+            {
+                var asset = subassets[i];
+                if (asset == null || keep.Contains(asset)) continue;
+                if (asset is AnimatorState || asset is AnimatorStateTransition || asset is AnimatorStateMachine)
+                {
+                    UnityEngine.Object.DestroyImmediate(asset, true);
+                }
+            }
+        }
+
+        private static AnimatorStateTransition AddAirTransitions(AnimatorState source, AnimatorState jump, AnimatorState fall)
+        {
+            var toJump = AddAnimatorConditionTransition(source, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
+            toJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
+            var toFall = AddAnimatorConditionTransition(source, fall, AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
+            toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
+            return toFall;
+        }
+
+        private static AnimatorStateTransition AddAnimatorConditionTransition(AnimatorState source, AnimatorState destination, AnimatorConditionMode mode, float threshold, string parameter)
+        {
+            var transition = source.AddTransition(destination);
+            transition.hasExitTime = false;
+            transition.exitTime = 0f;
+            transition.duration = 0.02f;
+            transition.offset = 0f;
+            transition.canTransitionToSelf = true;
+            transition.conditions = Array.Empty<AnimatorCondition>();
+            transition.AddCondition(mode, threshold, parameter);
+            return transition;
+        }
+
+        private static void ValidateWorldAnimatorController(Animator animator, string path, string modelPath)
+        {
+            var controller = animator.runtimeAnimatorController as AnimatorController;
+            var clipNames = new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" };
+            var clips = new AnimationClip[clipNames.Length];
+            for (var i = 0; i < clipNames.Length; i++) clips[i] = FindImportedClip(modelPath, clipNames[i]);
+            if (!IsWorldAnimatorControllerExact(controller, clips, out var reason))
+            {
+                throw new InvalidOperationException("World animator controller contract invalid: " + path + "; " + reason);
+            }
+        }
+
+        private readonly struct WorldAnimatorConditionSpecification
+        {
+            public readonly AnimatorConditionMode Mode;
+            public readonly float Threshold;
+            public readonly string Parameter;
+
+            public WorldAnimatorConditionSpecification(AnimatorConditionMode mode, float threshold, string parameter)
+            {
+                Mode = mode;
+                Threshold = threshold;
+                Parameter = parameter;
+            }
+        }
+
+        private readonly struct WorldAnimatorTransitionSpecification
+        {
+            public readonly string Source;
+            public readonly string Destination;
+            public readonly bool AnyState;
+            public readonly bool HasExitTime;
+            public readonly float ExitTime;
+            public readonly float Duration;
+            public readonly bool CanTransitionToSelf;
+            public readonly WorldAnimatorConditionSpecification[] Conditions;
+
+            public WorldAnimatorTransitionSpecification(string source, string destination, bool anyState, bool hasExitTime, float exitTime, float duration, bool canTransitionToSelf, params WorldAnimatorConditionSpecification[] conditions)
+            {
+                Source = source;
+                Destination = destination;
+                AnyState = anyState;
+                HasExitTime = hasExitTime;
+                ExitTime = exitTime;
+                Duration = duration;
+                CanTransitionToSelf = canTransitionToSelf;
+                Conditions = conditions ?? Array.Empty<WorldAnimatorConditionSpecification>();
+            }
+        }
+
+        private static WorldAnimatorConditionSpecification WorldCondition(AnimatorConditionMode mode, float threshold, string parameter)
+        {
+            return new WorldAnimatorConditionSpecification(mode, threshold, parameter);
+        }
+
+        private static WorldAnimatorTransitionSpecification[] GetWorldAnimatorTransitionSpecifications()
+        {
+            const float blend = 0.02f;
+            return new[]
+            {
+                new WorldAnimatorTransitionSpecification("Idle", "Run", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.30f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Run", "Idle", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Idle", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Idle", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Run", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Run", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Jump", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("Jump", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Fall", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Fall", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Idle", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Land", "Run", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Idle", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Run", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Jump", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Fall", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("AnyState", "Kick", true, false, 0f, blend, false, WorldCondition(AnimatorConditionMode.If, 0f, "Kick"))
+            };
+        }
+
+        private static bool IsWorldAnimatorControllerExact(AnimatorController controller, AnimationClip[] clips, out string reason)
+        {
+            reason = null;
+            if (controller == null)
+            {
+                reason = "controller missing";
+                return false;
+            }
+            if (clips == null || clips.Length != 6)
+            {
+                reason = "clip set incomplete";
+                return false;
+            }
+            if (controller.parameters.Length != 4)
+            {
+                reason = "parameter count";
+                return false;
+            }
+            var expectedParameters = new[] { "Speed", "Grounded", "VerticalSpeed", "Kick" };
+            var expectedTypes = new[] { AnimatorControllerParameterType.Float, AnimatorControllerParameterType.Bool, AnimatorControllerParameterType.Float, AnimatorControllerParameterType.Trigger };
+            for (var i = 0; i < expectedParameters.Length; i++)
+            {
+                var parameter = controller.parameters[i];
+                if (parameter.name != expectedParameters[i] || parameter.type != expectedTypes[i] || Mathf.Abs(parameter.defaultFloat) > 0.0001f || parameter.defaultInt != 0 || parameter.defaultBool)
+                {
+                    reason = "parameter contract: " + expectedParameters[i];
+                    return false;
+                }
+            }
+            if (controller.layers.Length != 1 || controller.layers[0].stateMachine == null || controller.layers[0].name != "Base Layer")
+            {
+                reason = "base layer contract";
+                return false;
+            }
+
+            var stateMachine = controller.layers[0].stateMachine;
+            var expectedStates = new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" };
+            if (stateMachine.states.Length != expectedStates.Length || stateMachine.stateMachines.Length != 0 || stateMachine.entryTransitions.Length != 0 || stateMachine.anyStateTransitions.Length != 1 || stateMachine.defaultState == null || stateMachine.defaultState.name != "Idle")
+            {
+                reason = "state machine count/default";
+                return false;
+            }
+
+            var namedStates = new Dictionary<string, AnimatorState>(StringComparer.Ordinal);
+            var boundClips = new HashSet<AnimationClip>();
+            for (var i = 0; i < stateMachine.states.Length; i++)
+            {
+                var state = stateMachine.states[i].state;
+                if (state == null || namedStates.ContainsKey(state.name))
+                {
+                    reason = "state identity";
+                    return false;
+                }
+                namedStates.Add(state.name, state);
+            }
+            for (var i = 0; i < expectedStates.Length; i++)
+            {
+                if (!namedStates.TryGetValue(expectedStates[i], out var state) || state.motion != clips[i] || state.motion == null || !boundClips.Add(state.motion as AnimationClip))
+                {
+                    reason = "state motion: " + expectedStates[i];
+                    return false;
+                }
+            }
+
+            var specifications = GetWorldAnimatorTransitionSpecifications();
+            var transitionCount = stateMachine.anyStateTransitions.Length;
+            for (var i = 0; i < stateMachine.states.Length; i++) transitionCount += stateMachine.states[i].state.transitions.Length;
+            if (transitionCount != specifications.Length)
+            {
+                reason = "transition count";
+                return false;
+            }
+
+            for (var i = 0; i < specifications.Length; i++)
+            {
+                var specification = specifications[i];
+                var transitions = specification.AnyState ? stateMachine.anyStateTransitions : namedStates[specification.Source].transitions;
+                AnimatorStateTransition found = null;
+                for (var j = 0; j < transitions.Length; j++)
+                {
+                    var candidate = transitions[j];
+                    if (candidate != null && candidate.destinationState != null && candidate.destinationState.name == specification.Destination && MatchesWorldAnimatorTransition(candidate, specification))
+                    {
+                        if (found != null)
+                        {
+                            reason = "duplicate transition: " + specification.Source + " -> " + specification.Destination;
+                            return false;
+                        }
+                        found = candidate;
+                    }
+                }
+                if (found == null)
+                {
+                    reason = "transition semantics: " + specification.Source + " -> " + specification.Destination;
+                    return false;
+                }
+            }
+
+            var subassets = AssetDatabase.LoadAllAssetsAtPath(AssetDatabase.GetAssetPath(controller));
+            var stateCount = 0;
+            var transitionSubassetCount = 0;
+            for (var i = 0; i < subassets.Length; i++)
+            {
+                if (subassets[i] is AnimatorState) stateCount++;
+                if (subassets[i] is AnimatorStateTransition) transitionSubassetCount++;
+            }
+            if (stateCount != 6 || transitionSubassetCount != 19)
+            {
+                reason = "subasset count";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool MatchesWorldAnimatorTransition(AnimatorStateTransition transition, WorldAnimatorTransitionSpecification specification)
+        {
+            if (transition.destinationStateMachine != null || transition.isExit || transition.hasExitTime != specification.HasExitTime || Mathf.Abs(transition.exitTime - specification.ExitTime) > 0.0001f || Mathf.Abs(transition.duration - specification.Duration) > 0.0001f || Mathf.Abs(transition.offset) > 0.0001f || transition.canTransitionToSelf != specification.CanTransitionToSelf || !transition.hasFixedDuration || transition.mute || transition.solo || transition.interruptionSource != TransitionInterruptionSource.None || !transition.orderedInterruption)
+            {
+                return false;
+            }
+            var conditions = transition.conditions;
+            if (conditions == null || conditions.Length != specification.Conditions.Length)
+            {
+                return false;
+            }
+            for (var i = 0; i < conditions.Length; i++)
+            {
+                var expected = specification.Conditions[i];
+                if (conditions[i].mode != expected.Mode || conditions[i].parameter != expected.Parameter || Mathf.Abs(conditions[i].threshold - expected.Threshold) > 0.0001f)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static AnimationClip FindImportedClip(string modelPath, string name)
@@ -1538,11 +2445,87 @@ namespace RocketFooxball.Editor
             }
         }
 
+        private static void ValidateRenderPipelineSettings()
+        {
+            if (QualitySettings.GetQualityLevel() != 0)
+            {
+                throw new InvalidOperationException("MovementLab quality index must be 0.");
+            }
+
+            var qualityAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset");
+            if (qualityAssets == null || qualityAssets.Length == 0)
+            {
+                throw new InvalidOperationException("QualitySettings asset could not be loaded.");
+            }
+
+            var qualityObject = new SerializedObject(qualityAssets[0]);
+            var qualityLevels = qualityObject.FindProperty("m_QualitySettings");
+            if (qualityLevels == null || !qualityLevels.isArray || qualityLevels.arraySize <= 0)
+            {
+                throw new InvalidOperationException("QualitySettings quality-level array is unavailable.");
+            }
+
+            var pcQuality = qualityLevels.GetArrayElementAtIndex(0);
+            var customPipeline = pcQuality.FindPropertyRelative("customRenderPipeline");
+            var pcPipeline = customPipeline != null ? customPipeline.objectReferenceValue as RenderPipelineAsset : null;
+            if (pcPipeline == null || AssetDatabase.GetAssetPath(pcPipeline) != "Assets/Settings/PC_RPAsset.asset")
+            {
+                throw new InvalidOperationException("Quality index 0 must resolve Assets/Settings/PC_RPAsset.asset.");
+            }
+
+            var pipelineObject = new SerializedObject(pcPipeline);
+            var renderScale = pipelineObject.FindProperty("m_RenderScale");
+            var supportsHdr = pipelineObject.FindProperty("m_SupportsHDR");
+            var msaa = pipelineObject.FindProperty("m_MSAA");
+            var mainLightShadows = pipelineObject.FindProperty("m_MainLightShadowsSupported");
+            var additionalLights = pipelineObject.FindProperty("m_AdditionalLightsRenderingMode");
+            var useSrpBatcher = pipelineObject.FindProperty("m_UseSRPBatcher");
+            var defaultRendererIndex = pipelineObject.FindProperty("m_DefaultRendererIndex");
+            if (renderScale == null || supportsHdr == null || msaa == null || mainLightShadows == null || additionalLights == null || useSrpBatcher == null || defaultRendererIndex == null ||
+                Mathf.Abs(renderScale.floatValue - 0.8f) > 0.0001f || supportsHdr.boolValue || msaa.intValue != 1 || mainLightShadows.boolValue || additionalLights.intValue != 0 || !useSrpBatcher.boolValue || defaultRendererIndex.intValue != 0)
+            {
+                throw new InvalidOperationException("PC URP asset quality contract invalid.");
+            }
+
+            var rendererDataList = pipelineObject.FindProperty("m_RendererDataList");
+            if (rendererDataList == null || !rendererDataList.isArray || rendererDataList.arraySize == 0 || rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue == null)
+            {
+                throw new InvalidOperationException("PC URP renderer data is missing.");
+            }
+
+            var rendererData = rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue;
+            if (rendererData == null || AssetDatabase.GetAssetPath(rendererData) != "Assets/Settings/PC_Renderer.asset")
+            {
+                throw new InvalidOperationException("PC URP renderer data type is invalid.");
+            }
+
+            var rendererObject = new SerializedObject(rendererData);
+            var rendererFeatures = rendererObject.FindProperty("m_RendererFeatures");
+            if (rendererFeatures == null || !rendererFeatures.isArray)
+            {
+                throw new InvalidOperationException("PC URP renderer feature list is unavailable.");
+            }
+            for (var i = 0; i < rendererFeatures.arraySize; i++)
+            {
+                var feature = rendererFeatures.GetArrayElementAtIndex(i).objectReferenceValue;
+                if (feature == null || feature.name.IndexOf("ScreenSpaceAmbientOcclusion", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var featureObject = new SerializedObject(feature);
+                var active = featureObject.FindProperty("m_Active");
+                if (active == null || active.boolValue)
+                {
+                    throw new InvalidOperationException("PC URP SSAO renderer feature must remain inactive.");
+                }
+            }
+        }
+
         private static void ValidateArenaMaterials(GameObject arena, PhysicsMaterial ballSurface)
         {
             var floor = Require(arena.transform.Find("Floor"), "Arena Floor");
             var floorRenderer = Require(floor.GetComponent<Renderer>(), "Arena Floor renderer");
             ValidateRetroMaterial(floorRenderer.sharedMaterial, AssetDatabase.LoadAssetAtPath<Texture2D>(GrassTexturePath), new Vector2(32.5f, 22.5f), "Floor");
+            ValidateRetroMaterial(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, AssetDatabase.LoadAssetAtPath<Texture2D>(WallTexturePath), new Vector2(8f, 2f), "Wall");
+            ValidateRetroMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), AssetDatabase.LoadAssetAtPath<Texture2D>(TrimTexturePath), new Vector2(4f, 1f), "Trim");
+            ValidateRetroMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Hazard.mat"), AssetDatabase.LoadAssetAtPath<Texture2D>(HazardTexturePath), new Vector2(4f, 1f), "Hazard");
             var colliders = arena.GetComponentsInChildren<Collider>(true);
             var relevant = 0;
             for (var i = 0; i < colliders.Length; i++)
@@ -1569,6 +2552,88 @@ namespace RocketFooxball.Editor
             Require(arena.transform.Find("Containment"), "Containment root");
         }
 
+        private static void ValidateArenaArchitecture(GameObject arena)
+        {
+            var sceneRendererCount = 0;
+            var sceneRoots = arena.scene.GetRootGameObjects();
+            for (var i = 0; i < sceneRoots.Length; i++) sceneRendererCount += sceneRoots[i].GetComponentsInChildren<MeshRenderer>(true).Length;
+            if (sceneRendererCount > 80)
+            {
+                throw new InvalidOperationException("Complete MovementLab MeshRenderer budget exceeded: " + sceneRendererCount);
+            }
+            Debug.Log("Rocket Fooxball Movement Lab MeshRenderer total: " + sceneRendererCount);
+
+            var architecture = Require(arena.transform.Find("Architecture"), "Arena Architecture");
+            var renderers = architecture.GetComponentsInChildren<MeshRenderer>(true);
+            if (renderers.Length == 0 || renderers.Length > 80) throw new InvalidOperationException("Arena architecture renderer budget invalid: " + renderers.Length);
+            var triangleCount = 0;
+            var palette = new[]
+            {
+                AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"),
+                AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaTrim.mat"),
+                AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat"),
+                AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat")
+            };
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                var filter = Require(renderer.GetComponent<MeshFilter>(), "Architecture MeshFilter");
+                var mesh = Require(filter.sharedMesh, "Architecture mesh");
+                if (AssetDatabase.GetAssetPath(mesh) != ArenaKitModelPath) throw new InvalidOperationException("Architecture mesh provenance mismatch: " + renderer.name);
+                if (renderer.GetComponentsInChildren<Collider>(true).Length != 0 || renderer.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Architecture visual must remain renderer-only: " + renderer.name);
+                var materials = renderer.sharedMaterials;
+                if (materials == null || materials.Length == 0) throw new InvalidOperationException("Architecture material slots missing: " + renderer.name);
+                for (var j = 0; j < materials.Length; j++) if (materials[j] == null) throw new InvalidOperationException("Architecture material slot null: " + renderer.name);
+                var expectedMaterials = ResolveArenaKitMaterials(mesh.name, palette);
+                if (materials.Length != expectedMaterials.Length) throw new InvalidOperationException("Architecture material slot count mismatch: " + renderer.name);
+                for (var j = 0; j < materials.Length; j++) if (materials[j] != expectedMaterials[j]) throw new InvalidOperationException("Architecture material slot order mismatch: " + renderer.name);
+                triangleCount += mesh.triangles.Length / 3;
+            }
+            if (triangleCount > 50000) throw new InvalidOperationException("Arena architecture triangle budget exceeded: " + triangleCount);
+            ValidateArenaKitModel();
+            ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
+            ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
+            ValidateArchitectureTransform(architecture, "WestRampRails", new Vector3(-22f, 2.55f, 2f), Quaternion.Euler(-15f, -90f, 0f));
+            ValidateArchitectureTransform(architecture, "EastRampRails", new Vector3(22f, 2.55f, -2f), Quaternion.Euler(-15f, 90f, 0f));
+            ValidateShieldVisual(arena.transform.Find("NorthGoal"), "NorthGoal");
+            ValidateShieldVisual(arena.transform.Find("SouthGoal"), "SouthGoal");
+        }
+
+        private static void ValidateArchitectureTransform(Transform architecture, string name, Vector3 position, Quaternion rotation)
+        {
+            var item = Require(architecture.Find(name), "Architecture " + name);
+            if (Vector3.Distance(item.localPosition, position) > 0.01f || Quaternion.Angle(item.localRotation, rotation) > 0.1f || Vector3.Distance(item.localScale, Vector3.one) > 0.001f) throw new InvalidOperationException("Architecture transform mismatch: " + name);
+            if (!item.gameObject.isStatic) throw new InvalidOperationException("Architecture visual must be static: " + name);
+        }
+
+        private static void ValidateShieldVisual(Transform goal, string label)
+        {
+            var collider = Require(goal != null ? goal.Find("ShieldCollider") : null, label + " ShieldCollider").GetComponent<BoxCollider>();
+            var visual = Require(goal != null ? goal.Find("ShieldVisual") : null, label + " ShieldVisual");
+            if (collider == null || collider.isTrigger || visual.GetComponent<Collider>() != null || visual.GetComponent<MeshRenderer>() == null) throw new InvalidOperationException(label + " shield collider/render split invalid.");
+            var material = visual.GetComponent<MeshRenderer>().sharedMaterial;
+            if (material == null || material.shader == null || material.shader.name != "RocketFooxball/RetroShield" || Mathf.Abs(material.GetFloat("_Alpha") - 0.52f) > 0.001f) throw new InvalidOperationException(label + " shield material contract invalid.");
+        }
+
+        private static void ValidateArenaKitModel()
+        {
+            var importer = AssetImporter.GetAtPath(ArenaKitModelPath) as ModelImporter;
+            if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("ArenaKit importer contract invalid.");
+            var expected = new[] { "ArenaGoalShell", "ArenaRampRails", "ArenaWallPylon", "ArenaPerimeterTruss", "ArenaScoreboard" };
+            var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
+            for (var i = 0; i < expected.Length; i++)
+            {
+                Mesh found = null;
+                for (var j = 0; j < assets.Length; j++) if (assets[j] is Mesh mesh && mesh.name == expected[i]) found = mesh;
+                if (found == null || AssetDatabase.GetAssetPath(found) != ArenaKitModelPath || found.subMeshCount < 1)
+                {
+                    var importedNames = new List<string>();
+                    for (var k = 0; k < assets.Length; k++) if (assets[k] != null) importedNames.Add(assets[k].name + "[" + assets[k].GetType().Name + "]");
+                    throw new InvalidOperationException("ArenaKit named mesh missing/provenance invalid: " + expected[i] + "; imported assets=" + string.Join(",", importedNames.ToArray()));
+                }
+            }
+        }
+
         private static void ValidateRetroMaterial(Material material, Texture2D texture, Vector2 scale, string label)
         {
             if (material == null || material.shader == null || material.shader.name != "RocketFooxball/RetroToonLit") throw new InvalidOperationException(label + " must use RetroToonLit.");
@@ -1580,7 +2645,11 @@ namespace RocketFooxball.Editor
         private static void ValidateTextureImporterContracts()
         {
             ValidateTextureImporter(GrassTexturePath, true);
+            ValidateTextureImporter(WallTexturePath, true);
+            ValidateTextureImporter(TrimTexturePath, true);
+            ValidateTextureImporter(HazardTexturePath, true);
             ValidateTextureImporter(BallTexturePath, true);
+            ValidateTextureImporter(ShieldTexturePath, false);
             ValidateTextureImporter(ExplosionTexturePath, false);
             ValidateTextureImporter(SmokeTexturePath, false);
         }
@@ -1588,7 +2657,11 @@ namespace RocketFooxball.Editor
         private static void ValidateTextureImporter(string path, bool repeat)
         {
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
-            if (importer == null || !importer.sRGBTexture || !importer.mipmapEnabled || importer.filterMode != FilterMode.Bilinear || importer.anisoLevel != 0 || importer.wrapMode != (repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp))
+            var expectedSize = path == BallTexturePath ? 256 : 128;
+            var settings = new TextureImporterSettings();
+            if (importer != null) importer.ReadTextureSettings(settings);
+            var platform = importer != null ? importer.GetDefaultPlatformTextureSettings() : default(TextureImporterPlatformSettings);
+            if (importer == null || !importer.sRGBTexture || !importer.mipmapEnabled || importer.filterMode != FilterMode.Bilinear || importer.anisoLevel != 0 || importer.wrapMode != (repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp) || importer.maxTextureSize != expectedSize || !settings.ignoreMipmapLimit || platform.overridden || platform.maxTextureSize != expectedSize)
             {
                 throw new InvalidOperationException("Texture importer contract invalid: " + path);
             }
@@ -1603,6 +2676,9 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("Weapon importer contract invalid.");
             }
+            var rocket = AssetImporter.GetAtPath(RocketModelPath) as ModelImporter;
+            if (rocket == null || rocket.animationType != ModelImporterAnimationType.None || rocket.importAnimation || rocket.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(rocket.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("Rocket importer contract invalid.");
+            ValidateArenaKitModel();
         }
 
         private static void ValidateRigImporter(string path)
@@ -1613,14 +2689,10 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Rig importer contract invalid: " + path);
             }
             var clips = importer.clipAnimations;
-            var idle = false;
-            var kick = false;
-            for (var i = 0; clips != null && i < clips.Length; i++)
-            {
-                idle |= clips[i].name == "Idle" && clips[i].loopTime;
-                kick |= clips[i].name == "Kick" && !clips[i].loopTime;
-            }
-            if (!idle || !kick) throw new InvalidOperationException("Rig importer missing Idle/Kick clip contract: " + path);
+            var expected = path == CharacterModelPath ? new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" } : new[] { "Idle", "Kick" };
+            var loops = path == CharacterModelPath ? new[] { true, true, false, false, false, false } : new[] { true, false };
+            if (clips == null || clips.Length != expected.Length) throw new InvalidOperationException("Rig importer clip count mismatch: " + path);
+            for (var i = 0; i < expected.Length; i++) if (clips[i].name != expected[i] || clips[i].loopTime != loops[i]) throw new InvalidOperationException("Rig importer clip contract invalid: " + path + "/" + expected[i]);
         }
 
         private static void ValidatePrefab(string path, string expectedName, bool dynamicBody, PhysicsMaterial ballSurface)
@@ -1656,10 +2728,9 @@ namespace RocketFooxball.Editor
                     ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
                     ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
                     ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
-                    ValidateSerializedFloat(prefabMotor, "jumpVelocity", 4.50f, "Player prefab PlayerMotor.jumpVelocity");
-                    ValidateSerializedFloat(prefabKick, "kickRange", 4.50f, "Player prefab BallKick.kickRange");
+                    ValidateSerializedFloat(prefabMotor, "jumpVelocity", 6.75f, "Player prefab PlayerMotor.jumpVelocity");
+                    ValidateSerializedFloat(prefabKick, "kickRange", 3.00f, "Player prefab BallKick.kickRange");
                     ValidateSerializedFloat(prefabKick, "contactReachPadding", 1.00f, "Player prefab BallKick.contactReachPadding");
-                    ValidateSerializedFloat(prefabKick, "contactReachScale", 1.50f, "Player prefab BallKick.contactReachScale");
                     ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", 4, "Player prefab PlayerMotor.jumpsToHardCap");
                     ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
                     var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
@@ -1882,6 +2953,8 @@ namespace RocketFooxball.Editor
                 emission.GetBursts(bursts);
                 for (var j = 0; j < bursts.Length; j++) emitted += bursts[j].maxCount;
                 if (systems[i].main.maxParticles > 40) throw new InvalidOperationException("Explosion particle max exceeds POC budget.");
+                var sheet = systems[i].textureSheetAnimation;
+                if (!sheet.enabled || sheet.numTilesX != 4 || sheet.numTilesY != 4 || sheet.animation != ParticleSystemAnimationType.WholeSheet) throw new InvalidOperationException("Explosion texture-sheet contract invalid: " + systems[i].name);
             }
             if (emitted != 37) throw new InvalidOperationException("Explosion burst count must total 37.");
             var renderer = prefab.GetComponentsInChildren<Renderer>(true);
@@ -1925,6 +2998,7 @@ namespace RocketFooxball.Editor
                 NormalizeYamlFile(GeneratedYamlAssetPaths[i]);
                 NormalizeYamlFile(GeneratedYamlAssetPaths[i] + ".meta");
             }
+            for (var i = 0; i < GeneratedImporterMetadataPaths.Length; i++) NormalizeYamlFile(GeneratedImporterMetadataPaths[i]);
         }
 
         private static void NormalizeYamlFile(string path)
@@ -2141,6 +3215,7 @@ namespace RocketFooxball.Editor
             EnsureFolder("Assets/_Game/Prefabs");
             EnsureFolder("Assets/_Game/Models");
             EnsureFolder("Assets/_Game/Scenes");
+            EnsureFolder("Assets/_Game/Generated");
         }
 
         private static void EnsureFolder(string path)

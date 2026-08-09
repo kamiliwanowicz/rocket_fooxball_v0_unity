@@ -28,6 +28,9 @@ namespace RocketFooxball
         public bool SimulationEnabled => simulationEnabled;
         public bool CanFire => simulationEnabled && cooldownRemaining <= 0f && projectilePrefab != null;
 
+        /// <summary>Raised once after a projectile is initialized, registered, and cooldown is assigned.</summary>
+        public event System.Action RocketLaunched;
+
         private void Awake()
         {
             CacheReferences();
@@ -63,6 +66,7 @@ namespace RocketFooxball
             projectile.Initialize(transform, this, explosionResolver, direction);
             RegisterProjectile(projectile);
             cooldownRemaining = Mathf.Max(firingInterval, 0.01f);
+            RocketLaunched?.Invoke();
             return true;
         }
 
