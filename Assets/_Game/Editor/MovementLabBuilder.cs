@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using UnityEngine.Rendering;
 
 namespace RocketFooxball.Editor
 {
@@ -621,6 +622,7 @@ namespace RocketFooxball.Editor
             ValidateArenaArchitecture(arena);
             ValidateTextureImporterContracts();
             ValidateModelImporterContracts();
+            ValidateRenderPipelineSettings();
             ValidatePhysicsAndBuildSettings();
             ValidateNoMissingComponents(scene);
 
@@ -732,7 +734,9 @@ namespace RocketFooxball.Editor
             SetObjectReference(input, "actions", actions);
             SetObjectReference(motor, "input", input);
             SetFloat(motor, "bhopSoftCapMultiplier", 2.5f);
-            SetFloat(motor, "jumpVelocity", 4.50f);
+            // Keep gameplay tuning at the approved review baseline. Presentation
+            // changes must not silently retune movement or ball control.
+            SetFloat(motor, "jumpVelocity", 6.75f);
             SetInteger(motor, "jumpsToHardCap", 4);
             SetObjectReference(look, "input", input);
             SetObjectReference(look, "head", head);
@@ -748,9 +752,8 @@ namespace RocketFooxball.Editor
             SetObjectReference(kick, "player", motor);
             SetObjectReference(kick, "look", look);
             SetObjectReference(kick, "aimCamera", camera);
-            SetFloat(kick, "kickRange", 4.50f);
+            SetFloat(kick, "kickRange", 3.00f);
             SetFloat(kick, "contactReachPadding", 1.00f);
-            SetFloat(kick, "contactReachScale", 1.50f);
             SetFloat(kick, "coneTotalDegrees", 35f);
             SetFloat(kick, "cooldown", 0.40f);
             SetFloat(kick, "inputBuffer", 0.50f);
@@ -1055,13 +1058,17 @@ namespace RocketFooxball.Editor
 
             // Wall pylons at a readable eight-metre cadence. They are renderer-only
             // and deliberately stop short of the goal shells/openings.
-            for (var x = -56f; x <= 56f; x += 8f)
+            // Keep pylon placement symmetric while leaving the outer two
+            // goal-adjacent pairs to the goal-shell visuals.
+            for (var x = -40f; x <= 40f; x += 8f)
             {
                 CreateArenaKitVisual(architecture, "NorthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, -45.25f), Quaternion.identity, arenaMaterials);
                 CreateArenaKitVisual(architecture, "SouthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, 45.25f), Quaternion.identity, arenaMaterials);
             }
 
-            for (var x = -54f; x <= 54f; x += 12f)
+            // A symmetric nine-per-wall truss cadence keeps the complete
+            // loaded scene inside the strict MeshRenderer budget.
+            for (var x = -48f; x <= 48f; x += 12f)
             {
                 CreateArenaKitVisual(architecture, "NorthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, -45.0f), Quaternion.identity, arenaMaterials);
                 CreateArenaKitVisual(architecture, "SouthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, 45.0f), Quaternion.identity, arenaMaterials);
@@ -1873,59 +1880,141 @@ namespace RocketFooxball.Editor
             }
 
             var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
-            var stateMachine = controller != null && controller.layers.Length > 0 ? controller.layers[0].stateMachine : null;
-            var states = stateMachine != null ? stateMachine.states : Array.Empty<ChildAnimatorState>();
-            var animatorTransitions = 0;
-            if (stateMachine != null)
+            if (controller == null)
             {
-                animatorTransitions += stateMachine.anyStateTransitions.Length;
-                for (var i = 0; i < states.Length; i++) animatorTransitions += states[i].state.transitions.Length;
-            }
-            if (controller == null || controller.parameters.Length != 4 || states.Length != 6 || animatorTransitions != 19)
-            {
-                if (controller != null && !AssetDatabase.DeleteAsset(path)) throw new InvalidOperationException("Failed to remove stale world controller: " + path);
                 controller = AnimatorController.CreateAnimatorControllerAtPath(path);
-                stateMachine = controller.layers[0].stateMachine;
-                var idle = stateMachine.AddState("Idle");
-                var run = stateMachine.AddState("Run");
-                var jump = stateMachine.AddState("Jump");
-                var fall = stateMachine.AddState("Fall");
-                var land = stateMachine.AddState("Land");
-                var kick = stateMachine.AddState("Kick");
-                stateMachine.defaultState = idle;
-                idle.motion = clips[0]; run.motion = clips[1]; jump.motion = clips[2]; fall.motion = clips[3]; land.motion = clips[4]; kick.motion = clips[5];
-                controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
-                controller.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
-                controller.AddParameter("VerticalSpeed", AnimatorControllerParameterType.Float);
-                controller.AddParameter("Kick", AnimatorControllerParameterType.Trigger);
-
-                AddAnimatorConditionTransition(idle, run, AnimatorConditionMode.Greater, 0.30f, "Speed");
-                AddAnimatorConditionTransition(run, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
-                AddAirTransitions(idle, jump, fall);
-                AddAirTransitions(run, jump, fall);
-                AddAirTransitions(land, jump, fall);
-                AddAnimatorConditionTransition(jump, fall, AnimatorConditionMode.Less, 0f, "VerticalSpeed");
-                AddAnimatorConditionTransition(jump, land, AnimatorConditionMode.If, 0f, "Grounded");
-                var fallToJump = AddAnimatorConditionTransition(fall, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
-                fallToJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
-                AddAnimatorConditionTransition(fall, land, AnimatorConditionMode.If, 0f, "Grounded");
-                var landToIdle = AddAnimatorConditionTransition(land, idle, AnimatorConditionMode.Less, 0.20f, "Speed"); landToIdle.hasExitTime = true; landToIdle.exitTime = 0.65f;
-                var landToRun = AddAnimatorConditionTransition(land, run, AnimatorConditionMode.Greater, 0.20f, "Speed"); landToRun.hasExitTime = true; landToRun.exitTime = 0.65f;
-                var anyKick = stateMachine.AddAnyStateTransition(kick); anyKick.hasExitTime = false; anyKick.duration = 0.02f; anyKick.canTransitionToSelf = false; anyKick.AddCondition(AnimatorConditionMode.If, 0f, "Kick");
-                var kickToIdle = AddAnimatorConditionTransition(kick, idle, AnimatorConditionMode.If, 0f, "Grounded"); kickToIdle.hasExitTime = true; kickToIdle.exitTime = 1f; kickToIdle.AddCondition(AnimatorConditionMode.Less, 0.20f, "Speed");
-                var kickToRun = AddAnimatorConditionTransition(kick, run, AnimatorConditionMode.If, 0f, "Grounded"); kickToRun.hasExitTime = true; kickToRun.exitTime = 1f; kickToRun.AddCondition(AnimatorConditionMode.Greater, 0.20f, "Speed");
-                var kickToJump = AddAnimatorConditionTransition(kick, jump, AnimatorConditionMode.IfNot, 0f, "Grounded"); kickToJump.hasExitTime = true; kickToJump.exitTime = 1f; kickToJump.AddCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
-                var kickToFall = AddAnimatorConditionTransition(kick, fall, AnimatorConditionMode.IfNot, 0f, "Grounded"); kickToFall.hasExitTime = true; kickToFall.exitTime = 1f; kickToFall.AddCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
+                RebuildWorldAnimatorController(controller, clips);
             }
-            stateMachine = controller.layers[0].stateMachine;
-            var namedStates = stateMachine.states;
-            for (var i = 0; i < namedStates.Length; i++)
+            else if (!IsWorldAnimatorControllerExact(controller, clips, out _))
             {
-                for (var j = 0; j < clipNames.Length; j++) if (namedStates[i].state.name == clipNames[j]) namedStates[i].state.motion = clips[j];
+                // Repair in place. Deleting/recreating the main asset changes
+                // its GUID and leaves stale controller subassets behind.
+                RebuildWorldAnimatorController(controller, clips);
             }
-            controller.layers[0].stateMachine = stateMachine;
-            EditorUtility.SetDirty(controller);
             return controller;
+        }
+
+        private static void RebuildWorldAnimatorController(AnimatorController controller, AnimationClip[] clips)
+        {
+            if (controller == null || clips == null || clips.Length != 6) throw new InvalidOperationException("World animator rebuild inputs are invalid.");
+
+            while (controller.layers.Length > 1) controller.RemoveLayer(controller.layers.Length - 1);
+            if (controller.layers.Length == 0) controller.AddLayer("Base Layer");
+
+            var layer = controller.layers[0];
+            layer.name = "Base Layer";
+            var stateMachine = layer.stateMachine;
+            if (stateMachine == null)
+            {
+                controller.RemoveLayer(0);
+                controller.AddLayer("Base Layer");
+                layer = controller.layers[0];
+                stateMachine = layer.stateMachine;
+            }
+            if (stateMachine == null) throw new InvalidOperationException("World animator base state machine is unavailable.");
+
+            var anyTransitions = stateMachine.anyStateTransitions;
+            for (var i = 0; i < anyTransitions.Length; i++) stateMachine.RemoveAnyStateTransition(anyTransitions[i]);
+            var existingStates = stateMachine.states;
+            for (var i = 0; i < existingStates.Length; i++)
+            {
+                var transitions = existingStates[i].state != null ? existingStates[i].state.transitions : Array.Empty<AnimatorStateTransition>();
+                for (var j = 0; j < transitions.Length; j++) existingStates[i].state.RemoveTransition(transitions[j]);
+                if (existingStates[i].state != null) stateMachine.RemoveState(existingStates[i].state);
+            }
+            var childStateMachines = stateMachine.stateMachines;
+            for (var i = 0; i < childStateMachines.Length; i++) stateMachine.RemoveStateMachine(childStateMachines[i].stateMachine);
+
+            while (controller.parameters.Length > 0) controller.RemoveParameter(0);
+            controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            controller.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
+            controller.AddParameter("VerticalSpeed", AnimatorControllerParameterType.Float);
+            controller.AddParameter("Kick", AnimatorControllerParameterType.Trigger);
+
+            var idle = stateMachine.AddState("Idle");
+            var run = stateMachine.AddState("Run");
+            var jump = stateMachine.AddState("Jump");
+            var fall = stateMachine.AddState("Fall");
+            var land = stateMachine.AddState("Land");
+            var kick = stateMachine.AddState("Kick");
+            stateMachine.defaultState = idle;
+            idle.motion = clips[0];
+            run.motion = clips[1];
+            jump.motion = clips[2];
+            fall.motion = clips[3];
+            land.motion = clips[4];
+            kick.motion = clips[5];
+
+            AddAnimatorConditionTransition(idle, run, AnimatorConditionMode.Greater, 0.30f, "Speed");
+            AddAnimatorConditionTransition(run, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
+            AddAirTransitions(idle, jump, fall);
+            AddAirTransitions(run, jump, fall);
+            AddAirTransitions(land, jump, fall);
+            AddAnimatorConditionTransition(jump, fall, AnimatorConditionMode.Less, 0f, "VerticalSpeed");
+            AddAnimatorConditionTransition(jump, land, AnimatorConditionMode.If, 0f, "Grounded");
+            var fallToJump = AddAnimatorConditionTransition(fall, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
+            fallToJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
+            var fallToLand = AddAnimatorConditionTransition(fall, land, AnimatorConditionMode.If, 0f, "Grounded");
+            var landToIdle = AddAnimatorConditionTransition(land, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
+            landToIdle.hasExitTime = true;
+            landToIdle.exitTime = 0.65f;
+            var landToRun = AddAnimatorConditionTransition(land, run, AnimatorConditionMode.Greater, 0.20f, "Speed");
+            landToRun.hasExitTime = true;
+            landToRun.exitTime = 0.65f;
+            var anyKick = stateMachine.AddAnyStateTransition(kick);
+            anyKick.hasExitTime = false;
+            anyKick.exitTime = 0f;
+            anyKick.duration = 0.02f;
+            anyKick.offset = 0f;
+            anyKick.canTransitionToSelf = false;
+            anyKick.AddCondition(AnimatorConditionMode.If, 0f, "Kick");
+            var kickToIdle = AddAnimatorConditionTransition(kick, idle, AnimatorConditionMode.If, 0f, "Grounded");
+            kickToIdle.hasExitTime = true;
+            kickToIdle.exitTime = 1f;
+            kickToIdle.AddCondition(AnimatorConditionMode.Less, 0.20f, "Speed");
+            var kickToRun = AddAnimatorConditionTransition(kick, run, AnimatorConditionMode.If, 0f, "Grounded");
+            kickToRun.hasExitTime = true;
+            kickToRun.exitTime = 1f;
+            kickToRun.AddCondition(AnimatorConditionMode.Greater, 0.20f, "Speed");
+            var kickToJump = AddAnimatorConditionTransition(kick, jump, AnimatorConditionMode.IfNot, 0f, "Grounded");
+            kickToJump.hasExitTime = true;
+            kickToJump.exitTime = 1f;
+            kickToJump.AddCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
+            var kickToFall = AddAnimatorConditionTransition(kick, fall, AnimatorConditionMode.IfNot, 0f, "Grounded");
+            kickToFall.hasExitTime = true;
+            kickToFall.exitTime = 1f;
+            kickToFall.AddCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
+
+            controller.layers[0] = layer;
+            CleanupWorldAnimatorSubassets(controller, stateMachine);
+            EditorUtility.SetDirty(stateMachine);
+            EditorUtility.SetDirty(controller);
+        }
+
+        private static void CleanupWorldAnimatorSubassets(AnimatorController controller, AnimatorStateMachine stateMachine)
+        {
+            var keep = new HashSet<UnityEngine.Object> { controller, stateMachine };
+            var states = stateMachine.states;
+            for (var i = 0; i < states.Length; i++)
+            {
+                if (states[i].state == null) continue;
+                keep.Add(states[i].state);
+                var transitions = states[i].state.transitions;
+                for (var j = 0; j < transitions.Length; j++) keep.Add(transitions[j]);
+            }
+            var anyTransitions = stateMachine.anyStateTransitions;
+            for (var i = 0; i < anyTransitions.Length; i++) keep.Add(anyTransitions[i]);
+
+            var subassets = AssetDatabase.LoadAllAssetsAtPath(AssetDatabase.GetAssetPath(controller));
+            for (var i = 0; i < subassets.Length; i++)
+            {
+                var asset = subassets[i];
+                if (asset == null || keep.Contains(asset)) continue;
+                if (asset is AnimatorState || asset is AnimatorStateTransition || asset is AnimatorStateMachine)
+                {
+                    UnityEngine.Object.DestroyImmediate(asset, true);
+                }
+            }
         }
 
         private static AnimatorStateTransition AddAirTransitions(AnimatorState source, AnimatorState jump, AnimatorState fall)
@@ -1941,7 +2030,10 @@ namespace RocketFooxball.Editor
         {
             var transition = source.AddTransition(destination);
             transition.hasExitTime = false;
+            transition.exitTime = 0f;
             transition.duration = 0.02f;
+            transition.offset = 0f;
+            transition.canTransitionToSelf = true;
             transition.conditions = Array.Empty<AnimatorCondition>();
             transition.AddCondition(mode, threshold, parameter);
             return transition;
@@ -1950,26 +2042,219 @@ namespace RocketFooxball.Editor
         private static void ValidateWorldAnimatorController(Animator animator, string path, string modelPath)
         {
             var controller = animator.runtimeAnimatorController as AnimatorController;
-            if (controller == null || AssetDatabase.GetAssetPath(controller) != path || controller.parameters.Length != 4 || controller.layers.Length != 1) throw new InvalidOperationException("World animator controller contract invalid: " + path);
+            var clipNames = new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" };
+            var clips = new AnimationClip[clipNames.Length];
+            for (var i = 0; i < clipNames.Length; i++) clips[i] = FindImportedClip(modelPath, clipNames[i]);
+            if (!IsWorldAnimatorControllerExact(controller, clips, out var reason))
+            {
+                throw new InvalidOperationException("World animator controller contract invalid: " + path + "; " + reason);
+            }
+        }
+
+        private readonly struct WorldAnimatorConditionSpecification
+        {
+            public readonly AnimatorConditionMode Mode;
+            public readonly float Threshold;
+            public readonly string Parameter;
+
+            public WorldAnimatorConditionSpecification(AnimatorConditionMode mode, float threshold, string parameter)
+            {
+                Mode = mode;
+                Threshold = threshold;
+                Parameter = parameter;
+            }
+        }
+
+        private readonly struct WorldAnimatorTransitionSpecification
+        {
+            public readonly string Source;
+            public readonly string Destination;
+            public readonly bool AnyState;
+            public readonly bool HasExitTime;
+            public readonly float ExitTime;
+            public readonly float Duration;
+            public readonly bool CanTransitionToSelf;
+            public readonly WorldAnimatorConditionSpecification[] Conditions;
+
+            public WorldAnimatorTransitionSpecification(string source, string destination, bool anyState, bool hasExitTime, float exitTime, float duration, bool canTransitionToSelf, params WorldAnimatorConditionSpecification[] conditions)
+            {
+                Source = source;
+                Destination = destination;
+                AnyState = anyState;
+                HasExitTime = hasExitTime;
+                ExitTime = exitTime;
+                Duration = duration;
+                CanTransitionToSelf = canTransitionToSelf;
+                Conditions = conditions ?? Array.Empty<WorldAnimatorConditionSpecification>();
+            }
+        }
+
+        private static WorldAnimatorConditionSpecification WorldCondition(AnimatorConditionMode mode, float threshold, string parameter)
+        {
+            return new WorldAnimatorConditionSpecification(mode, threshold, parameter);
+        }
+
+        private static WorldAnimatorTransitionSpecification[] GetWorldAnimatorTransitionSpecifications()
+        {
+            const float blend = 0.02f;
+            return new[]
+            {
+                new WorldAnimatorTransitionSpecification("Idle", "Run", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.30f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Run", "Idle", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Idle", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Idle", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Run", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Run", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Jump", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("Jump", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Fall", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Fall", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                new WorldAnimatorTransitionSpecification("Land", "Idle", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Land", "Run", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Idle", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Run", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Jump", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("Kick", "Fall", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed")),
+                new WorldAnimatorTransitionSpecification("AnyState", "Kick", true, false, 0f, blend, false, WorldCondition(AnimatorConditionMode.If, 0f, "Kick"))
+            };
+        }
+
+        private static bool IsWorldAnimatorControllerExact(AnimatorController controller, AnimationClip[] clips, out string reason)
+        {
+            reason = null;
+            if (controller == null)
+            {
+                reason = "controller missing";
+                return false;
+            }
+            if (clips == null || clips.Length != 6)
+            {
+                reason = "clip set incomplete";
+                return false;
+            }
+            if (controller.parameters.Length != 4)
+            {
+                reason = "parameter count";
+                return false;
+            }
             var expectedParameters = new[] { "Speed", "Grounded", "VerticalSpeed", "Kick" };
             var expectedTypes = new[] { AnimatorControllerParameterType.Float, AnimatorControllerParameterType.Bool, AnimatorControllerParameterType.Float, AnimatorControllerParameterType.Trigger };
-            for (var i = 0; i < expectedParameters.Length; i++) if (controller.parameters[i].name != expectedParameters[i] || controller.parameters[i].type != expectedTypes[i]) throw new InvalidOperationException("World animator parameter contract invalid: " + expectedParameters[i]);
+            for (var i = 0; i < expectedParameters.Length; i++)
+            {
+                var parameter = controller.parameters[i];
+                if (parameter.name != expectedParameters[i] || parameter.type != expectedTypes[i] || Mathf.Abs(parameter.defaultFloat) > 0.0001f || parameter.defaultInt != 0 || parameter.defaultBool)
+                {
+                    reason = "parameter contract: " + expectedParameters[i];
+                    return false;
+                }
+            }
+            if (controller.layers.Length != 1 || controller.layers[0].stateMachine == null || controller.layers[0].name != "Base Layer")
+            {
+                reason = "base layer contract";
+                return false;
+            }
+
             var stateMachine = controller.layers[0].stateMachine;
             var expectedStates = new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" };
-            if (stateMachine.states.Length != expectedStates.Length || stateMachine.anyStateTransitions.Length != 1) throw new InvalidOperationException("World animator state count invalid.");
+            if (stateMachine.states.Length != expectedStates.Length || stateMachine.stateMachines.Length != 0 || stateMachine.entryTransitions.Length != 0 || stateMachine.anyStateTransitions.Length != 1 || stateMachine.defaultState == null || stateMachine.defaultState.name != "Idle")
+            {
+                reason = "state machine count/default";
+                return false;
+            }
+
+            var namedStates = new Dictionary<string, AnimatorState>(StringComparer.Ordinal);
+            var boundClips = new HashSet<AnimationClip>();
+            for (var i = 0; i < stateMachine.states.Length; i++)
+            {
+                var state = stateMachine.states[i].state;
+                if (state == null || namedStates.ContainsKey(state.name))
+                {
+                    reason = "state identity";
+                    return false;
+                }
+                namedStates.Add(state.name, state);
+            }
             for (var i = 0; i < expectedStates.Length; i++)
             {
-                AnimatorState found = null;
-                for (var j = 0; j < stateMachine.states.Length; j++) if (stateMachine.states[j].state.name == expectedStates[i]) found = stateMachine.states[j].state;
-                if (found == null || found.motion != FindImportedClip(modelPath, expectedStates[i])) throw new InvalidOperationException("World animator motion binding invalid: " + expectedStates[i]);
+                if (!namedStates.TryGetValue(expectedStates[i], out var state) || state.motion != clips[i] || state.motion == null || !boundClips.Add(state.motion as AnimationClip))
+                {
+                    reason = "state motion: " + expectedStates[i];
+                    return false;
+                }
             }
+
+            var specifications = GetWorldAnimatorTransitionSpecifications();
             var transitionCount = stateMachine.anyStateTransitions.Length;
             for (var i = 0; i < stateMachine.states.Length; i++) transitionCount += stateMachine.states[i].state.transitions.Length;
-            if (transitionCount != 19) throw new InvalidOperationException("World animator transition count invalid: " + transitionCount);
-            var subassets = AssetDatabase.LoadAllAssetsAtPath(path);
-            var stateCount = 0; var transitionSubassetCount = 0;
-            for (var i = 0; i < subassets.Length; i++) { if (subassets[i] is AnimatorState) stateCount++; if (subassets[i] is AnimatorStateTransition) transitionSubassetCount++; }
-            if (stateCount != 6 || transitionSubassetCount != 19) throw new InvalidOperationException("World animator subasset growth/identity invalid.");
+            if (transitionCount != specifications.Length)
+            {
+                reason = "transition count";
+                return false;
+            }
+
+            for (var i = 0; i < specifications.Length; i++)
+            {
+                var specification = specifications[i];
+                var transitions = specification.AnyState ? stateMachine.anyStateTransitions : namedStates[specification.Source].transitions;
+                AnimatorStateTransition found = null;
+                for (var j = 0; j < transitions.Length; j++)
+                {
+                    var candidate = transitions[j];
+                    if (candidate != null && candidate.destinationState != null && candidate.destinationState.name == specification.Destination && MatchesWorldAnimatorTransition(candidate, specification))
+                    {
+                        if (found != null)
+                        {
+                            reason = "duplicate transition: " + specification.Source + " -> " + specification.Destination;
+                            return false;
+                        }
+                        found = candidate;
+                    }
+                }
+                if (found == null)
+                {
+                    reason = "transition semantics: " + specification.Source + " -> " + specification.Destination;
+                    return false;
+                }
+            }
+
+            var subassets = AssetDatabase.LoadAllAssetsAtPath(AssetDatabase.GetAssetPath(controller));
+            var stateCount = 0;
+            var transitionSubassetCount = 0;
+            for (var i = 0; i < subassets.Length; i++)
+            {
+                if (subassets[i] is AnimatorState) stateCount++;
+                if (subassets[i] is AnimatorStateTransition) transitionSubassetCount++;
+            }
+            if (stateCount != 6 || transitionSubassetCount != 19)
+            {
+                reason = "subasset count";
+                return false;
+            }
+            return true;
+        }
+
+        private static bool MatchesWorldAnimatorTransition(AnimatorStateTransition transition, WorldAnimatorTransitionSpecification specification)
+        {
+            if (transition.destinationStateMachine != null || transition.isExit || transition.hasExitTime != specification.HasExitTime || Mathf.Abs(transition.exitTime - specification.ExitTime) > 0.0001f || Mathf.Abs(transition.duration - specification.Duration) > 0.0001f || Mathf.Abs(transition.offset) > 0.0001f || transition.canTransitionToSelf != specification.CanTransitionToSelf || !transition.hasFixedDuration || transition.mute || transition.solo || transition.interruptionSource != TransitionInterruptionSource.None || !transition.orderedInterruption)
+            {
+                return false;
+            }
+            var conditions = transition.conditions;
+            if (conditions == null || conditions.Length != specification.Conditions.Length)
+            {
+                return false;
+            }
+            for (var i = 0; i < conditions.Length; i++)
+            {
+                var expected = specification.Conditions[i];
+                if (conditions[i].mode != expected.Mode || conditions[i].parameter != expected.Parameter || Mathf.Abs(conditions[i].threshold - expected.Threshold) > 0.0001f)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private static AnimationClip FindImportedClip(string modelPath, string name)
@@ -2160,6 +2445,79 @@ namespace RocketFooxball.Editor
             }
         }
 
+        private static void ValidateRenderPipelineSettings()
+        {
+            if (QualitySettings.GetQualityLevel() != 0)
+            {
+                throw new InvalidOperationException("MovementLab quality index must be 0.");
+            }
+
+            var qualityAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset");
+            if (qualityAssets == null || qualityAssets.Length == 0)
+            {
+                throw new InvalidOperationException("QualitySettings asset could not be loaded.");
+            }
+
+            var qualityObject = new SerializedObject(qualityAssets[0]);
+            var qualityLevels = qualityObject.FindProperty("m_QualitySettings");
+            if (qualityLevels == null || !qualityLevels.isArray || qualityLevels.arraySize <= 0)
+            {
+                throw new InvalidOperationException("QualitySettings quality-level array is unavailable.");
+            }
+
+            var pcQuality = qualityLevels.GetArrayElementAtIndex(0);
+            var customPipeline = pcQuality.FindPropertyRelative("customRenderPipeline");
+            var pcPipeline = customPipeline != null ? customPipeline.objectReferenceValue as RenderPipelineAsset : null;
+            if (pcPipeline == null || AssetDatabase.GetAssetPath(pcPipeline) != "Assets/Settings/PC_RPAsset.asset")
+            {
+                throw new InvalidOperationException("Quality index 0 must resolve Assets/Settings/PC_RPAsset.asset.");
+            }
+
+            var pipelineObject = new SerializedObject(pcPipeline);
+            var renderScale = pipelineObject.FindProperty("m_RenderScale");
+            var supportsHdr = pipelineObject.FindProperty("m_SupportsHDR");
+            var msaa = pipelineObject.FindProperty("m_MSAA");
+            var mainLightShadows = pipelineObject.FindProperty("m_MainLightShadowsSupported");
+            var additionalLights = pipelineObject.FindProperty("m_AdditionalLightsRenderingMode");
+            var useSrpBatcher = pipelineObject.FindProperty("m_UseSRPBatcher");
+            var defaultRendererIndex = pipelineObject.FindProperty("m_DefaultRendererIndex");
+            if (renderScale == null || supportsHdr == null || msaa == null || mainLightShadows == null || additionalLights == null || useSrpBatcher == null || defaultRendererIndex == null ||
+                Mathf.Abs(renderScale.floatValue - 0.8f) > 0.0001f || supportsHdr.boolValue || msaa.intValue != 1 || mainLightShadows.boolValue || additionalLights.intValue != 0 || !useSrpBatcher.boolValue || defaultRendererIndex.intValue != 0)
+            {
+                throw new InvalidOperationException("PC URP asset quality contract invalid.");
+            }
+
+            var rendererDataList = pipelineObject.FindProperty("m_RendererDataList");
+            if (rendererDataList == null || !rendererDataList.isArray || rendererDataList.arraySize == 0 || rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue == null)
+            {
+                throw new InvalidOperationException("PC URP renderer data is missing.");
+            }
+
+            var rendererData = rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue;
+            if (rendererData == null || AssetDatabase.GetAssetPath(rendererData) != "Assets/Settings/PC_Renderer.asset")
+            {
+                throw new InvalidOperationException("PC URP renderer data type is invalid.");
+            }
+
+            var rendererObject = new SerializedObject(rendererData);
+            var rendererFeatures = rendererObject.FindProperty("m_RendererFeatures");
+            if (rendererFeatures == null || !rendererFeatures.isArray)
+            {
+                throw new InvalidOperationException("PC URP renderer feature list is unavailable.");
+            }
+            for (var i = 0; i < rendererFeatures.arraySize; i++)
+            {
+                var feature = rendererFeatures.GetArrayElementAtIndex(i).objectReferenceValue;
+                if (feature == null || feature.name.IndexOf("ScreenSpaceAmbientOcclusion", StringComparison.OrdinalIgnoreCase) < 0) continue;
+                var featureObject = new SerializedObject(feature);
+                var active = featureObject.FindProperty("m_Active");
+                if (active == null || active.boolValue)
+                {
+                    throw new InvalidOperationException("PC URP SSAO renderer feature must remain inactive.");
+                }
+            }
+        }
+
         private static void ValidateArenaMaterials(GameObject arena, PhysicsMaterial ballSurface)
         {
             var floor = Require(arena.transform.Find("Floor"), "Arena Floor");
@@ -2196,6 +2554,15 @@ namespace RocketFooxball.Editor
 
         private static void ValidateArenaArchitecture(GameObject arena)
         {
+            var sceneRendererCount = 0;
+            var sceneRoots = arena.scene.GetRootGameObjects();
+            for (var i = 0; i < sceneRoots.Length; i++) sceneRendererCount += sceneRoots[i].GetComponentsInChildren<MeshRenderer>(true).Length;
+            if (sceneRendererCount > 80)
+            {
+                throw new InvalidOperationException("Complete MovementLab MeshRenderer budget exceeded: " + sceneRendererCount);
+            }
+            Debug.Log("Rocket Fooxball Movement Lab MeshRenderer total: " + sceneRendererCount);
+
             var architecture = Require(arena.transform.Find("Architecture"), "Arena Architecture");
             var renderers = architecture.GetComponentsInChildren<MeshRenderer>(true);
             if (renderers.Length == 0 || renderers.Length > 80) throw new InvalidOperationException("Arena architecture renderer budget invalid: " + renderers.Length);
@@ -2361,10 +2728,9 @@ namespace RocketFooxball.Editor
                     ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
                     ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
                     ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
-                    ValidateSerializedFloat(prefabMotor, "jumpVelocity", 4.50f, "Player prefab PlayerMotor.jumpVelocity");
-                    ValidateSerializedFloat(prefabKick, "kickRange", 4.50f, "Player prefab BallKick.kickRange");
+                    ValidateSerializedFloat(prefabMotor, "jumpVelocity", 6.75f, "Player prefab PlayerMotor.jumpVelocity");
+                    ValidateSerializedFloat(prefabKick, "kickRange", 3.00f, "Player prefab BallKick.kickRange");
                     ValidateSerializedFloat(prefabKick, "contactReachPadding", 1.00f, "Player prefab BallKick.contactReachPadding");
-                    ValidateSerializedFloat(prefabKick, "contactReachScale", 1.50f, "Player prefab BallKick.contactReachScale");
                     ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", 4, "Player prefab PlayerMotor.jumpsToHardCap");
                     ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
                     var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();

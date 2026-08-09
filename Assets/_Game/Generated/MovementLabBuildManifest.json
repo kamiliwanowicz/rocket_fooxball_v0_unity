@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
-    "sourceSignature": "d9ce6b7af9be214a95275c9e685e44206cb19ff7320fa8bd1be14d39af6cde7b",
-    "generatedOutputFingerprint": "3b2525e5ebeaa1d0375e759fbaa1a07942d2c8e58bdb94df5176e5cc0ff5d35a",
+    "sourceSignature": "9483ede311256365dcbc8424fdc7c742a04572fed53932be4ce8f0fff2dde37c",
+    "generatedOutputFingerprint": "409498d2309112a213c3fd800e9fac76dbbd5bb565874e4bd18e8e16a0d4d8ff",
     "unityVersion": "6000.5.6f1",
     "fingerprintPaths": [
         "Assets/_Game/Animations/FpsKick.controller",

@@ -438,7 +438,7 @@ MonoBehaviour:
   airForwardScale: 0.35
   bhopSoftCapMultiplier: 2.5
   hardCapMultiplier: 3
-  jumpVelocity: 4.5
+  jumpVelocity: 6.75
   jumpsToHardCap: 4
   coyoteTime: 0.08
   jumpBufferTime: 0.1
@@ -520,7 +520,7 @@ MonoBehaviour:
   look: {fileID: 5313289886365503098}
   aimCamera: {fileID: 4927503976345080273}
   ball: {fileID: 0}
-  kickRange: 4.5
+  kickRange: 3
   contactReachPadding: 1
   contactReachScale: 1.5
   coneTotalDegrees: 35
