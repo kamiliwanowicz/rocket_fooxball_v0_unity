@@ -109,8 +109,11 @@ namespace RocketFooxball.Editor
         private const string ReflectionCenterPath = LightingPath + "/ReflectionProbe_Center.exr";
         private const string ReflectionWestPath = LightingPath + "/ReflectionProbe_WestGoal.exr";
         private const string ReflectionEastPath = LightingPath + "/ReflectionProbe_EastGoal.exr";
+        private const string BakedLightingPath = "Assets/_Game/Scenes/MovementLab";
+        private const int ExpectedLightmapCount = 5;
+        private const int ExpectedReflectionProbeBakeCount = 4;
         private const string SkyShaderPath = ShadersPath + "/SunnyArenaSky.shader";
-        private const int ManifestSchemaVersion = 3;
+        private const int ManifestSchemaVersion = 4;
         private const string DetailNormalKeyword = "_DETAIL_MULX2";
         private const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
         private const float BallPrefabScale = 4.32f;
@@ -192,6 +195,30 @@ namespace RocketFooxball.Editor
             WorldControllerPath,
             FpsControllerPath,
             ExplosionPrefabPath
+        };
+
+        private static readonly string[] GeneratedBakedLightingPaths =
+        {
+            BakedLightingPath + "/LightingData.asset",
+            BakedLightingPath + "/Lightmap-0_comp_dir.png",
+            BakedLightingPath + "/Lightmap-0_comp_light.exr",
+            BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-1_comp_dir.png",
+            BakedLightingPath + "/Lightmap-1_comp_light.exr",
+            BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-2_comp_dir.png",
+            BakedLightingPath + "/Lightmap-2_comp_light.exr",
+            BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-3_comp_dir.png",
+            BakedLightingPath + "/Lightmap-3_comp_light.exr",
+            BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-4_comp_dir.png",
+            BakedLightingPath + "/Lightmap-4_comp_light.exr",
+            BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
+            BakedLightingPath + "/ReflectionProbe-0.exr",
+            BakedLightingPath + "/ReflectionProbe-1.exr",
+            BakedLightingPath + "/ReflectionProbe-2.exr",
+            BakedLightingPath + "/ReflectionProbe-3.exr"
         };
 
         // Fingerprint every builder-owned output and the importer/project state
@@ -406,6 +433,11 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath + ".meta");
             AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath);
             AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath + ".meta");
+            for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
+            {
+                AddGeneratedFingerprintPath(paths, seen, GeneratedBakedLightingPaths[i]);
+                AddGeneratedFingerprintPath(paths, seen, GeneratedBakedLightingPaths[i] + ".meta");
+            }
             paths.Sort(StringComparer.Ordinal);
             var result = paths.ToArray();
             ValidateGeneratedFingerprintPathList(result);
@@ -446,6 +478,15 @@ namespace RocketFooxball.Editor
                 if (!seen.Contains(yamlPath) || !seen.Contains(yamlPath + ".meta"))
                 {
                     throw new InvalidOperationException("Generated YAML asset fingerprint coverage is incomplete: " + yamlPath);
+                }
+            }
+
+            for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
+            {
+                var bakedPath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[i]);
+                if (!seen.Contains(bakedPath) || !seen.Contains(bakedPath + ".meta"))
+                {
+                    throw new InvalidOperationException("Generated baked lighting fingerprint coverage is incomplete: " + bakedPath);
                 }
             }
         }
@@ -2204,6 +2245,7 @@ namespace RocketFooxball.Editor
                 ShieldShaderPath,
                 SkyShaderPath,
                 "Assets/_Game/Editor/GraphicsQualityConfigurator.cs",
+                "Assets/_Game/Scripts/Runtime/GraphicsQualityRuntime.cs",
                 "Assets/_Game/Scripts/Runtime/ExplosionVfx.cs",
                 "Assets/_Game/Scripts/Runtime/RocketTrailVfx.cs",
                 "Assets/_Game/Scripts/Runtime/PlayerMotor.cs",
@@ -3524,6 +3566,7 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("MovementLab lightmap bake data is missing.");
             if (LightmapSettings.lightmapsMode != LightmapsMode.CombinedDirectional)
                 throw new InvalidOperationException("MovementLab lightmaps must use directional mode.");
+            ValidatePersistedBakeOutputs(scene);
 
             var renderers = scene.GetRootGameObjects();
             var meshRenderers = 0;
@@ -3558,6 +3601,98 @@ namespace RocketFooxball.Editor
             if (meshRenderers > 140 || sceneTriangles > 150000 || opaqueDraws > 180 || transparentStatic > 8)
                 throw new InvalidOperationException("MovementLab render budget exceeded: renderers=" + meshRenderers + " triangles=" + sceneTriangles + " opaqueDraws=" + opaqueDraws + " transparentStatic=" + transparentStatic);
             Debug.Log("Rocket Fooxball Movement Lab render budget: triangles=" + sceneTriangles + " MeshRenderers=" + meshRenderers + " opaqueDraws=" + opaqueDraws + " staticTransparent=" + transparentStatic);
+        }
+
+        private static void ValidatePersistedBakeOutputs(Scene scene)
+        {
+            if (GeneratedBakedLightingPaths.Length != 1 + (ExpectedLightmapCount * 3) + ExpectedReflectionProbeBakeCount)
+            {
+                throw new InvalidOperationException("MovementLab baked lighting path contract is invalid.");
+            }
+
+            var projectRoot = ResolveProjectRoot();
+            var expectedPaths = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
+            {
+                var relativePath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[i]);
+                expectedPaths.Add(relativePath);
+                expectedPaths.Add(relativePath + ".meta");
+                var absolutePath = GetAbsoluteProjectPath(projectRoot, relativePath);
+                if (!File.Exists(absolutePath))
+                {
+                    throw new InvalidOperationException("Missing persisted MovementLab bake output: " + relativePath);
+                }
+                if (!File.Exists(absolutePath + ".meta"))
+                {
+                    throw new InvalidOperationException("Missing persisted MovementLab bake output metadata: " + relativePath + ".meta");
+                }
+            }
+
+            var bakedLightingDirectory = GetAbsoluteProjectPath(projectRoot, BakedLightingPath);
+            var persistedFiles = Directory.GetFiles(bakedLightingDirectory);
+            for (var i = 0; i < persistedFiles.Length; i++)
+            {
+                var persistedPath = persistedFiles[i].Substring(projectRoot.FullName.Length + 1).Replace('\\', '/');
+                var fileName = Path.GetFileName(persistedPath);
+                var isBakedOutput = string.Equals(fileName, "LightingData.asset", StringComparison.Ordinal) ||
+                                    string.Equals(fileName, "LightingData.asset.meta", StringComparison.Ordinal) ||
+                                    fileName.StartsWith("Lightmap-", StringComparison.Ordinal) ||
+                                    fileName.StartsWith("ReflectionProbe-", StringComparison.Ordinal);
+                if (isBakedOutput && !expectedPaths.Contains(persistedPath))
+                {
+                    throw new InvalidOperationException("Unexpected persisted MovementLab bake output: " + persistedPath);
+                }
+            }
+
+            var lightmaps = LightmapSettings.lightmaps;
+            if (lightmaps == null || lightmaps.Length != ExpectedLightmapCount)
+            {
+                throw new InvalidOperationException("MovementLab lightmap atlas count invalid: expected " + ExpectedLightmapCount + ".");
+            }
+
+            for (var i = 0; i < lightmaps.Length; i++)
+            {
+                var data = lightmaps[i];
+                if (data == null || data.lightmapDir == null || data.lightmapColor == null || data.shadowMask == null)
+                {
+                    throw new InvalidOperationException("MovementLab lightmap data entry is incomplete: " + i);
+                }
+
+                var pathIndex = 1 + (i * 3);
+                var expectedDirectionPath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[pathIndex]);
+                var expectedColorPath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[pathIndex + 1]);
+                var expectedShadowMaskPath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[pathIndex + 2]);
+                if (!string.Equals(AssetDatabase.GetAssetPath(data.lightmapDir), expectedDirectionPath, StringComparison.Ordinal) ||
+                    !string.Equals(AssetDatabase.GetAssetPath(data.lightmapColor), expectedColorPath, StringComparison.Ordinal) ||
+                    !string.Equals(AssetDatabase.GetAssetPath(data.shadowMask), expectedShadowMaskPath, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException("MovementLab lightmap data reference is stale: " + i);
+                }
+            }
+
+            var lightingDataGuid = AssetDatabase.AssetPathToGUID(GeneratedBakedLightingPaths[0]);
+            if (string.IsNullOrEmpty(lightingDataGuid))
+            {
+                throw new InvalidOperationException("MovementLab lighting data asset GUID is missing.");
+            }
+
+            var sceneYamlPath = GetAbsoluteProjectPath(projectRoot, scene.path);
+            var sceneYaml = File.ReadAllText(sceneYamlPath);
+            var lightingDataReference = "guid: " + lightingDataGuid + ",";
+            var lightingDataReferenceCount = 0;
+            var sceneLines = sceneYaml.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < sceneLines.Length; i++)
+            {
+                var line = sceneLines[i].TrimStart();
+                if (line.StartsWith("m_LightingDataAsset:", StringComparison.Ordinal) && line.IndexOf(lightingDataReference, StringComparison.Ordinal) >= 0)
+                {
+                    lightingDataReferenceCount++;
+                }
+            }
+            if (lightingDataReferenceCount != 1)
+            {
+                throw new InvalidOperationException("MovementLab scene lighting data reference count invalid: " + lightingDataReferenceCount);
+            }
         }
 
         private static void ValidateArenaMaterials(GameObject arena, PhysicsMaterial ballSurface)
