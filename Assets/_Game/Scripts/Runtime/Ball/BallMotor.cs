@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Runtime.Ball
 {
@@ -15,7 +16,7 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField] private Rigidbody body;
         [SerializeField] private Collider ballCollider;
         [SerializeField] private PlayerMotor player;
-        [SerializeField] private Collider[] goalShieldColliders;
+        [SerializeField] private GoalShieldSet goalShieldSet;
 
         [Header("Speed and Surface")]
         [SerializeField, Min(1f)] private float baseSpeedReference = 10f;
@@ -203,13 +204,6 @@ namespace RocketFooxball.Runtime.Ball
             ClearQueuedState();
         }
 
-        /// <summary>Sets shield colliders ignored by ball physics and ball-directed blast occlusion.</summary>
-        public void SetShieldColliders(Collider[] shields)
-        {
-            goalShieldColliders = shields;
-            IgnoreShieldCollisions();
-        }
-
         private void CacheReferences()
         {
             if (body == null)
@@ -224,18 +218,18 @@ namespace RocketFooxball.Runtime.Ball
 
         private bool ValidateComposition()
         {
-            if (body == null || ballCollider == null || player == null || goalShieldColliders == null)
+            if (body == null || ballCollider == null || player == null || goalShieldSet == null || goalShieldSet.Colliders == null)
             {
-                Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldColliders.", this);
+                Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldSet.", this);
                 enabled = false;
                 return false;
             }
 
-            for (var i = 0; i < goalShieldColliders.Length; i++)
+            for (var i = 0; i < goalShieldSet.Colliders.Length; i++)
             {
-                if (goalShieldColliders[i] == null)
+                if (goalShieldSet.Colliders[i] == null)
                 {
-                    Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldColliders.", this);
+                    Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldSet.", this);
                     enabled = false;
                     return false;
                 }
@@ -258,14 +252,14 @@ namespace RocketFooxball.Runtime.Ball
 
         private void IgnoreShieldCollisions()
         {
-            if (ballCollider == null || goalShieldColliders == null)
+            if (ballCollider == null || goalShieldSet == null || goalShieldSet.Colliders == null)
             {
                 return;
             }
 
-            for (var i = 0; i < goalShieldColliders.Length; i++)
+            for (var i = 0; i < goalShieldSet.Colliders.Length; i++)
             {
-                var shield = goalShieldColliders[i];
+                var shield = goalShieldSet.Colliders[i];
                 if (shield != null && shield != ballCollider)
                 {
                     UnityEngine.Physics.IgnoreCollision(ballCollider, shield, true);

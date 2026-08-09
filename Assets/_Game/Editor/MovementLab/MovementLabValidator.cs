@@ -127,12 +127,14 @@ namespace RocketFooxball.Editor
                     var ball = GameObject.Find("Ball");
                     var matchObject = GameObject.Find("MatchController");
                     var explosionObject = GameObject.Find("ExplosionResolver");
+                    var shieldSetObject = GameObject.Find("GoalShieldSet");
                     var hudObject = GameObject.Find("DebugHUD");
                     Require(arena, "Arena root");
                     Require(player, "Player root");
                     Require(ball, "Ball root");
                     Require(matchObject, "MatchController root");
                     Require(explosionObject, "ExplosionResolver root");
+                    Require(shieldSetObject, "GoalShieldSet root");
                     Require(hudObject, "DebugHUD root");
                     Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "T5 build marker");
 
@@ -170,6 +172,8 @@ namespace RocketFooxball.Editor
                     }
 
                     var resolver = Require(explosionObject.GetComponent<ExplosionResolver>(), "ExplosionResolver");
+                    var explosionVfxSpawner = Require(explosionObject.GetComponent<ExplosionVfxSpawner>(), "ExplosionVfxSpawner");
+                    var goalShieldSet = Require(shieldSetObject.GetComponent<GoalShieldSet>(), "GoalShieldSet");
                     var match = Require(matchObject.GetComponent<MatchController>(), "MatchController");
                     var hud = Require(hudObject.GetComponent<MovementDebugHud>(), "MovementDebugHud");
                     ValidateSerializedFloat(resolver, "blastRadius", BlastRadius, "ExplosionResolver.blastRadius");
@@ -227,7 +231,8 @@ namespace RocketFooxball.Editor
                     ValidateReference(ballMotor, "body", ballBody, "BallMotor.body");
                     ValidateReference(ballMotor, "ballCollider", ballCollider, "BallMotor.ballCollider");
                     ValidateReference(ballMotor, "player", playerMotor, "BallMotor.player");
-                    ValidateArrayContains(ballMotor, "goalShieldColliders", northShield, southShield, "BallMotor.goalShieldColliders");
+                    ValidateReference(ballMotor, "goalShieldSet", goalShieldSet, "BallMotor.goalShieldSet");
+                    ValidateArrayContains(goalShieldSet, "colliders", northShield, southShield, "GoalShieldSet.colliders");
                     ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
                     ValidateReference(playerMotor, "input", input, "PlayerMotor.input");
                     ValidateReference(look, "input", input, "PlayerLook.input");
@@ -240,6 +245,8 @@ namespace RocketFooxball.Editor
                     ValidateReference(launcher, "explosionResolver", resolver, "RocketLauncher.explosionResolver");
                     ValidateReference(cameraFeedback, "player", playerMotor, "PlayerCameraFeedback.player");
                     ValidateReference(cameraFeedback, "targetCamera", camera, "PlayerCameraFeedback.targetCamera");
+                    ValidateReference(cameraFeedback, "viewmodels", player.transform.Find("Head/Camera/Viewmodels").gameObject, "PlayerCameraFeedback.viewmodels");
+                    ValidateReference(cameraFeedback, "crosshairCanvas", player.transform.Find("Head/Camera/CrosshairCanvas").gameObject, "PlayerCameraFeedback.crosshairCanvas");
                     ValidateReference(qualityRuntime, "targetCamera", camera, "GraphicsQualityRuntime.targetCamera");
                     ValidateSerializedFloat(cameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "PlayerCameraFeedback.celebrationOrbitRadius");
                     ValidateSerializedFloat(cameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "PlayerCameraFeedback.celebrationOrbitHeight");
@@ -251,8 +258,9 @@ namespace RocketFooxball.Editor
                     ValidateReference(kick, "look", look, "BallKick.look");
                     ValidateReference(kick, "aimCamera", camera, "BallKick.aimCamera");
                     ValidateReference(kick, "ball", ballMotor, "BallKick.ball");
-                    ValidateArrayContains(resolver, "goalShieldColliders", northShield, southShield, "ExplosionResolver.goalShieldColliders");
-                    ValidatePrefabReference(resolver, "explosionVfxPrefab", ExplosionPrefabPath, "ExplosionResolver.explosionVfxPrefab");
+                    ValidateReference(resolver, "goalShieldSet", goalShieldSet, "ExplosionResolver.goalShieldSet");
+                    ValidateReference(resolver, "explosionVfxSpawner", explosionVfxSpawner, "ExplosionResolver.explosionVfxSpawner");
+                    ValidatePrefabReference(explosionVfxSpawner, "explosionVfxPrefab", ExplosionPrefabPath, "ExplosionVfxSpawner.explosionVfxPrefab");
 
                     var presentation = Require(player.GetComponent<PlayerPresentation>(), "PlayerPresentation");
                     ValidateReference(presentation, "kick", kick, "PlayerPresentation.kick");

@@ -162,6 +162,8 @@ namespace RocketFooxball.Editor
                     SetObjectReference(look, "head", head);
                     SetObjectReference(feedback, "player", motor);
                     SetObjectReference(feedback, "targetCamera", camera);
+                    SetObjectReference(feedback, "viewmodels", viewmodels.gameObject);
+                    SetObjectReference(feedback, "crosshairCanvas", camera.transform.Find("CrosshairCanvas").gameObject);
                     SetObjectReference(qualityRuntime, "targetCamera", camera);
                     SetObjectReference(launcher, "input", input);
                     SetObjectReference(launcher, "look", look);
@@ -650,6 +652,8 @@ namespace RocketFooxball.Editor
                             ValidateReference(prefabLauncher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath), "Player prefab RocketLauncher.projectilePrefab");
                             ValidateReference(prefabLauncher, "spawnPoint", root.transform.Find("Head/Camera/RocketMuzzle"), "Player prefab RocketLauncher.spawnPoint");
                             ValidateReference(prefabFeedback, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerCameraFeedback.targetCamera");
+                            ValidateReference(prefabFeedback, "viewmodels", root.transform.Find("Head/Camera/Viewmodels").gameObject, "Player prefab PlayerCameraFeedback.viewmodels");
+                            ValidateReference(prefabFeedback, "crosshairCanvas", root.transform.Find("Head/Camera/CrosshairCanvas").gameObject, "Player prefab PlayerCameraFeedback.crosshairCanvas");
                             ValidateReference(prefabQualityRuntime, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab GraphicsQualityRuntime.targetCamera");
                             ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
                             ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");

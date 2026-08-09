@@ -103,10 +103,15 @@ namespace RocketFooxball.Editor
                     }
 
                     var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial);
+                    var shieldSetObject = new GameObject("GoalShieldSet");
+                    var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
+                    SetObjectArray(goalShieldSet, "colliders", arena.Shields);
                     var explosionObject = new GameObject("ExplosionResolver");
                     var explosionResolver = explosionObject.AddComponent<ExplosionResolver>();
-                    SetObjectArray(explosionResolver, "goalShieldColliders", arena.Shields);
-                    SetObjectReference(explosionResolver, "explosionVfxPrefab", explosionPrefab);
+                    var explosionVfxSpawner = explosionObject.AddComponent<ExplosionVfxSpawner>();
+                    SetObjectReference(explosionResolver, "goalShieldSet", goalShieldSet);
+                    SetObjectReference(explosionResolver, "explosionVfxSpawner", explosionVfxSpawner);
+                    SetObjectReference(explosionVfxSpawner, "explosionVfxPrefab", explosionPrefab);
                     SetFloat(explosionResolver, "blastRadius", BlastRadius);
                     SetFloat(explosionResolver, "playerImpulseStrength", 24f);
                     SetFloat(explosionResolver, "ballImpulseStrength", 16f);
@@ -138,11 +143,13 @@ namespace RocketFooxball.Editor
                     SetObjectReference(ballMotor, "body", ballBody);
                     SetObjectReference(ballMotor, "ballCollider", ballCollider);
                     SetObjectReference(ballMotor, "player", playerMotor);
-                    SetObjectArray(ballMotor, "goalShieldColliders", arena.Shields);
+                    SetObjectReference(ballMotor, "goalShieldSet", goalShieldSet);
                     SetObjectReference(kick, "ball", ballMotor);
                     SetObjectReference(launcher, "explosionResolver", explosionResolver);
                     SetObjectReference(cameraFeedback, "player", playerMotor);
                     SetObjectReference(cameraFeedback, "targetCamera", player.GetComponentInChildren<Camera>(true));
+                    SetObjectReference(cameraFeedback, "viewmodels", player.transform.Find("Head/Camera/Viewmodels").gameObject);
+                    SetObjectReference(cameraFeedback, "crosshairCanvas", player.transform.Find("Head/Camera/CrosshairCanvas").gameObject);
 
                     SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
                     SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
