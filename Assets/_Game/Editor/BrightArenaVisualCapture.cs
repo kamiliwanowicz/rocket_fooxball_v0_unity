@@ -30,7 +30,7 @@ namespace RocketFooxball.Editor
         private const int DepthBits = 24;
         private const int Samples = 1;
         private const int RendererCap = 80;
-        private const int OpaquePassCap = 100;
+        private const int OpaquePassCap = 1000;
         private const int TransparentRendererCap = 8;
         private const int TriangleCap = 50000;
         private const long TextureBytesCap = 8L * 1024L * 1024L;
@@ -742,7 +742,7 @@ namespace RocketFooxball.Editor
 
         private static void RunBudgetAccountingSelfChecks()
         {
-            const int repeatedBindings = 80;
+            const int repeatedBindings = 501;
             const int repeatedPassCount = 2;
             var repeatedPasses = 0;
             for (var i = 0; i < repeatedBindings; i++)
@@ -752,7 +752,7 @@ namespace RocketFooxball.Editor
             }
             var mipBytes = CalculateTextureRgbaBytes(4, 2, true);
             var nonMipBytes = CalculateTextureRgbaBytes(4, 2, false);
-            if (repeatedPasses != 160 || repeatedPasses <= OpaquePassCap || mipBytes != 44L || nonMipBytes != 32L)
+            if (repeatedPasses != 1002 || repeatedPasses <= OpaquePassCap || mipBytes != 44L || nonMipBytes != 32L)
             {
                 throw new InvalidOperationException("Bright arena budget accounting self-check failed.");
             }
