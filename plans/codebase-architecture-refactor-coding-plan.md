@@ -252,7 +252,7 @@ Transform current POC into clear domain modules with explicit ownership, narrow 
 ## Execution Assignments
 
 - workers: T1 -> W1 `luna_max`; T2 -> W2 exact `sol_high`; T3 -> W3 `luna_max`; T4 -> W4 `luna_max`; T5 -> W5 `terra_high`; T6 -> W6 `terra_high`; T7 -> W7 `luna_max`
-- review_checkpoints: CP1 -> fresh `sol_medium`, module/identity migration; CP2 -> fresh `sol_medium`, stage DAG/manifest/pre-bake safety; CP3 -> fresh `sol_medium`, builder module ownership/validator purity; CP4 -> fresh `sol_medium`, dependency/API wiring; CP5 -> fresh `sol_medium`, lifecycle semantics; CP6 -> fresh `sol_medium`, blast/camera parity; CP7 -> fresh `sol_medium`, exact-SHA staged generation/evidence
+- review_checkpoints: CP1 -> fresh `sol_high`, module/identity migration; CP2 -> fresh `sol_high`, stage DAG/manifest/pre-bake safety; CP3 -> fresh `sol_high`, builder module ownership/validator purity; CP4 -> fresh `sol_high`, dependency/API wiring; CP5 -> fresh `sol_high`, lifecycle semantics; CP6 -> fresh `sol_high`, blast/camera parity; CP7 -> fresh `sol_high`, exact-SHA staged generation/evidence
 - checkpoint rule: one frozen committed SHA per worker; Critical/High findings only; fresh fix worker; no fix re-review; rerun invalidated checks
 - execution contract: exact `sol_high` execution orchestrator uses `$orchestrate-implementation`; workers receive only assigned task, predecessor SHA, owned/protected paths, and proof boundary
 
