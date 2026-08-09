@@ -40,6 +40,7 @@ namespace RocketFooxball.Editor
                     {
                         sun = new GameObject("Sun").AddComponent<Light>();
                     }
+                    sun.GetUniversalAdditionalLightData();
 
                     sun.gameObject.name = "Sun";
                     sun.transform.SetParent(environment.transform, false);
@@ -116,6 +117,7 @@ namespace RocketFooxball.Editor
                     {
                         var contract = AccentLightContract[i];
                         var light = new GameObject(contract.name).AddComponent<Light>();
+                        light.GetUniversalAdditionalLightData();
                         light.transform.SetParent(parent, false);
                         light.transform.localPosition = contract.position;
                         light.type = LightType.Point;
@@ -350,7 +352,7 @@ namespace RocketFooxball.Editor
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
                 {
                     var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();
-                    if (sun == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
+                    if (sun == null || sun.GetComponent<UniversalAdditionalLightData>() == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - 1.1f) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
                         sun.color != SunColor || Mathf.Abs(sun.shadowStrength - 1f) > 0.001f ||
@@ -383,7 +385,7 @@ namespace RocketFooxball.Editor
                             if (accent.name == AccentLightContract[j].name) contractIndex = j;
                         if (contractIndex < 0) throw new InvalidOperationException("Unexpected shadow/light source: " + accent.name);
                         var contract = AccentLightContract[contractIndex];
-                        if (accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
+                        if (accent.GetComponent<UniversalAdditionalLightData>() == null || accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
                             Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
                             Mathf.Abs(accent.intensity - 500f) > 0.01f || Mathf.Abs(accent.range - 14f) > 0.001f)
                         {

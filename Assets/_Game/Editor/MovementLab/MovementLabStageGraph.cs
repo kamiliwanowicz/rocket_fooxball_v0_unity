@@ -42,7 +42,7 @@ namespace RocketFooxball.Editor
     {
         private const string ImporterContract = "importer-contract:1";
         private const string MaterialContract = "material-prefab-contract:1";
-        private const string GameplayContract = "gameplay-scene-contract:3";
+        private const string GameplayContract = "gameplay-scene-contract:4";
         private const string QualityContract = "quality-contract:1";
         private const string LightingContract = "lighting-contract:1";
         private const string BakedContract = "baked-output-contract:2";
