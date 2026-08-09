@@ -104,25 +104,38 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 ## Child lifecycle gate
 
 - Registry: record child agent ID, `execution_id`, role, and state (`running | returned | retired`) at dispatch. One dispatch gets one child turn; follow-up work gets fresh child required by role rules.
+- Terminal return: collaboration runtime reports child turn finished and child is no longer running. Messages, commentary, partial reports, filesystem changes, or apparent task completion while child remains running -> progress evidence only.
 - Returned child: capture immutable report, mark `returned`, then retire immediately. Result acceptance, Git verification, and checkpoint work use captured report; returned agent stays retired.
 - Replaced, restarted, cancelled, or no-longer-needed running child: call `interrupt_agent`, wait for terminal state, capture late output as evidence only, then mark `retired`. Finish retirement before replacement dispatch or lane-barrier close.
 - Exit drain: before any `complete` or `blocked` return, call `list_agents`; interrupt every running descendant, wait for terminal states, then call `list_agents` again. `complete` requires zero running descendants and every registry entry `retired`. Unresolved descendant -> `blocked` with exact agent ID, role, state, and cleanup attempts.
 
+## Worker -> reviewer barrier
+
+Reviewer dispatch requires all checkpoint-covered implementation workers through this sequence:
+
+1. Receive terminal return from collaboration runtime; confirm covered child no longer running.
+2. Capture final report; require `status: complete`; verify identity, scope, files, checks, and Git boundary.
+3. Mark child `returned`, then `retired`. Covered worker registry contains zero `running` entries.
+4. Close writer barrier; stage only checkpoint paths; commit; resolve exact `frozen_sha`; verify scope and unrelated status.
+5. Dispatch reviewer bound to committed `review_base_sha..frozen_sha`.
+
+Per-worker checkpoint covers one worker. Grouped checkpoint covers every named worker. Any covered worker still `running`, lacking terminal return, blocked, or unverified -> reviewer barrier remains open. Unrelated disjoint workers outside checkpoint may keep running.
+
 ## Review checkpoints
 
-Default: one checkpoint per implementation worker. Close writer barrier, verify scope, commit, freeze exact SHA, review before dependent work.
+Default: one checkpoint per implementation worker. Satisfy worker -> reviewer barrier, then review before dependent work.
 
 Accepted plan may group multiple implementation workers into one checkpoint only when combined chunk creates stronger review boundary than partial worker states. Plan must name checkpoint, covered tasks/workers, join condition, and technical rationale. Valid rationale: producer/consumer contract, coordinated code/serialized asset wiring, or another state whose partial review lacks meaningful proof. Throughput or fewer reviewer calls is insufficient. Missing explicit grouped checkpoint -> per-worker review.
 
-Plan fan-out -> launch every ready sibling after shared predecessors. Worker completion -> close lane barrier, commit/freeze task paths, dispatch declared per-worker checkpoint immediately; unrelated disjoint workers continue. Grouped checkpoint waits only for named members and join condition. Branch checkpoint gates fan-in. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
+Plan fan-out -> launch every ready sibling after shared predecessors. Worker terminal return -> satisfy worker -> reviewer barrier for declared per-worker checkpoint immediately; unrelated disjoint workers continue. Grouped checkpoint waits only for terminal returns from all named members plus join condition. Branch checkpoint gates fan-in. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
 
 Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
 
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Process each worker completion immediately. Verify report against files, Git, scope, checks, and live identity. Restart condition -> apply restart rule; no retry on old worker.
-3. Per-worker checkpoint -> close completed lane barrier; stage only task paths; commit and freeze exact SHA; verify scope and unrelated status; dispatch fresh exact `sol_high` reviewer immediately. Keep unrelated disjoint workers running. Grouped checkpoint -> wait only for named workers and join condition before same freeze/dispatch flow.
+2. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. Restart condition -> apply restart rule; no retry on old worker.
+3. Per-worker checkpoint -> satisfy worker -> reviewer barrier; dispatch fresh exact `sol_high` reviewer. Keep unrelated disjoint workers running. Grouped checkpoint -> wait for terminal returns from all named workers plus join condition, then satisfy same barrier.
 4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
 6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
