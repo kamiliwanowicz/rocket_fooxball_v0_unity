@@ -6,6 +6,23 @@ Postmortem + next-run guardrails for `plans/comprehensive-graphics-overhaul-codi
 
 Use before next orchestrated Unity graphics, generated-scene, lighting, or Blender-heavy run.
 
+## Operating priority
+
+1. iteration speed
+2. gameplay correctness + readability
+3. production graphics + exhaustive proof at explicit checkpoints
+
+Fast mode remains default during active development. Production graphics activate only for explicit visual-quality checkpoint or final proof. Preserve production assets/settings; switch profile instead of deleting accepted work.
+
+Remediation order: fast-mode command/profile -> targeted stage execution -> bake optimization -> production polish/proof.
+
+Iteration budgets:
+
+- warm code edit -> compile + focused test/play start: target `<=30s`
+- targeted visual edit -> changed import/material/prefab + fast validation/play start: target `<=60s`
+- predicted command over `60s` -> checkpoint work, outside iteration loop
+- routine code/visual edit -> zero production bake, capture, full hash sweep, or Build 1/Build 2 proof
+
 ## Accepted state
 
 - branch: `new_graphics`
@@ -140,6 +157,10 @@ Required cache rules:
 
 Split current command:
 
+`EnterMovementLabFastMode()` -> iteration quality profile + simple realtime lighting; zero production-asset rewrite
+
+`BuildMovementLabFast()` -> changed non-lighting stages + fast validation; zero bake/capture/full-proof work
+
 `AssembleMovementLab()` -> importers, materials, prefabs, gameplay scene
 
 `ValidateMovementLabPreBake()` -> all non-lighting semantic + persistence checks
@@ -157,6 +178,8 @@ Required behavior:
 - semantic validation failure -> stop; no automatic bake
 - validator-only change -> compile + validate; zero generated writes
 - unchanged lighting-input digest -> preserve baked outputs
+- fast mode -> preserve production lighting outputs; record stale production-lighting state separately
+- fast profile -> separate non-production quality state; no production URP/scene/lighting mutation
 - development bake output -> tagged non-final; rejected by production validation
 - production bake starts only through explicit lighting stage
 
@@ -179,22 +202,39 @@ Expected invalidation matrix:
 - validator edit -> compile + validator
 - gameplay behavior edit -> compile
 - serialized prefab-contract edit -> prefab + gameplay scene
-- material appearance edit -> material + lighting
-- static mesh/light/probe edit -> lighting
+- material appearance edit in fast mode -> material preview + mark production lighting stale
+- static mesh/light/probe edit in fast mode -> affected preview stage + mark production lighting stale
+- explicit production checkpoint with stale lighting -> lighting
 - quality validator edit -> compile + validator
 
-## Bake operating modes
+## Iteration and bake modes
 
 Default path:
 
-`no-bake development -> fast development bake when visual input changes -> production bake after source freeze`
+`iteration fast mode -> optional development bake for GI evaluation -> production bake after source freeze`
 
-### No-bake development
+### Iteration fast mode
 
-- use for runtime gameplay, validator, input, HUD, and other non-lighting behavior edits
-- reuse last accepted production lighting outputs
-- compile + focused tests/validation only
-- lighting-input digest change -> mark lighting stale; require development or production bake before visual acceptance
+Use for runtime gameplay, validator, input, HUD, materials, VFX, models, arena composition, and normal visual iteration.
+
+Graphics profile:
+
+- baked GI: off for preview; accepted baked files preserved untouched
+- realtime GI: off
+- lighting: simple realtime directional sun + ambient sky/gradient
+- shadows: off by default; one low-cost directional shadow only when movement/depth readability needs it
+- HDR, SSAO, bloom, post-processing: off
+- reflection-probe bake: off; use sky/default reflection or last stable cubemap
+- render quality: dedicated `Iteration`/Low URP profile; lower Game view resolution/render scale where useful
+
+Execution rules:
+
+- code edit -> Unity compile + focused existing test; launch play mode
+- visual edit -> import changed source family + rebuild changed material/prefab/scene slice + fast semantic check; launch play mode
+- production-lighting input change -> mark stale; continue fast preview without bake
+- `BuildMovementLab()`, `Lightmapping.Bake()`, reflection bake, capture, full two-run texture proof, and Build 1/Build 2 proof remain checkpoint commands
+- fast-mode activation changes runtime/editor selection only; production assets, scenes, bake outputs, GUIDs, manifests, and quality defaults remain unchanged
+- fast-mode visual result proves gameplay readability and composition only; production-lighting acceptance remains pending
 
 ### Fast development bake
 
@@ -355,9 +395,10 @@ Run after builder remediation. Isolate one variable per component experiment; be
    - benchmark; no default switch without stable-output + quality evidence
 
 4. No-bake POC A/B
-   - baked current state vs realtime sun + sky ambient + SSAO + stable reflection cubemap
+   - production baked state vs iteration profile: realtime sun + ambient, no baked GI, no SSAO/bloom/HDR, stable/default reflection
    - blind visual/readability comparison
-   - remove baked-GI subsystem if no material gameplay/readability win
+   - keep iteration profile default during active development
+   - remove baked-GI subsystem only if production A/B shows no material gameplay/readability win
 
 5. Static lighting scene split
    - `MovementLabLighting.unity` -> static renderers, sun, probes, baked data
@@ -405,16 +446,21 @@ Recurring URP local-keyword instability -> evaluate project-owned PBR shader con
 - copy `LightingData.asset` across regenerated scene identity -> reject
 - GPU switch without controlled benchmark -> reject
 - bake inside importer/postprocess callback -> reject
+- fast-mode switch that rewrites production quality/scene/lighting assets -> reject
+- production bake or full proof inside routine iteration loop -> reject
 
 ## Next remediation completion criteria
 
 - validator-only source edit causes no bake and zero owned-output writes
 - semantic pre-bake failure exits before `Lightmapping.Bake()`
 - gameplay-only edit leaves lighting-input digest unchanged
-- no-bake development path preserves accepted lighting outputs
+- fast mode handles code + visual iteration without production bake/full proof
+- fast mode preserves accepted lighting outputs and production quality assets
+- fast mode meets warm `30s` code / `60s` targeted-visual iteration goals or reports measured blocker
+- visual lighting-input edit marks production lighting stale without blocking fast preview
 - development bake records non-final profile + exact settings
 - production validator rejects development bake outputs
-- lighting-input edit triggers exactly one explicit bake
+- production checkpoint with stale lighting triggers exactly one explicit bake
 - Build 2 reuses outputs with zero changed hashes
 - separate validator changes zero hashes
 - no command exceeds retry/budget policy silently
