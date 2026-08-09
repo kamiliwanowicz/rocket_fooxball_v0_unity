@@ -81,7 +81,8 @@ After plan worktree creation, all execution, review, recovery, and completion Gi
 - Reviewer: fresh exact `sol_high` per review checkpoint; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
-- Restart / context reset: trigger for from-scratch recovery, repeated blockers or back-and-forth, massive implementation chunk, or overwhelmed worker context -> retire old worker/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, dispatch fresh implementation worker with new `execution_id` and original task contract. Ambiguous edit ownership -> `blocked`.
+- Stuck-child takeover: any child blocker, request for rescue, repeated failed approach, scope drift, confusion, or loss of useful progress -> interrupt immediately. Orchestrator takes over diagnosis: inspect repository/evidence, reproduce failure, run safe checks, determine solution, and remove blocker or improve task contract. Retire old child/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, then dispatch fresh role-appropriate child with new `execution_id` and blocker-free contract. Never coach, resume, or retry stuck child. Ambiguous edit ownership or unresolved authority/product decision -> `blocked`.
+- Proactive context reset: massive implementation chunk or overwhelmed child context -> same stuck-child takeover flow before failure compounds.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
 Writer barriers follow ownership: completed disjoint lane closes independently before Git mutation, freeze, or review; unrelated lanes continue. Shared path, contract, or validation environment -> global barrier.
@@ -104,6 +105,7 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 ## Child lifecycle gate
 
 - Registry: record child agent ID, `execution_id`, role, and state (`running | returned | retired`) at dispatch. One dispatch gets one child turn; follow-up work gets fresh child required by role rules.
+- Stuck signal at any lifecycle point -> run stuck-child takeover before more child work. Orchestrator may continue independent diagnosis while child retirement completes; replacement waits for terminal retirement and restored writer boundary.
 - Terminal return: collaboration runtime reports child turn finished and child is no longer running. Messages, commentary, partial reports, filesystem changes, or apparent task completion while child remains running -> progress evidence only.
 - Returned child: capture immutable report, mark `returned`, then retire immediately. Result acceptance, Git verification, and checkpoint work use captured report; returned agent stays retired.
 - Replaced, restarted, cancelled, or no-longer-needed running child: call `interrupt_agent`, wait for terminal state, capture late output as evidence only, then mark `retired`. Finish retirement before replacement dispatch or lane-barrier close.
@@ -134,7 +136,7 @@ Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`,
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. Restart condition -> apply restart rule; no retry on old worker.
+2. Monitor running children for stuck signals. Signal -> interrupt, diagnose directly, remove blocker or improve contract, restore writer boundary, then dispatch fresh child. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. No retry on old worker.
 3. Per-worker checkpoint -> satisfy worker -> reviewer barrier; dispatch fresh exact `sol_high` reviewer. Keep unrelated disjoint workers running. Grouped checkpoint -> wait for terminal returns from all named workers plus join condition, then satisfy same barrier.
 4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
