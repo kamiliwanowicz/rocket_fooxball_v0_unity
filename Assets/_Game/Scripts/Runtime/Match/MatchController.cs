@@ -12,7 +12,7 @@ namespace RocketFooxball.Runtime.Match
     [MovedFrom("RocketFooxball")]
     public sealed class MatchController : MonoBehaviour
     {
-        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "MatchController.MatchState")]
+        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "MatchController/MatchState")]
         public enum MatchState
         {
             Playing,

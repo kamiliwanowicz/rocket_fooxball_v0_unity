@@ -9,7 +9,7 @@ namespace RocketFooxball.Runtime.Match
     [MovedFrom("RocketFooxball")]
     public sealed class GoalTrigger : MonoBehaviour
     {
-        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "GoalTrigger.GoalSide")]
+        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "GoalTrigger/GoalSide")]
         public enum GoalSide
         {
             North,
