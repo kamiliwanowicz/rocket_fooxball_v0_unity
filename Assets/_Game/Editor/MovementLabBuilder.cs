@@ -443,10 +443,18 @@ namespace RocketFooxball.Editor
                 return;
             }
 
+            MovementLabManifestStore.EnsureWriteAuthorization();
             AssembleMovementLabUnstaged();
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureAssembledState());
             AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             Debug.Log("Rocket Fooxball Movement Lab assembled without lighting bake: " + ScenePath);
+        }
+
+        [MenuItem("Rocket Fooxball/Authorize Movement Lab Manifest Migration")]
+        public static void AuthorizeMovementLabManifestMigration()
+        {
+            var path = MovementLabManifestStore.AuthorizeManifestMigration();
+            Debug.Log("Rocket Fooxball Movement Lab manifest migration authorized for current Git SHA: " + path);
         }
 
         [MenuItem("Rocket Fooxball/Validate Movement Lab Pre-Bake")]
@@ -468,9 +476,10 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting")]
         public static void BakeMovementLabLighting()
         {
-            ValidateMovementLabPreBake();
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord();
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-            BakeSceneLighting(scene);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath);
+            BakeSceneLighting(scene, passPath);
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.SaveAssets();
             NormalizeGeneratedYamlWhitespace();
@@ -1890,9 +1899,10 @@ namespace RocketFooxball.Editor
             return settings;
         }
 
-        private static void BakeSceneLighting(Scene scene)
+        private static void BakeSceneLighting(Scene scene, string passPath)
         {
             ConfigureLightingSettings(scene);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath);
             var baked = Lightmapping.Bake();
             if (!baked)
             {
@@ -1910,6 +1920,7 @@ namespace RocketFooxball.Editor
                 var probe = probes[i];
                 if (probe == null || probe.mode != ReflectionProbeMode.Baked) continue;
                 var filename = LightingPath + "/" + probe.name + ".exr";
+                MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true);
                 if (!Lightmapping.BakeReflectionProbe(probe, filename))
                 {
                     throw new InvalidOperationException("Reflection probe bake failed: " + probe.name);

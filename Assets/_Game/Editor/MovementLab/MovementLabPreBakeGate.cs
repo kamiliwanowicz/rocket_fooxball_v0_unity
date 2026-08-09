@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -21,7 +23,18 @@ namespace RocketFooxball.Editor
             public bool sourceReviewCompleted;
             public bool criticalHighFixesApplied;
             public string reviewer;
+            public string reviewerIdentity;
+            public string checkpoint;
+            public string checkpointId;
+            public string reviewCheckpoint;
             public string completedUtc;
+        }
+
+        private sealed class ValidatedReviewMarker
+        {
+            internal string Digest;
+            internal string Checkpoint;
+            internal string Reviewer;
         }
 
         [Serializable]
@@ -32,6 +45,9 @@ namespace RocketFooxball.Editor
             public string unityVersion;
             public string lightingInputDigest;
             public string reviewMarkerPath;
+            public string reviewMarkerDigest;
+            public string checkpoint;
+            public string reviewer;
             public string passedUtc;
             public string[] validatedStages;
         }
@@ -56,7 +72,7 @@ namespace RocketFooxball.Editor
             var commonGitDirectory = ResolveCommonGitDirectory(projectRoot);
             var evidenceRoot = Path.Combine(commonGitDirectory, "architecture-evidence", "movement-lab-prebake");
             var reviewMarkerPath = Path.Combine(evidenceRoot, "reviews", gitSha + ".json");
-            ValidateReviewMarker(reviewMarkerPath, gitSha);
+            var review = ValidateReviewMarker(reviewMarkerPath, gitSha, projectRoot);
 
             var passDirectory = Path.Combine(evidenceRoot, "passes");
             Directory.CreateDirectory(passDirectory);
@@ -67,11 +83,76 @@ namespace RocketFooxball.Editor
                 unityVersion = Application.unityVersion,
                 lightingInputDigest = probe.LightingInputDigest,
                 reviewMarkerPath = reviewMarkerPath,
+                reviewMarkerDigest = review.Digest,
+                checkpoint = review.Checkpoint,
+                reviewer = review.Reviewer,
                 passedUtc = DateTime.UtcNow.ToString("O"),
                 validatedStages = required.Select(stage => stage.ToString()).ToArray()
             };
             WriteOutsideProjectAtomic(passPath, JsonUtility.ToJson(record, true) + "\n", projectRoot);
             return passPath;
+        }
+
+        internal static void RevalidatePassRecord(string passPath, bool allowBakedOutputDrift = false)
+        {
+            var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
+            if (string.IsNullOrEmpty(projectRoot)) throw new InvalidOperationException("Unable to resolve Unity project root.");
+            var fullPassPath = Path.GetFullPath(passPath ?? string.Empty);
+            EnsureDurableEvidencePath(fullPassPath, projectRoot);
+            if (!File.Exists(fullPassPath)) throw new InvalidOperationException("MovementLab pre-bake pass record is missing: " + fullPassPath);
+
+            PassRecord pass;
+            try
+            {
+                pass = JsonUtility.FromJson<PassRecord>(Encoding.UTF8.GetString(File.ReadAllBytes(fullPassPath)));
+            }
+            catch (Exception exception)
+            {
+                throw new InvalidOperationException("MovementLab pre-bake pass record could not be parsed: " + exception.Message, exception);
+            }
+
+            var gitSha = RunGit(projectRoot, "rev-parse HEAD");
+            if (gitSha.Length != 40 || pass == null || pass.schemaVersion != 1 ||
+                !string.Equals(pass.gitSha, gitSha, StringComparison.Ordinal) ||
+                !string.Equals(pass.unityVersion, Application.unityVersion, StringComparison.Ordinal) ||
+                string.IsNullOrWhiteSpace(pass.lightingInputDigest) || string.IsNullOrWhiteSpace(pass.reviewMarkerPath) ||
+                string.IsNullOrWhiteSpace(pass.reviewMarkerDigest) || string.IsNullOrWhiteSpace(pass.checkpoint) ||
+                string.IsNullOrWhiteSpace(pass.reviewer))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake pass record is stale or incomplete; exact Git SHA required.");
+            }
+
+            ValidateSourceCheckpoint(projectRoot);
+            var commonGitDirectory = ResolveCommonGitDirectory(projectRoot);
+            var expectedPassPath = Path.GetFullPath(Path.Combine(commonGitDirectory, "architecture-evidence", "movement-lab-prebake", "passes", gitSha + "-" + pass.lightingInputDigest + ".json"));
+            if (!string.Equals(fullPassPath, expectedPassPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake pass path is not bound to exact current Git SHA and lighting digest.");
+            }
+
+            var expectedReviewPath = Path.GetFullPath(Path.Combine(commonGitDirectory, "architecture-evidence", "movement-lab-prebake", "reviews", gitSha + ".json"));
+            EnsureDurableEvidencePath(expectedReviewPath, projectRoot);
+            var passReviewPath = Path.GetFullPath(pass.reviewMarkerPath);
+            if (!string.Equals(passReviewPath, expectedReviewPath, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake review marker path is not bound to exact current Git SHA.");
+            }
+
+            var review = ValidateReviewMarker(expectedReviewPath, gitSha, projectRoot);
+            if (!string.Equals(review.Digest, pass.reviewMarkerDigest, StringComparison.Ordinal) ||
+                !string.Equals(review.Checkpoint, pass.checkpoint, StringComparison.Ordinal) ||
+                !string.Equals(review.Reviewer, pass.reviewer, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake review marker changed after pass validation.");
+            }
+
+            var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift);
+            var required = new[] { MovementLabStage.Importer, MovementLabStage.MaterialPrefab, MovementLabStage.GameplayScene, MovementLabStage.Quality };
+            var stale = required.Where(probe.IsStale).Select(stage => stage.ToString()).ToArray();
+            if (stale.Length > 0 || !string.Equals(probe.LightingInputDigest, pass.lightingInputDigest, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake finalized lighting digest or non-lighting state changed after pass validation.");
+            }
         }
 
         private static void ValidatePersistedNonLightingState()
@@ -157,26 +238,88 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void ValidateReviewMarker(string path, string gitSha)
+        private static ValidatedReviewMarker ValidateReviewMarker(string path, string gitSha, string projectRoot)
         {
+            EnsureDurableEvidencePath(Path.GetFullPath(path), projectRoot);
             if (!File.Exists(path))
             {
                 throw new InvalidOperationException("MovementLab pre-bake source review marker is missing: " + path);
             }
             ReviewMarker marker;
+            byte[] bytes;
             try
             {
-                marker = JsonUtility.FromJson<ReviewMarker>(File.ReadAllText(path));
+                bytes = File.ReadAllBytes(path);
+                marker = JsonUtility.FromJson<ReviewMarker>(Encoding.UTF8.GetString(bytes));
             }
             catch (Exception exception)
             {
                 throw new InvalidOperationException("MovementLab pre-bake source review marker could not be parsed: " + exception.Message, exception);
             }
+            var reviewer = ResolveMarkerIdentity(marker?.reviewer, marker?.reviewerIdentity, null, "reviewer");
+            var checkpoint = ResolveMarkerIdentity(marker?.checkpoint, marker?.checkpointId, marker?.reviewCheckpoint, "checkpoint");
             if (marker == null || marker.schemaVersion != 1 || !string.Equals(marker.gitSha, gitSha, StringComparison.Ordinal) ||
-                !marker.sourceReviewCompleted || !marker.criticalHighFixesApplied || string.IsNullOrWhiteSpace(marker.reviewer) ||
+                !marker.sourceReviewCompleted || !marker.criticalHighFixesApplied ||
+                string.IsNullOrWhiteSpace(reviewer) || string.IsNullOrWhiteSpace(checkpoint) ||
                 !DateTime.TryParse(marker.completedUtc, null, System.Globalization.DateTimeStyles.RoundtripKind, out _))
             {
                 throw new InvalidOperationException("MovementLab pre-bake source review marker is stale or incomplete: " + path);
+            }
+
+            return new ValidatedReviewMarker
+            {
+                Digest = HashBytes(bytes),
+                Checkpoint = checkpoint,
+                Reviewer = reviewer
+            };
+        }
+
+        private static string ResolveMarkerIdentity(string primary, string alias, string thirdAlias, string label)
+        {
+            if (!string.IsNullOrWhiteSpace(primary) && !string.IsNullOrWhiteSpace(alias) &&
+                !string.Equals(primary, alias, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake source review marker has conflicting " + label + " identities.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(thirdAlias) &&
+                ((!string.IsNullOrWhiteSpace(primary) && !string.Equals(primary, thirdAlias, StringComparison.Ordinal)) ||
+                 (!string.IsNullOrWhiteSpace(alias) && !string.Equals(alias, thirdAlias, StringComparison.Ordinal))))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake source review marker has conflicting " + label + " identities.");
+            }
+
+            var value = string.IsNullOrWhiteSpace(primary) ? alias : primary;
+            if (string.IsNullOrWhiteSpace(value)) value = thirdAlias;
+            if (string.IsNullOrWhiteSpace(value) || !string.Equals(value, value.Trim(), StringComparison.Ordinal) ||
+                value.IndexOfAny(new[] { '\r', '\n', '\0' }) >= 0)
+            {
+                return null;
+            }
+
+            return value;
+        }
+
+        private static string HashBytes(byte[] bytes)
+        {
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(bytes ?? Array.Empty<byte>())).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static void EnsureDurableEvidencePath(string path, string projectRoot)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var projectPrefix = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (fullPath.StartsWith(projectPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("MovementLab pre-bake evidence must be outside worktree: " + fullPath);
+            }
+            if (fullPath.IndexOf(Path.DirectorySeparatorChar + "Library" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                fullPath.IndexOf(Path.DirectorySeparatorChar + "Temp" + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                throw new InvalidOperationException("MovementLab pre-bake evidence path is not durable: " + fullPath);
             }
         }
 

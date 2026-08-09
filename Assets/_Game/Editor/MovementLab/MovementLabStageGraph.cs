@@ -70,14 +70,19 @@ namespace RocketFooxball.Editor
                     MovementLabContract.InputActionsPath
                 }), Array.Empty<string>(), Array.Empty<string>(), WithAssetMetasOnly(MovementLabContract.GameplaySceneOutputs), false),
             new StageDefinition(MovementLabStage.Quality, Array.Empty<MovementLabStage>(), QualityContract,
-                new[] { "Packages/manifest.json", "Packages/packages-lock.json" }, Array.Empty<string>(),
+                new[]
+                {
+                    "Packages/manifest.json", "Packages/packages-lock.json",
+                    "Assets/_Game/Editor/GraphicsQualityConfigurator.cs"
+                }, Array.Empty<string>(),
                 Array.Empty<string>(), WithAssetMetasOnly(MovementLabContract.QualityOutputs), false),
             new StageDefinition(MovementLabStage.Lighting,
                 new[] { MovementLabStage.MaterialPrefab, MovementLabStage.GameplayScene, MovementLabStage.Quality }, LightingContract,
                 new[]
                 {
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
-                    MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta"
+                    MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
+                    "Assets/_Game/Editor/GraphicsQualityConfigurator.cs"
                 }, Concat(MovementLabContract.MaterialPrefabOutputs, MovementLabContract.QualityOutputs),
                 Array.Empty<string>(), Array.Empty<string>(), true),
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, BakedContract,
@@ -85,12 +90,14 @@ namespace RocketFooxball.Editor
                 WithMetas(MovementLabContract.BakedOutputPaths), false)
         };
 
-        internal static MovementLabStageProbe Probe(bool stopOnOutputDrift)
+        internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift = false)
         {
-            var manifest = MovementLabManifestStore.ReadOrNull();
+            var manifestRead = MovementLabManifestStore.Read();
+            var manifest = manifestRead.State;
             var currentRecords = new Dictionary<MovementLabStage, MovementLabStageRecord>();
             var stale = new HashSet<MovementLabStage>();
-            var schemaCurrent = manifest != null && manifest.schemaVersion == MovementLabContract.ManifestSchemaVersion;
+            var schemaCurrent = manifestRead.Status == MovementLabManifestReadStatus.Current &&
+                MovementLabManifestStore.IsCurrentAndReadable(manifest);
 
             for (var i = 0; i < Definitions.Length; i++)
             {
@@ -106,21 +113,28 @@ namespace RocketFooxball.Editor
                     !string.Equals(prior.inputDigest, current.inputDigest, StringComparison.Ordinal) ||
                     !SequenceEqual(prior.predecessorDigests, current.predecessorDigests);
 
+                // Output drift is fatal for trusted records, even when input/predecessor state is stale.
+                // Compare before marking stale so writers cannot overwrite unreviewed changes.
+                if (schemaCurrent && prior != null)
+                {
+                    var drift = FindOutputDrift(prior.outputs, current.outputs);
+                    if (drift.Count > 0)
+                    {
+                        var ignoreDrift = allowBakedOutputDrift && definition.Stage == MovementLabStage.BakedOutput;
+                        if (stopOnOutputDrift && !ignoreDrift)
+                        {
+                            throw new InvalidOperationException(FormatOutputDrift(definition.Stage, drift));
+                        }
+                        stale.Add(definition.Stage);
+                    }
+                }
+
                 if (predecessorStale || inputStale)
                 {
                     stale.Add(definition.Stage);
                     continue;
                 }
 
-                var drift = FindOutputDrift(prior.outputs, current.outputs);
-                if (drift.Count > 0)
-                {
-                    if (stopOnOutputDrift)
-                    {
-                        throw new InvalidOperationException(FormatOutputDrift(definition.Stage, drift));
-                    }
-                    stale.Add(definition.Stage);
-                }
             }
 
             return new MovementLabStageProbe(stale, currentRecords[MovementLabStage.Lighting].inputDigest);
