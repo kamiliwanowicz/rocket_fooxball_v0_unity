@@ -65,12 +65,13 @@ Digest, identity, or mode-contract mismatch -> `blocked` with observed digest/si
 - Child roles: implementation worker, reviewer, fix worker only. Active agent retains plan sequencing, worker coordination, result acceptance, Git operations, review gates, finding disposition, and final validation.
 - Implementation/fix workers: edit assigned owned paths only; no Git staging, commits, branch/worktree operations, or state edits.
 - One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared contracts, generated/serialized assets, migrations, and shared validation environments.
-- Reviewer: fresh exact `sol_medium` per review checkpoint; read-only exact frozen SHA.
+- Reviewer: fresh exact `sol_medium` per review checkpoint; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
+- Restart: task requiring from-scratch recovery -> retire old worker/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, dispatch fresh implementation worker with new `execution_id` and original task contract. Ambiguous edit ownership -> `blocked`.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
-Active execution orchestrator closes writer barrier before Git mutation, freeze, review, or shared validation.
+Writer barriers follow ownership: completed disjoint lane closes independently before Git mutation, freeze, or review; unrelated lanes continue. Shared path, contract, or validation environment -> global barrier.
 
 ## Child dispatch contract
 
@@ -93,19 +94,19 @@ Default: one checkpoint per implementation worker. Close writer barrier, verify 
 
 Accepted plan may group multiple implementation workers into one checkpoint only when combined chunk creates stronger review boundary than partial worker states. Plan must name checkpoint, covered tasks/workers, join condition, and technical rationale. Valid rationale: producer/consumer contract, coordinated code/serialized asset wiring, or another state whose partial review lacks meaningful proof. Throughput or fewer reviewer calls is insufficient. Missing explicit grouped checkpoint -> per-worker review.
 
-Plan fan-out -> launch every ready sibling after shared predecessors. Wait all, close writer barrier, commit one wave freeze, then run declared checkpoints. Branch checkpoint gates fan-in, not sibling launch. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
+Plan fan-out -> launch every ready sibling after shared predecessors. Worker completion -> close lane barrier, commit/freeze task paths, dispatch declared per-worker checkpoint immediately; unrelated disjoint workers continue. Grouped checkpoint waits only for named members and join condition. Branch checkpoint gates fan-in. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
 
 Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
 
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Verify covered child reports against files, Git, scope, checks, and live identity. Wave -> wait all workers. Stop writers, close barrier, require join condition.
-3. Stage accepted owned paths. Commit checkpoint or wave. Verify owned paths clean, initial unrelated status preserved, scope, and exact frozen SHA.
-4. Dispatch fresh exact `sol_medium` reviewer for checkpoint. Reviewer reports Critical/High findings only and performs no edits/tests unless explicitly assigned.
-5. No accepted finding -> advance to next checkpoint or final validation. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
-6. Stop fix writer, close barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance from post-fix head.
-7. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash accepted plan artifact. Verify owned paths clean, initial unrelated status preserved, branch, dependencies, owned path diff, and requirements.
+2. Process each worker completion immediately. Verify report against files, Git, scope, checks, and live identity. From-scratch recovery -> apply restart rule; no retry on old worker.
+3. Per-worker checkpoint -> close completed lane barrier; stage only task paths; commit and freeze exact SHA; verify scope and unrelated status; dispatch fresh exact `sol_medium` reviewer immediately. Keep unrelated disjoint workers running. Grouped checkpoint -> wait only for named workers and join condition before same freeze/dispatch flow.
+4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
+5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
+6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
+7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash accepted plan artifact. Verify owned paths clean, initial unrelated status preserved, branch, dependencies, owned path diff, and requirements.
 
 Required unowned edit, plan decomposition change, dependency drift, artifact mismatch, or product decision outside accepted plan -> `blocked`. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
 

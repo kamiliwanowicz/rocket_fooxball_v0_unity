@@ -75,7 +75,7 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 - Parallel tasks require same launch head, disjoint paths, stable inputs, independent acceptance, and explicit fan-in. Cross-lane dependency or shared validation environment -> serial edge.
 - Shared files, contracts, generated/serialized assets, migrations, and product decisions stay serialized.
 - Default review boundary: one unique checkpoint after each expected implementation worker. Group multiple workers only when joined chunk is more meaningful to review than partial worker states; name covered tasks, join condition, and technical rationale. Reviewer-call reduction is insufficient rationale.
-- Fan-out launches every ready sibling together. Parallel workers keep per-worker checkpoints; branch checkpoint gates fan-in, not sibling launch. Group only under rule above.
+- Fan-out launches every ready sibling together. Each per-worker checkpoint dispatches immediately when its worker completes; unrelated siblings continue. Branch checkpoint gates fan-in. Group only under rule above.
 - Candidate dependencies use accepted SHAs supplied by LP.
 - Assigned candidate exceeding detailed design capacity -> decomposition mismatch; LP mode returns `blocked` with `fresh task-breakdown`. Produce no shallow catch-all task.
 
