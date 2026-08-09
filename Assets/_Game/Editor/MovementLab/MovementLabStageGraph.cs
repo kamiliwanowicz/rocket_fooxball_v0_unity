@@ -42,7 +42,7 @@ namespace RocketFooxball.Editor
     {
         private const string ImporterContract = "importer-contract:1";
         private const string MaterialContract = "material-prefab-contract:1";
-        private const string GameplayContract = "gameplay-scene-contract:2";
+        private const string GameplayContract = "gameplay-scene-contract:3";
         private const string QualityContract = "quality-contract:1";
         private const string LightingContract = "lighting-contract:1";
         private const string BakedContract = "baked-output-contract:2";
@@ -239,24 +239,39 @@ namespace RocketFooxball.Editor
         {
             var normalized = NormalizeLineEndings(File.ReadAllText(path, Encoding.UTF8));
             var lines = normalized.Split(new[] { '\n' }, StringSplitOptions.None);
-            var retained = new StringBuilder(normalized.Length);
-            var index = 0;
-            while (index < lines.Length)
+            var hasTrailingNewline = normalized.EndsWith("\n", StringComparison.Ordinal);
+            var contentLineCount = lines.Length - (hasTrailingNewline ? 1 : 0);
+            var firstDocument = 0;
+            while (firstDocument < contentLineCount && !IsYamlDocumentHeader(lines[firstDocument])) firstDocument++;
+            if (firstDocument == contentLineCount)
+            {
+                return HashBytes(Encoding.UTF8.GetBytes(normalized));
+            }
+
+            var preamble = string.Join("\n", lines, 0, firstDocument);
+            var documents = new List<string>();
+            var index = firstDocument;
+            while (index < contentLineCount)
             {
                 var next = index + 1;
-                while (next < lines.Length && !IsYamlDocumentHeader(lines[next])) next++;
+                while (next < contentLineCount && !IsYamlDocumentHeader(lines[next])) next++;
                 if (!IsLightmapSettingsDocument(lines, index, next))
                 {
-                    for (var lineIndex = index; lineIndex < next; lineIndex++)
-                    {
-                        if (retained.Length > 0) retained.Append('\n');
-                        retained.Append(lines[lineIndex]);
-                    }
+                    documents.Add(string.Join("\n", lines, index, next - index));
                 }
                 index = next;
             }
 
-            return HashBytes(Encoding.UTF8.GetBytes(retained.ToString()));
+            documents.Sort(StringComparer.Ordinal);
+            var canonical = new StringBuilder(normalized.Length);
+            canonical.Append(preamble);
+            if (documents.Count > 0)
+            {
+                if (canonical.Length > 0) canonical.Append('\n');
+                canonical.Append(string.Join("\n", documents));
+            }
+            if (hasTrailingNewline) canonical.Append('\n');
+            return HashBytes(Encoding.UTF8.GetBytes(canonical.ToString()));
         }
 
         private static bool IsLightmapSettingsDocument(string[] lines, int start, int end)
