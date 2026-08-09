@@ -1,7 +1,7 @@
 using System;
 using System.IO;
-using System.Security.Cryptography;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
@@ -21,6 +21,11 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using static RocketFooxball.Editor.MovementLabSerializedProperties;
+using MaterialSpecification = RocketFooxball.Editor.MovementLabContract.MaterialSpecification;
+using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMaterialSpecification;
+using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
+using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
 namespace RocketFooxball.Editor
 {
@@ -30,21 +35,21 @@ namespace RocketFooxball.Editor
     /// </summary>
     public static class MovementLabBuilder
     {
-        private const string PrefabPath = "Assets/_Game/Prefabs/Player.prefab";
-        private const string BallPrefabPath = "Assets/_Game/Prefabs/Ball.prefab";
-        private const string RocketPrefabPath = "Assets/_Game/Prefabs/Rocket.prefab";
+        private const string PrefabPath = MovementLabContract.PlayerPrefabPath;
+        private const string BallPrefabPath = MovementLabContract.BallPrefabPath;
+        private const string RocketPrefabPath = MovementLabContract.RocketPrefabPath;
         private const string RocketModelPath = "Assets/_Game/Models/LowPolyRocket.fbx";
         private const string ArenaKitModelPath = "Assets/_Game/Models/ArenaKit.fbx";
         private const string CharacterModelPath = "Assets/_Game/Models/LowPolyCharacter.fbx";
         private const string FpsKickModelPath = "Assets/_Game/Models/FpsKickRig.fbx";
         private const string WeaponModelPath = "Assets/_Game/Models/FpsRocketLauncher.fbx";
-        private const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
-        private const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
-        private const string MaterialsPath = "Assets/_Game/Materials";
-        private const string TexturesPath = "Assets/_Game/Textures";
-        private const string ShadersPath = "Assets/_Game/Shaders";
-        private const string AnimationsPath = "Assets/_Game/Animations";
-        private const string ExplosionPrefabPath = "Assets/_Game/Prefabs/ExplosionVfx.prefab";
+        private const string ScenePath = MovementLabContract.ScenePath;
+        private const string InputActionsPath = MovementLabContract.InputActionsPath;
+        private const string MaterialsPath = MovementLabContract.MaterialsPath;
+        private const string TexturesPath = MovementLabContract.TexturesPath;
+        private const string ShadersPath = MovementLabContract.ShadersPath;
+        private const string AnimationsPath = MovementLabContract.AnimationsPath;
+        private const string ExplosionPrefabPath = MovementLabContract.ExplosionPrefabPath;
         private const string WorldControllerPath = AnimationsPath + "/WorldCharacter.controller";
         private const string FpsControllerPath = AnimationsPath + "/FpsKick.controller";
         private const string GrassTexturePath = TexturesPath + "/RetroGrass.png";
@@ -104,57 +109,53 @@ namespace RocketFooxball.Editor
         private const string GridCeilingMaterialPath = MaterialsPath + "/ContainmentGridCeiling.mat";
         private const string GridLongWallMaterialPath = MaterialsPath + "/ContainmentGridLongWall.mat";
         private const string GridEndWallMaterialPath = MaterialsPath + "/ContainmentGridEndWall.mat";
-        private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
-        private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs";
-        private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
-        private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
+        private const string ManifestPath = MovementLabContract.ManifestPath;
         private const string SkyTexturePath = TexturesPath + "/RetroSunnySky.png";
         private const string SkyMaterialPath = MaterialsPath + "/RetroSunnySky.mat";
-        private const string LightingPath = "Assets/_Game/Lighting";
-        private const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
-        private const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
-        private const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
-        private const string ReflectionCenterPath = LightingPath + "/ReflectionProbe_Center.exr";
-        private const string ReflectionWestPath = LightingPath + "/ReflectionProbe_WestGoal.exr";
-        private const string ReflectionEastPath = LightingPath + "/ReflectionProbe_EastGoal.exr";
-        private const string BakedLightingPath = "Assets/_Game/Scenes/MovementLab";
+        private const string LightingPath = MovementLabContract.LightingPath;
+        private const string VolumeProfilePath = MovementLabContract.VolumeProfilePath;
+        private const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
+        private const string LightingManifestPath = MovementLabContract.LightingManifestPath;
+        private const string ReflectionCenterPath = MovementLabContract.ReflectionCenterPath;
+        private const string ReflectionWestPath = MovementLabContract.ReflectionWestPath;
+        private const string ReflectionEastPath = MovementLabContract.ReflectionEastPath;
+        private const string BakedLightingPath = MovementLabContract.BakedLightingPath;
         private const int ExpectedLightmapCount = 5;
         private const int ExpectedReflectionProbeBakeCount = 4;
         private const string SkyShaderPath = ShadersPath + "/SunnyArenaSky.shader";
-        private const int ManifestSchemaVersion = 4;
         private const string DetailNormalKeyword = "_DETAIL_MULX2";
-        private const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
-        private const float BallPrefabScale = 4.32f;
-        private const float BallRadius = 2.16f;
-        private const float BallSpawnHeight = BallRadius;
-        private const float BlastRadius = 5.85f;
-        private const float BlastVisualScale = 1.30f;
-        private const float GoalAxisPosition = 64f;
-        private const float PlayerSpawnOffset = 12f;
-        private const float GoalFreezeDuration = 5f;
-        private const float CelebrationOrbitRadius = 5.5f;
-        private const float CelebrationOrbitHeight = 2.5f;
-        private const float CelebrationLookHeight = 1.05f;
-        private const float CelebrationOrbitDegrees = 360f;
-        private const float CelebrationFov = 60f;
-        private const float RocketTrailLifetime = 0.55f;
-        private const float RocketTrailRateOverDistance = 1.5f;
-        private const float RocketTrailStartSize = 0.70f;
-        private static readonly Color RocketTrailStartColor = new Color(0.58f, 0.55f, 0.50f, 0.75f);
-        private static readonly Color RocketTrailEndColor = new Color(0.20f, 0.19f, 0.18f, 1f);
-        private static readonly Color RocketEmissionColor = new Color(1.00f, 0.20f, 0.04f, 1f);
-        private const float RocketEmissionStrength = 3.0f;
-        private static readonly Color RocketBaseColor = Color.white;
-        private static readonly Color WeaponMetalBaseColor = new Color(0.95f, 0.86f, 0.70f, 1f);
-        private static readonly Color WeaponDarkBaseColor = new Color(0.88f, 0.90f, 0.92f, 1f);
-        private static readonly Color WeaponAccentBaseColor = new Color(0.95f, 0.56f, 0.38f, 1f);
-        private static readonly Color ExplosionFireMaterialColor = Color.white;
-        private static readonly Color ExplosionSmokeMaterialColor = new Color(0.52f, 0.49f, 0.44f, 0.72f);
-        private static readonly Color GridColor = new Color(0.12f, 0.50f, 0.72f, 1f);
-        private const float JumpVelocity = 4.80f;
-        private const float UnderfootForwardImpulseScale = 0.5625f;
-        private const float UnderfootUpwardImpulseScale = 1f;
-        private const float UnderfootHighSpeedVerticalRedirect = 1f;
+        private const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
+        private const float BallPrefabScale = MovementLabContract.BallPrefabScale;
+        private const float BallRadius = MovementLabContract.BallRadius;
+        private const float BallSpawnHeight = MovementLabContract.BallSpawnHeight;
+        private const float BlastRadius = MovementLabContract.BlastRadius;
+        private const float BlastVisualScale = MovementLabContract.BlastVisualScale;
+        private const float GoalAxisPosition = MovementLabContract.GoalAxisPosition;
+        private const float PlayerSpawnOffset = MovementLabContract.PlayerSpawnOffset;
+        private const float GoalFreezeDuration = MovementLabContract.GoalFreezeDuration;
+        private const float CelebrationOrbitRadius = MovementLabContract.CelebrationOrbitRadius;
+        private const float CelebrationOrbitHeight = MovementLabContract.CelebrationOrbitHeight;
+        private const float CelebrationLookHeight = MovementLabContract.CelebrationLookHeight;
+        private const float CelebrationOrbitDegrees = MovementLabContract.CelebrationOrbitDegrees;
+        private const float CelebrationFov = MovementLabContract.CelebrationFov;
+        private const float RocketTrailLifetime = MovementLabContract.RocketTrailLifetime;
+        private const float RocketTrailRateOverDistance = MovementLabContract.RocketTrailRateOverDistance;
+        private const float RocketTrailStartSize = MovementLabContract.RocketTrailStartSize;
+        private static readonly Color RocketTrailStartColor = MovementLabContract.RocketTrailStartColor;
+        private static readonly Color RocketTrailEndColor = MovementLabContract.RocketTrailEndColor;
+        private static readonly Color RocketEmissionColor = MovementLabContract.RocketEmissionColor;
+        private const float RocketEmissionStrength = MovementLabContract.RocketEmissionStrength;
+        private static readonly Color RocketBaseColor = MovementLabContract.RocketBaseColor;
+        private static readonly Color WeaponMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
+        private static readonly Color WeaponDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
+        private static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
+        private static readonly Color ExplosionFireMaterialColor = MovementLabContract.ExplosionFireMaterialColor;
+        private static readonly Color ExplosionSmokeMaterialColor = MovementLabContract.ExplosionSmokeMaterialColor;
+        private static readonly Color GridColor = MovementLabContract.GridColor;
+        private const float JumpVelocity = MovementLabContract.JumpVelocity;
+        private const float UnderfootForwardImpulseScale = MovementLabContract.UnderfootForwardImpulseScale;
+        private const float UnderfootUpwardImpulseScale = MovementLabContract.UnderfootUpwardImpulseScale;
+        private const float UnderfootHighSpeedVerticalRedirect = MovementLabContract.UnderfootHighSpeedVerticalRedirect;
 
         // Keep this list limited to assets authored by this builder. Unity can
         // serialize empty fields with trailing spaces in both the asset and
@@ -265,93 +266,6 @@ namespace RocketFooxball.Editor
             public Collider[] Shields;
         }
 
-        private readonly struct MaterialSpecification
-        {
-            public readonly string Name;
-            public readonly string ShaderName;
-            public readonly Texture2D Texture;
-            public readonly Vector2 TextureScale;
-            public readonly Color BaseColor;
-            public readonly Color ShadowColor;
-            public readonly Color AmbientColor;
-            public readonly float AmbientStrength;
-            public readonly Color RimColor;
-            public readonly float RimPower;
-            public readonly float RimStrength;
-            public readonly Color EmissionColor;
-            public readonly float EmissionStrength;
-
-            public MaterialSpecification(string name, string shaderName, Texture2D texture, Vector2 textureScale,
-                Color baseColor, Color shadowColor, Color ambientColor, float ambientStrength,
-                Color rimColor, float rimPower, float rimStrength, Color emissionColor, float emissionStrength)
-            {
-                Name = name;
-                ShaderName = shaderName;
-                Texture = texture;
-                TextureScale = textureScale;
-                BaseColor = baseColor;
-                ShadowColor = shadowColor;
-                AmbientColor = ambientColor;
-                AmbientStrength = ambientStrength;
-                RimColor = rimColor;
-                RimPower = rimPower;
-                RimStrength = rimStrength;
-                EmissionColor = emissionColor;
-                EmissionStrength = emissionStrength;
-            }
-        }
-
-        private readonly struct PbrMaterialSpecification
-        {
-            public readonly string Name;
-            public readonly Texture2D BaseMap;
-            public readonly Texture2D NormalMap;
-            public readonly Texture2D MetallicGlossMap;
-            public readonly Texture2D OcclusionMap;
-            public readonly Texture2D EmissionMap;
-            public readonly Texture2D DetailNormalMap;
-            public readonly Vector2 TextureScale;
-            public readonly Color BaseColor;
-            public readonly Color EmissionColor;
-            public readonly float EmissionStrength;
-            public readonly float Metallic;
-            public readonly float Smoothness;
-            public readonly float OcclusionStrength;
-            public readonly float BumpScale;
-
-            public PbrMaterialSpecification(string name, Texture2D baseMap, Texture2D normalMap,
-                Texture2D metallicGlossMap, Texture2D occlusionMap, Texture2D emissionMap,
-                Texture2D detailNormalMap, Vector2 textureScale, Color baseColor, Color emissionColor,
-                float emissionStrength, float metallic, float smoothness, float occlusionStrength, float bumpScale)
-            {
-                Name = name;
-                BaseMap = baseMap;
-                NormalMap = normalMap;
-                MetallicGlossMap = metallicGlossMap;
-                OcclusionMap = occlusionMap;
-                EmissionMap = emissionMap;
-                DetailNormalMap = detailNormalMap;
-                TextureScale = textureScale;
-                BaseColor = baseColor;
-                EmissionColor = emissionColor;
-                EmissionStrength = emissionStrength;
-                Metallic = metallic;
-                Smoothness = smoothness;
-                OcclusionStrength = occlusionStrength;
-                BumpScale = bumpScale;
-            }
-        }
-
-        [Serializable]
-        private sealed class MovementLabBuildManifest
-        {
-            public int schemaVersion;
-            public string sourceSignature;
-            public string generatedOutputFingerprint;
-            public string unityVersion;
-            public string[] fingerprintPaths;
-        }
-
         private static string[] CreateGeneratedFingerprintPaths()
         {
             var paths = new List<string>();
@@ -423,6 +337,7 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TimeManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TagManager.asset");
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath);
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath + ".meta");
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath);
@@ -502,11 +417,72 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
-            var builderSignature = ComputeBuilderSignature();
-            if (TryReuseGeneratedState(builderSignature))
+            AssembleMovementLab();
+            ValidateMovementLabPreBake();
+            var probe = MovementLabStageGraph.Probe(true);
+            if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
             {
+                throw new InvalidOperationException("MovementLab lighting is stale. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
+            }
+        }
+
+        [MenuItem("Rocket Fooxball/Assemble Movement Lab")]
+        public static void AssembleMovementLab()
+        {
+            var probe = MovementLabStageGraph.Probe(true);
+            var generationStages = new[]
+            {
+                MovementLabStage.Importer,
+                MovementLabStage.MaterialPrefab,
+                MovementLabStage.GameplayScene,
+                MovementLabStage.Quality
+            };
+            if (!generationStages.Any(probe.IsStale))
+            {
+                Debug.Log("Rocket Fooxball Movement Lab assembly reused generated state: " + ScenePath);
                 return;
             }
+
+            AssembleMovementLabUnstaged();
+            MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureAssembledState());
+            AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            Debug.Log("Rocket Fooxball Movement Lab assembled without lighting bake: " + ScenePath);
+        }
+
+        [MenuItem("Rocket Fooxball/Validate Movement Lab Pre-Bake")]
+        public static void ValidateMovementLabPreBake()
+        {
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord();
+            Debug.Log("Rocket Fooxball Movement Lab pre-bake gate passed: " + passPath);
+        }
+
+        [MenuItem("Rocket Fooxball/Probe Movement Lab Generated State")]
+        public static void ProbeMovementLabGeneratedState()
+        {
+            var probe = MovementLabStageGraph.Probe(true);
+            Debug.Log("Rocket Fooxball Movement Lab stale stages: " +
+                (probe.StaleStages.Length == 0 ? "none" : string.Join(", ", probe.StaleStages)) +
+                "; lighting input digest: " + probe.LightingInputDigest);
+        }
+
+        [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting")]
+        public static void BakeMovementLabLighting()
+        {
+            ValidateMovementLabPreBake();
+            var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            BakeSceneLighting(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            AssetDatabase.SaveAssets();
+            NormalizeGeneratedYamlWhitespace();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
+            AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            Debug.Log("Rocket Fooxball Movement Lab lighting baked explicitly: " + ScenePath);
+        }
+
+        private static void AssembleMovementLabUnstaged()
+        {
+            var builderSignature = ComputeBuilderSignature();
 
             EnsureFolders();
 
@@ -651,8 +627,6 @@ namespace RocketFooxball.Editor
 
             ConfigureSceneEnvironment(scene, arena);
             EditorSceneManager.SaveScene(scene, ScenePath);
-            BakeSceneLighting(scene);
-            EditorSceneManager.SaveScene(scene, ScenePath);
             }
             finally
             {
@@ -664,35 +638,28 @@ namespace RocketFooxball.Editor
             AssetDatabase.SaveAssets();
             NormalizeGeneratedYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            ValidateMovementLabInternal(false, builderSignature, false);
             FinalizeGeneratedMaterialPersistence();
-            var generatedOutputFingerprint = ComputeGeneratedOutputFingerprint();
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            var settledFingerprint = ComputeGeneratedOutputFingerprint();
-            if (!string.Equals(generatedOutputFingerprint, settledFingerprint, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("Generated output fingerprint did not settle after synchronous material import.");
-            }
-            WriteBuildManifest(builderSignature, generatedOutputFingerprint);
-            AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
-            Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath);
         }
 
         /// <summary>Reopens and checks generated assets without writing project state.</summary>
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]
         public static void ValidateMovementLab()
         {
-            ValidateMovementLabInternal(true, ComputeBuilderSignature(), true);
+            var probe = MovementLabStageGraph.Probe(true);
+            if (probe.StaleStages.Length > 0)
+            {
+                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", probe.StaleStages));
+            }
+            ValidateMovementLabInternal(ComputeBuilderSignature(), true, true);
         }
 
-        private static void ValidateMovementLabInternal(bool includeManifest, string builderSignature, bool logSuccess)
+        internal static void ValidateMovementLabPreBakeSemantics()
         {
-            var baselineLitMaterialDirtyState = CaptureGeneratedLitMaterialDirtyState();
-            if (includeManifest)
-            {
-                ValidateManifestAndFingerprint(builderSignature);
-            }
+            ValidateMovementLabInternal(ComputeBuilderSignature(), false, false);
+        }
 
+        private static void ValidateMovementLabInternal(string builderSignature, bool includeBakedLighting, bool logSuccess)
+        {
             EnsureAssetExists(PrefabPath);
             EnsureAssetExists(BallPrefabPath);
             EnsureAssetExists(RocketPrefabPath);
@@ -970,10 +937,9 @@ namespace RocketFooxball.Editor
             ValidateTextureImporterContracts();
             ValidateModelImporterContracts();
             ValidateRenderPipelineSettings();
-            ValidateSceneEnvironment(scene, arena);
+            ValidateSceneEnvironment(scene, arena, includeBakedLighting);
             ValidatePhysicsAndBuildSettings();
             ValidateNoMissingComponents(scene);
-            RestoreGeneratedLitMaterialKeywords(false, baselineLitMaterialDirtyState);
 
             if (logSuccess)
             {
@@ -2030,176 +1996,6 @@ namespace RocketFooxball.Editor
             else material.DisableKeyword(keyword);
         }
 
-        private static bool TryReuseGeneratedState(string builderSignature)
-        {
-            try
-            {
-                ValidateManifestAndFingerprint(builderSignature);
-                var active = SceneManager.GetActiveScene();
-                if (active.path != ScenePath)
-                {
-                    active = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-                }
-                if (!active.IsValid())
-                {
-                    return RejectGeneratedReuse("generated scene is invalid");
-                }
-                if (GameObject.Find(GetBuildMarkerName(builderSignature)) == null)
-                {
-                    return RejectGeneratedReuse("scene marker is missing or stale");
-                }
-
-                // Full validation is intentionally read-only. A successful
-                // result permits the caller to return before every write path.
-                ValidateMovementLabInternal(true, builderSignature, false);
-                Debug.Log("Rocket Fooxball Movement Lab reused generated state: " + ScenePath);
-                return true;
-            }
-            catch (Exception exception)
-            {
-                return RejectGeneratedReuse(exception.Message);
-            }
-        }
-
-        private static bool RejectGeneratedReuse(string reason)
-        {
-            var detail = string.IsNullOrEmpty(reason) ? "unknown stale state" : reason;
-            Debug.Log("Rocket Fooxball Movement Lab generated state stale; rebuilding: " + detail);
-            return false;
-        }
-
-        private static void ValidateManifestAndFingerprint(string builderSignature)
-        {
-            var projectRoot = ResolveProjectRoot();
-            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
-            if (!File.Exists(manifestAbsolutePath))
-            {
-                throw new InvalidOperationException("build manifest is missing: " + ManifestPath);
-            }
-
-            MovementLabBuildManifest manifest;
-            try
-            {
-                manifest = JsonUtility.FromJson<MovementLabBuildManifest>(File.ReadAllText(manifestAbsolutePath));
-            }
-            catch (Exception exception)
-            {
-                throw new InvalidOperationException("build manifest could not be parsed: " + exception.Message);
-            }
-
-            if (manifest == null)
-            {
-                throw new InvalidOperationException("build manifest is empty");
-            }
-            if (manifest.schemaVersion != ManifestSchemaVersion)
-            {
-                throw new InvalidOperationException("build manifest schema is stale");
-            }
-            if (!string.Equals(manifest.sourceSignature, builderSignature, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("build manifest source signature is stale");
-            }
-            if (!string.Equals(manifest.unityVersion, Application.unityVersion, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("build manifest Unity version is stale");
-            }
-            if (manifest.fingerprintPaths == null || manifest.fingerprintPaths.Length != GeneratedFingerprintPaths.Length)
-            {
-                throw new InvalidOperationException("build manifest fingerprint path list is stale");
-            }
-            ValidateGeneratedFingerprintPathList(manifest.fingerprintPaths);
-            for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
-            {
-                var expectedPath = GeneratedFingerprintPaths[i];
-                var manifestPath = manifest.fingerprintPaths[i];
-                if (!string.Equals(manifestPath, expectedPath, StringComparison.Ordinal) ||
-                    !string.Equals(NormalizeRepositoryRelativePath(manifestPath), manifestPath, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException("build manifest fingerprint path list is stale");
-                }
-            }
-
-            var actualFingerprint = ComputeGeneratedOutputFingerprint();
-            if (!string.Equals(manifest.generatedOutputFingerprint, actualFingerprint, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException("generated output fingerprint is stale");
-            }
-        }
-
-        private static string ComputeGeneratedOutputFingerprint()
-        {
-            var projectRoot = ResolveProjectRoot();
-            using (var sha = SHA256.Create())
-            {
-                for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
-                {
-                    var relativePath = NormalizeRepositoryRelativePath(GeneratedFingerprintPaths[i]);
-                    var absolutePath = GetAbsoluteProjectPath(projectRoot, relativePath);
-                    if (!File.Exists(absolutePath))
-                    {
-                        throw new InvalidOperationException("Missing generated fingerprint file: " + relativePath);
-                    }
-
-                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
-                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
-                    var bytes = File.ReadAllBytes(absolutePath);
-                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
-                    var separator = new byte[] { 0 };
-                    sha.TransformBlock(separator, 0, separator.Length, separator, 0);
-                }
-                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-                return BitConverter.ToString(sha.Hash).Replace("-", string.Empty).ToLowerInvariant();
-            }
-        }
-
-        private static void WriteBuildManifest(string builderSignature, string generatedOutputFingerprint)
-        {
-            var projectRoot = ResolveProjectRoot();
-            var manifestAbsolutePath = GetAbsoluteProjectPath(projectRoot, ManifestPath);
-            var manifestDirectory = Path.GetDirectoryName(manifestAbsolutePath);
-            if (string.IsNullOrEmpty(manifestDirectory))
-            {
-                throw new InvalidOperationException("Unable to resolve build manifest directory.");
-            }
-            Directory.CreateDirectory(manifestDirectory);
-
-            var manifest = new MovementLabBuildManifest
-            {
-                schemaVersion = ManifestSchemaVersion,
-                sourceSignature = builderSignature,
-                generatedOutputFingerprint = generatedOutputFingerprint,
-                unityVersion = Application.unityVersion,
-                fingerprintPaths = (string[])GeneratedFingerprintPaths.Clone()
-            };
-            var json = JsonUtility.ToJson(manifest, true);
-            var bytes = new System.Text.UTF8Encoding(false).GetBytes(json + "\n");
-            var temporaryPath = manifestAbsolutePath + ".tmp-" + Guid.NewGuid().ToString("N");
-            try
-            {
-                using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
-                {
-                    stream.Write(bytes, 0, bytes.Length);
-                    stream.Flush(true);
-                }
-
-                if (File.Exists(manifestAbsolutePath))
-                {
-                    File.Replace(temporaryPath, manifestAbsolutePath, null);
-                }
-                else
-                {
-                    File.Move(temporaryPath, manifestAbsolutePath);
-                }
-            }
-            finally
-            {
-                if (File.Exists(temporaryPath))
-                {
-                    File.Delete(temporaryPath);
-                }
-            }
-        }
-
         private static DirectoryInfo ResolveProjectRoot()
         {
             var projectRoot = Directory.GetParent(Application.dataPath);
@@ -2241,78 +2037,7 @@ namespace RocketFooxball.Editor
 
         private static string ComputeBuilderSignature()
         {
-            var projectRoot = ResolveProjectRoot();
-
-            var sourcePaths = new[]
-            {
-                BuilderSourcePath,
-                ToonShaderPath,
-                ParticleShaderPath,
-                AdditiveParticleShaderPath,
-                PowerGridShaderPath,
-                ShieldShaderPath,
-                SkyShaderPath,
-                "Assets/_Game/Editor/GraphicsQualityConfigurator.cs",
-                "Assets/_Game/Scripts/Runtime/Rendering/GraphicsQualityRuntime.cs",
-                "Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs",
-                "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs",
-                "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
-                "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
-                "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
-                "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
-                "Assets/_Game/Scripts/Runtime/Weapons/ExplosionResolver.cs",
-                "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs",
-                RocketLauncherSourcePath,
-                "Tools/Blender/generate_retro_textures.py",
-                "Tools/Blender/generate_arena_kit.py",
-                "Tools/Blender/generate_low_poly_character.py",
-                "Tools/Blender/generate_fps_kick_rig.py",
-                "Tools/Blender/generate_fps_rocket_launcher.py",
-                RocketGeneratorSourcePath
-            };
-            Array.Sort(sourcePaths, StringComparer.Ordinal);
-            using (var sha = SHA256.Create())
-            {
-                for (var i = 0; i < sourcePaths.Length; i++)
-                {
-                    var relativePath = sourcePaths[i].Replace('\\', '/');
-                    var absolutePath = Path.Combine(projectRoot.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
-                    if (!File.Exists(absolutePath)) throw new InvalidOperationException("Missing signature source: " + relativePath);
-                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
-                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
-                    var bytes = File.ReadAllBytes(absolutePath);
-                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
-                }
-                var generatedSourcePaths = new[]
-                {
-                    ArenaKitModelPath, RocketModelPath,
-                    GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath, GrassOcclusionTexturePath,
-                    WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath, WallOcclusionTexturePath,
-                    TrimTexturePath, TrimNormalTexturePath, TrimMetallicTexturePath, TrimOcclusionTexturePath,
-                    HazardTexturePath, HazardNormalTexturePath, HazardMetallicTexturePath, HazardOcclusionTexturePath,
-                    DetailNormalTexturePath, ShieldTexturePath,
-                    BallTexturePath, BallNormalTexturePath, BallMetallicTexturePath, BallOcclusionTexturePath,
-                    WeaponMetalTexturePath, WeaponMetalNormalTexturePath, WeaponMetalMetallicTexturePath, WeaponMetalOcclusionTexturePath,
-                    WeaponDarkTexturePath, WeaponDarkNormalTexturePath, WeaponDarkMetallicTexturePath, WeaponDarkOcclusionTexturePath,
-                    WeaponAccentTexturePath, WeaponAccentNormalTexturePath, WeaponAccentMetallicTexturePath, WeaponAccentOcclusionTexturePath,
-                    WeaponAccentEmissionTexturePath,
-                    RocketTexturePath, RocketNormalTexturePath, RocketMetallicTexturePath, RocketOcclusionTexturePath, RocketEmissionTexturePath, RocketGlowTexturePath,
-                     ExplosionTexturePath, SmokeTexturePath, SkyTexturePath
-                };
-                Array.Sort(generatedSourcePaths, StringComparer.Ordinal);
-                for (var i = 0; i < generatedSourcePaths.Length; i++)
-                {
-                    var relativePath = generatedSourcePaths[i].Replace('\\', '/');
-                    var absolutePath = Path.Combine(projectRoot.FullName, relativePath.Replace('/', Path.DirectorySeparatorChar));
-                    if (!File.Exists(absolutePath)) throw new InvalidOperationException("Missing generated signature source: " + relativePath);
-                    var pathBytes = System.Text.Encoding.UTF8.GetBytes(relativePath + "\n");
-                    sha.TransformBlock(pathBytes, 0, pathBytes.Length, pathBytes, 0);
-                    var bytes = File.ReadAllBytes(absolutePath);
-                    sha.TransformBlock(bytes, 0, bytes.Length, bytes, 0);
-                }
-                sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
-                return BitConverter.ToString(sha.Hash).Replace("-", string.Empty).ToLowerInvariant();
-            }
+            return "serialized-contract-v" + MovementLabContract.SerializedContractVersion;
         }
 
         private static string GetBuildMarkerName(string builderSignature)
@@ -2958,45 +2683,10 @@ namespace RocketFooxball.Editor
             land.motion = clips[4];
             kick.motion = clips[5];
 
-            AddAnimatorConditionTransition(idle, run, AnimatorConditionMode.Greater, 0.30f, "Speed");
-            AddAnimatorConditionTransition(run, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
-            AddAirTransitions(idle, jump, fall);
-            AddAirTransitions(run, jump, fall);
-            AddAirTransitions(land, jump, fall);
-            AddAnimatorConditionTransition(jump, fall, AnimatorConditionMode.Less, 0f, "VerticalSpeed");
-            AddAnimatorConditionTransition(jump, land, AnimatorConditionMode.If, 0f, "Grounded");
-            var fallToJump = AddAnimatorConditionTransition(fall, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
-            fallToJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
-            var fallToLand = AddAnimatorConditionTransition(fall, land, AnimatorConditionMode.If, 0f, "Grounded");
-            var landToIdle = AddAnimatorConditionTransition(land, idle, AnimatorConditionMode.Less, 0.20f, "Speed");
-            landToIdle.hasExitTime = true;
-            landToIdle.exitTime = 0.65f;
-            var landToRun = AddAnimatorConditionTransition(land, run, AnimatorConditionMode.Greater, 0.20f, "Speed");
-            landToRun.hasExitTime = true;
-            landToRun.exitTime = 0.65f;
-            var anyKick = stateMachine.AddAnyStateTransition(kick);
-            anyKick.hasExitTime = false;
-            anyKick.exitTime = 0f;
-            anyKick.duration = 0.02f;
-            anyKick.offset = 0f;
-            anyKick.canTransitionToSelf = false;
-            anyKick.AddCondition(AnimatorConditionMode.If, 0f, "Kick");
-            var kickToIdle = AddAnimatorConditionTransition(kick, idle, AnimatorConditionMode.If, 0f, "Grounded");
-            kickToIdle.hasExitTime = true;
-            kickToIdle.exitTime = 1f;
-            kickToIdle.AddCondition(AnimatorConditionMode.Less, 0.20f, "Speed");
-            var kickToRun = AddAnimatorConditionTransition(kick, run, AnimatorConditionMode.If, 0f, "Grounded");
-            kickToRun.hasExitTime = true;
-            kickToRun.exitTime = 1f;
-            kickToRun.AddCondition(AnimatorConditionMode.Greater, 0.20f, "Speed");
-            var kickToJump = AddAnimatorConditionTransition(kick, jump, AnimatorConditionMode.IfNot, 0f, "Grounded");
-            kickToJump.hasExitTime = true;
-            kickToJump.exitTime = 1f;
-            kickToJump.AddCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
-            var kickToFall = AddAnimatorConditionTransition(kick, fall, AnimatorConditionMode.IfNot, 0f, "Grounded");
-            kickToFall.hasExitTime = true;
-            kickToFall.exitTime = 1f;
-            kickToFall.AddCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
+            ApplyWorldAnimatorTransitions(stateMachine, new Dictionary<string, AnimatorState>(StringComparer.Ordinal)
+            {
+                { "Idle", idle }, { "Run", run }, { "Jump", jump }, { "Fall", fall }, { "Land", land }, { "Kick", kick }
+            });
 
             controller.layers[0] = layer;
             CleanupWorldAnimatorSubassets(controller, stateMachine);
@@ -3064,74 +2754,33 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private readonly struct WorldAnimatorConditionSpecification
-        {
-            public readonly AnimatorConditionMode Mode;
-            public readonly float Threshold;
-            public readonly string Parameter;
-
-            public WorldAnimatorConditionSpecification(AnimatorConditionMode mode, float threshold, string parameter)
-            {
-                Mode = mode;
-                Threshold = threshold;
-                Parameter = parameter;
-            }
-        }
-
-        private readonly struct WorldAnimatorTransitionSpecification
-        {
-            public readonly string Source;
-            public readonly string Destination;
-            public readonly bool AnyState;
-            public readonly bool HasExitTime;
-            public readonly float ExitTime;
-            public readonly float Duration;
-            public readonly bool CanTransitionToSelf;
-            public readonly WorldAnimatorConditionSpecification[] Conditions;
-
-            public WorldAnimatorTransitionSpecification(string source, string destination, bool anyState, bool hasExitTime, float exitTime, float duration, bool canTransitionToSelf, params WorldAnimatorConditionSpecification[] conditions)
-            {
-                Source = source;
-                Destination = destination;
-                AnyState = anyState;
-                HasExitTime = hasExitTime;
-                ExitTime = exitTime;
-                Duration = duration;
-                CanTransitionToSelf = canTransitionToSelf;
-                Conditions = conditions ?? Array.Empty<WorldAnimatorConditionSpecification>();
-            }
-        }
-
-        private static WorldAnimatorConditionSpecification WorldCondition(AnimatorConditionMode mode, float threshold, string parameter)
-        {
-            return new WorldAnimatorConditionSpecification(mode, threshold, parameter);
-        }
-
         private static WorldAnimatorTransitionSpecification[] GetWorldAnimatorTransitionSpecifications()
         {
-            const float blend = 0.02f;
-            return new[]
+            return (WorldAnimatorTransitionSpecification[])MovementLabContract.WorldAnimatorTransitions.Clone();
+        }
+
+        private static void ApplyWorldAnimatorTransitions(AnimatorStateMachine stateMachine, Dictionary<string, AnimatorState> states)
+        {
+            var specifications = MovementLabContract.WorldAnimatorTransitions;
+            for (var i = 0; i < specifications.Length; i++)
             {
-                new WorldAnimatorTransitionSpecification("Idle", "Run", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.30f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Run", "Idle", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Idle", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Idle", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Run", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Run", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Jump", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0f, "VerticalSpeed")),
-                new WorldAnimatorTransitionSpecification("Jump", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Fall", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Fall", "Land", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Land", "Jump", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Land", "Fall", false, false, 0f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                new WorldAnimatorTransitionSpecification("Land", "Idle", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Land", "Run", false, true, 0.65f, blend, true, WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Kick", "Idle", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Kick", "Run", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.If, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
-                new WorldAnimatorTransitionSpecification("Kick", "Jump", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed")),
-                new WorldAnimatorTransitionSpecification("Kick", "Fall", false, true, 1f, blend, true, WorldCondition(AnimatorConditionMode.IfNot, 0f, "Grounded"), WorldCondition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed")),
-                new WorldAnimatorTransitionSpecification("AnyState", "Kick", true, false, 0f, blend, false, WorldCondition(AnimatorConditionMode.If, 0f, "Kick"))
-            };
+                var specification = specifications[i];
+                var destination = states[specification.Destination];
+                var transition = specification.AnyState
+                    ? stateMachine.AddAnyStateTransition(destination)
+                    : states[specification.Source].AddTransition(destination);
+                transition.hasExitTime = specification.HasExitTime;
+                transition.exitTime = specification.ExitTime;
+                transition.duration = specification.Duration;
+                transition.offset = 0f;
+                transition.canTransitionToSelf = specification.CanTransitionToSelf;
+                transition.conditions = Array.Empty<AnimatorCondition>();
+                for (var conditionIndex = 0; conditionIndex < specification.Conditions.Length; conditionIndex++)
+                {
+                    var condition = specification.Conditions[conditionIndex];
+                    transition.AddCondition(condition.Mode, condition.Threshold, condition.Parameter);
+                }
+            }
         }
 
         private static bool IsWorldAnimatorControllerExact(AnimatorController controller, AnimationClip[] clips, out string reason)
@@ -3494,7 +3143,7 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void ValidateSceneEnvironment(Scene scene, GameObject arena)
+        private static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
         {
             var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();
             if (sun == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
@@ -3570,11 +3219,14 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Reflection probe contract invalid: " + expected.name);
             }
 
-            if (LightmapSettings.lightmaps == null || LightmapSettings.lightmaps.Length == 0)
-                throw new InvalidOperationException("MovementLab lightmap bake data is missing.");
-            if (LightmapSettings.lightmapsMode != LightmapsMode.CombinedDirectional)
-                throw new InvalidOperationException("MovementLab lightmaps must use directional mode.");
-            ValidatePersistedBakeOutputs(scene);
+            if (includeBakedLighting)
+            {
+                if (LightmapSettings.lightmaps == null || LightmapSettings.lightmaps.Length == 0)
+                    throw new InvalidOperationException("MovementLab lightmap bake data is missing.");
+                if (LightmapSettings.lightmapsMode != LightmapsMode.CombinedDirectional)
+                    throw new InvalidOperationException("MovementLab lightmaps must use directional mode.");
+                ValidatePersistedBakeOutputs(scene);
+            }
 
             var renderers = scene.GetRootGameObjects();
             var meshRenderers = 0;
@@ -4685,186 +4337,6 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Missing required " + label + ".");
             }
             return value;
-        }
-
-        private static void ValidateReference(UnityEngine.Object target, string propertyName, UnityEngine.Object expected, string label)
-        {
-            if (target == null || expected == null)
-            {
-                throw new InvalidOperationException(label + " reference is null.");
-            }
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.ObjectReference || property.objectReferenceValue != expected)
-            {
-                throw new InvalidOperationException(label + " reference is broken.");
-            }
-        }
-
-        private static void ValidateSerializedFloat(UnityEngine.Object target, string propertyName, float expected, string label)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.Float || Mathf.Abs(property.floatValue - expected) > 0.001f)
-            {
-                throw new InvalidOperationException(label + " tuning mismatch.");
-            }
-        }
-
-        private static void ValidateSerializedInteger(UnityEngine.Object target, string propertyName, int expected, string label)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.Integer || property.intValue != expected)
-            {
-                throw new InvalidOperationException(label + " tuning mismatch.");
-            }
-        }
-
-        private static void ValidateSerializedVector3(UnityEngine.Object target, string propertyName, Vector3 expected, string label)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.Vector3 || Vector3.Distance(property.vector3Value, expected) > 0.001f)
-            {
-                throw new InvalidOperationException(label + " tuning mismatch.");
-            }
-        }
-
-        private static void ValidatePrefabReference(UnityEngine.Object target, string propertyName, string prefabPath, string label)
-        {
-            if (target == null) throw new InvalidOperationException(label + " target is null.");
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.ObjectReference || property.objectReferenceValue == null)
-            {
-                throw new InvalidOperationException(label + " reference is null.");
-            }
-            var component = property.objectReferenceValue as Component;
-            var sourcePath = AssetDatabase.GetAssetPath(property.objectReferenceValue);
-            if (string.IsNullOrEmpty(sourcePath))
-            {
-                var source = component != null ? PrefabUtility.GetCorrespondingObjectFromSource(component) : PrefabUtility.GetCorrespondingObjectFromSource(property.objectReferenceValue);
-                sourcePath = source != null ? AssetDatabase.GetAssetPath(source) : string.Empty;
-            }
-            if (sourcePath != prefabPath)
-            {
-                throw new InvalidOperationException(label + " prefab provenance mismatch: " + sourcePath);
-            }
-        }
-
-        private static T GetSerializablePrefabComponent<T>(GameObject prefabAsset, out GameObject instance) where T : Component
-        {
-            instance = null;
-            if (prefabAsset == null)
-            {
-                return null;
-            }
-
-            instance = PrefabUtility.InstantiatePrefab(prefabAsset) as GameObject;
-            if (instance != null)
-            {
-                instance.hideFlags = HideFlags.HideAndDontSave;
-            }
-            var instanceComponent = instance != null ? instance.GetComponent<T>() : null;
-            return instanceComponent != null ? PrefabUtility.GetCorrespondingObjectFromSource(instanceComponent) : null;
-        }
-
-        private static void ValidateArrayContains(UnityEngine.Object target, string propertyName, UnityEngine.Object first, UnityEngine.Object second, string label)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || !property.isArray || property.arraySize != 2)
-            {
-                throw new InvalidOperationException(label + " must contain two colliders.");
-            }
-            var a = property.GetArrayElementAtIndex(0).objectReferenceValue;
-            var b = property.GetArrayElementAtIndex(1).objectReferenceValue;
-            if (!((a == first && b == second) || (a == second && b == first)))
-            {
-                throw new InvalidOperationException(label + " does not contain both goal shields.");
-            }
-        }
-
-        private static void SetObjectReference(UnityEngine.Object target, string propertyName, UnityEngine.Object value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no serialized field '" + propertyName + "'.");
-            }
-            property.objectReferenceValue = value;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetObjectArray(UnityEngine.Object target, string propertyName, UnityEngine.Object[] values)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || !property.isArray)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no serialized array '" + propertyName + "'.");
-            }
-            property.arraySize = values == null ? 0 : values.Length;
-            for (var i = 0; values != null && i < values.Length; i++)
-            {
-                property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
-            }
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetFloat(UnityEngine.Object target, string propertyName, float value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no serialized float '" + propertyName + "'.");
-            }
-            property.floatValue = value;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetInteger(UnityEngine.Object target, string propertyName, int value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.Integer)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no serialized integer '" + propertyName + "'.");
-            }
-            property.intValue = value;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetVector3(UnityEngine.Object target, string propertyName, Vector3 value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no serialized Vector3 '" + propertyName + "'.");
-            }
-            property.vector3Value = value;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
-        }
-
-        private static void SetEnum(UnityEngine.Object target, string propertyName, string value)
-        {
-            var serialized = new SerializedObject(target);
-            var property = serialized.FindProperty(propertyName);
-            if (property == null || property.propertyType != SerializedPropertyType.Enum)
-            {
-                throw new InvalidOperationException(target.GetType().Name + " has no enum '" + propertyName + "'.");
-            }
-            var index = Array.IndexOf(property.enumDisplayNames, value);
-            if (index < 0)
-            {
-                throw new InvalidOperationException("Unknown enum value " + value + " for " + propertyName + ".");
-            }
-            property.enumValueIndex = index;
-            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static void EnsureFolders()
