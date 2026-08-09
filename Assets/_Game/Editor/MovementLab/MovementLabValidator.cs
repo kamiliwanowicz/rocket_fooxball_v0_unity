@@ -143,6 +143,7 @@ namespace RocketFooxball.Editor
                     var launcher = Require(player.GetComponent<RocketLauncher>(), "RocketLauncher");
                     var kick = Require(player.GetComponent<BallKick>(), "BallKick");
                     var camera = Require(player.GetComponentInChildren<Camera>(true), "Player camera");
+                    var qualityRuntime = Require(camera.GetComponent<GraphicsQualityRuntime>(), "GraphicsQualityRuntime");
                     if (camera.clearFlags != CameraClearFlags.SolidColor || Mathf.Abs(camera.backgroundColor.r - 0.72f) > 0.001f || Mathf.Abs(camera.backgroundColor.g - 0.88f) > 0.001f || Mathf.Abs(camera.backgroundColor.b - 0.96f) > 0.001f || Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.farClipPlane - 180f) > 0.01f) throw new InvalidOperationException("Gameplay camera bright-scene contract invalid.");
                     if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Skybox || !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f || Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f) throw new InvalidOperationException("Scene environment contract invalid.");
                     Require(player.GetComponent<CharacterController>(), "Player CharacterController");
@@ -227,6 +228,10 @@ namespace RocketFooxball.Editor
                     ValidateReference(ballMotor, "ballCollider", ballCollider, "BallMotor.ballCollider");
                     ValidateReference(ballMotor, "player", playerMotor, "BallMotor.player");
                     ValidateArrayContains(ballMotor, "goalShieldColliders", northShield, southShield, "BallMotor.goalShieldColliders");
+                    ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
+                    ValidateReference(playerMotor, "input", input, "PlayerMotor.input");
+                    ValidateReference(look, "input", input, "PlayerLook.input");
+                    ValidateReference(look, "head", player.transform.Find("Head"), "PlayerLook.head");
                     ValidateReference(launcher, "input", input, "RocketLauncher.input");
                     ValidateReference(launcher, "look", look, "RocketLauncher.look");
                     ValidateReference(launcher, "aimCamera", camera, "RocketLauncher.aimCamera");
@@ -235,6 +240,7 @@ namespace RocketFooxball.Editor
                     ValidateReference(launcher, "explosionResolver", resolver, "RocketLauncher.explosionResolver");
                     ValidateReference(cameraFeedback, "player", playerMotor, "PlayerCameraFeedback.player");
                     ValidateReference(cameraFeedback, "targetCamera", camera, "PlayerCameraFeedback.targetCamera");
+                    ValidateReference(qualityRuntime, "targetCamera", camera, "GraphicsQualityRuntime.targetCamera");
                     ValidateSerializedFloat(cameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "PlayerCameraFeedback.celebrationOrbitRadius");
                     ValidateSerializedFloat(cameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "PlayerCameraFeedback.celebrationOrbitHeight");
                     ValidateSerializedFloat(cameraFeedback, "celebrationLookHeight", CelebrationLookHeight, "PlayerCameraFeedback.celebrationLookHeight");

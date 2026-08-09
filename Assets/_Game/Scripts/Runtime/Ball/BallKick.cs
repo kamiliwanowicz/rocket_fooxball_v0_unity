@@ -98,12 +98,6 @@ namespace RocketFooxball.Runtime.Ball
             }
         }
 
-        /// <summary>Compatibility alias for match freeze owners.</summary>
-        public void SetSimulationFrozen(bool frozen)
-        {
-            SetSimulationEnabled(!frozen);
-        }
-
         /// <summary>Clears cooldown and buffered attempt.</summary>
         public void ResetState()
         {

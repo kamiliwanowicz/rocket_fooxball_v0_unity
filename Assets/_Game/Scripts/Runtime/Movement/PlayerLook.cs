@@ -71,12 +71,6 @@ namespace RocketFooxball.Runtime.Movement
             }
         }
 
-        /// <summary>Compatibility alias used by match reset owners.</summary>
-        public void ResetAim(Vector3 worldForward)
-        {
-            ResetView(worldForward);
-        }
-
         private static void SetCursorCapture(bool captured)
         {
             Cursor.lockState = captured ? CursorLockMode.Locked : CursorLockMode.None;

@@ -41,26 +41,14 @@ namespace RocketFooxball.Runtime.Match
 
         public GoalSide Side => goalSide;
         public bool EntryLatched => entryLatched;
-        public Collider OpeningTrigger => openingTrigger != null ? openingTrigger : ownCollider;
+        public Collider OpeningTrigger => openingTrigger;
 
         private void Awake()
         {
             ownCollider = GetComponent<Collider>();
-            if (openingTrigger == null)
+            if (!ValidateComposition())
             {
-                openingTrigger = ownCollider;
-            }
-            if (planeReference == null)
-            {
-                planeReference = transform;
-            }
-            if (ball == null)
-            {
-                ball = FindAnyObjectByType<BallMotor>();
-            }
-            if (match == null)
-            {
-                match = FindAnyObjectByType<MatchController>();
+                return;
             }
         }
 
@@ -149,21 +137,16 @@ namespace RocketFooxball.Runtime.Match
             ballInsideTrigger = false;
         }
 
-        /// <summary>Compatibility alias for reset owners.</summary>
-        public void ResetState()
+        private bool ValidateComposition()
         {
-            Rearm();
-        }
+            if (ownCollider == null || ball == null || match == null || planeReference == null || openingTrigger == null)
+            {
+                Debug.LogError("GoalTrigger requires serialized references: ball, match, planeReference, openingTrigger.", this);
+                enabled = false;
+                return false;
+            }
 
-        public void SetBall(BallMotor target)
-        {
-            ball = target;
-            Rearm();
-        }
-
-        public void SetMatch(MatchController target)
-        {
-            match = target;
+            return true;
         }
 
         private void TryScore()
@@ -204,13 +187,13 @@ namespace RocketFooxball.Runtime.Match
 
         private Vector3 GetPlanePosition()
         {
-            return planeReference != null ? planeReference.position : transform.position;
+            return planeReference.position;
         }
 
         private Vector3 GetPlaneNormal()
         {
             var normal = planeNormal.sqrMagnitude > 0.000001f ? planeNormal.normalized : transform.forward;
-            if (planeReference != null && planeReference != transform && planeNormal.sqrMagnitude > 0.000001f)
+            if (planeReference != transform && planeNormal.sqrMagnitude > 0.000001f)
             {
                 normal = planeReference.TransformDirection(planeNormal).normalized;
             }

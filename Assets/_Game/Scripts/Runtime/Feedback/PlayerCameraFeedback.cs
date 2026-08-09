@@ -216,12 +216,6 @@ namespace RocketFooxball.Runtime.Feedback
             shakePhase = Mathf.Repeat(shakePhase + 1.234567f, 1000f);
         }
 
-        /// <summary>Compatibility alias for explosion feedback owners.</summary>
-        public void RequestShake(float normalizedStrength)
-        {
-            RequestBlastShake(normalizedStrength);
-        }
-
         /// <summary>Ends any celebration orbit, restores neutral camera pose/FOV, and clears pending shake.</summary>
         public void ResetFeedback()
         {
@@ -240,12 +234,6 @@ namespace RocketFooxball.Runtime.Feedback
             {
                 targetCamera.fieldOfView = baseFov;
             }
-        }
-
-        /// <summary>Compatibility alias for match reset owners.</summary>
-        public void ResetState()
-        {
-            ResetFeedback();
         }
 
         private void CacheReferences()

@@ -56,11 +56,10 @@ namespace RocketFooxball.Runtime.Diagnostics
 
             var velocity = player.Velocity;
             var speed = new Vector2(velocity.x, velocity.z).magnitude;
-            var controller = player.GetComponent<CharacterController>();
             var text = $"FPS: {Mathf.RoundToInt(1f / Mathf.Max(Time.unscaledDeltaTime, 0.0001f))}\n" +
                        $"H Speed: {speed:F1} m/s ({speed / Mathf.Max(player.HardCap, 0.001f) * 100f:F0}% cap)\n" +
                        $"V Speed: {velocity.y:F1} m/s\n" +
-                       $"Grounded: {(controller != null && controller.isGrounded ? "YES" : "NO")}\n" +
+                       $"Grounded: {(player.IsGrounded ? "YES" : "NO")}\n" +
                        $"Caps: base {player.BaseSpeed:F0} | soft {player.SoftCap:F0} | hard {player.HardCap:F0}\n";
 
             if (ball != null)

@@ -74,22 +74,10 @@ namespace RocketFooxball.Runtime.Weapons
             return true;
         }
 
-        /// <summary>Compatibility alias for callers that use fire terminology.</summary>
-        public bool Fire()
-        {
-            return LaunchRocket();
-        }
-
         /// <summary>Stops fixed-step launches and leaves active projectile cleanup to match reset.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
             simulationEnabled = enabled;
-        }
-
-        /// <summary>Compatibility alias for match freeze owners.</summary>
-        public void SetSimulationFrozen(bool frozen)
-        {
-            SetSimulationEnabled(!frozen);
         }
 
         /// <summary>Clears cooldown and destroys all tracked rockets.</summary>

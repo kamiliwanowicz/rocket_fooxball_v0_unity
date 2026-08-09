@@ -50,14 +50,9 @@ namespace RocketFooxball.Runtime.Match
 
         private void Awake()
         {
-            CacheReferences();
-            if (northGoal != null)
+            if (!ValidateComposition())
             {
-                northGoal.SetMatch(this);
-            }
-            if (southGoal != null)
-            {
-                southGoal.SetMatch(this);
+                return;
             }
         }
 
@@ -108,12 +103,6 @@ namespace RocketFooxball.Runtime.Match
             cameraFeedback?.BeginGoalCelebration(freezeRemaining);
         }
 
-        /// <summary>Compatibility alias for goal owners.</summary>
-        public void RegisterGoal(GoalTrigger.GoalSide goalSide)
-        {
-            NotifyGoal(goalSide);
-        }
-
         /// <summary>Explicit gameplay gate used by external reset tooling.</summary>
         public void SetGameplayEnabled(bool enabled)
         {
@@ -148,7 +137,7 @@ namespace RocketFooxball.Runtime.Match
             }
             var playerRotation = Quaternion.LookRotation(lookDirection.normalized, Vector3.up);
             player?.ResetState(playerResetPosition, playerRotation);
-            playerLook?.ResetAim(lookDirection);
+            playerLook?.ResetView(lookDirection);
             cameraFeedback?.ResetFeedback();
             launcher?.ResetState();
             kick?.ResetState();
@@ -172,55 +161,16 @@ namespace RocketFooxball.Runtime.Match
             ResetMatch();
         }
 
-        private void CacheReferences()
+        private bool ValidateComposition()
         {
-            if (input == null && player != null)
+            if (input == null || player == null || playerLook == null || cameraFeedback == null || ball == null || launcher == null || kick == null || northGoal == null || southGoal == null)
             {
-                input = player.GetComponent<PlayerInputReader>();
+                Debug.LogError("MatchController requires serialized references: input, player, playerLook, cameraFeedback, ball, launcher, kick, northGoal, southGoal.", this);
+                enabled = false;
+                return false;
             }
-            if (player == null)
-            {
-                player = FindAnyObjectByType<PlayerMotor>();
-            }
-            if (input == null && player != null)
-            {
-                input = player.GetComponent<PlayerInputReader>();
-            }
-            if (playerLook == null && player != null)
-            {
-                playerLook = player.GetComponent<PlayerLook>();
-            }
-            if (cameraFeedback == null && player != null)
-            {
-                cameraFeedback = player.GetComponent<PlayerCameraFeedback>();
-            }
-            if (ball == null)
-            {
-                ball = FindAnyObjectByType<BallMotor>();
-            }
-            if (launcher == null && player != null)
-            {
-                launcher = player.GetComponent<RocketLauncher>();
-            }
-            if (kick == null && player != null)
-            {
-                kick = player.GetComponent<BallKick>();
-            }
-            if (northGoal == null || southGoal == null)
-            {
-                var goals = FindObjectsByType<GoalTrigger>();
-                for (var i = 0; i < goals.Length; i++)
-                {
-                    if (goals[i].Side == GoalTrigger.GoalSide.North)
-                    {
-                        northGoal = goals[i];
-                    }
-                    else
-                    {
-                        southGoal = goals[i];
-                    }
-                }
-            }
+
+            return true;
         }
     }
 }

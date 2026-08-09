@@ -46,6 +46,11 @@ namespace RocketFooxball.Runtime.Ball
         private void Awake()
         {
             CacheReferences();
+            if (!ValidateComposition())
+            {
+                return;
+            }
+
             ConfigureBody();
             IgnoreShieldCollisions();
         }
@@ -53,6 +58,11 @@ namespace RocketFooxball.Runtime.Ball
         private void OnEnable()
         {
             CacheReferences();
+            if (!ValidateComposition())
+            {
+                return;
+            }
+
             if (player != null)
             {
                 player.CollisionHit += OnPlayerCollisionHit;
@@ -110,12 +120,6 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             queuedImpulse += impulse;
-        }
-
-        /// <summary>Compatibility alias for explosion and kick owners.</summary>
-        public void AddExternalImpulse(Vector3 impulse)
-        {
-            QueueImpulse(impulse);
         }
 
         /// <summary>Applies aimed kick velocity while preserving useful incoming momentum.</summary>
@@ -177,12 +181,6 @@ namespace RocketFooxball.Runtime.Ball
             }
         }
 
-        /// <summary>Compatibility alias for match freeze owners.</summary>
-        public void SetSimulationFrozen(bool frozen)
-        {
-            SetSimulationEnabled(!frozen);
-        }
-
         /// <summary>Clears pending impulses and contact state without moving the body.</summary>
         public void ClearQueuedState()
         {
@@ -213,12 +211,6 @@ namespace RocketFooxball.Runtime.Ball
             ClearQueuedState();
         }
 
-        /// <summary>Compatibility alias for reset owners.</summary>
-        public void ResetBall(Vector3 worldPosition)
-        {
-            ResetState(worldPosition, Quaternion.identity);
-        }
-
         /// <summary>Sets shield colliders ignored by ball physics and ball-directed blast occlusion.</summary>
         public void SetShieldColliders(Collider[] shields)
         {
@@ -236,10 +228,28 @@ namespace RocketFooxball.Runtime.Ball
             {
                 ballCollider = GetComponent<Collider>();
             }
-            if (player == null)
+        }
+
+        private bool ValidateComposition()
+        {
+            if (body == null || ballCollider == null || player == null || goalShieldColliders == null)
             {
-                player = FindAnyObjectByType<PlayerMotor>();
+                Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldColliders.", this);
+                enabled = false;
+                return false;
             }
+
+            for (var i = 0; i < goalShieldColliders.Length; i++)
+            {
+                if (goalShieldColliders[i] == null)
+                {
+                    Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldColliders.", this);
+                    enabled = false;
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private void ConfigureBody()

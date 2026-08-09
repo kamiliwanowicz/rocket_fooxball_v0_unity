@@ -145,9 +145,7 @@ namespace RocketFooxball.Editor
                     SetObjectReference(cameraFeedback, "targetCamera", player.GetComponentInChildren<Camera>(true));
 
                     SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
-                    SetObjectReference(arena.NorthGoal.Trigger, "match", null);
                     SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
-                    SetObjectReference(arena.SouthGoal.Trigger, "match", null);
                     SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
                     SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
 
@@ -166,8 +164,6 @@ namespace RocketFooxball.Editor
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
-                    arena.NorthGoal.Trigger.SetMatch(match);
-                    arena.SouthGoal.Trigger.SetMatch(match);
                     SetObjectReference(arena.NorthGoal.Trigger, "match", match);
                     SetObjectReference(arena.SouthGoal.Trigger, "match", match);
 

@@ -167,12 +167,6 @@ namespace RocketFooxball.Runtime.Movement
             queuedExternalImpulse += impulse;
         }
 
-        /// <summary>Compatibility alias for gameplay owners requesting a rocket/blast impulse.</summary>
-        public void QueueExternalImpulse(Vector3 impulse)
-        {
-            AddExternalImpulse(impulse);
-        }
-
         /// <summary>Enables or freezes fixed-step player simulation without changing transform or velocity.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
@@ -184,12 +178,6 @@ namespace RocketFooxball.Runtime.Movement
                 jumpBufferTimer = 0f;
                 input?.ClearGameplayState();
             }
-        }
-
-        /// <summary>Compatibility alias for match freeze owners.</summary>
-        public void SetSimulationFrozen(bool frozen)
-        {
-            SetSimulationEnabled(!frozen);
         }
 
         /// <summary>Clears movement state without moving the player.</summary>
@@ -223,12 +211,6 @@ namespace RocketFooxball.Runtime.Movement
             velocity = Vector3.zero;
             ClearQueuedState();
             input?.ClearGameplayState();
-        }
-
-        /// <summary>Compatibility alias for reset owners.</summary>
-        public void ResetMotion(Vector3 worldPosition, Quaternion worldRotation)
-        {
-            ResetState(worldPosition, worldRotation);
         }
 
         private void ApplyGroundMovement(Vector3 strafeDirection, Vector3 forwardDirection, Vector3 activeGroundNormal, float deltaTime)

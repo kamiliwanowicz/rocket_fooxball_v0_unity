@@ -199,12 +199,6 @@ namespace RocketFooxball.Runtime.Weapons
             return origin.y >= minY && origin.y <= maxY;
         }
 
-        /// <summary>Compatibility alias for projectile owners.</summary>
-        public void Resolve(Vector3 origin)
-        {
-            ResolveExplosion(origin);
-        }
-
         /// <summary>Updates shield list used for ball-transparent blast occlusion.</summary>
         public void SetShieldColliders(Collider[] shields)
         {

@@ -183,12 +183,6 @@ namespace RocketFooxball.Runtime.Input
             captureCursorRequested = false;
         }
 
-        /// <summary>Compatibility alias for reset owners.</summary>
-        public void ClearInputState()
-        {
-            ResetInputState();
-        }
-
         private void OnJumpStarted(InputAction.CallbackContext _)
         {
             if (gameplayInputEnabled)
