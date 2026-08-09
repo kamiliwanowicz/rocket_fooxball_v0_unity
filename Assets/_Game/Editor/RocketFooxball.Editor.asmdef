@@ -4,7 +4,9 @@
   "references": [
     "RocketFooxball.Runtime",
     "Unity.InputSystem",
-    "UnityEngine.UI"
+    "Unity.RenderPipelines.Core.Runtime",
+    "UnityEngine.UI",
+    "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [
     "Editor"

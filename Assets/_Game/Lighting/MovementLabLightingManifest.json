@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "scene": "Assets/_Game/Scenes/MovementLab.unity",
+  "lightmapper": "ProgressiveCPU",
+  "bakedGI": true,
+  "realtimeGI": false,
+  "mixedBakeMode": "Shadowmask",
+  "directionality": "CombinedDirectional",
+  "lightmapResolution": 10,
+  "atlasSize": 1024,
+  "padding": 2,
+  "maxBounces": 2,
+  "reflectionProbes": ["ReflectionProbe_Center", "ReflectionProbe_WestGoal", "ReflectionProbe_EastGoal"]
+}

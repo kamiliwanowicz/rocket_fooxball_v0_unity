@@ -438,7 +438,7 @@ MonoBehaviour:
   airForwardScale: 0.35
   bhopSoftCapMultiplier: 2.5
   hardCapMultiplier: 3
-  jumpVelocity: 6.75
+  jumpVelocity: 4.8
   jumpsToHardCap: 4
   coyoteTime: 0.08
   jumpBufferTime: 0.1
@@ -651,6 +651,7 @@ GameObject:
   - component: {fileID: 291735094461411079}
   - component: {fileID: 4927503976345080273}
   - component: {fileID: 876046215680871153}
+  - component: {fileID: 3459346961491098666}
   m_Layer: 0
   m_Name: Camera
   m_TagString: MainCamera
@@ -735,6 +736,19 @@ AudioListener:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7353942073518467462}
   m_Enabled: 1
+--- !u!114 &3459346961491098666
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7353942073518467462}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d967c4e7ef42b3043bd5fcd834996701, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.GraphicsQualityRuntime
+  targetCamera: {fileID: 4927503976345080273}
 --- !u!1 &7405524944435701350
 GameObject:
   m_ObjectHideFlags: 0

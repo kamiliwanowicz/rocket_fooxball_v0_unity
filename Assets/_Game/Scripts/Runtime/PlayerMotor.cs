@@ -26,7 +26,7 @@ namespace RocketFooxball
         [SerializeField, Min(1f)] private float hardCapMultiplier = 3f;
 
         [Header("Jump")]
-        [SerializeField, Min(0f)] private float jumpVelocity = 4.50f;
+        [SerializeField, Min(0f)] private float jumpVelocity = 4.80f;
         [SerializeField, Min(1)] private int jumpsToHardCap = 4;
         [SerializeField, Min(0f)] private float coyoteTime = 0.08f;
         [SerializeField, Min(0f)] private float jumpBufferTime = 0.10f;

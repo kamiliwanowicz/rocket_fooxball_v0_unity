@@ -15,6 +15,7 @@ namespace RocketFooxball
         [Header("Rocket Jump")]
         [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
         [SerializeField, Min(0f)] private float underfootUpwardImpulseScale = 1f;
+        [SerializeField, Range(0f, 1f)] private float underfootHighSpeedVerticalRedirect = 1f;
         [SerializeField] private Collider[] goalShieldColliders;
 
         [Header("Feedback")]
@@ -140,9 +141,21 @@ namespace RocketFooxball
                 return radialDirection * strength;
             }
 
-            // Floor/leg blasts preserve upward impulse while adding forward force
-            // from player yaw. Camera pitch never controls rocket-jump direction.
-            var underfootImpulse = facing * underfootForwardImpulseScale + Vector3.up * underfootUpwardImpulseScale;
+            // Floor/leg blasts preserve impulse magnitude while redirecting
+            // high-speed forward force upward. Camera pitch never controls
+            // rocket-jump direction.
+            var speedT = Mathf.Clamp01(
+                (target.HorizontalSpeed - target.BaseSpeed) /
+                Mathf.Max(target.SoftCap - target.BaseSpeed, 0.000001f));
+            var redirectT = speedT * underfootHighSpeedVerticalRedirect;
+            var forwardScale = underfootForwardImpulseScale * (1f - redirectT);
+            var impulseScaleSqr =
+                underfootForwardImpulseScale * underfootForwardImpulseScale +
+                underfootUpwardImpulseScale * underfootUpwardImpulseScale;
+            var upwardScale = Mathf.Sqrt(Mathf.Max(
+                impulseScaleSqr - forwardScale * forwardScale,
+                0f));
+            var underfootImpulse = facing * forwardScale + Vector3.up * upwardScale;
             if (underfootImpulse.sqrMagnitude <= 0.000001f)
             {
                 return Vector3.up * strength;
