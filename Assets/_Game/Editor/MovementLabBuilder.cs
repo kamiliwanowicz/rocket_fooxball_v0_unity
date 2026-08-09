@@ -81,6 +81,7 @@ namespace RocketFooxball.Editor
             AssetDatabase.SaveAssets();
             MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             Debug.Log("Rocket Fooxball Movement Lab lighting baked explicitly: " + MovementLabContract.ScenePath);

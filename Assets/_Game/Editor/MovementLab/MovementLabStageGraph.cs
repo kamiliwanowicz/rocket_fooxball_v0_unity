@@ -42,10 +42,10 @@ namespace RocketFooxball.Editor
     {
         private const string ImporterContract = "importer-contract:1";
         private const string MaterialContract = "material-prefab-contract:1";
-        private const string GameplayContract = "gameplay-scene-contract:1";
+        private const string GameplayContract = "gameplay-scene-contract:2";
         private const string QualityContract = "quality-contract:1";
         private const string LightingContract = "lighting-contract:1";
-        private const string BakedContract = "baked-output-contract:1";
+        private const string BakedContract = "baked-output-contract:2";
 
         private static readonly StageDefinition[] Definitions =
         {
@@ -188,7 +188,7 @@ namespace RocketFooxball.Editor
             if (definition.IncludeUnityVersion) inputParts.Add("unity:" + Application.unityVersion);
             for (var i = 0; i < predecessorDigests.Length; i++) inputParts.Add("predecessor:" + predecessorDigests[i]);
 
-            var outputs = CaptureOutputs(definition.Outputs, definition.Stage == MovementLabStage.Importer);
+            var outputs = CaptureOutputs(definition.Outputs, definition.Stage == MovementLabStage.Importer, definition.Stage);
             return new MovementLabStageRecord
             {
                 stage = definition.Stage.ToString(),
@@ -202,7 +202,7 @@ namespace RocketFooxball.Editor
             };
         }
 
-        private static MovementLabPathDigest[] CaptureOutputs(string[] paths, bool useDependencyHash)
+        private static MovementLabPathDigest[] CaptureOutputs(string[] paths, bool useDependencyHash, MovementLabStage stage)
         {
             var normalizedPaths = paths.Select(MovementLabManifestStore.NormalizeRepositoryPath)
                 .Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
@@ -218,10 +218,65 @@ namespace RocketFooxball.Editor
                     missing = missing,
                     digest = missing ? string.Empty : useDependencyHash && path.StartsWith("Assets/", StringComparison.Ordinal) && !path.EndsWith(".meta", StringComparison.Ordinal)
                         ? AssetDatabase.GetAssetDependencyHash(path).ToString()
-                        : HashFile(absolute)
+                        : HashOutputFile(path, absolute, stage)
                 };
             }
             return result;
+        }
+
+        private static string HashOutputFile(string repositoryPath, string absolutePath, MovementLabStage stage)
+        {
+            // Gameplay stage owns scene content except bake-owned LightmapSettings; BakedOutput owns raw post-bake scene.
+            if (stage == MovementLabStage.GameplayScene && string.Equals(repositoryPath, MovementLabContract.ScenePath, StringComparison.Ordinal))
+            {
+                return HashGameplaySceneWithoutLightmapSettings(absolutePath);
+            }
+
+            return HashFile(absolutePath);
+        }
+
+        private static string HashGameplaySceneWithoutLightmapSettings(string path)
+        {
+            var normalized = NormalizeLineEndings(File.ReadAllText(path, Encoding.UTF8));
+            var lines = normalized.Split(new[] { '\n' }, StringSplitOptions.None);
+            var retained = new StringBuilder(normalized.Length);
+            var index = 0;
+            while (index < lines.Length)
+            {
+                var next = index + 1;
+                while (next < lines.Length && !IsYamlDocumentHeader(lines[next])) next++;
+                if (!IsLightmapSettingsDocument(lines, index, next))
+                {
+                    for (var lineIndex = index; lineIndex < next; lineIndex++)
+                    {
+                        if (retained.Length > 0) retained.Append('\n');
+                        retained.Append(lines[lineIndex]);
+                    }
+                }
+                index = next;
+            }
+
+            return HashBytes(Encoding.UTF8.GetBytes(retained.ToString()));
+        }
+
+        private static bool IsLightmapSettingsDocument(string[] lines, int start, int end)
+        {
+            if (start >= end || !lines[start].StartsWith("--- !u!157 ", StringComparison.Ordinal)) return false;
+            for (var index = start + 1; index < end; index++)
+            {
+                if (string.Equals(lines[index], "LightmapSettings:", StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        private static bool IsYamlDocumentHeader(string line)
+        {
+            return line.StartsWith("--- !u!", StringComparison.Ordinal);
+        }
+
+        private static string NormalizeLineEndings(string value)
+        {
+            return value.Replace("\r\n", "\n").Replace("\r", "\n");
         }
 
         private static void AddRepositoryDigests(List<string> parts, string[] paths)
@@ -408,6 +463,14 @@ namespace RocketFooxball.Editor
             using (var stream = File.OpenRead(path))
             {
                 return ToHex(sha.ComputeHash(stream));
+            }
+        }
+
+        private static string HashBytes(byte[] bytes)
+        {
+            using (var sha = SHA256.Create())
+            {
+                return ToHex(sha.ComputeHash(bytes));
             }
         }
 

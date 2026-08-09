@@ -6,7 +6,7 @@ namespace RocketFooxball.Editor
 {
     internal static class MovementLabContract
     {
-        internal const int ManifestSchemaVersion = 5;
+        internal const int ManifestSchemaVersion = 6;
         internal const int SerializedContractVersion = 1;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
@@ -121,6 +121,7 @@ namespace RocketFooxball.Editor
 
         internal static readonly string[] BakedOutputPaths =
         {
+            ScenePath,
             BakedLightingPath + "/LightingData.asset",
             BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
             BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
