@@ -4848,7 +4848,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fad277b469a8444c8a87caa0bf26bb4f, type: 3}
   m_Name:
-  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.RocketTrailVfx
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Feedback.RocketTrailVfx
   particleSystems:
   - {fileID: 6429022872448179805}
 --- !u!1 &2566106794535997151
@@ -4947,7 +4947,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d618b5ef1f0c4bda9a9a3b7934e4c205, type: 3}
   m_Name:
-  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.RocketProjectile
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Weapons.RocketProjectile
   speed: 48
   lifetime: 8
   body: {fileID: 3425620744121157692}

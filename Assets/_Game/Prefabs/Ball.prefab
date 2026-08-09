@@ -152,11 +152,11 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 38aebf428e7f439b87b9126af45a2d01, type: 3}
   m_Name:
-  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.BallMotor
+  m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Ball.BallMotor
   body: {fileID: 4392405790869560408}
   ballCollider: {fileID: 2975698619275137767}
   player: {fileID: 0}
-  goalShieldColliders: []
+  goalShieldSet: {fileID: 0}
   baseSpeedReference: 10
   speedCapMultiplier: 4
   rollingResistance: 1.25
