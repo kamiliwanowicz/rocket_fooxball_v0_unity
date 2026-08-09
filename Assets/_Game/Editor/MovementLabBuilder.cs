@@ -62,7 +62,7 @@ namespace RocketFooxball.Editor
         private const float BlastRadius = 5.85f;
         private const float BlastVisualScale = 1.30f;
         private const float GoalAxisPosition = 64f;
-        private const float PlayerSpawnOffset = 3f;
+        private const float PlayerSpawnOffset = 12f;
         private const float GoalFreezeDuration = 5f;
         private const float CelebrationOrbitRadius = 5.5f;
         private const float CelebrationOrbitHeight = 2.5f;
@@ -1052,19 +1052,6 @@ namespace RocketFooxball.Editor
             var southShell = CreateArenaKitVisual(architecture, "SouthGoalShell", "ArenaGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), arenaMaterials);
             northShell.transform.localScale = Vector3.one;
             southShell.transform.localScale = Vector3.one;
-
-            CreateArenaKitVisual(architecture, "WestRampRails", "ArenaRampRails", new Vector3(-22f, 2.55f, 2f), Quaternion.Euler(-15f, -90f, 0f), arenaMaterials);
-            CreateArenaKitVisual(architecture, "EastRampRails", "ArenaRampRails", new Vector3(22f, 2.55f, -2f), Quaternion.Euler(-15f, 90f, 0f), arenaMaterials);
-
-            // Wall pylons at a readable eight-metre cadence. They are renderer-only
-            // and deliberately stop short of the goal shells/openings.
-            // Keep pylon placement symmetric while leaving the outer two
-            // goal-adjacent pairs to the goal-shell visuals.
-            for (var x = -40f; x <= 40f; x += 8f)
-            {
-                CreateArenaKitVisual(architecture, "NorthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, -45.25f), Quaternion.identity, arenaMaterials);
-                CreateArenaKitVisual(architecture, "SouthPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, 45.25f), Quaternion.identity, arenaMaterials);
-            }
 
             // A symmetric nine-per-wall truss cadence keeps the complete
             // loaded scene inside the strict MeshRenderer budget.
@@ -2579,6 +2566,7 @@ namespace RocketFooxball.Editor
                 var renderer = renderers[i];
                 var filter = Require(renderer.GetComponent<MeshFilter>(), "Architecture MeshFilter");
                 var mesh = Require(filter.sharedMesh, "Architecture mesh");
+                if (mesh.name == "ArenaRampRails" || mesh.name == "ArenaWallPylon") throw new InvalidOperationException("Removed arena architecture is still present: " + renderer.name);
                 if (AssetDatabase.GetAssetPath(mesh) != ArenaKitModelPath) throw new InvalidOperationException("Architecture mesh provenance mismatch: " + renderer.name);
                 if (renderer.GetComponentsInChildren<Collider>(true).Length != 0 || renderer.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Architecture visual must remain renderer-only: " + renderer.name);
                 var materials = renderer.sharedMaterials;
@@ -2593,8 +2581,6 @@ namespace RocketFooxball.Editor
             ValidateArenaKitModel();
             ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
             ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
-            ValidateArchitectureTransform(architecture, "WestRampRails", new Vector3(-22f, 2.55f, 2f), Quaternion.Euler(-15f, -90f, 0f));
-            ValidateArchitectureTransform(architecture, "EastRampRails", new Vector3(22f, 2.55f, -2f), Quaternion.Euler(-15f, 90f, 0f));
             ValidateShieldVisual(arena.transform.Find("NorthGoal"), "NorthGoal");
             ValidateShieldVisual(arena.transform.Find("SouthGoal"), "SouthGoal");
         }
