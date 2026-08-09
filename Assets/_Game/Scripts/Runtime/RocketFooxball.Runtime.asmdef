@@ -2,7 +2,8 @@
   "name": "RocketFooxball.Runtime",
   "rootNamespace": "RocketFooxball",
   "references": [
-    "Unity.InputSystem"
+    "Unity.InputSystem",
+    "Unity.RenderPipelines.Universal.Runtime"
   ],
   "includePlatforms": [],
   "excludePlatforms": [],
