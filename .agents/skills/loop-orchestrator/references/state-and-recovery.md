@@ -14,9 +14,9 @@ LP is sole state writer. Breakdown, planner, execution orchestrator, workers, re
 
 Truth priority:
 
-`observed Git + live-agent facts -> accepted immutable artifact bytes -> state claims -> agent prose`
+`observed Git + live-agent facts -> attempt-bound plan snapshot bytes -> state claims -> agent prose`
 
-State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or artifact digest.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative snapshot digest.
 
 ## Atomic write
 
@@ -68,9 +68,12 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
-- artifact: [absolute path or None]
-- artifact sha256: [lowercase digest or None]
-- artifact bytes: [integer or None]
+- source artifact: [absolute path or None]
+- source artifact sha256: [lowercase digest or None]
+- source artifact bytes: [integer or None]
+- execution snapshot: [absolute path or None]
+- execution snapshot sha256: [lowercase digest or None]
+- execution snapshot bytes: [integer or None]
 - branch: [exact name or None]
 - worktree: [absolute path or None]
 - accepted execution SHA: [full SHA or None]
@@ -112,9 +115,13 @@ Blocked:
 
 `planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
 
-Digest mismatch:
+Pre-bind source digest mismatch:
 
 `planned -> blocked`; preserve accepted artifact metadata, record observed digest/size, mutate no product worktree, and start fresh planning attempt only after LP selects new reserved artifact path.
+
+Post-bind snapshot digest mismatch:
+
+`executing | done -> blocked`; preserve source provenance, record observed snapshot digest/size, stop mutation, and retry through fresh execution attempt plus fresh snapshot. Source artifact drift after snapshot binding is outside run gates and causes no transition.
 
 Merge:
 
@@ -133,8 +140,9 @@ Planner acceptance:
 1. Stop planner.
 2. Verify reserved artifact exists and was create-once.
 3. Compute SHA-256 and byte size.
-4. Record artifact path/digest/size and status `planned` atomically.
-5. Rehash immediately before execution dispatch. Mismatch follows digest-mismatch transition.
+4. Record source artifact path/digest/size and status `planned` atomically.
+5. Read source once into create-once execution snapshot. Reopen snapshot and compare accepted digest/size; mismatch follows pre-bind source-digest transition.
+6. Record matching snapshot path/digest/size before execution dispatch.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 
@@ -163,7 +171,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash every accepted artifact; compare digest/size.
+3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Source drift after binding is ignored.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
@@ -177,7 +185,7 @@ Missing or corrupt state:
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
 
-Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+Authoritative artifact mismatch blocks execution: source before snapshot binding; snapshot after binding. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
 
 ## Recovery scenarios
 
@@ -186,7 +194,8 @@ Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
-- digest mismatch: rehash differs; status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
+- source digest mismatch before binding: status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
+- snapshot digest mismatch after binding: status `blocked`; fresh execution attempt and snapshot required; source drift ignored.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
 ## Cleanup and completion

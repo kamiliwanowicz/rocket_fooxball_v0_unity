@@ -62,20 +62,26 @@ Dispatch exact `sol_high` planner with `run_id`, `plan_id`, `attempt_id`, covere
 
 Planner result handling:
 
-- `ready`: stop planner; verify artifact exists at reserved path; compute SHA-256 and byte size; record accepted path/digest/size; artifact becomes immutable.
+- `ready`: stop planner; verify artifact exists at reserved path; compute SHA-256 and byte size; record source path/digest/size.
 - `needs_user`: record `awaiting_user` and question. User response -> fresh planner attempt, new `attempt_id`, new reserved path.
 - `blocked`: record blocker and recheck condition. Resolution -> fresh planner attempt and new reserved path.
 - decomposition change: route candidate revision through fresh task-breakdown attempt; planner never splits candidates.
 
-Rehash accepted artifact immediately before execution dispatch. Mismatch -> plan `blocked`; no product worktree mutation.
+Accepted source artifact remains pre-execution input only. Execution binding performs one source read into attempt snapshot, then verifies snapshot against accepted digest/size.
 
 ## EXECUTION
 
-For each accepted plan, LP provisions one isolated branch/worktree from recorded plan baseline. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
+For each accepted plan, LP provisions one isolated branch/worktree from recorded plan baseline. Read accepted source once into unique create-once execution snapshot:
+
+`<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/executions/<attempt-id>.md`
+
+Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
+
+Snapshot binding closes source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator verify bound snapshot only until attempt ends.
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
-Accept `complete` only when exact execution identity matches, accepted plan digest rehash matches, observed branch/worktree match, committed head descends from bound baseline, changed paths stay owned, required checks bind head, and worktree is clean. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
+Accept `complete` only when exact execution identity matches, bound snapshot digest rehash matches, observed branch/worktree match, committed head descends from bound baseline, changed paths stay owned, required checks bind head, and worktree is clean. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
 
 ## MERGING
 

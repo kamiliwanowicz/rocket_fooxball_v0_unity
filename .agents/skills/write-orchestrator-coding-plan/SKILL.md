@@ -44,7 +44,7 @@ Result status:
 - `blocked`: return exact blocker, evidence, and one needed LP action/recheck; create no accepted artifact.
 - decomposition mismatch: return `blocked` with needed LP action `fresh task-breakdown`; planner never creates/splits candidates.
 
-After planner stops, LP computes SHA-256 and byte size, records acceptance in state, and rehashes before execution. Planner never claims digest acceptance.
+After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binding copies source once into attempt snapshot and verifies accepted digest/size. Planner never claims digest acceptance.
 
 Dependent candidate planning begins only after LP supplies observed accepted upstream integration SHA. Never plan against forecast or invented downstream baseline.
 
@@ -108,7 +108,7 @@ Each task names objective, done condition, dependency, owned/protected paths, fo
 
 Execution route:
 
-`accepted artifact -> LP-bound isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
+`accepted source artifact -> LP-bound attempt snapshot + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
 
 Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates.
 
@@ -195,7 +195,7 @@ Dependencies: [accepted full SHAs or None]
 - Execution Graph includes every task and review checkpoint exactly once and makes every sequential dependency, parallel lane, and join gate explicit;
 - every implementation worker maps to one review checkpoint; grouped checkpoints include stronger-boundary rationale;
 - exact baseline and dependencies are factual;
-- execution route uses immutable accepted artifact and `$orchestrate-implementation`;
+- execution route uses immutable attempt-bound snapshot and `$orchestrate-implementation`;
 - final checks bind clean committed head or blocker names needed action.
 ```
 

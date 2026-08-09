@@ -22,7 +22,7 @@ Never switch mode during attempt. Ambiguous or partial LP handoff -> `blocked`; 
 
 - `run_id`, stable `plan_id`, unique `attempt_id`;
 - assigned active-agent identity, role `execution orchestrator`, profile `sol_high`;
-- accepted plan artifact absolute path, SHA-256 digest, byte size;
+- accepted plan source path as provenance plus attempt-bound plan snapshot absolute path, SHA-256 digest, byte size;
 - covered requirement IDs and objective;
 - accepted dependency SHAs;
 - exact plan branch and isolated worktree;
@@ -37,14 +37,14 @@ Missing/mismatched field, including active-agent identity or role -> `blocked` b
 
 `user-direct` requires accepted plan artifact explicitly identified by user or current context. Before child dispatch:
 
-1. Resolve repository root and accepted plan artifact absolute path. Capture artifact SHA-256 and byte size as immutable attempt identity.
-2. Capture launch checkout absolute path, current branch, exact `HEAD` as worktree source, and status. Preserve launch checkout and all existing changes unchanged.
-3. Generate stable local `plan_id` plus unique `attempt_id`. Derive unique `codex/<plan-slug>-<attempt-id>` branch and sibling worktree path outside launch checkout.
-4. Confirm target parent writable for active agent and child agents. Existing branch/path -> choose new unique names; preserve existing worktrees and branches.
-5. Create branch/worktree from captured source SHA. Verify worktree root, branch, `HEAD`, initial status, and accepted artifact readability at frozen absolute path for active agent and children.
-6. Bind objective, requirements, owned/protected paths, dependencies, checks, proof boundary, and evidence locations from accepted plan. Missing execution-critical boundary -> `blocked` with one needed user decision.
+1. Resolve repository root and accepted plan source absolute path. Generate stable local `plan_id` plus unique `attempt_id`.
+2. Read source once into unique create-once snapshot at `<git-common-dir>/orchestrate-implementation/<plan-id>/executions/<attempt-id>.md`. Reopen snapshot; capture SHA-256 and byte size. Record source path as provenance; bind snapshot as sole plan authority.
+3. Capture launch checkout absolute path, current branch, exact `HEAD` as worktree source, and status. Preserve launch checkout and all existing changes unchanged.
+4. Derive unique `codex/<plan-slug>-<attempt-id>` branch and sibling worktree path outside launch checkout. Confirm target parent writable for active agent and child agents. Existing branch/path -> choose new unique names; preserve existing worktrees and branches.
+5. Create branch/worktree from captured source SHA. Verify worktree root, branch, `HEAD`, and initial status.
+6. Bind objective, requirements, owned/protected paths, dependencies, checks, proof boundary, and evidence locations from snapshot. Missing execution-critical boundary -> `blocked` with one needed user decision.
 
-All plan work, child dispatch, Git mutation, and validation use created worktree. Active agent owns created plan branch only. Launch checkout remains unchanged. Keep completed worktree/branch for user inspection; integrate into launch branch only when user explicitly requested integration.
+All product reads, plan work, child dispatch, Git mutation, and validation use created worktree plus bound snapshot. Active agent owns created plan branch only. Launch checkout leaves attempt authority after snapshot binding. Keep completed worktree/branch for user inspection; integrate into launch branch only when user explicitly requested integration.
 
 Worktree creation failure -> `blocked` before product mutation. Return command/error, attempted branch/path, and one needed user action.
 
@@ -54,10 +54,12 @@ Before first worker dispatch:
 
 - Current plan-worktree `HEAD` -> authoritative `start_sha`. Plan-declared repository revision metadata never gates execution.
 - Capture initial worktree status. Pre-existing changes outside owned paths -> preserve untouched, exclude from staging/review evidence, continue. Pre-existing change overlapping owned path -> `blocked` with exact overlap and one needed authority action.
-- `lp-dispatched`: read LP state; verify assigned identity, role `execution orchestrator`, profile `sol_high`, artifact path/digest/size, artifact identity, dependencies, worktree/branch, ownership, and allowed Git operations.
-- `user-direct`: verify generated attempt identity, artifact path/digest/size, dependencies, created worktree/branch, ownership, and branch-only Git boundary.
+- `lp-dispatched`: read LP state; verify assigned identity, role `execution orchestrator`, profile `sol_high`, bound snapshot path/digest/size, dependencies, worktree/branch, ownership, and allowed Git operations.
+- `user-direct`: verify generated attempt identity, bound snapshot path/digest/size, dependencies, created worktree/branch, ownership, and branch-only Git boundary.
 
-Digest, identity, or mode-contract mismatch -> `blocked` with observed digest/size and needed authority action. Perform no product mutation or child dispatch. Accepted artifact remains immutable throughout attempt; rehash before final return. Post-dispatch mismatch invalidates attempt.
+Snapshot digest, identity, or mode-contract mismatch -> `blocked` with observed digest/size and needed authority action. Perform no product mutation or child dispatch. Rehash bound snapshot before final return; snapshot mismatch invalidates attempt.
+
+After snapshot gate passes, source plan path, launch checkout, and source branch are out of attempt observation, recovery, and completion gates. Later changes there have no effect on running attempt. Only explicit user/LP cancellation, bound snapshot corruption, plan-worktree drift, or normal execution blockers can stop product work.
 
 ## Ownership and profiles
 
@@ -75,7 +77,7 @@ Writer barriers follow ownership: completed disjoint lane closes independently b
 
 ## Child dispatch contract
 
-Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer), checks, proof/evidence boundary, and plan identity/path/digest.
+Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer), checks, proof/evidence boundary, and bound snapshot identity/path/digest.
 
 Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
 
@@ -106,9 +108,9 @@ Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`,
 4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
 6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
-7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash accepted plan artifact. Verify owned paths clean, initial unrelated status preserved, branch, dependencies, owned path diff, and requirements.
+7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash bound snapshot. Verify owned paths clean, initial unrelated status preserved, branch, dependencies, owned path diff, and requirements.
 
-Required unowned edit, plan decomposition change, dependency drift, artifact mismatch, or product decision outside accepted plan -> `blocked`. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
+Required unowned edit, plan decomposition change, dependency drift, bound snapshot mismatch, or product decision outside accepted plan -> `blocked`. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
 
 ## Completion routing
 
@@ -116,7 +118,7 @@ Return common facts:
 
 - invocation mode, `plan_id`, `attempt_id`, active-agent identity, role `execution orchestrator`, profile;
 - `status: complete | blocked`;
-- artifact path, accepted digest/size, observed final digest/size;
+- source plan path as provenance; bound snapshot path, accepted digest/size, observed final digest/size;
 - exact `start_sha`, dependency SHAs, branch, worktree, initial unrelated-status snapshot;
 - clean committed exact plan SHA when complete;
 - changed paths and scope proof;
@@ -128,4 +130,4 @@ Return common facts:
 
 `user-direct` returns facts directly to user, including launch checkout path/branch/status snapshot and created branch/worktree. Result remains isolated unless user explicitly authorized integration.
 
-`complete` requires artifact match, exact committed head, owned paths clean, initial unrelated status preserved, owned-only committed diff, every worker covered by completed checkpoint review/fix flow, and passing final checks.
+`complete` requires bound snapshot match, exact committed head, owned paths clean, initial unrelated status preserved, owned-only committed diff, every worker covered by completed checkpoint review/fix flow, and passing final checks.
