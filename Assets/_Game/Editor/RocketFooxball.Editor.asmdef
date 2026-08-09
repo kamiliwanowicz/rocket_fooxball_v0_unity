@@ -4,6 +4,7 @@
   "references": [
     "RocketFooxball.Runtime",
     "Unity.InputSystem",
+    "Unity.RenderPipelines.Core.Runtime",
     "UnityEngine.UI",
     "Unity.RenderPipelines.Universal.Runtime"
   ],
