@@ -55,7 +55,7 @@ namespace RocketFooxball.Editor
         internal static string ValidateAndWritePassRecord()
         {
             ValidatePersistedNonLightingState();
-            MovementLabBuilder.ValidateMovementLabPreBakeSemantics();
+            MovementLabValidator.ValidatePreBakeSemantics();
             var probe = MovementLabStageGraph.Probe(true);
             var required = new[] { MovementLabStage.Importer, MovementLabStage.MaterialPrefab, MovementLabStage.GameplayScene, MovementLabStage.Quality };
             var stale = required.Where(probe.IsStale).Select(stage => stage.ToString()).ToArray();
