@@ -68,7 +68,7 @@ Digest, identity, or mode-contract mismatch -> `blocked` with observed digest/si
 - Reviewer: fresh exact `sol_medium` per review checkpoint; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
-- Restart: task requiring from-scratch recovery -> retire old worker/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, dispatch fresh implementation worker with new `execution_id` and original task contract. Ambiguous edit ownership -> `blocked`.
+- Restart / context reset: trigger for from-scratch recovery, repeated blockers or back-and-forth, massive implementation chunk, or overwhelmed worker context -> retire old worker/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, dispatch fresh implementation worker with new `execution_id` and original task contract. Ambiguous edit ownership -> `blocked`.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
 Writer barriers follow ownership: completed disjoint lane closes independently before Git mutation, freeze, or review; unrelated lanes continue. Shared path, contract, or validation environment -> global barrier.
@@ -101,7 +101,7 @@ Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`,
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Process each worker completion immediately. Verify report against files, Git, scope, checks, and live identity. From-scratch recovery -> apply restart rule; no retry on old worker.
+2. Process each worker completion immediately. Verify report against files, Git, scope, checks, and live identity. Restart condition -> apply restart rule; no retry on old worker.
 3. Per-worker checkpoint -> close completed lane barrier; stage only task paths; commit and freeze exact SHA; verify scope and unrelated status; dispatch fresh exact `sol_medium` reviewer immediately. Keep unrelated disjoint workers running. Grouped checkpoint -> wait only for named workers and join condition before same freeze/dispatch flow.
 4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
