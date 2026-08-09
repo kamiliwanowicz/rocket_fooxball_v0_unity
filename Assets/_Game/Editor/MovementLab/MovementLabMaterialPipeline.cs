@@ -78,9 +78,13 @@ namespace RocketFooxball.Editor
                         SetMaterialKeyword(material, "_NORMALMAP", material.GetTexture("_BumpMap") != null);
                         SetMaterialKeyword(material, "_METALLICSPECGLOSSMAP", material.GetTexture("_MetallicGlossMap") != null);
                         SetMaterialKeyword(material, "_OCCLUSIONMAP", material.GetTexture("_OcclusionMap") != null);
-                        var authoredEmission = material.name == "WeaponAccent" || material.name == "RocketHot" || material.name == "ArenaGlow";
-                        SetMaterialKeyword(material, "_EMISSION", authoredEmission || material.GetTexture("_EmissionMap") != null ||
-                            (material.HasProperty("_EmissionColor") && material.GetColor("_EmissionColor").maxColorComponent > 0.001f));
+                        var hasEmission = material.name == "WeaponAccent" || material.name == "RocketHot" || material.name == "ArenaGlow" ||
+                            material.GetTexture("_EmissionMap") != null ||
+                            (material.HasProperty("_EmissionColor") && material.GetColor("_EmissionColor").maxColorComponent > 0.001f);
+                        material.globalIlluminationFlags = hasEmission
+                            ? MaterialGlobalIlluminationFlags.BakedEmissive
+                            : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                        SetMaterialKeyword(material, "_EMISSION", hasEmission);
                         SetDetailNormalKeyword(material, material.GetTexture("_DetailNormalMap") != null);
                         if (persist || wasDirty) EditorUtility.SetDirty(material);
                         else EditorUtility.ClearDirty(material);
@@ -99,6 +103,7 @@ namespace RocketFooxball.Editor
                         var material = AssetDatabase.LoadAssetAtPath<Material>(emissivePaths[i]);
                         if (material == null) throw new InvalidOperationException("Missing authored emissive material: " + emissivePaths[i]);
                         var wasDirty = GetBaselineDirtyState(emissivePaths[i], material, baselineDirtyState);
+                        material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.BakedEmissive;
                         material.EnableKeyword("_EMISSION");
                         if (persist || wasDirty) EditorUtility.SetDirty(material);
                         else EditorUtility.ClearDirty(material);
@@ -187,7 +192,11 @@ namespace RocketFooxball.Editor
                     if (specification.NormalMap != null) material.EnableKeyword("_NORMALMAP"); else material.DisableKeyword("_NORMALMAP");
                     if (specification.MetallicGlossMap != null) material.EnableKeyword("_METALLICSPECGLOSSMAP"); else material.DisableKeyword("_METALLICSPECGLOSSMAP");
                     if (specification.OcclusionMap != null) material.EnableKeyword("_OCCLUSIONMAP"); else material.DisableKeyword("_OCCLUSIONMAP");
-                    if (specification.EmissionMap != null || specification.EmissionStrength > 0.001f) material.EnableKeyword("_EMISSION"); else material.DisableKeyword("_EMISSION");
+                    var hasEmission = specification.EmissionMap != null || specification.EmissionStrength > 0.001f;
+                    material.globalIlluminationFlags = hasEmission
+                        ? MaterialGlobalIlluminationFlags.BakedEmissive
+                        : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    if (hasEmission) material.EnableKeyword("_EMISSION"); else material.DisableKeyword("_EMISSION");
                     SetDetailNormalKeyword(material, specification.DetailNormalMap != null);
                     material.SetFloat("_SmoothnessTextureChannel", 0f);
                     material.enableInstancing = true;
