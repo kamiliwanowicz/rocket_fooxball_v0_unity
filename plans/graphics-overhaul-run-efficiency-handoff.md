@@ -144,6 +144,8 @@ Split current command:
 
 `ValidateMovementLabPreBake()` -> all non-lighting semantic + persistence checks
 
+`BakeMovementLabLightingDevelopment()` -> explicit fast local bake
+
 `BakeMovementLabLighting()` -> explicit production bake
 
 `ValidateMovementLab()` -> clean-process, read-only persisted validation
@@ -155,6 +157,7 @@ Required behavior:
 - semantic validation failure -> stop; no automatic bake
 - validator-only change -> compile + validate; zero generated writes
 - unchanged lighting-input digest -> preserve baked outputs
+- development bake output -> tagged non-final; rejected by production validation
 - production bake starts only through explicit lighting stage
 
 ## Stage-keyed invalidation
@@ -179,6 +182,49 @@ Expected invalidation matrix:
 - material appearance edit -> material + lighting
 - static mesh/light/probe edit -> lighting
 - quality validator edit -> compile + validator
+
+## Bake operating modes
+
+Default path:
+
+`no-bake development -> fast development bake when visual input changes -> production bake after source freeze`
+
+### No-bake development
+
+- use for runtime gameplay, validator, input, HUD, and other non-lighting behavior edits
+- reuse last accepted production lighting outputs
+- compile + focused tests/validation only
+- lighting-input digest change -> mark lighting stale; require development or production bake before visual acceptance
+
+### Fast development bake
+
+Initial candidate profile:
+
+- lightmapper: Progressive CPU
+- lightmap resolution: `5` texels/m instead of production `10`
+- indirect bounces: `1` instead of production `2`
+- light-probe positions: `80` instead of production `200`; test `40` only if moving-object readability remains acceptable
+- probe multiplier: `1`
+- indirect/environment samples: reduced; select exact values through controlled timing + visual comparison
+- reflection probes: `64` resolution or reuse last accepted cubemaps when reflection inputs remain unchanged
+
+Development bake rules:
+
+- local iteration evidence only; never satisfies final bake proof
+- manifest + lighting digest record profile ID and every quality setting
+- outputs remain tagged `development` until overwritten by production bake
+- final validator rejects development tag or setting mismatch
+- profile switch invalidates lighting stage
+
+### Production bake
+
+- Progressive CPU
+- lightmap resolution: `10` texels/m
+- indirect bounces: `2`
+- light-probe positions: `200`
+- three baked reflection probes at `128` resolution
+- run once after reviews, accepted fixes, pre-bake gate, and source freeze
+- exact committed-SHA evidence only
 
 ## Pre-bake gate
 
@@ -291,7 +337,7 @@ Per checkpoint:
 
 ## Lighting experiments
 
-Run after builder remediation. One variable per experiment. Same scene, Unity version, path, warm Library, power state.
+Run after builder remediation. Isolate one variable per component experiment; benchmark combined development profile only after component selection. Same scene, Unity version, path, warm Library, power state.
 
 1. Probe scaling
    - variants: `40`, `80`, `200`
@@ -299,11 +345,10 @@ Run after builder remediation. One variable per experiment. Same scene, Unity ve
    - inspect player/ball/rocket lighting near goals, walls, ramps, center
 
 2. Development bake profile
-   - lower indirect/environment samples
-   - probe multiplier `1`
-   - lower lightmap resolution
-   - one bounce where visually adequate
-   - final profile used only after source freeze
+   - benchmark candidate profile from `Bake operating modes`
+   - compare total duration and output size against production baseline
+   - inspect dynamic player/ball/rocket lighting plus static goals, walls, ramps, and center
+   - accept candidate only when gameplay readability remains intact
 
 3. CPU vs GPU
    - current machine: Intel Core Ultra 5 135U; integrated Intel Graphics; reported 2 GiB VRAM
@@ -366,6 +411,9 @@ Recurring URP local-keyword instability -> evaluate project-owned PBR shader con
 - validator-only source edit causes no bake and zero owned-output writes
 - semantic pre-bake failure exits before `Lightmapping.Bake()`
 - gameplay-only edit leaves lighting-input digest unchanged
+- no-bake development path preserves accepted lighting outputs
+- development bake records non-final profile + exact settings
+- production validator rejects development bake outputs
 - lighting-input edit triggers exactly one explicit bake
 - Build 2 reuses outputs with zero changed hashes
 - separate validator changes zero hashes
