@@ -21,21 +21,12 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-using static RocketFooxball.Editor.MovementLabSerializedProperties;
 using MaterialSpecification = RocketFooxball.Editor.MovementLabContract.MaterialSpecification;
 using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMaterialSpecification;
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
-using static RocketFooxball.Editor.MovementLabImportPipeline;
-using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
-using static RocketFooxball.Editor.MovementLabPrefabPipeline;
-using static RocketFooxball.Editor.MovementLabArenaPipeline;
-using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabMaterialPipeline
@@ -46,8 +37,6 @@ namespace RocketFooxball.Editor
             internal MovementLabMaterialCatalog(UnityEngine.Material floor, UnityEngine.Material wall, UnityEngine.Material trim, UnityEngine.Material hazard, UnityEngine.Material marking, UnityEngine.Material ball, UnityEngine.Material rocket)
             { Floor = floor; Wall = wall; Trim = trim; Hazard = hazard; Marking = marking; Ball = ball; Rocket = rocket; }
         }
-        internal static void Settle() => FinalizeGeneratedMaterialPersistence();
-
         internal static void ValidateCatalog(Material floor, Material wall, Material trim, Material hazard,
             Material marking, Material ball, Material rocket)
         {
@@ -148,7 +137,6 @@ namespace RocketFooxball.Editor
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     RestoreGeneratedLitMaterialKeywords();
                     AssetDatabase.SaveAssets();
-                    NormalizeGeneratedYamlWhitespace();
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 }
 

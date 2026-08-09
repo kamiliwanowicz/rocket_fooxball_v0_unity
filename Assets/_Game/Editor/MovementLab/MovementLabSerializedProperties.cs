@@ -6,6 +6,12 @@ namespace RocketFooxball.Editor
 {
     internal static class MovementLabSerializedProperties
     {
+        internal static T Require<T>(T value, string label) where T : UnityEngine.Object
+        {
+            if (value == null) throw new InvalidOperationException("Missing required " + label + ".");
+            return value;
+        }
+
         internal static void ValidateReference(UnityEngine.Object target, string propertyName, UnityEngine.Object expected, string label)
         {
             if (target == null || expected == null) throw new InvalidOperationException(label + " reference is null.");

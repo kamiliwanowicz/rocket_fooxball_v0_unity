@@ -27,17 +27,25 @@ using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMa
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
-using static RocketFooxball.Editor.MovementLabImportPipeline;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
-using static RocketFooxball.Editor.MovementLabPrefabPipeline;
-using static RocketFooxball.Editor.MovementLabArenaPipeline;
-using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
 namespace RocketFooxball.Editor
 {
+    internal sealed class GoalBuild
+    {
+        internal GameObject Root;
+        internal GoalTrigger Trigger;
+        internal Collider Shield;
+    }
+
+    internal sealed class ArenaBuild
+    {
+        internal GameObject Root;
+        internal GoalBuild NorthGoal;
+        internal GoalBuild SouthGoal;
+        internal Collider[] Shields;
+    }
+
     internal static partial class MovementLabArenaPipeline
     {
         internal static void Validate()
@@ -416,7 +424,6 @@ namespace RocketFooxball.Editor
                         if (uniqueMeshes.Add(mesh)) triangleCount += mesh.triangles.Length / 3;
                     }
                     if (triangleCount > 75000) throw new InvalidOperationException("ArenaKit imported triangle budget exceeded: " + triangleCount);
-                    ValidateArenaKitModel();
                     ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
                     ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
                     ValidateArchitectureTransform(architecture, "RampWestRails", new Vector3(-22f, 2.1f, 2f), Quaternion.Euler(-15f, -90f, 0f));
@@ -444,27 +451,6 @@ namespace RocketFooxball.Editor
                     if (collider == null || collider.isTrigger || visual.GetComponent<Collider>() != null || visual.GetComponent<MeshRenderer>() == null) throw new InvalidOperationException(label + " shield collider/render split invalid.");
                     var material = visual.GetComponent<MeshRenderer>().sharedMaterial;
                     if (material == null || material.shader == null || material.shader.name != "RocketFooxball/RetroShield" || Mathf.Abs(material.GetFloat("_Alpha") - 0.52f) > 0.001f) throw new InvalidOperationException(label + " shield material contract invalid.");
-                }
-
-                internal static void ValidateArenaKitModel()
-                {
-                    var importer = AssetImporter.GetAtPath(ArenaKitModelPath) as ModelImporter;
-                    if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("ArenaKit importer contract invalid.");
-                    ValidatePbrModelImporter(importer, true, "ArenaKit");
-                    var expected = new[] { "ArenaGoalShell", "ArenaRampRails", "ArenaWallPylon", "ArenaPerimeterTruss", "ArenaScoreboard" };
-                    var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
-                    for (var i = 0; i < expected.Length; i++)
-                    {
-                        Mesh found = null;
-                        for (var j = 0; j < assets.Length; j++) if (assets[j] is Mesh mesh && mesh.name == expected[i]) found = mesh;
-                        if (found == null || AssetDatabase.GetAssetPath(found) != ArenaKitModelPath || found.subMeshCount < 1)
-                        {
-                            var importedNames = new List<string>();
-                            for (var k = 0; k < assets.Length; k++) if (assets[k] != null) importedNames.Add(assets[k].name + "[" + assets[k].GetType().Name + "]");
-                            throw new InvalidOperationException("ArenaKit named mesh missing/provenance invalid: " + expected[i] + "; imported assets=" + string.Join(",", importedNames.ToArray()));
-                        }
-                        ValidateMeshPbrChannels(found, true, "ArenaKit/" + expected[i]);
-                    }
                 }
 
     }

@@ -27,15 +27,7 @@ using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMa
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
-using static RocketFooxball.Editor.MovementLabImportPipeline;
-using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
-using static RocketFooxball.Editor.MovementLabPrefabPipeline;
-using static RocketFooxball.Editor.MovementLabArenaPipeline;
-using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabValidator
@@ -43,7 +35,7 @@ namespace RocketFooxball.Editor
         internal static void Validate(bool includeBakedLighting, bool logSuccess)
         {
             ValidateMovementLabInternal(ComputeBuilderSignature(), includeBakedLighting, logSuccess);
-            MovementLabImportPipeline.Validate();
+            MovementLabImportPipeline.ValidateTextureImporterContracts();
             MovementLabAnimatorPipeline.Validate();
             MovementLabPrefabPipeline.Validate();
             MovementLabArenaPipeline.Validate();
@@ -277,24 +269,24 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("World/FPS animators must have imported avatars.");
                     }
-                    ValidateImportedVisual(worldVisual.gameObject, CharacterModelPath, "WorldVisual");
-                    ValidateImportedVisual(weaponVisual.gameObject, WeaponModelPath, "WeaponVisual");
-                    ValidateWeaponMaterials(weaponVisual.gameObject);
-                    ValidateImportedVisual(fpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual");
-                    ValidateNoPhysics(weaponVisual.gameObject, "WeaponVisual");
-                    ValidateNoPhysics(fpsVisual.gameObject, "FpsKickVisual");
-                    ValidateWorldAnimatorController(worldAnimator, WorldControllerPath, CharacterModelPath);
-                    ValidateAnimatorController(fpsAnimator, FpsControllerPath, FpsKickModelPath);
+                    MovementLabPrefabPipeline.ValidateImportedVisual(worldVisual.gameObject, CharacterModelPath, "WorldVisual");
+                    MovementLabPrefabPipeline.ValidateImportedVisual(weaponVisual.gameObject, WeaponModelPath, "WeaponVisual");
+                    MovementLabMaterialPipeline.ValidateWeaponMaterials(weaponVisual.gameObject);
+                    MovementLabPrefabPipeline.ValidateImportedVisual(fpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual");
+                    MovementLabPrefabPipeline.ValidateNoPhysics(weaponVisual.gameObject, "WeaponVisual");
+                    MovementLabPrefabPipeline.ValidateNoPhysics(fpsVisual.gameObject, "FpsKickVisual");
+                    MovementLabAnimatorPipeline.ValidateWorldAnimatorController(worldAnimator, WorldControllerPath, CharacterModelPath);
+                    MovementLabPrefabPipeline.ValidateAnimatorController(fpsAnimator, FpsControllerPath, FpsKickModelPath);
                     var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
                     if (hiddenLayer < 0 || (camera.cullingMask & (1 << hiddenLayer)) != 0)
                     {
                         throw new InvalidOperationException("LocalPlayerHidden layer must be excluded from player camera culling.");
                     }
-                    ValidateLayerRecursively(worldVisual.gameObject, hiddenLayer, "WorldVisual");
-                    ValidateLayerExcluded(viewmodels.gameObject, hiddenLayer, "Viewmodels");
-                    ValidateCrosshair(camera);
-                    ValidateTrail(AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath));
-                    ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath));
+                    MovementLabPrefabPipeline.ValidateLayerRecursively(worldVisual.gameObject, hiddenLayer, "WorldVisual");
+                    MovementLabPrefabPipeline.ValidateLayerExcluded(viewmodels.gameObject, hiddenLayer, "Viewmodels");
+                    MovementLabPrefabPipeline.ValidateCrosshair(camera);
+                    MovementLabPrefabPipeline.ValidateTrail(AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath));
+                    MovementLabPrefabPipeline.ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath));
 
                     ValidateReference(north, "ball", ballMotor, "NorthGoal.ball");
                     ValidateReference(north, "match", match, "NorthGoal.match");
@@ -323,17 +315,17 @@ namespace RocketFooxball.Editor
                     ValidateReference(hud, "kick", kick, "HUD.kick");
                     ValidateReference(hud, "match", match, "HUD.match");
 
-                    ValidatePrefab(PrefabPath, "Player", false, ballSurface);
-                    ValidatePrefab(BallPrefabPath, "Ball", true, ballSurface);
-                    ValidatePrefab(RocketPrefabPath, "Rocket", false, null);
-                    ValidateArenaMaterials(arena, ballSurface);
-                    ValidateArenaArchitecture(arena);
-                    ValidateOpaqueMaterialReferences();
-                    ValidateTextureImporterContracts();
-                    ValidateModelImporterContracts();
-                    ValidateRenderPipelineSettings();
-                    ValidateSceneEnvironment(scene, arena, includeBakedLighting);
-                    ValidatePhysicsAndBuildSettings();
+                    MovementLabPrefabPipeline.ValidatePrefab(PrefabPath, "Player", false, ballSurface);
+                    MovementLabPrefabPipeline.ValidatePrefab(BallPrefabPath, "Ball", true, ballSurface);
+                    MovementLabPrefabPipeline.ValidatePrefab(RocketPrefabPath, "Rocket", false, null);
+                    MovementLabArenaPipeline.ValidateArenaMaterials(arena, ballSurface);
+                    MovementLabArenaPipeline.ValidateArenaArchitecture(arena);
+                    MovementLabMaterialPipeline.ValidateOpaqueMaterialReferences();
+                    MovementLabImportPipeline.ValidateTextureImporterContracts();
+                    MovementLabImportPipeline.ValidateModelImporterContracts();
+                    MovementLabSceneComposer.ValidateRenderPipelineSettings();
+                    MovementLabLightingPipeline.ValidateSceneEnvironment(scene, arena, includeBakedLighting);
+                    MovementLabSceneComposer.ValidatePhysicsAndBuildSettings();
                     ValidateNoMissingComponents(scene);
 
                     if (logSuccess)
@@ -364,15 +356,6 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Missing generated asset: " + path);
                     }
-                }
-
-                internal static T Require<T>(T value, string label) where T : UnityEngine.Object
-                {
-                    if (value == null)
-                    {
-                        throw new InvalidOperationException("Missing required " + label + ".");
-                    }
-                    return value;
                 }
 
     }

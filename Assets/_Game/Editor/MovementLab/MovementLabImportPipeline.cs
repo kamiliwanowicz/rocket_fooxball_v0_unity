@@ -21,28 +21,22 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-using static RocketFooxball.Editor.MovementLabSerializedProperties;
 using MaterialSpecification = RocketFooxball.Editor.MovementLabContract.MaterialSpecification;
 using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMaterialSpecification;
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
-using static RocketFooxball.Editor.MovementLabImportPipeline;
-using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
-using static RocketFooxball.Editor.MovementLabPrefabPipeline;
-using static RocketFooxball.Editor.MovementLabArenaPipeline;
-using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabImportPipeline
     {
-        internal static void Apply() => ConfigureTextureImporters();
-        internal static void Validate() => ValidateTextureImporterContracts();
-
+        internal static void Apply()
+        {
+            // Preserve importer settlement order: textures first, models second.
+            ConfigureTextureImporters();
+            ConfigureModelImporters();
+        }
     }
 
     internal static partial class MovementLabImportPipeline
@@ -438,6 +432,27 @@ namespace RocketFooxball.Editor
                     }
                     if (!rocketSurface || !rocketHot) throw new InvalidOperationException("Rocket imported mesh names are incomplete.");
                     ValidateArenaKitModel();
+                }
+
+                internal static void ValidateArenaKitModel()
+                {
+                    var importer = AssetImporter.GetAtPath(ArenaKitModelPath) as ModelImporter;
+                    if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("ArenaKit importer contract invalid.");
+                    ValidatePbrModelImporter(importer, true, "ArenaKit");
+                    var expected = new[] { "ArenaGoalShell", "ArenaRampRails", "ArenaWallPylon", "ArenaPerimeterTruss", "ArenaScoreboard" };
+                    var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
+                    for (var i = 0; i < expected.Length; i++)
+                    {
+                        Mesh found = null;
+                        for (var j = 0; j < assets.Length; j++) if (assets[j] is Mesh mesh && mesh.name == expected[i]) found = mesh;
+                        if (found == null || AssetDatabase.GetAssetPath(found) != ArenaKitModelPath || found.subMeshCount < 1)
+                        {
+                            var importedNames = new List<string>();
+                            for (var k = 0; k < assets.Length; k++) if (assets[k] != null) importedNames.Add(assets[k].name + "[" + assets[k].GetType().Name + "]");
+                            throw new InvalidOperationException("ArenaKit named mesh missing/provenance invalid: " + expected[i] + "; imported assets=" + string.Join(",", importedNames.ToArray()));
+                        }
+                        ValidateMeshPbrChannels(found, true, "ArenaKit/" + expected[i]);
+                    }
                 }
 
                 internal static void ValidateRigImporter(string path)

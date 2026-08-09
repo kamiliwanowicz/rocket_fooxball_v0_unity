@@ -21,28 +21,20 @@ using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
-using static RocketFooxball.Editor.MovementLabSerializedProperties;
 using MaterialSpecification = RocketFooxball.Editor.MovementLabContract.MaterialSpecification;
 using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMaterialSpecification;
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 using static RocketFooxball.Editor.MovementLabImportPipeline;
-using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
-using static RocketFooxball.Editor.MovementLabPrefabPipeline;
-using static RocketFooxball.Editor.MovementLabArenaPipeline;
-using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
 namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabAnimatorPipeline
     {
         internal static void Validate()
         {
-            MovementLabBuildContext.ValidateImporterContracts();
+            MovementLabImportPipeline.ValidateModelImporterContracts();
             RequireController(MovementLabContract.AnimationsPath + "/WorldCharacter.controller", "world");
             RequireController(MovementLabContract.AnimationsPath + "/FpsKick.controller", "FPS");
         }

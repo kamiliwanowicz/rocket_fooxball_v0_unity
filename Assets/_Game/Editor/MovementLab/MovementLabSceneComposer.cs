@@ -27,22 +27,13 @@ using PbrMaterialSpecification = RocketFooxball.Editor.MovementLabContract.PbrMa
 using WorldAnimatorConditionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorConditionSpecification;
 using WorldAnimatorTransitionSpecification = RocketFooxball.Editor.MovementLabContract.WorldAnimatorTransitionSpecification;
 
-using static RocketFooxball.Editor.MovementLabBuildContext;
-using static RocketFooxball.Editor.MovementLabImportPipeline;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 using static RocketFooxball.Editor.MovementLabMaterialPipeline;
-using static RocketFooxball.Editor.MovementLabAnimatorPipeline;
 using static RocketFooxball.Editor.MovementLabPrefabPipeline;
 using static RocketFooxball.Editor.MovementLabArenaPipeline;
 using static RocketFooxball.Editor.MovementLabLightingPipeline;
-using static RocketFooxball.Editor.MovementLabSceneComposer;
-using static RocketFooxball.Editor.MovementLabValidator;
 namespace RocketFooxball.Editor
 {
-    internal static partial class MovementLabSceneComposer
-    {
-        internal static void Assemble() => AssembleMovementLabUnstaged();
-    }
-
     internal static partial class MovementLabSceneComposer
     {
                 internal static void AssembleMovementLabUnstaged()
@@ -203,7 +194,9 @@ namespace RocketFooxball.Editor
                     AssetDatabase.SaveAssets();
                     NormalizeGeneratedYamlWhitespace();
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-                    MovementLabMaterialPipeline.Settle();
+                    MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
+                    NormalizeGeneratedYamlWhitespace();
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 }
 
                 internal static void RegisterBuildScene()
@@ -286,23 +279,12 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Gameplay camera must own GraphicsQualityRuntime with self target.");
                     }
 
-                    var originalQuality = QualitySettings.GetQualityLevel();
-                    QualitySettings.SetQualityLevel(GraphicsQualityConfigurator.LowQualityIndex, true);
-                    runtime.ApplyCurrentQuality();
-                    if (camera.allowHDR || camera.GetUniversalAdditionalCameraData().renderPostProcessing ||
-                        camera.GetUniversalAdditionalCameraData().antialiasing != AntialiasingMode.FastApproximateAntialiasing)
+                    // Validation is inspection-only. Generation persists High/Low assets;
+                    // camera state is checked without changing quality or runtime state.
+                    var cameraData = camera.GetUniversalAdditionalCameraData();
+                    if (!camera.allowHDR || !cameraData.renderPostProcessing ||
+                        cameraData.antialiasing != AntialiasingMode.SubpixelMorphologicalAntiAliasing)
                     {
-                        QualitySettings.SetQualityLevel(originalQuality, true);
-                        runtime.ApplyCurrentQuality();
-                        throw new InvalidOperationException("Low quality camera state contract invalid.");
-                    }
-                    QualitySettings.SetQualityLevel(GraphicsQualityConfigurator.HighQualityIndex, true);
-                    runtime.ApplyCurrentQuality();
-                    if (!camera.allowHDR || !camera.GetUniversalAdditionalCameraData().renderPostProcessing ||
-                        camera.GetUniversalAdditionalCameraData().antialiasing != AntialiasingMode.SubpixelMorphologicalAntiAliasing)
-                    {
-                        QualitySettings.SetQualityLevel(originalQuality, true);
-                        runtime.ApplyCurrentQuality();
                         throw new InvalidOperationException("High quality camera state contract invalid.");
                     }
                 }
