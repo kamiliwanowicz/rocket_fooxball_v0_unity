@@ -21,6 +21,17 @@ TEXTURE_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Textures")
 PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "RetroTextures")
 SEED = 0xF00B411
 MIB = 1024.0 * 1024.0
+BALL_PANEL_RADIUS = 0.29
+BALL_SEAM_WIDTH = 0.032
+BALL_NORMAL_SCALE = 0.05
+ROCKET_GUTTER_PX = 32
+ROCKET_ATLAS_REGIONS = {
+    # UV bounds use half-open intervals. Pixel bounds derive from these values.
+    "body": (0.00, 0.50, 0.00, 1.00),
+    "hot": (0.50, 1.00, 0.00, 0.50),
+    "fins": (0.50, 0.75, 0.50, 1.00),
+    "nozzle": (0.75, 1.00, 0.50, 1.00),
+}
 
 
 def clamp01(value: float) -> float:
@@ -155,7 +166,9 @@ def _surface_fields(kind: str, u: float, v: float):
         base = (mix(0.46, 0.76, n01), mix(0.53, 0.80, n01), mix(0.51, 0.72, n01))
         base = tuple(mix(value, (0.06, 0.40, 0.47)[i], seam * 0.62) for i, value in enumerate(base))
         height = 0.50 + n * 0.07 - seam * 0.10
-        return base, height, 0.10 + seam * 0.10, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+        # Concrete remains non-metallic. Seam response lives in height/AO,
+        # never in metallic R.
+        return base, height, 0.0, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
     if kind == "trim":
         stripe = (u * 12.0 + v * 12.0) % 1.0
         edge = 1.0 if stripe < 0.12 else 0.0
@@ -296,32 +309,55 @@ def regular_polygon_boundary(radius, angle, sides=5):
     return radius * math.cos(math.pi / sides) / max(0.20, math.cos(offset))
 
 
-def ball_sample(point, frames):
+def _ball_surface_fields(point, frames):
+    """Return football albedo fields plus continuous leather/panel height."""
     nearest_index = max(range(len(frames)), key=lambda index: dot3(point, frames[index][0]))
     center, tangent_u, tangent_v = frames[nearest_index]
     cosine = max(-1.0, min(1.0, dot3(point, center)))
     angular = math.acos(cosine)
     local_angle = math.atan2(dot3(point, tangent_v), dot3(point, tangent_u))
-    panel_radius = regular_polygon_boundary(0.29, local_angle)
-    seam = panel_radius < angular <= panel_radius + 0.032
+    panel_radius = regular_polygon_boundary(BALL_PANEL_RADIUS, local_angle)
+    seam = panel_radius < angular <= panel_radius + BALL_SEAM_WIDTH
     panel = angular <= panel_radius
     grain = 0.5 + 0.5 * (0.60 * math.sin(point[0] * 31.0 + point[2] * 17.0) + 0.40 * math.sin(point[1] * 47.0 - point[2] * 13.0))
+
+    # Height transitions are smooth even though albedo classification stays
+    # crisp. This gives finite tangent slopes at panel and seam boundaries.
+    panel_blend = 1.0 - smoothstep(panel_radius - 0.014, panel_radius + 0.014, angular)
+    seam_blend = smoothstep(panel_radius + 0.006, panel_radius + 0.014, angular)
+    seam_blend *= 1.0 - smoothstep(panel_radius + BALL_SEAM_WIDTH - 0.010, panel_radius + BALL_SEAM_WIDTH + 0.010, angular)
+    leather_height = 0.50 + grain * 0.015
+    height = mix(leather_height, 0.39, panel_blend) + 0.045 * seam_blend
+
     if panel:
         base = (0.008 + grain * 0.005, 0.010 + grain * 0.006, 0.014 + grain * 0.008)
-        height = 0.39
         smooth = 0.29
         ao = 0.60
     elif seam:
         base = (0.10, 0.105, 0.11)
-        height = 0.43
         smooth = 0.34
         ao = 0.53
     else:
         base = (0.86 + grain * 0.08, 0.87 + grain * 0.075, 0.83 + grain * 0.07)
-        height = 0.50 + grain * 0.015
         smooth = 0.42 + grain * 0.16
         ao = 0.89
-    normal = (0.5 + 0.017 * math.sin(point[2] * 41.0), 0.5 + 0.017 * math.cos(point[0] * 37.0), 0.985)
+    return base, height, smooth, ao, panel, tangent_u, tangent_v
+
+
+def ball_sample(point, frames):
+    """Sample base fields and derive tangent normal from height slope."""
+    base, height, smooth, ao, panel, tangent_u, tangent_v = _ball_surface_fields(point, frames)
+    epsilon = 0.003
+    plus_u = normalized(add3(point, scale3(tangent_u, epsilon)))
+    minus_u = normalized(add3(point, scale3(tangent_u, -epsilon)))
+    plus_v = normalized(add3(point, scale3(tangent_v, epsilon)))
+    minus_v = normalized(add3(point, scale3(tangent_v, -epsilon)))
+    height_u = (_ball_surface_fields(plus_u, frames)[1] - _ball_surface_fields(minus_u, frames)[1]) / (2.0 * epsilon)
+    height_v = (_ball_surface_fields(plus_v, frames)[1] - _ball_surface_fields(minus_v, frames)[1]) / (2.0 * epsilon)
+    # Height-gradient tangent normal: panel recess and raised seams produce
+    # opposite-signed slopes, with shallow relief tuned for leather scale.
+    tangent_normal = normalized((-height_u * BALL_NORMAL_SCALE, -height_v * BALL_NORMAL_SCALE, 1.0))
+    normal = (0.5 + tangent_normal[0] * 0.5, 0.5 + tangent_normal[1] * 0.5, 0.5 + tangent_normal[2] * 0.5)
     return base, normal, 0.0, smooth, ao, panel
 
 
@@ -359,23 +395,36 @@ def generate_ball_maps(width=1024, height=512):
     return base, normal, metallic, occlusion, frames
 
 
-def _rocket_region(x, y, width=1024, height=1024):
-    # (name, interior rectangle) with 32 px gutters on every side.
-    if y < 512:
-        return "body" if x < 512 else "hot"
-    return "fins" if x < 768 else "nozzle"
+def rocket_region_rectangles(width=1024, height=1024):
+    """Return disjoint outer and gutter-safe pixel rectangles for atlas regions."""
+    rectangles = {}
+    for name, (u0, u1, v0, v1) in ROCKET_ATLAS_REGIONS.items():
+        left = int(round(u0 * width))
+        right = int(round(u1 * width))
+        bottom = int(round(v0 * height))
+        top = int(round(v1 * height))
+        gutter = ROCKET_GUTTER_PX
+        if right - left <= gutter * 2 or top - bottom <= gutter * 2:
+            raise RuntimeError(f"Rocket region {name} too small for {gutter}px gutters")
+        rectangles[name] = {
+            "outer": (left, bottom, right, top),
+            "inner": (left + gutter, bottom + gutter, right - gutter, top - gutter),
+            "uv": (u0, u1, v0, v1),
+        }
+    return rectangles
 
 
-def _rocket_region_uv(region, x, y):
-    rectangles = {
-        "body": (0, 0, 512, 1024),
-        "hot": (512, 0, 1024, 512),
-        "fins": (512, 512, 768, 1024),
-        "nozzle": (768, 512, 1024, 1024),
-    }
-    left, bottom, right, top = rectangles[region]
-    inner_left, inner_bottom = left + 32, bottom + 32
-    inner_right, inner_top = right - 32, top - 32
+def _rocket_region(x, y, width=1024, height=1024, rectangles=None):
+    rectangles = rectangles or rocket_region_rectangles(width, height)
+    matches = [name for name, entry in rectangles.items() if entry["outer"][0] <= x < entry["outer"][2] and entry["outer"][1] <= y < entry["outer"][3]]
+    if len(matches) != 1:
+        raise RuntimeError(f"Rocket atlas region overlap/gap at pixel ({x},{y}): {matches}")
+    return matches[0]
+
+
+def _rocket_region_uv(region, x, y, rectangles=None):
+    entry = (rectangles or rocket_region_rectangles())[region]
+    inner_left, inner_bottom, inner_right, inner_top = entry["inner"]
     cx = min(max(x, inner_left), inner_right - 1)
     cy = min(max(y, inner_bottom), inner_top - 1)
     return (cx - inner_left) / max(1.0, inner_right - inner_left - 1), (cy - inner_bottom) / max(1.0, inner_top - inner_bottom - 1)
@@ -388,17 +437,17 @@ def _rocket_fields(region, u, v):
         body = (0.29 + grain * 0.12, 0.22 + grain * 0.09, 0.13 + grain * 0.055)
         charcoal = (0.055, 0.062, 0.066)
         base = tuple(mix(body[i], charcoal[i], panel * 0.72) for i in range(3))
-        return base, 0.50 + grain * 0.08 - panel * 0.08, 0.78 - panel * 0.22, 0.78 - panel * 0.10, (0.47, 0.50, 0.53)
+        return base, 0.50 + grain * 0.08 - panel * 0.08, 0.78 - panel * 0.22, 0.78 - panel * 0.10, (0.0, 0.0, 0.0)
     if region == "hot":
         radial = math.sqrt((u - 0.5) ** 2 + (v - 0.5) ** 2)
         red = (0.55 + grain * 0.18, 0.035 + grain * 0.025, 0.012)
-        orange = (0.96, 0.19, 0.018)
+        orange = (1.0, 0.70, 0.035)
         base = tuple(mix(red[i], orange[i], smoothstep(0.58, 0.12, radial)) for i in range(3))
         emission = (1.0, 0.20 + 0.55 * smoothstep(0.48, 0.0, radial), 0.02)
         return base, 0.48 + grain * 0.06, 0.32, 0.62, emission
     if region == "fins":
         base = (0.38 + grain * 0.25, 0.018 + grain * 0.035, 0.012 + grain * 0.016)
-        return base, 0.46 + grain * 0.04, 0.58, 0.58, (0.08, 0.005, 0.001)
+        return base, 0.46 + grain * 0.04, 0.58, 0.58, (0.0, 0.0, 0.0)
     radial = math.sqrt((u - 0.5) ** 2 + (v - 0.5) ** 2)
     base = (0.025 + grain * 0.025, 0.030 + grain * 0.028, 0.032 + grain * 0.030)
     throat = smoothstep(0.24, 0.03, radial)
@@ -410,10 +459,11 @@ def _rocket_fields(region, u, v):
 def generate_rocket_maps(width=1024, height=1024):
     total = width * height
     outputs = {key: bytearray(total * 4) for key in ("base", "normal", "metallic", "occlusion", "emission")}
+    rectangles = rocket_region_rectangles(width, height)
     for y in range(height):
         for x in range(width):
-            region = _rocket_region(x, y, width, height)
-            u, v = _rocket_region_uv(region, x, y)
+            region = _rocket_region(x, y, width, height, rectangles)
+            u, v = _rocket_region_uv(region, x, y, rectangles)
             colour, _height, metal, smooth, emission = _rocket_fields(region, u, v)
             nx = clamp01(0.5 + 0.035 * math.sin(math.tau * (u * 5.0 + v)))
             ny = clamp01(0.5 + 0.035 * math.cos(math.tau * (v * 6.0 - u)))
@@ -479,13 +529,19 @@ def generate_sprite_sheet(kind: str, width=128, height=128):
                     edge = edge_base + irregular
                     if kind == "explosion":
                         alpha = 1.0 - smoothstep(edge - 0.20, edge, radius)
-                        core = smoothstep(0.33, 0.0, radius)
-                        body = smoothstep(0.58, 0.08, radius)
-                        edge_mix = smoothstep(edge, 0.46, radius)
+                        core = smoothstep(0.37, 0.0, radius)
+                        body = smoothstep(0.67, 0.10, radius)
+                        edge_mix = smoothstep(edge, 0.48, radius)
+                        # Near-white/yellow contiguous body. Orange edge stays
+                        # subdued but remains yellow-classified while alpha is
+                        # high, preventing red-dominant high-alpha pixels.
+                        green = clamp01(0.99 * core + 0.88 * body + 0.68 * edge_mix)
+                        if alpha >= 0.50:
+                            green = max(green, 0.72)
                         colour = (
                             1.0,
-                            clamp01(0.99 * core + 0.82 * body + 0.48 * edge_mix),
-                            clamp01(0.80 * core + 0.12 * body + 0.025 * edge_mix),
+                            green,
+                            clamp01(0.82 * core + 0.22 * body + 0.035 * edge_mix),
                         )
                     else:
                         puff = 0.5 + 0.5 * (0.62 * math.sin(5.0 * angle + phase) + 0.38 * math.sin(9.0 * angle - phase * 1.6))
@@ -656,6 +712,347 @@ def audit_texture(name, width, height, rgba, expected, seam_u=False, seam_v=Fals
     return {"dimensions": [width, height], "channels": "RGBA8", "ranges": channel_ranges, "seam_u_error": seam_u_error, "seam_v_error": seam_v_error, "pole_error": pole_error, "map_type": map_type}
 
 
+def _seam_errors(rgba, width, height, check_v=False, check_poles=False):
+    seam_u = max(abs(rgba_get(rgba, y * width)[channel] - rgba_get(rgba, y * width + width - 1)[channel]) for y in range(height) for channel in range(4))
+    seam_v = 0
+    if check_v:
+        seam_v = max(abs(rgba_get(rgba, x)[channel] - rgba_get(rgba, (height - 1) * width + x)[channel]) for x in range(width) for channel in range(4))
+    poles = 0
+    if check_poles:
+        for row in (0, height - 1):
+            reference = rgba_get(rgba, row * width)
+            poles = max(poles, max(abs(rgba_get(rgba, row * width + x)[channel] - reference[channel]) for x in range(width) for channel in range(4)))
+    return seam_u, seam_v, poles
+
+
+def _normal_map_audit(rgba, width, height):
+    minimum = float("inf")
+    maximum = 0.0
+    invalid = 0
+    for index in range(width * height):
+        red, green, blue, alpha = rgba_get(rgba, index)
+        nx = red / 127.5 - 1.0
+        ny = green / 127.5 - 1.0
+        nz = blue / 127.5 - 1.0
+        length = math.sqrt(nx * nx + ny * ny + nz * nz)
+        minimum = min(minimum, length)
+        maximum = max(maximum, length)
+        if not all(math.isfinite(component) for component in (nx, ny, nz, length)) or nz <= 0.0 or length < 0.70 or length > 1.30 or alpha != 255:
+            invalid += 1
+    return {
+        "valid": invalid == 0,
+        "invalid_pixels": invalid,
+        "decoded_length": [round(minimum, 6), round(maximum, 6)],
+    }
+
+
+def audit_ball_layout(base, normal, metallic, occlusion, frames, width=1024, height=512):
+    """Hard football semantic gates. Return serializable metrics and pass bits."""
+    centres = [frame[0] for frame in frames]
+    finite = all(math.isfinite(component) for centre in centres for component in centre)
+    unique = len({tuple(round(component, 12) for component in centre) for centre in centres}) == 12
+    unit_error = max(abs(math.sqrt(dot3(centre, centre)) - 1.0) for centre in centres) if centres else float("inf")
+    centroid = tuple(sum(centre[index] for centre in centres) / max(1, len(centres)) for index in range(3))
+    centroid_error = math.sqrt(dot3(centroid, centroid))
+    antipodal_error = max(min(math.sqrt(sum((centre[index] + other[index]) ** 2 for index in range(3))) for other in centres) for centre in centres)
+    neighbour_counts = []
+    neighbour_spread = 0.0
+    for centre in centres:
+        distances = sorted(math.acos(max(-1.0, min(1.0, dot3(centre, other)))) for other in centres if other is not centre)
+        nearest = distances[:5]
+        neighbour_counts.append(sum(1 for distance in distances if abs(distance - nearest[0]) <= 1e-6))
+        neighbour_spread = max(neighbour_spread, max(nearest) - min(nearest))
+    five_neighbours = all(count == 5 for count in neighbour_counts)
+    nearest_separation = min(math.acos(max(-1.0, min(1.0, dot3(a, b)))) for index, a in enumerate(centres) for b in centres[index + 1 :])
+    separation_ok = nearest_separation > BALL_PANEL_RADIUS * 2.0 + 1e-6
+
+    centre_dark = True
+    centre_samples = []
+    for centre in centres:
+        longitude = math.atan2(centre[2], centre[0])
+        latitude = math.asin(max(-1.0, min(1.0, centre[1])))
+        x = int(round((longitude + math.pi) / math.tau * (width - 1)))
+        y = int(round((latitude + math.pi / 2.0) / math.pi * (height - 1)))
+        x = max(0, min(width - 1, x))
+        y = max(0, min(height - 1, y))
+        sample = rgba_get(base, y * width + x)
+        centre_samples.append({"xy": [x, y], "rgb": list(sample[:3])})
+        centre_dark &= max(sample[:3]) <= 80
+    dark_pixels = 0
+    for index in range(width * height):
+        red, green, blue, _alpha = rgba_get(base, index)
+        dark_pixels += int(red <= 80 and green <= 80 and blue <= 90)
+    dark_ratio = dark_pixels / float(width * height)
+    dark_area_ok = 0.08 <= dark_ratio <= 0.42
+    seam_u, seam_v, poles = _seam_errors(base, width, height, False, True)
+    for map_buffer in (normal, metallic, occlusion):
+        map_u, map_v, map_poles = _seam_errors(map_buffer, width, height, False, True)
+        seam_u = max(seam_u, map_u)
+        seam_v = max(seam_v, map_v)
+        poles = max(poles, map_poles)
+    normal_audit = _normal_map_audit(normal, width, height)
+    normal_xy_max = 0.0
+    for index in range(width * height):
+        red, green, _blue, _alpha = rgba_get(normal, index)
+        normal_xy_max = max(normal_xy_max, math.sqrt((red / 127.5 - 1.0) ** 2 + (green / 127.5 - 1.0) ** 2))
+    metallic_r_max = max(metallic[index * 4] for index in range(width * height))
+    nonmetal = metallic_r_max == 0
+    gates = {
+        "finite_unique_unit_centres": finite and unique and unit_error <= 1e-6,
+        "centroid_near_zero": centroid_error <= 1e-6,
+        "antipodal_symmetry": antipodal_error <= 1e-6,
+        "five_nearest_neighbours": five_neighbours and neighbour_spread <= 1e-6,
+        "panel_separation": separation_ok,
+        "black_centre_pixels": centre_dark,
+        "bounded_dark_area": dark_area_ok,
+        "u_seam": seam_u == 0,
+        "uniform_poles": poles == 0,
+        "decoded_normal_valid": normal_audit["valid"],
+        "shallow_panel_relief": normal_xy_max <= 0.65,
+        "nonmetallic": nonmetal,
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "centres": {
+            "count": len(centres),
+            "unit_error": unit_error,
+            "centroid": centroid,
+            "centroid_error": centroid_error,
+            "antipodal_error": antipodal_error,
+            "neighbour_counts": neighbour_counts,
+            "neighbour_spread": neighbour_spread,
+            "nearest_separation_rad": nearest_separation,
+            "panel_radius_rad": BALL_PANEL_RADIUS,
+            "samples": centre_samples,
+        },
+        "dark_area_ratio": dark_ratio,
+        "seam_u_error": seam_u,
+        "seam_v_error": seam_v,
+        "pole_error": poles,
+        "normal": normal_audit,
+        "normal_xy_max": normal_xy_max,
+        "metallic_r_max": metallic_r_max,
+    }
+
+
+def _region_stats(rgba, rectangle):
+    left, bottom, right, top = rectangle
+    count = max(1, (right - left) * (top - bottom))
+    luminance_sum = 0.0
+    luminance_min = 1.0
+    luminance_max = 0.0
+    channel_max = [0, 0, 0]
+    channel_min = [255, 255, 255]
+    red_dominant = 0
+    for y in range(bottom, top):
+        for x in range(left, right):
+            red, green, blue, _alpha = rgba_get(rgba, y * 1024 + x)
+            colour = (red / 255.0, green / 255.0, blue / 255.0)
+            luminance = 0.2126 * colour[0] + 0.7152 * colour[1] + 0.0722 * colour[2]
+            luminance_sum += luminance
+            luminance_min = min(luminance_min, luminance)
+            luminance_max = max(luminance_max, luminance)
+            for channel, value in enumerate((red, green, blue)):
+                channel_min[channel] = min(channel_min[channel], value)
+                channel_max[channel] = max(channel_max[channel], value)
+            red_dominant += int(red > green * 1.45 and red > blue * 1.65)
+    return {
+        "count": count,
+        "mean_luminance": luminance_sum / count,
+        "luminance_range": [luminance_min, luminance_max],
+        "channel_ranges": [[channel_min[index], channel_max[index]] for index in range(3)],
+        "red_dominant_ratio": red_dominant / float(count),
+    }
+
+
+def audit_rocket_atlas(maps, width=1024, height=1024):
+    """Hard atlas gates: disjoint UV regions, gutters, palette, emission mask."""
+    rectangles = rocket_region_rectangles(width, height)
+    entries = list(rectangles.values())
+    area = sum((entry["outer"][2] - entry["outer"][0]) * (entry["outer"][3] - entry["outer"][1]) for entry in entries)
+    overlap = any(
+        max(a["outer"][0], b["outer"][0]) < min(a["outer"][2], b["outer"][2]) and max(a["outer"][1], b["outer"][1]) < min(a["outer"][3], b["outer"][3])
+        for index, a in enumerate(entries) for b in entries[index + 1 :]
+    )
+    regions_exact = area == width * height and not overlap
+
+    gutter_errors = {}
+    for map_name, rgba in maps.items():
+        errors = 0
+        for entry in entries:
+            left, bottom, right, top = entry["outer"]
+            inner_left, inner_bottom, inner_right, inner_top = entry["inner"]
+            for y in range(bottom, top):
+                for x in range(left, right):
+                    if inner_left <= x < inner_right and inner_bottom <= y < inner_top:
+                        continue
+                    cx = min(max(x, inner_left), inner_right - 1)
+                    cy = min(max(y, inner_bottom), inner_top - 1)
+                    if rgba_get(rgba, y * width + x) != rgba_get(rgba, cy * width + cx):
+                        errors += 1
+        gutter_errors[map_name] = errors
+
+    region_stats = {}
+    for name, entry in rectangles.items():
+        region_stats[name] = _region_stats(maps["base"], entry["inner"])
+    body = region_stats["body"]
+    fins = region_stats["fins"]
+    hot = region_stats["hot"]
+    nozzle = region_stats["nozzle"]
+    body_panel_contrast = body["luminance_range"][1] - body["luminance_range"][0]
+    palette = {
+        "body_nonflat": body_panel_contrast > 0.08,
+        "body_bronze_above_charcoal": body["mean_luminance"] > 0.12 and body["luminance_range"][0] < body["mean_luminance"] * 0.65,
+        "fins_red_dominant": fins["red_dominant_ratio"] >= 0.90,
+        "hot_has_red_orange_yellow": hot["channel_ranges"][0][1] >= 200 and hot["channel_ranges"][1][1] >= 90 and hot["channel_ranges"][2][1] >= 4,
+        "nozzle_dark": nozzle["mean_luminance"] < 0.16,
+    }
+
+    emission = maps["emission"]
+    body_fin_emission = 0
+    hot_nozzle_emission = 0
+    for name, entry in rectangles.items():
+        left, bottom, right, top = entry["outer"]
+        for y in range(bottom, top):
+            for x in range(left, right):
+                red, green, blue, alpha = rgba_get(emission, y * width + x)
+                bright = red > 0 or green > 0 or blue > 0
+                if name in ("body", "fins"):
+                    body_fin_emission += int(bright)
+                else:
+                    hot_nozzle_emission += int(bright)
+                if alpha != 255:
+                    body_fin_emission += 1
+    emission_gates = {
+        "body_fins_zero": body_fin_emission == 0,
+        "hot_nozzle_isolated": hot_nozzle_emission > 0,
+    }
+    normal_audit = _normal_map_audit(maps["normal"], width, height)
+    gates = {
+        "regions_exact_nonoverlap": regions_exact,
+        "gutters_all_maps": all(error == 0 for error in gutter_errors.values()),
+        "palette": all(palette.values()),
+        "emission_containment": all(emission_gates.values()),
+        "decoded_normal_valid": normal_audit["valid"],
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "regions": {name: {"uv": list(entry["uv"]), "outer_px": list(entry["outer"]), "inner_px": list(entry["inner"])} for name, entry in rectangles.items()},
+        "gutter_errors": gutter_errors,
+        "palette": palette,
+        "region_stats": region_stats,
+        "emission": {"body_fins_nonzero_pixels": body_fin_emission, "hot_nozzle_nonzero_pixels": hot_nozzle_emission, "gates": emission_gates},
+        "normal": normal_audit,
+    }
+
+
+def audit_explosion_semantics(rgba, width=128, height=128):
+    """Check contiguous yellow fireballs and high-alpha yellow:red ratio."""
+    high_yellow = 0
+    high_red = 0
+    high_pixels = 0
+    core_near_white = 0
+    components = []
+    edge_green_ratios = []
+    for cell_y in range(4):
+        for cell_x in range(4):
+            visited = set()
+            high = set()
+            for py in range(32):
+                for px in range(32):
+                    x = cell_x * 32 + px
+                    y = cell_y * 32 + py
+                    red, green, blue, alpha = rgba_get(rgba, y * width + x)
+                    if alpha >= 128:
+                        high.add((px, py))
+                        high_pixels += 1
+                        if green >= red * 0.60 and blue >= red * 0.025:
+                            high_yellow += 1
+                        elif red >= 120 and green < red * 0.60:
+                            high_red += 1
+                    radius = math.sqrt(((px + 0.5 - 16.0) / 16.0) ** 2 + ((py + 0.5 - 16.0) / 16.0) ** 2)
+                    if radius <= 0.34 and alpha >= 128 and red >= 240 and green >= 220:
+                        core_near_white += 1
+                    if alpha >= 32 and radius >= 0.60:
+                        edge_green_ratios.append(green / float(max(1, red)))
+            component_count = 0
+            largest = 0
+            for start in high:
+                if start in visited:
+                    continue
+                component_count += 1
+                stack = [start]
+                visited.add(start)
+                size = 0
+                while stack:
+                    px, py = stack.pop()
+                    size += 1
+                    for neighbour in ((px - 1, py), (px + 1, py), (px, py - 1), (px, py + 1)):
+                        if neighbour in high and neighbour not in visited:
+                            visited.add(neighbour)
+                            stack.append(neighbour)
+                largest = max(largest, size)
+            components.append({"count": component_count, "pixels": len(high), "largest": largest})
+    yellow_red_ratio = high_yellow / float(max(1, high_red))
+    edge_mean_ratio = sum(edge_green_ratios) / float(max(1, len(edge_green_ratios)))
+    gates = {
+        "alpha_high_pixels": high_pixels > 0,
+        "yellow_red_ratio": high_yellow > 0 and yellow_red_ratio >= 3.0,
+        "near_white_body": core_near_white > 0,
+        "contiguous_body": all(component["count"] == 1 and component["largest"] >= 24 for component in components),
+        "subdued_orange_edge": bool(edge_green_ratios) and 0.20 <= edge_mean_ratio <= 0.95,
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "high_alpha_pixels": high_pixels,
+        "yellow_pixels": high_yellow,
+        "red_pixels": high_red,
+        "yellow_red_ratio": yellow_red_ratio,
+        "near_white_core_pixels": core_near_white,
+        "components": components,
+        "edge_green_ratio": [min(edge_green_ratios), max(edge_green_ratios), edge_mean_ratio] if edge_green_ratios else [0.0, 0.0, 0.0],
+    }
+
+
+def run_semantic_audits(generated, frames):
+    ball = audit_ball_layout(
+        generated["RetroBall"]["buffer"], generated["RetroBall_Normal"]["buffer"], generated["RetroBall_MetallicSmoothness"]["buffer"], generated["RetroBall_Occlusion"]["buffer"], frames
+    )
+    rocket = audit_rocket_atlas(
+        {
+            "base": generated["RetroRocket"]["buffer"],
+            "normal": generated["RetroRocket_Normal"]["buffer"],
+            "metallic": generated["RetroRocket_MetallicSmoothness"]["buffer"],
+            "occlusion": generated["RetroRocket_Occlusion"]["buffer"],
+            "emission": generated["RetroRocket_Emission"]["buffer"],
+        }
+    )
+    explosion = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
+    wall_metallic = generated["RetroWall_MetallicSmoothness"]["buffer"]
+    wall_metallic_r_max = max(wall_metallic[index * 4] for index in range(1024 * 1024))
+    wall = {
+        "pass": wall_metallic_r_max == 0,
+        "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
+        "metallic_r_max": wall_metallic_r_max,
+    }
+    normal_maps = {}
+    for name, entry in generated.items():
+        if entry["map_type"] == "normal":
+            width, height = entry["dimensions"]
+            normal_maps[name] = _normal_map_audit(entry["buffer"], width, height)
+    normal_pass = all(result["valid"] for result in normal_maps.values())
+    pbr = {"pass": normal_pass and ball["gates"]["nonmetallic"] and wall["gates"]["concrete_nonmetallic"], "normal_maps": normal_maps, "nonmetallic_ball": ball["gates"]["nonmetallic"], "nonmetallic_concrete": wall["gates"]["concrete_nonmetallic"]}
+    checks = {"ball": ball, "pbr_channels": pbr, "wall": wall, "rocket": rocket, "explosion": explosion}
+    failed = []
+    for name, result in checks.items():
+        if not result["pass"]:
+            failed.append(name)
+    return {"pass": not failed, "failed": failed, "checks": checks}
+
+
 def estimate_compressed_memory(outputs):
     # Conservative platform estimate: normals use BC5 (16-byte blocks),
     # colour/mask/VFX maps use BC4/BC1/BC3-class 8-byte blocks. Full mip
@@ -768,26 +1165,33 @@ def main():
         for name, entry in generated.items()
     }
     memory_mib = estimate_compressed_memory(outputs)
+    semantic_audit = run_semantic_audits(generated, frames)
+    memory_pass = memory_mib <= 96.0
+    overall_pass = semantic_audit["pass"] and memory_pass and len(generated) == 44
     manifest = {
         "generator": "Tools/Blender/generate_retro_textures.py",
         "seed": SEED,
         "outputs": outputs,
         "previews": previews,
         "counts": {"outputs": len(outputs), "previews": len(previews)},
+        "semantic_audit": semantic_audit,
         "memory_forecast": {
             "format": "BC1/BC4-like 8-byte blocks for opaque base/AO/emission/sky; BC5/BC7/BC3-like 16-byte blocks for normal/metallic/VFX; full mips ~= 4/3",
             "compressed_mib": round(memory_mib, 3),
             "budget_mib": 96.0,
-            "within_budget": memory_mib <= 96.0,
+            "within_budget": memory_pass,
         },
         "ball": {"centers": [list(frame[0]) for frame in frames], "center_count": len(frames), "unit_tolerance": 1e-6, "u_wrap": True, "v_wrap": False},
-        "status": "PASS" if memory_mib <= 96.0 else "FAIL",
+        "status": "PASS" if overall_pass else "FAIL",
     }
     manifest_path = os.path.join(PREVIEW_DIRECTORY, "retro_texture_manifest.json")
     with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:
         json.dump(manifest, handle, indent=2, sort_keys=True)
         handle.write("\n")
     print(f"MEMORY RetroTextures: compressed forecast {memory_mib:.3f} MiB / 96.000 MiB")
+    if not overall_pass:
+        print(f"AUDIT RetroTextures: FAIL semantic={semantic_audit['failed']} memory={memory_pass} outputs={len(generated)}")
+        raise RuntimeError("RetroTextures semantic audit failed; inspect retro_texture_manifest.json")
     print(f"AUDIT RetroTextures: PASS ({len(generated)} outputs, {len(previews)} previews, deterministic seed {SEED})")
 
 

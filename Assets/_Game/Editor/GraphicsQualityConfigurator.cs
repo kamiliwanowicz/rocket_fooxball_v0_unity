@@ -297,7 +297,9 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("URP renderer reference does not match quality contract: " + pipeline.name);
             }
 
+            ExpectInt(serialized, "m_RendererType", (int)RendererType.UniversalRenderer);
             ExpectBool(serialized, "m_SupportsHDR", high);
+            ExpectInt(serialized, "m_HDRColorBufferPrecision", 0);
             ExpectInt(serialized, "m_MSAA", 1);
             ExpectFloat(serialized, "m_RenderScale", high ? HighRenderScale : LowRenderScale);
             ExpectInt(serialized, "m_MainLightRenderingMode", high ? 1 : 0);
@@ -306,14 +308,18 @@ namespace RocketFooxball.Editor
             ExpectInt(serialized, "m_AdditionalLightsRenderingMode", high ? 1 : 0);
             ExpectInt(serialized, "m_AdditionalLightsPerObjectLimit", high ? 16 : 0);
             ExpectBool(serialized, "m_AdditionalLightShadowsSupported", false);
+            ExpectInt(serialized, "m_AdditionalLightsShadowmapResolution", LowShadowResolution);
             ExpectFloat(serialized, "m_ShadowDistance", high ? HighShadowDistance : 0f);
             ExpectInt(serialized, "m_ShadowCascadeCount", high ? HighShadowCascadeCount : 1);
             ExpectBool(serialized, "m_AnyShadowsSupported", high);
             ExpectBool(serialized, "m_SoftShadowsSupported", high);
+            ExpectInt(serialized, "m_SoftShadowQuality", (int)SoftShadowQuality.Medium);
             ExpectBool(serialized, "m_UseSRPBatcher", true);
             ExpectBool(serialized, "m_ReflectionProbeBlending", high);
             ExpectBool(serialized, "m_ReflectionProbeBoxProjection", high);
             ExpectBool(serialized, "m_ReflectionProbeAtlas", high);
+            ExpectInt(serialized, "m_ColorGradingMode", high ? (int)ColorGradingMode.HighDynamicRange : (int)ColorGradingMode.LowDynamicRange);
+            ExpectInt(serialized, "m_VolumeFrameworkUpdateMode", (int)VolumeFrameworkUpdateMode.EveryFrame);
         }
 
         private static void ValidateRenderer(UniversalRendererData renderer, bool high)
@@ -376,6 +382,9 @@ namespace RocketFooxball.Editor
             ExpectInt(level, "globalTextureMipmapLimit", high ? 0 : 1);
             ExpectInt(level, "anisotropicTextures", high ? 2 : 0);
             ExpectInt(level, "antiAliasing", 0);
+            ExpectInt(level, "pixelLightCount", high ? 8 : 0);
+            ExpectInt(level, "shadows", high ? 2 : 0);
+            ExpectInt(level, "shadowResolution", high ? 2 : 0);
         }
 
         private static void ValidateNativeResolution()
