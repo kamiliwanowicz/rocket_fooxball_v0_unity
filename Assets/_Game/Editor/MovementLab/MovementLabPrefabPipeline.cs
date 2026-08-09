@@ -39,7 +39,7 @@ namespace RocketFooxball.Editor
         {
             RequireComponent<RocketFooxball.Runtime.Movement.PlayerMotor>(MovementLabContract.PlayerPrefabPath, "PlayerMotor");
             RequireComponent<RocketFooxball.Runtime.Ball.BallMotor>(MovementLabContract.BallPrefabPath, "BallMotor");
-            RequireComponent<RocketFooxball.Runtime.Weapons.RocketLauncher>(MovementLabContract.RocketPrefabPath, "RocketLauncher");
+            RequireComponent<RocketFooxball.Runtime.Weapons.RocketLauncher>(MovementLabContract.PlayerPrefabPath, "RocketLauncher");
             RequireComponent<RocketFooxball.Runtime.Feedback.ExplosionVfx>(MovementLabContract.ExplosionPrefabPath, "ExplosionVfx");
         }
         internal static void RequireComponent<T>(string path, string label) where T : UnityEngine.Component
