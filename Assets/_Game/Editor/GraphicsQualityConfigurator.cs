@@ -255,7 +255,7 @@ namespace RocketFooxball.Editor
         private static void SetPerPlatformDefault(SerializedObject serialized, int qualityIndex)
         {
             var defaults = Required(serialized, "m_PerPlatformDefaultQuality");
-            var standalone = defaults.FindPropertyRelative("Standalone");
+            var standalone = FindPlatformDefault(defaults, serialized);
             if (standalone == null)
             {
                 throw new InvalidOperationException("Unsupported QualitySettings schema: Standalone default quality is missing.");
@@ -365,7 +365,7 @@ namespace RocketFooxball.Editor
             ValidateQualityLevel(levels.GetArrayElementAtIndex(LowQualityIndex), LowQualityName, lowPipeline, high: false);
             ExpectInt(serialized, "m_CurrentQuality", HighQualityIndex);
             var defaults = Required(serialized, "m_PerPlatformDefaultQuality");
-            var standalone = defaults.FindPropertyRelative("Standalone");
+            var standalone = FindPlatformDefault(defaults, serialized);
             if (standalone == null || standalone.intValue != HighQualityIndex)
             {
                 throw new InvalidOperationException("Standalone default quality must be High (index 0).");
@@ -404,6 +404,27 @@ namespace RocketFooxball.Editor
             }
 
             return assets[0];
+        }
+
+        private static SerializedProperty FindPlatformDefault(SerializedProperty defaults, SerializedObject serialized)
+        {
+            var standalone = defaults.FindPropertyRelative("Standalone");
+            if (standalone == null) standalone = serialized.FindProperty("m_PerPlatformDefaultQuality.Standalone");
+            if (standalone == null) standalone = serialized.FindProperty("m_PerPlatformDefaultQuality.m_Standalone");
+            if (standalone == null && defaults.isArray)
+            {
+                for (var i = 0; i < defaults.arraySize; i++)
+                {
+                    var item = defaults.GetArrayElementAtIndex(i);
+                    var key = item.FindPropertyRelative("first");
+                    if (key != null && string.Equals(key.stringValue, "Standalone", StringComparison.Ordinal))
+                    {
+                        standalone = item.FindPropertyRelative("second");
+                        break;
+                    }
+                }
+            }
+            return standalone;
         }
 
         private static SerializedProperty Required(SerializedObject serialized, string name)

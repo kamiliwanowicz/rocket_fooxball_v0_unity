@@ -12,6 +12,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace RocketFooxball.Editor
 {
@@ -99,9 +100,19 @@ namespace RocketFooxball.Editor
         private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/RocketLauncher.cs";
         private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
         private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
+        private const string SkyTexturePath = TexturesPath + "/RetroSunnySky.png";
+        private const string SkyMaterialPath = MaterialsPath + "/RetroSunnySky.mat";
+        private const string LightingPath = "Assets/_Game/Lighting";
+        private const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
+        private const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
+        private const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
+        private const string ReflectionCenterPath = LightingPath + "/ReflectionProbe_Center.exr";
+        private const string ReflectionWestPath = LightingPath + "/ReflectionProbe_WestGoal.exr";
+        private const string ReflectionEastPath = LightingPath + "/ReflectionProbe_EastGoal.exr";
+        private const string SkyShaderPath = ShadersPath + "/SunnyArenaSky.shader";
         private const int ManifestSchemaVersion = 3;
         private const string DetailNormalKeyword = "_DETAIL_MULX2";
-        private const string BuildMarkerPrefix = "MovementLabGeneratedT6_";
+        private const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
         private const float BallPrefabScale = 4.32f;
         private const float BallRadius = 2.16f;
         private const float BallSpawnHeight = BallRadius;
@@ -168,6 +179,9 @@ namespace RocketFooxball.Editor
             GridCeilingMaterialPath,
             GridLongWallMaterialPath,
             GridEndWallMaterialPath,
+            SkyMaterialPath,
+            VolumeProfilePath,
+            LightingSettingsPath,
             MaterialsPath + "/CharacterRed.mat",
             MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat",
@@ -362,7 +376,8 @@ namespace RocketFooxball.Editor
                 RocketEmissionTexturePath,
                 RocketGlowTexturePath,
                 ExplosionTexturePath,
-                SmokeTexturePath
+                SmokeTexturePath,
+                SkyTexturePath
             };
             for (var i = 0; i < generatedSourcePaths.Length; i++)
             {
@@ -373,6 +388,24 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TimeManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath);
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath);
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowPipelinePath);
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowPipelinePath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowRendererPath);
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowRendererPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.QualitySettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.ProjectSettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, LightingManifestPath);
+            AddGeneratedFingerprintPath(paths, seen, LightingManifestPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath);
+            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath);
+            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath);
+            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath + ".meta");
             paths.Sort(StringComparer.Ordinal);
             var result = paths.ToArray();
             ValidateGeneratedFingerprintPathList(result);
@@ -427,6 +460,11 @@ namespace RocketFooxball.Editor
             }
 
             EnsureFolders();
+
+            // Quality assets must settle before importer, material, scene, or bake
+            // writes. Build fingerprint includes these outputs, so valid state
+            // returns above without touching project settings.
+            GraphicsQualityConfigurator.Configure();
 
             ConfigureTextureImporters();
             ConfigureModelImporters();
@@ -562,7 +600,9 @@ namespace RocketFooxball.Editor
 
             new GameObject(GetBuildMarkerName(builderSignature));
 
-            ConfigureSceneLight();
+            ConfigureSceneEnvironment(scene, arena);
+            EditorSceneManager.SaveScene(scene, ScenePath);
+            BakeSceneLighting(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);
             }
             finally
@@ -576,10 +616,16 @@ namespace RocketFooxball.Editor
             NormalizeGeneratedYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             ValidateMovementLabInternal(false, builderSignature, false);
+            FinalizeGeneratedMaterialPersistence();
             var generatedOutputFingerprint = ComputeGeneratedOutputFingerprint();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            var settledFingerprint = ComputeGeneratedOutputFingerprint();
+            if (!string.Equals(generatedOutputFingerprint, settledFingerprint, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Generated output fingerprint did not settle after synchronous material import.");
+            }
             WriteBuildManifest(builderSignature, generatedOutputFingerprint);
             AssetDatabase.ImportAsset(ManifestPath, ImportAssetOptions.ForceSynchronousImport);
-            ValidateMovementLabInternal(true, builderSignature, false);
             Debug.Log("Rocket Fooxball Movement Lab built: " + ScenePath);
         }
 
@@ -592,6 +638,7 @@ namespace RocketFooxball.Editor
 
         private static void ValidateMovementLabInternal(bool includeManifest, string builderSignature, bool logSuccess)
         {
+            var baselineLitMaterialDirtyState = CaptureGeneratedLitMaterialDirtyState();
             if (includeManifest)
             {
                 ValidateManifestAndFingerprint(builderSignature);
@@ -634,6 +681,8 @@ namespace RocketFooxball.Editor
             EnsureAssetExists(RocketGlowTexturePath);
             EnsureAssetExists(ExplosionTexturePath);
             EnsureAssetExists(SmokeTexturePath);
+            EnsureAssetExists(SkyTexturePath);
+            EnsureAssetExists(SkyShaderPath);
             EnsureAssetExists(DetailNormalTexturePath);
             EnsureAssetExists(ToonShaderPath);
             EnsureAssetExists(ParticleShaderPath);
@@ -656,6 +705,13 @@ namespace RocketFooxball.Editor
             EnsureAssetExists(GridCeilingMaterialPath);
             EnsureAssetExists(GridLongWallMaterialPath);
             EnsureAssetExists(GridEndWallMaterialPath);
+            EnsureAssetExists(SkyMaterialPath);
+            EnsureAssetExists(VolumeProfilePath);
+            EnsureAssetExists(LightingSettingsPath);
+            EnsureAssetExists(LightingManifestPath);
+            EnsureAssetExists(ReflectionCenterPath);
+            EnsureAssetExists(ReflectionWestPath);
+            EnsureAssetExists(ReflectionEastPath);
 
             var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
             if (!scene.IsValid() || scene.path != ScenePath)
@@ -685,7 +741,7 @@ namespace RocketFooxball.Editor
             var kick = Require(player.GetComponent<BallKick>(), "BallKick");
             var camera = Require(player.GetComponentInChildren<Camera>(true), "Player camera");
             if (camera.clearFlags != CameraClearFlags.SolidColor || Mathf.Abs(camera.backgroundColor.r - 0.72f) > 0.001f || Mathf.Abs(camera.backgroundColor.g - 0.88f) > 0.001f || Mathf.Abs(camera.backgroundColor.b - 0.96f) > 0.001f || Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.farClipPlane - 180f) > 0.01f) throw new InvalidOperationException("Gameplay camera bright-scene contract invalid.");
-            if (RenderSettings.skybox != null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Trilight || !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f || Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f) throw new InvalidOperationException("Scene environment contract invalid.");
+            if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Skybox || !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f || Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f) throw new InvalidOperationException("Scene environment contract invalid.");
             Require(player.GetComponent<CharacterController>(), "Player CharacterController");
             if (Vector3.Distance(player.transform.position, new Vector3(PlayerSpawnOffset, 0f, 0f)) > 0.001f || Vector3.Dot(player.transform.forward, Vector3.left) < 0.999f)
             {
@@ -865,8 +921,10 @@ namespace RocketFooxball.Editor
             ValidateTextureImporterContracts();
             ValidateModelImporterContracts();
             ValidateRenderPipelineSettings();
+            ValidateSceneEnvironment(scene, arena);
             ValidatePhysicsAndBuildSettings();
             ValidateNoMissingComponents(scene);
+            RestoreGeneratedLitMaterialKeywords(false, baselineLitMaterialDirtyState);
 
             if (logSuccess)
             {
@@ -922,6 +980,7 @@ namespace RocketFooxball.Editor
             camera.clearFlags = CameraClearFlags.SolidColor;
             camera.backgroundColor = new Color(0.72f, 0.88f, 0.96f, 1f);
             camera.gameObject.AddComponent<AudioListener>();
+            var qualityRuntime = camera.gameObject.AddComponent<GraphicsQualityRuntime>();
             var muzzle = new GameObject("RocketMuzzle").transform;
             muzzle.SetParent(camera.transform, false);
             muzzle.localPosition = new Vector3(0f, -0.05f, 0.45f);
@@ -984,6 +1043,7 @@ namespace RocketFooxball.Editor
             SetObjectReference(look, "head", head);
             SetObjectReference(feedback, "player", motor);
             SetObjectReference(feedback, "targetCamera", camera);
+            SetObjectReference(qualityRuntime, "targetCamera", camera);
             SetObjectReference(launcher, "input", input);
             SetObjectReference(launcher, "look", look);
             SetObjectReference(launcher, "aimCamera", camera);
@@ -1518,29 +1578,407 @@ namespace RocketFooxball.Editor
             marking.GetComponent<Renderer>().sharedMaterial = material;
         }
 
-        private static void ConfigureSceneLight()
+        private static readonly Color SkyHorizonColor = new Color(0.7254902f, 0.8627451f, 0.9490196f, 1f);
+        private static readonly Color SkyZenithColor = new Color(0.2980392f, 0.5686275f, 0.8470588f, 1f);
+        private static readonly Color SkyCloudColor = new Color(0.9607843f, 0.9529412f, 0.9098039f, 1f);
+        private static readonly Color SunColor = new Color(1.0f, 0.8392157f, 0.6392157f, 1f);
+
+        private static readonly (string name, Vector3 position, Color color)[] AccentLightContract =
         {
-            RenderSettings.skybox = null;
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = new Color(0.72f, 0.88f, 1.00f, 1f);
-            RenderSettings.ambientEquatorColor = new Color(0.52f, 0.68f, 0.82f, 1f);
-            RenderSettings.ambientGroundColor = new Color(0.28f, 0.38f, 0.48f, 1f);
+            ("GoalAccent_WestBlue_North", new Vector3(-58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_WestBlue_South", new Vector3(-58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_EastRed_North", new Vector3(58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_EastRed_South", new Vector3(58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f))
+        };
+
+        private static readonly (string name, Vector3 center, Vector3 size)[] ReflectionProbeContract =
+        {
+            ("ReflectionProbe_Center", new Vector3(0f, 12f, 0f), new Vector3(100f, 28f, 70f)),
+            ("ReflectionProbe_WestGoal", new Vector3(-58f, 6f, 0f), new Vector3(20f, 12f, 38f)),
+            ("ReflectionProbe_EastGoal", new Vector3(58f, 6f, 0f), new Vector3(20f, 12f, 38f))
+        };
+
+        private static void ConfigureSceneEnvironment(Scene scene, ArenaBuild arena)
+        {
+            var environment = new GameObject("Environment");
+            var sun = UnityEngine.Object.FindFirstObjectByType<Light>();
+            if (sun == null)
+            {
+                sun = new GameObject("Sun").AddComponent<Light>();
+            }
+
+            sun.gameObject.name = "Sun";
+            sun.transform.SetParent(environment.transform, false);
+            sun.type = LightType.Directional;
+            sun.color = SunColor;
+            sun.intensity = 1.1f;
+            sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            sun.lightmapBakeType = LightmapBakeType.Mixed;
+            sun.shadows = LightShadows.Soft;
+            sun.shadowStrength = 1f;
+            sun.shadowBias = 0.05f;
+            sun.shadowNormalBias = 0.4f;
+            sun.cullingMask = -1;
+
+            var skyMaterial = GetOrCreateSkyMaterial(sun);
+            RenderSettings.skybox = skyMaterial;
+            RenderSettings.sun = sun;
+            RenderSettings.ambientMode = AmbientMode.Skybox;
             RenderSettings.ambientIntensity = 1f;
             RenderSettings.fog = true;
-            RenderSettings.fogColor = new Color(0.72f, 0.88f, 0.96f, 1f);
+            RenderSettings.fogColor = SkyHorizonColor;
             RenderSettings.fogMode = FogMode.Linear;
             RenderSettings.fogStartDistance = 75f;
             RenderSettings.fogEndDistance = 170f;
-            var light = UnityEngine.Object.FindFirstObjectByType<Light>();
-            if (light == null)
+            RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
+            RenderSettings.defaultReflectionResolution = 128;
+            RenderSettings.reflectionBounces = 2;
+            RenderSettings.reflectionIntensity = 1f;
+
+            ConfigureAccentLights(environment.transform);
+            ConfigureGlobalVolume(environment.transform);
+            ConfigureLightProbes(environment.transform);
+            ConfigureReflectionProbes(environment.transform);
+            MarkArenaStaticForLighting(arena.Root);
+            ConfigureLightingSettings(scene);
+        }
+
+        private static Material GetOrCreateSkyMaterial(Light sun)
+        {
+            var shader = Shader.Find("RocketFooxball/SunnyArenaSky");
+            if (shader == null)
             {
-                return;
+                throw new InvalidOperationException("SunnyArenaSky shader is unavailable.");
             }
-            light.type = LightType.Directional;
-            light.color = new Color(1.00f, 0.96f, 0.90f, 1f);
-            light.intensity = 1.2f;
-            light.transform.rotation = Quaternion.Euler(45f, -30f, 0f);
-            light.shadows = LightShadows.None;
+
+            var material = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
+            if (material == null)
+            {
+                material = new Material(shader) { name = "RetroSunnySky" };
+                AssetDatabase.CreateAsset(material, SkyMaterialPath);
+            }
+
+            material.shader = shader;
+            material.SetTexture("_Panorama", LoadTexture(SkyTexturePath));
+            material.SetColor("_HorizonColor", SkyHorizonColor);
+            material.SetColor("_ZenithColor", SkyZenithColor);
+            material.SetColor("_CloudTint", SkyCloudColor);
+            material.SetFloat("_CloudCoverage", 0.22f);
+            material.SetFloat("_CloudSoftness", 0.65f);
+            material.SetVector("_SunDirection", -sun.transform.forward);
+            material.SetColor("_SunColor", SunColor);
+            material.SetFloat("_SunAngularRadius", 0.012f);
+            material.SetFloat("_SunIntensity", 3f);
+            material.SetColor("_FogHorizonColor", SkyHorizonColor);
+            material.SetFloat("_FogHorizonHeight", 0.02f);
+            material.SetFloat("_FogHorizonWidth", 0.28f);
+            EditorUtility.SetDirty(material);
+            return material;
+        }
+
+        private static void ConfigureAccentLights(Transform parent)
+        {
+            for (var i = 0; i < AccentLightContract.Length; i++)
+            {
+                var contract = AccentLightContract[i];
+                var light = new GameObject(contract.name).AddComponent<Light>();
+                light.transform.SetParent(parent, false);
+                light.transform.localPosition = contract.position;
+                light.type = LightType.Point;
+                light.color = contract.color;
+                light.intensity = 500f;
+                light.range = 14f;
+                light.shadows = LightShadows.None;
+                light.lightmapBakeType = LightmapBakeType.Realtime;
+            }
+        }
+
+        private static void ConfigureGlobalVolume(Transform parent)
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+            if (profile == null)
+            {
+                profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                profile.name = "MovementLabVolumeProfile";
+                AssetDatabase.CreateAsset(profile, VolumeProfilePath);
+            }
+
+            VolumeComponent[] stale = profile.components.ToArray();
+            for (var i = 0; i < stale.Length; i++)
+            {
+                if (stale[i] != null)
+                {
+                    profile.Remove(stale[i].GetType());
+                    UnityEngine.Object.DestroyImmediate(stale[i], true);
+                }
+            }
+            profile.components.Clear();
+
+            var tonemapping = AddPersistentVolumeComponent<Tonemapping>(profile);
+            tonemapping.active = true;
+            tonemapping.mode.value = TonemappingMode.ACES;
+            tonemapping.mode.overrideState = true;
+
+            var bloom = AddPersistentVolumeComponent<Bloom>(profile);
+            bloom.active = true;
+            bloom.threshold.value = 1.1f;
+            bloom.threshold.overrideState = true;
+            bloom.intensity.value = 0.20f;
+            bloom.intensity.overrideState = true;
+            bloom.scatter.value = 0.60f;
+            bloom.scatter.overrideState = true;
+            bloom.clamp.value = 10f;
+            bloom.clamp.overrideState = true;
+            bloom.highQualityFiltering.value = false;
+            bloom.highQualityFiltering.overrideState = true;
+
+            var color = AddPersistentVolumeComponent<ColorAdjustments>(profile);
+            color.active = true;
+            color.postExposure.value = 0f;
+            color.postExposure.overrideState = true;
+            color.contrast.value = 5f;
+            color.contrast.overrideState = true;
+            color.saturation.value = 4f;
+            color.saturation.overrideState = true;
+
+            var volumeObject = new GameObject("GlobalVolume");
+            volumeObject.transform.SetParent(parent, false);
+            var volume = volumeObject.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 0f;
+            // Editor-authored profile must use sharedProfile so serialized
+            // scene YAML retains nonzero GUID/fileID reference.
+            volume.sharedProfile = profile;
+            EditorUtility.SetDirty(profile);
+            EditorUtility.SetDirty(volume);
+        }
+
+        private static T AddPersistentVolumeComponent<T>(VolumeProfile profile) where T : VolumeComponent
+        {
+            var component = profile.Add<T>();
+            if (component == null)
+            {
+                throw new InvalidOperationException("Unable to create Volume component: " + typeof(T).Name);
+            }
+
+            if (AssetDatabase.GetAssetPath(component) != VolumeProfilePath)
+            {
+                component.hideFlags = HideFlags.HideInHierarchy | HideFlags.HideInInspector;
+                AssetDatabase.AddObjectToAsset(component, profile);
+            }
+            EditorUtility.SetDirty(component);
+            return component;
+        }
+
+        private static void ConfigureLightProbes(Transform parent)
+        {
+            var probeObject = new GameObject("LightProbes");
+            probeObject.transform.SetParent(parent, false);
+            var positions = new List<Vector3>();
+            for (var yIndex = 0; yIndex < 5; yIndex++)
+            {
+                var y = new[] { 1.5f, 8f, 20f, 36f, 46f }[yIndex];
+                for (var x = -56f; x <= 56f; x += 16f)
+                {
+                    for (var z = -36f; z <= 36f; z += 18f)
+                    {
+                        var position = new Vector3(x, y, z);
+                        var overlaps = Physics.OverlapSphere(position, 0.20f, ~0, QueryTriggerInteraction.Ignore);
+                        var blocked = false;
+                        for (var i = 0; i < overlaps.Length; i++)
+                        {
+                            if (overlaps[i] != null && !overlaps[i].isTrigger)
+                            {
+                                blocked = true;
+                                break;
+                            }
+                        }
+                        if (!blocked) positions.Add(position);
+                    }
+                }
+            }
+
+            var group = probeObject.AddComponent<LightProbeGroup>();
+            group.probePositions = positions.ToArray();
+        }
+
+        private static void ConfigureReflectionProbes(Transform parent)
+        {
+            for (var i = 0; i < ReflectionProbeContract.Length; i++)
+            {
+                var contract = ReflectionProbeContract[i];
+                var probeObject = new GameObject(contract.name);
+                probeObject.transform.SetParent(parent, false);
+                probeObject.transform.localPosition = contract.center;
+                var probe = probeObject.AddComponent<ReflectionProbe>();
+                probe.mode = ReflectionProbeMode.Baked;
+                probe.refreshMode = ReflectionProbeRefreshMode.ViaScripting;
+                probe.timeSlicingMode = ReflectionProbeTimeSlicingMode.NoTimeSlicing;
+                probe.resolution = 128;
+                probe.hdr = true;
+                probe.boxProjection = true;
+                probe.size = contract.size;
+                probe.center = Vector3.zero;
+                probe.clearFlags = ReflectionProbeClearFlags.Skybox;
+                probe.intensity = 1f;
+            }
+        }
+
+        private static void MarkArenaStaticForLighting(GameObject arena)
+        {
+            if (arena == null) return;
+            var renderers = arena.GetComponentsInChildren<MeshRenderer>(true);
+            var opaqueFlags = StaticEditorFlags.ContributeGI | StaticEditorFlags.OccluderStatic |
+                              StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic |
+                              StaticEditorFlags.ReflectionProbeStatic;
+            var transparentFlags = StaticEditorFlags.OccludeeStatic | StaticEditorFlags.BatchingStatic;
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null) continue;
+                var owner = renderer.gameObject;
+                var transparent = owner.name.IndexOf("Grid", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                  owner.name.IndexOf("Shield", StringComparison.OrdinalIgnoreCase) >= 0;
+                owner.isStatic = true;
+                GameObjectUtility.SetStaticEditorFlags(owner, transparent ? transparentFlags : opaqueFlags);
+                renderer.lightProbeUsage = transparent ? LightProbeUsage.Off : LightProbeUsage.BlendProbes;
+                renderer.reflectionProbeUsage = transparent ? ReflectionProbeUsage.Off : ReflectionProbeUsage.BlendProbes;
+                renderer.shadowCastingMode = transparent ? ShadowCastingMode.Off : ShadowCastingMode.On;
+                renderer.receiveShadows = !transparent;
+            }
+        }
+
+        private static LightingSettings ConfigureLightingSettings(Scene scene)
+        {
+            var settings = AssetDatabase.LoadAssetAtPath<LightingSettings>(LightingSettingsPath);
+            if (settings == null)
+            {
+                settings = new LightingSettings();
+                settings.name = "MovementLabLightingSettings";
+                AssetDatabase.CreateAsset(settings, LightingSettingsPath);
+            }
+
+            settings.lightmapper = LightingSettings.Lightmapper.ProgressiveCPU;
+            settings.bakedGI = true;
+            settings.realtimeGI = false;
+            settings.mixedBakeMode = MixedLightingMode.Shadowmask;
+            settings.directionalityMode = LightmapsMode.CombinedDirectional;
+            settings.lightmapResolution = 10f;
+            settings.lightmapMaxSize = 1024;
+            settings.lightmapPadding = 2;
+            settings.maxBounces = 2;
+            settings.compressLightmaps = true;
+            settings.filteringMode = LightingSettings.FilterMode.Auto;
+            settings.autoGenerate = false;
+            Lightmapping.SetLightingSettingsForScene(scene, settings);
+            EditorUtility.SetDirty(settings);
+            return settings;
+        }
+
+        private static void BakeSceneLighting(Scene scene)
+        {
+            ConfigureLightingSettings(scene);
+            var baked = Lightmapping.Bake();
+            if (!baked)
+            {
+                throw new InvalidOperationException("Lightmapping.Bake returned false for MovementLab.");
+            }
+
+            // Progressive CPU temporarily strips local Lit keywords while
+            // preparing emissive/lightmapped variants. Restore authored
+            // keyword state before validation and persistence.
+            RestoreGeneratedLitMaterialKeywords();
+
+            var probes = UnityEngine.Object.FindObjectsByType<ReflectionProbe>(FindObjectsSortMode.InstanceID);
+            for (var i = 0; i < probes.Length; i++)
+            {
+                var probe = probes[i];
+                if (probe == null || probe.mode != ReflectionProbeMode.Baked) continue;
+                var filename = LightingPath + "/" + probe.name + ".exr";
+                if (!Lightmapping.BakeReflectionProbe(probe, filename))
+                {
+                    throw new InvalidOperationException("Reflection probe bake failed: " + probe.name);
+                }
+            }
+
+            // Reflection probe baking can strip local Lit keywords as well;
+            // restore once more after all probe jobs complete.
+            RestoreGeneratedLitMaterialKeywords();
+
+            var manifest = "{\n  \"schemaVersion\": 1,\n  \"scene\": \"" + ScenePath + "\",\n  \"lightmapper\": \"ProgressiveCPU\",\n  \"bakedGI\": true,\n  \"realtimeGI\": false,\n  \"mixedBakeMode\": \"Shadowmask\",\n  \"directionality\": \"CombinedDirectional\",\n  \"lightmapResolution\": 10,\n  \"atlasSize\": 1024,\n  \"padding\": 2,\n  \"maxBounces\": 2,\n  \"reflectionProbes\": [\"ReflectionProbe_Center\", \"ReflectionProbe_WestGoal\", \"ReflectionProbe_EastGoal\"]\n}\n";
+            var manifestAbsolutePath = Path.Combine(ResolveProjectRoot().FullName, LightingManifestPath.Replace('/', Path.DirectorySeparatorChar));
+            File.WriteAllText(manifestAbsolutePath, manifest, new System.Text.UTF8Encoding(false));
+            AssetDatabase.ImportAsset(LightingManifestPath, ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static Dictionary<string, bool> CaptureGeneratedLitMaterialDirtyState()
+        {
+            var baseline = new Dictionary<string, bool>(StringComparer.Ordinal);
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+            {
+                var path = GeneratedYamlAssetPaths[i];
+                if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || material.shader == null || material.shader.name != LitShaderName) continue;
+                baseline[path] = EditorUtility.IsDirty(material);
+            }
+            return baseline;
+        }
+
+        private static void RestoreGeneratedLitMaterialKeywords(bool persist = true, Dictionary<string, bool> baselineDirtyState = null)
+        {
+            var guids = AssetDatabase.FindAssets("t:Material", new[] { MaterialsPath });
+            for (var i = 0; i < guids.Length; i++)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guids[i]);
+                var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (material == null || material.shader == null || material.shader.name != LitShaderName) continue;
+                var wasDirty = GetBaselineDirtyState(path, material, baselineDirtyState);
+
+                SetMaterialKeyword(material, "_NORMALMAP", material.GetTexture("_BumpMap") != null);
+                SetMaterialKeyword(material, "_METALLICSPECGLOSSMAP", material.GetTexture("_MetallicGlossMap") != null);
+                SetMaterialKeyword(material, "_OCCLUSIONMAP", material.GetTexture("_OcclusionMap") != null);
+                var authoredEmission = material.name == "WeaponAccent" || material.name == "RocketHot" || material.name == "ArenaGlow";
+                SetMaterialKeyword(material, "_EMISSION", authoredEmission || material.GetTexture("_EmissionMap") != null ||
+                    (material.HasProperty("_EmissionColor") && material.GetColor("_EmissionColor").maxColorComponent > 0.001f));
+                SetDetailNormalKeyword(material, material.GetTexture("_DetailNormalMap") != null);
+                if (persist || wasDirty) EditorUtility.SetDirty(material);
+                else EditorUtility.ClearDirty(material);
+            }
+
+            // Bake systems may invalidate the in-memory material search
+            // results; force known authored emissive assets by stable path.
+            var emissivePaths = new[]
+            {
+                MaterialsPath + "/WeaponAccent.mat",
+                MaterialsPath + "/RocketHot.mat",
+                MaterialsPath + "/ArenaGlow.mat"
+            };
+            for (var i = 0; i < emissivePaths.Length; i++)
+            {
+                var material = AssetDatabase.LoadAssetAtPath<Material>(emissivePaths[i]);
+                if (material == null) throw new InvalidOperationException("Missing authored emissive material: " + emissivePaths[i]);
+                var wasDirty = GetBaselineDirtyState(emissivePaths[i], material, baselineDirtyState);
+                material.EnableKeyword("_EMISSION");
+                if (persist || wasDirty) EditorUtility.SetDirty(material);
+                else EditorUtility.ClearDirty(material);
+            }
+        }
+
+        private static bool GetBaselineDirtyState(string path, Material material, Dictionary<string, bool> baselineDirtyState)
+        {
+            if (baselineDirtyState != null && baselineDirtyState.TryGetValue(path, out var wasDirty))
+            {
+                return wasDirty;
+            }
+
+            return EditorUtility.IsDirty(material);
+        }
+
+        private static void SetMaterialKeyword(Material material, string keyword, bool enabled)
+        {
+            if (enabled) material.EnableKeyword(keyword);
+            else material.DisableKeyword(keyword);
         }
 
         private static bool TryReuseGeneratedState(string builderSignature)
@@ -1764,6 +2202,8 @@ namespace RocketFooxball.Editor
                 AdditiveParticleShaderPath,
                 PowerGridShaderPath,
                 ShieldShaderPath,
+                SkyShaderPath,
+                "Assets/_Game/Editor/GraphicsQualityConfigurator.cs",
                 "Assets/_Game/Scripts/Runtime/ExplosionVfx.cs",
                 "Assets/_Game/Scripts/Runtime/RocketTrailVfx.cs",
                 "Assets/_Game/Scripts/Runtime/PlayerMotor.cs",
@@ -1807,7 +2247,7 @@ namespace RocketFooxball.Editor
                     WeaponAccentTexturePath, WeaponAccentNormalTexturePath, WeaponAccentMetallicTexturePath, WeaponAccentOcclusionTexturePath,
                     WeaponAccentEmissionTexturePath,
                     RocketTexturePath, RocketNormalTexturePath, RocketMetallicTexturePath, RocketOcclusionTexturePath, RocketEmissionTexturePath, RocketGlowTexturePath,
-                    ExplosionTexturePath, SmokeTexturePath
+                     ExplosionTexturePath, SmokeTexturePath, SkyTexturePath
                 };
                 Array.Sort(generatedSourcePaths, StringComparer.Ordinal);
                 for (var i = 0; i < generatedSourcePaths.Length; i++)
@@ -1833,6 +2273,26 @@ namespace RocketFooxball.Editor
         private static void RegisterBuildScene()
         {
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+        }
+
+        private static void FinalizeGeneratedMaterialPersistence()
+        {
+            var materialPaths = new List<string>();
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+            {
+                var path = GeneratedYamlAssetPaths[i];
+                if (path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) materialPaths.Add(path);
+            }
+
+            for (var i = 0; i < materialPaths.Count; i++)
+            {
+                AssetDatabase.ImportAsset(materialPaths[i], ImportAssetOptions.ForceSynchronousImport);
+            }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            RestoreGeneratedLitMaterialKeywords();
+            AssetDatabase.SaveAssets();
+            NormalizeGeneratedYamlWhitespace();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         private static Texture2D LoadTexture(string path)
@@ -2200,8 +2660,10 @@ namespace RocketFooxball.Editor
             var tangentSpace = new SerializedObject(importer);
             var normalImport = tangentSpace.FindProperty("normalImportMode");
             var tangents = tangentSpace.FindProperty("tangentImportMode");
+            var secondaryUv = tangentSpace.FindProperty("generateSecondaryUV");
             if (normalImport != null && normalImport.intValue != 0) { normalImport.intValue = 0; changed = true; }
             if (tangents != null && tangents.intValue != 3) { tangents.intValue = 3; changed = true; }
+            if (path == ArenaKitModelPath && secondaryUv != null && !secondaryUv.boolValue) { secondaryUv.boolValue = true; changed = true; }
             tangentSpace.ApplyModifiedPropertiesWithoutUndo();
             if (changed)
             {
@@ -2948,75 +3410,154 @@ namespace RocketFooxball.Editor
 
         private static void ValidateRenderPipelineSettings()
         {
-            if (QualitySettings.GetQualityLevel() != 0)
+            GraphicsQualityConfigurator.Validate();
+            if (QualitySettings.GetQualityLevel() != GraphicsQualityConfigurator.HighQualityIndex)
             {
-                throw new InvalidOperationException("MovementLab quality index must be 0.");
+                throw new InvalidOperationException("MovementLab quality index must be High (index 0).");
             }
 
-            var qualityAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/QualitySettings.asset");
-            if (qualityAssets == null || qualityAssets.Length == 0)
+            var camera = Camera.main;
+            var runtime = camera != null ? camera.GetComponent<GraphicsQualityRuntime>() : null;
+            if (runtime == null || runtime.TargetCamera != camera)
             {
-                throw new InvalidOperationException("QualitySettings asset could not be loaded.");
+                throw new InvalidOperationException("Gameplay camera must own GraphicsQualityRuntime with self target.");
             }
 
-            var qualityObject = new SerializedObject(qualityAssets[0]);
-            var qualityLevels = qualityObject.FindProperty("m_QualitySettings");
-            if (qualityLevels == null || !qualityLevels.isArray || qualityLevels.arraySize <= 0)
+            var originalQuality = QualitySettings.GetQualityLevel();
+            QualitySettings.SetQualityLevel(GraphicsQualityConfigurator.LowQualityIndex, true);
+            runtime.ApplyCurrentQuality();
+            if (camera.allowHDR || camera.GetUniversalAdditionalCameraData().renderPostProcessing ||
+                camera.GetUniversalAdditionalCameraData().antialiasing != AntialiasingMode.FastApproximateAntialiasing)
             {
-                throw new InvalidOperationException("QualitySettings quality-level array is unavailable.");
+                QualitySettings.SetQualityLevel(originalQuality, true);
+                runtime.ApplyCurrentQuality();
+                throw new InvalidOperationException("Low quality camera state contract invalid.");
+            }
+            QualitySettings.SetQualityLevel(GraphicsQualityConfigurator.HighQualityIndex, true);
+            runtime.ApplyCurrentQuality();
+            if (!camera.allowHDR || !camera.GetUniversalAdditionalCameraData().renderPostProcessing ||
+                camera.GetUniversalAdditionalCameraData().antialiasing != AntialiasingMode.SubpixelMorphologicalAntiAliasing)
+            {
+                QualitySettings.SetQualityLevel(originalQuality, true);
+                runtime.ApplyCurrentQuality();
+                throw new InvalidOperationException("High quality camera state contract invalid.");
+            }
+        }
+
+        private static void ValidateSceneEnvironment(Scene scene, GameObject arena)
+        {
+            var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();
+            if (sun == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
+                sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - 1.1f) > 0.001f ||
+                Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
+                sun.color != SunColor || Mathf.Abs(sun.shadowStrength - 1f) > 0.001f ||
+                Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
+            {
+                throw new InvalidOperationException("MovementLab mixed sun contract invalid.");
             }
 
-            var pcQuality = qualityLevels.GetArrayElementAtIndex(0);
-            var customPipeline = pcQuality.FindPropertyRelative("customRenderPipeline");
-            var pcPipeline = customPipeline != null ? customPipeline.objectReferenceValue as RenderPipelineAsset : null;
-            if (pcPipeline == null || AssetDatabase.GetAssetPath(pcPipeline) != "Assets/Settings/PC_RPAsset.asset")
+            var sky = RenderSettings.skybox;
+            if (sky == null || sky.shader == null || sky.shader.name != "RocketFooxball/SunnyArenaSky" ||
+                sky.GetTexture("_Panorama") != LoadTexture(SkyTexturePath) ||
+                sky.GetColor("_HorizonColor") != SkyHorizonColor || sky.GetColor("_ZenithColor") != SkyZenithColor ||
+                sky.GetColor("_CloudTint") != SkyCloudColor || Mathf.Abs(sky.GetFloat("_CloudCoverage") - 0.22f) > 0.001f ||
+                Mathf.Abs(sky.GetFloat("_CloudSoftness") - 0.65f) > 0.001f ||
+                Vector3.Distance(sky.GetVector("_SunDirection"), -sun.transform.forward) > 0.001f ||
+                sky.GetColor("_SunColor") != SunColor || Mathf.Abs(sky.GetFloat("_SunAngularRadius") - 0.012f) > 0.001f ||
+                Mathf.Abs(sky.GetFloat("_SunIntensity") - 3f) > 0.001f)
             {
-                throw new InvalidOperationException("Quality index 0 must resolve Assets/Settings/PC_RPAsset.asset.");
+                throw new InvalidOperationException("Sunny sky material contract invalid.");
             }
 
-            var pipelineObject = new SerializedObject(pcPipeline);
-            var renderScale = pipelineObject.FindProperty("m_RenderScale");
-            var supportsHdr = pipelineObject.FindProperty("m_SupportsHDR");
-            var msaa = pipelineObject.FindProperty("m_MSAA");
-            var mainLightShadows = pipelineObject.FindProperty("m_MainLightShadowsSupported");
-            var additionalLights = pipelineObject.FindProperty("m_AdditionalLightsRenderingMode");
-            var useSrpBatcher = pipelineObject.FindProperty("m_UseSRPBatcher");
-            var defaultRendererIndex = pipelineObject.FindProperty("m_DefaultRendererIndex");
-            if (renderScale == null || supportsHdr == null || msaa == null || mainLightShadows == null || additionalLights == null || useSrpBatcher == null || defaultRendererIndex == null ||
-                Mathf.Abs(renderScale.floatValue - 0.8f) > 0.0001f || supportsHdr.boolValue || msaa.intValue != 1 || mainLightShadows.boolValue || additionalLights.intValue != 0 || !useSrpBatcher.boolValue || defaultRendererIndex.intValue != 0)
+            var accents = GameObject.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
+            var accentCount = 0;
+            for (var i = 0; i < accents.Length; i++)
             {
-                throw new InvalidOperationException("PC URP asset quality contract invalid.");
-            }
-
-            var rendererDataList = pipelineObject.FindProperty("m_RendererDataList");
-            if (rendererDataList == null || !rendererDataList.isArray || rendererDataList.arraySize == 0 || rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue == null)
-            {
-                throw new InvalidOperationException("PC URP renderer data is missing.");
-            }
-
-            var rendererData = rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue;
-            if (rendererData == null || AssetDatabase.GetAssetPath(rendererData) != "Assets/Settings/PC_Renderer.asset")
-            {
-                throw new InvalidOperationException("PC URP renderer data type is invalid.");
-            }
-
-            var rendererObject = new SerializedObject(rendererData);
-            var rendererFeatures = rendererObject.FindProperty("m_RendererFeatures");
-            if (rendererFeatures == null || !rendererFeatures.isArray)
-            {
-                throw new InvalidOperationException("PC URP renderer feature list is unavailable.");
-            }
-            for (var i = 0; i < rendererFeatures.arraySize; i++)
-            {
-                var feature = rendererFeatures.GetArrayElementAtIndex(i).objectReferenceValue;
-                if (feature == null || feature.name.IndexOf("ScreenSpaceAmbientOcclusion", StringComparison.OrdinalIgnoreCase) < 0) continue;
-                var featureObject = new SerializedObject(feature);
-                var active = featureObject.FindProperty("m_Active");
-                if (active == null || active.boolValue)
+                var accent = accents[i];
+                if (accent == null || accent == sun) continue;
+                var contractIndex = -1;
+                for (var j = 0; j < AccentLightContract.Length; j++)
+                    if (accent.name == AccentLightContract[j].name) contractIndex = j;
+                if (contractIndex < 0) throw new InvalidOperationException("Unexpected shadow/light source: " + accent.name);
+                var contract = AccentLightContract[contractIndex];
+                if (accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
+                    Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
+                    Mathf.Abs(accent.intensity - 500f) > 0.01f || Mathf.Abs(accent.range - 14f) > 0.001f)
                 {
-                    throw new InvalidOperationException("PC URP SSAO renderer feature must remain inactive.");
+                    throw new InvalidOperationException("Goal accent light contract invalid: " + accent.name);
                 }
+                accentCount++;
             }
+            if (accentCount != AccentLightContract.Length) throw new InvalidOperationException("Goal accent light count invalid.");
+
+            var volume = GameObject.Find("Environment/GlobalVolume")?.GetComponent<Volume>();
+            var expectedProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+            if (volume == null || !volume.isGlobal || volume.sharedProfile == null || volume.sharedProfile != expectedProfile)
+                throw new InvalidOperationException("Global post Volume reference invalid.");
+            var volumeProfile = volume.sharedProfile;
+            if (!volumeProfile.TryGet<Tonemapping>(out var tonemapping) || !tonemapping.active || !tonemapping.mode.overrideState || tonemapping.mode.value != TonemappingMode.ACES ||
+                !volumeProfile.TryGet<Bloom>(out var bloom) || !bloom.active || !bloom.threshold.overrideState || Mathf.Abs(bloom.threshold.value - 1.1f) > 0.001f ||
+                !bloom.intensity.overrideState || Mathf.Abs(bloom.intensity.value - 0.20f) > 0.001f || !bloom.scatter.overrideState || Mathf.Abs(bloom.scatter.value - 0.60f) > 0.001f ||
+                !bloom.clamp.overrideState || Mathf.Abs(bloom.clamp.value - 10f) > 0.001f || !bloom.highQualityFiltering.overrideState || bloom.highQualityFiltering.value ||
+                !volumeProfile.TryGet<ColorAdjustments>(out var color) || !color.active || !color.contrast.overrideState || Mathf.Abs(color.contrast.value - 5f) > 0.001f ||
+                !color.saturation.overrideState || Mathf.Abs(color.saturation.value - 4f) > 0.001f || !color.postExposure.overrideState || Mathf.Abs(color.postExposure.value) > 0.001f)
+            {
+                throw new InvalidOperationException("Global Volume post contract invalid.");
+            }
+
+            var probeGroup = GameObject.Find("Environment/LightProbes")?.GetComponent<LightProbeGroup>();
+            if (probeGroup == null || probeGroup.probePositions == null || probeGroup.probePositions.Length < 100)
+                throw new InvalidOperationException("Light probe lattice missing or too sparse.");
+            var probes = GameObject.FindObjectsByType<ReflectionProbe>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
+            if (probes.Length != ReflectionProbeContract.Length) throw new InvalidOperationException("Reflection probe count invalid.");
+            for (var i = 0; i < ReflectionProbeContract.Length; i++)
+            {
+                var expected = ReflectionProbeContract[i];
+                var probeObject = GameObject.Find("Environment/" + expected.name);
+                var probe = probeObject != null ? probeObject.GetComponent<ReflectionProbe>() : null;
+                if (probe == null || probe.mode != ReflectionProbeMode.Baked || !probe.boxProjection || !probe.hdr || probe.resolution != 128 ||
+                    Vector3.Distance(probe.transform.position, expected.center) > 0.001f || Vector3.Distance(probe.size, expected.size) > 0.001f)
+                    throw new InvalidOperationException("Reflection probe contract invalid: " + expected.name);
+            }
+
+            if (LightmapSettings.lightmaps == null || LightmapSettings.lightmaps.Length == 0)
+                throw new InvalidOperationException("MovementLab lightmap bake data is missing.");
+            if (LightmapSettings.lightmapsMode != LightmapsMode.CombinedDirectional)
+                throw new InvalidOperationException("MovementLab lightmaps must use directional mode.");
+
+            var renderers = scene.GetRootGameObjects();
+            var meshRenderers = 0;
+            var opaqueDraws = 0;
+            var transparentStatic = 0;
+            long sceneTriangles = 0;
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                var root = renderers[i];
+                var meshes = root.GetComponentsInChildren<MeshRenderer>(true);
+                meshRenderers += meshes.Length;
+                for (var j = 0; j < meshes.Length; j++)
+                {
+                    var renderer = meshes[j];
+                    if (renderer == null) continue;
+                    var materials = renderer.sharedMaterials;
+                    var transparent = renderer.gameObject.isStatic && (renderer.name.IndexOf("Grid", StringComparison.OrdinalIgnoreCase) >= 0 || renderer.name.IndexOf("Shield", StringComparison.OrdinalIgnoreCase) >= 0);
+                    if (transparent) transparentStatic++;
+                    for (var m = 0; m < materials.Length; m++)
+                    {
+                        var material = materials[m];
+                        if (material == null) continue;
+                        if (!transparent && material.shader != null && material.shader.name == LitShaderName) opaqueDraws++;
+                    }
+                    var filter = renderer.GetComponent<MeshFilter>();
+                    if (filter != null && filter.sharedMesh != null) sceneTriangles += filter.sharedMesh.triangles.Length / 3;
+                }
+                var skinned = root.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                for (var j = 0; j < skinned.Length; j++) if (skinned[j] != null && skinned[j].sharedMesh != null) sceneTriangles += skinned[j].sharedMesh.triangles.Length / 3;
+                meshRenderers += skinned.Length;
+            }
+            if (meshRenderers > 140 || sceneTriangles > 150000 || opaqueDraws > 180 || transparentStatic > 8)
+                throw new InvalidOperationException("MovementLab render budget exceeded: renderers=" + meshRenderers + " triangles=" + sceneTriangles + " opaqueDraws=" + opaqueDraws + " transparentStatic=" + transparentStatic);
+            Debug.Log("Rocket Fooxball Movement Lab render budget: triangles=" + sceneTriangles + " MeshRenderers=" + meshRenderers + " opaqueDraws=" + opaqueDraws + " staticTransparent=" + transparentStatic);
         }
 
         private static void ValidateArenaMaterials(GameObject arena, PhysicsMaterial ballSurface)
@@ -3143,6 +3684,7 @@ namespace RocketFooxball.Editor
             var renderers = architecture.GetComponentsInChildren<MeshRenderer>(true);
             if (renderers.Length == 0 || renderers.Length > 80) throw new InvalidOperationException("Arena architecture renderer budget invalid: " + renderers.Length);
             var triangleCount = 0;
+            var uniqueMeshes = new HashSet<Mesh>();
             var palette = new[]
             {
                 AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"),
@@ -3163,9 +3705,9 @@ namespace RocketFooxball.Editor
                 var expectedMaterials = ResolveArenaKitMaterials(mesh.name, palette);
                 if (materials.Length != expectedMaterials.Length) throw new InvalidOperationException("Architecture material slot count mismatch: " + renderer.name);
                 for (var j = 0; j < materials.Length; j++) if (materials[j] != expectedMaterials[j]) throw new InvalidOperationException("Architecture material slot order mismatch: " + renderer.name);
-                triangleCount += mesh.triangles.Length / 3;
+                if (uniqueMeshes.Add(mesh)) triangleCount += mesh.triangles.Length / 3;
             }
-            if (triangleCount > 50000) throw new InvalidOperationException("Arena architecture triangle budget exceeded: " + triangleCount);
+            if (triangleCount > 75000) throw new InvalidOperationException("ArenaKit imported triangle budget exceeded: " + triangleCount);
             ValidateArenaKitModel();
             ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
             ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
@@ -3222,7 +3764,9 @@ namespace RocketFooxball.Editor
             var serialized = new SerializedObject(importer);
             var normalImport = serialized.FindProperty("normalImportMode");
             var tangents = serialized.FindProperty("tangentImportMode");
-            if (normalImport == null || tangents == null || normalImport.intValue != 0 || tangents.intValue != 3)
+            var secondaryUv = serialized.FindProperty("generateSecondaryUV");
+            if (normalImport == null || tangents == null || normalImport.intValue != 0 || tangents.intValue != 3 ||
+                (arena && secondaryUv != null && !secondaryUv.boolValue))
             {
                 throw new InvalidOperationException(label + " importer must import authored normals and calculate Mikk tangents.");
             }
@@ -3272,7 +3816,7 @@ namespace RocketFooxball.Editor
             if (material.GetTexture("_BumpMap") != normalMap || material.GetTexture("_MetallicGlossMap") != metallicMap || material.GetTexture("_OcclusionMap") != occlusionMap || material.GetTexture("_EmissionMap") != emissionMap) throw new InvalidOperationException(label + " PBR map routing mismatch.");
             if (material.GetTexture("_DetailNormalMap") != detailNormalMap) throw new InvalidOperationException(label + " detail normal map mismatch.");
             var detailEnabled = detailNormalMap != null;
-            if (material.IsKeywordEnabled("_DETAIL") || material.IsKeywordEnabled("_DETAIL_SCALED") || material.IsKeywordEnabled("_DETAIL_MULX2") != detailEnabled)
+            if (HasSerializedKeyword(material, "_DETAIL") || HasSerializedKeyword(material, "_DETAIL_SCALED") || HasSerializedKeyword(material, "_DETAIL_MULX2") != detailEnabled)
             {
                 throw new InvalidOperationException(label + " detail normal keyword contract mismatch.");
             }
@@ -3296,6 +3840,56 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException(label + " emission contract mismatch.");
             }
+        }
+
+        private static bool HasSerializedKeyword(Material material, string keyword)
+        {
+            if (material == null || string.IsNullOrEmpty(keyword)) return false;
+            var assetPath = AssetDatabase.GetAssetPath(material);
+            if (!string.IsNullOrEmpty(assetPath) && assetPath.StartsWith("Assets/", StringComparison.Ordinal) && assetPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase))
+            {
+                // Saved project materials are authoritative on disk. Native
+                // lighting jobs may leave stale in-memory local-keyword arrays.
+                return HasPersistedMaterialKeyword(material, keyword);
+            }
+            var serialized = new SerializedObject(material);
+            var valid = serialized.FindProperty("m_ValidKeywords");
+            if (valid != null && valid.isArray)
+            {
+                for (var i = 0; i < valid.arraySize; i++)
+                {
+                    if (string.Equals(valid.GetArrayElementAtIndex(i).stringValue, keyword, StringComparison.Ordinal)) return true;
+                }
+                return HasPersistedMaterialKeyword(material, keyword);
+            }
+            var keywords = material.shaderKeywords;
+            for (var i = 0; i < keywords.Length; i++)
+            {
+                if (string.Equals(keywords[i], keyword, StringComparison.Ordinal)) return true;
+            }
+            return false;
+        }
+
+        private static bool HasPersistedMaterialKeyword(Material material, string keyword)
+        {
+            var path = AssetDatabase.GetAssetPath(material);
+            if (string.IsNullOrEmpty(path)) return false;
+            var absolutePath = GetAbsoluteProjectPath(ResolveProjectRoot(), path);
+            if (!File.Exists(absolutePath)) return false;
+            var yaml = File.ReadAllText(absolutePath);
+            var start = yaml.IndexOf("m_ValidKeywords:", StringComparison.Ordinal);
+            if (start < 0) return false;
+            var end = yaml.IndexOf("\n  m_InvalidKeywords:", start, StringComparison.Ordinal);
+            if (end < 0) end = yaml.IndexOf("\n  m_LightmapFlags:", start, StringComparison.Ordinal);
+            if (end < 0) end = yaml.Length;
+            var section = yaml.Substring(start, end - start);
+            var lines = section.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+            var expectedLine = "- " + keyword;
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (string.Equals(lines[i].Trim(), expectedLine, StringComparison.Ordinal)) return true;
+            }
+            return false;
         }
 
         private static void ValidateBallMaterial(Material material)
@@ -3364,7 +3958,7 @@ namespace RocketFooxball.Editor
             ValidatePbrMaterial(material, texture, normal, metallic, occlusion, emission, LoadTexture(DetailNormalTexturePath), Vector2.one, label);
             ValidatePbrScalars(material, 1f, 1f, 0.90f, 1f, label == "WeaponAccent" ? 1.5f : 0f, label);
             ValidateEmission(material, label == "WeaponAccent" ? new Color(1f, 0.16f, 0.03f, 1f) : Color.clear, label == "WeaponAccent" ? 1.5f : 0f, label);
-            if (material.IsKeywordEnabled("_EMISSION") != (label == "WeaponAccent")) throw new InvalidOperationException(label + " emission keyword contract mismatch.");
+            if (HasSerializedKeyword(material, "_EMISSION") != (label == "WeaponAccent")) throw new InvalidOperationException(label + " emission keyword contract mismatch.");
             var actual = material.GetColor("_BaseColor");
             if (Vector4.Distance(actual, baseColor) > 0.001f)
             {
@@ -3517,10 +4111,12 @@ namespace RocketFooxball.Editor
                     var prefabLauncher = Require(root.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
                     var prefabKick = Require(root.GetComponent<BallKick>(), "Player prefab BallKick");
                     var prefabFeedback = Require(root.GetComponent<PlayerCameraFeedback>(), "Player prefab PlayerCameraFeedback");
+                    var prefabQualityRuntime = Require(root.transform.Find("Head/Camera").GetComponent<GraphicsQualityRuntime>(), "Player prefab GraphicsQualityRuntime");
                     var prefabPresentation = Require(root.GetComponent<PlayerPresentation>(), "Player prefab PlayerPresentation");
                     ValidateReference(prefabLauncher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath), "Player prefab RocketLauncher.projectilePrefab");
                     ValidateReference(prefabLauncher, "spawnPoint", root.transform.Find("Head/Camera/RocketMuzzle"), "Player prefab RocketLauncher.spawnPoint");
                     ValidateReference(prefabFeedback, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerCameraFeedback.targetCamera");
+                    ValidateReference(prefabQualityRuntime, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab GraphicsQualityRuntime.targetCamera");
                     ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
                     ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
                     ValidateSerializedFloat(prefabFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "Player prefab PlayerCameraFeedback.celebrationOrbitRadius");
@@ -4139,6 +4735,7 @@ namespace RocketFooxball.Editor
             EnsureFolder("Assets/_Game/Models");
             EnsureFolder("Assets/_Game/Scenes");
             EnsureFolder("Assets/_Game/Generated");
+            EnsureFolder(LightingPath);
         }
 
         private static void EnsureFolder(string path)
