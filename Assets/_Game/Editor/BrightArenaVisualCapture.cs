@@ -41,6 +41,14 @@ namespace RocketFooxball.Editor
         private const float DarkLuminance = 0.08f;
         private const float ClippedLuminance = 0.98f;
         private const int UniqueColorFloor = 32;
+        private const string ExpectedGitShaArgument = "-brightArenaExpectedGitSha";
+        private const string ExpectedGitShaEnvironment = "BRIGHT_ARENA_EXPECTED_GIT_SHA";
+        private static readonly string[] SourceScopeRoots = { "Assets", "Tools", "ProjectSettings", "Packages" };
+        private static readonly string[] RequiredSourceFiles =
+        {
+            "Assets/_Game/Editor/BrightArenaVisualCapture.cs",
+            "Tools/Validation/Capture-BrightArenaVisuals.ps1"
+        };
 
         private sealed class BuildManifestDto
         {
@@ -71,6 +79,14 @@ namespace RocketFooxball.Editor
         {
             public string gitSha;
             public bool gitDirty;
+            public SourceFileHash[] fileHashes;
+        }
+
+        [Serializable]
+        private sealed class SourceFileHash
+        {
+            public string path;
+            public string sha256;
         }
 
         [Serializable]
@@ -221,6 +237,9 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Bright arena capture requires graphics-enabled Unity; GraphicsDeviceType.Null is unsupported.");
                 }
 
+                var expectedGitSha = ReadExpectedGitSha();
+                RunBudgetAccountingSelfChecks();
+
                 // Validator is the single authoritative scene/manifest check. Do not build,
                 // save, refresh, or otherwise mutate generated Unity assets from this path.
                 MovementLabBuilder.ValidateMovementLab();
@@ -235,7 +254,12 @@ namespace RocketFooxball.Editor
                 }
 
                 var buildManifest = ReadBuildManifest(projectRoot);
-                manifest.source = ReadSourceInfo(projectRoot);
+                manifest.source = ReadSourceInfo(projectRoot, expectedGitSha);
+                if (!string.Equals(manifest.source.gitSha, expectedGitSha, StringComparison.OrdinalIgnoreCase) || manifest.source.gitDirty)
+                {
+                    throw new InvalidOperationException("Capture source provenance assertion failed.");
+                }
+                UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_SOURCE sha=" + manifest.source.gitSha + " dirty=" + manifest.source.gitDirty);
                 manifest.unity = ReadUnityInfo();
                 manifest.build = new BuildInfo
                 {
@@ -420,15 +444,73 @@ namespace RocketFooxball.Editor
             return manifest;
         }
 
-        private static SourceInfo ReadSourceInfo(string projectRoot)
+        private static string ReadExpectedGitSha()
         {
-            var sha = RunGit(projectRoot, "rev-parse HEAD").Trim();
-            if (string.IsNullOrEmpty(sha))
+            var commandLine = Environment.GetCommandLineArgs();
+            for (var i = 0; i < commandLine.Length; i++)
             {
-                throw new InvalidOperationException("Unable to resolve Git SHA for capture evidence.");
+                var argument = commandLine[i];
+                if (string.Equals(argument, ExpectedGitShaArgument, StringComparison.OrdinalIgnoreCase) && i + 1 < commandLine.Length)
+                {
+                    return NormalizeGitSha(commandLine[i + 1], "command line");
+                }
+                if (argument.StartsWith(ExpectedGitShaArgument + "=", StringComparison.OrdinalIgnoreCase))
+                {
+                    return NormalizeGitSha(argument.Substring(ExpectedGitShaArgument.Length + 1), "command line");
+                }
             }
-            var status = RunGit(projectRoot, "status --porcelain --untracked-files=all");
-            return new SourceInfo { gitSha = sha, gitDirty = !string.IsNullOrEmpty(status.Trim()) };
+
+            var environmentValue = Environment.GetEnvironmentVariable(ExpectedGitShaEnvironment);
+            if (!string.IsNullOrWhiteSpace(environmentValue))
+            {
+                return NormalizeGitSha(environmentValue, "environment");
+            }
+            throw new InvalidOperationException("Capture requires the wrapper-provided expected Git SHA.");
+        }
+
+        private static string NormalizeGitSha(string value, string source)
+        {
+            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
+            if (normalized.Length != 40 || normalized.Any(character => !Uri.IsHexDigit(character)))
+            {
+                throw new InvalidOperationException("Expected Git SHA from " + source + " is not a 40-character hexadecimal SHA.");
+            }
+            return normalized;
+        }
+
+        private static SourceInfo ReadSourceInfo(string projectRoot, string expectedGitSha)
+        {
+            var sha = NormalizeGitSha(RunGit(projectRoot, "rev-parse --verify HEAD"), "git HEAD");
+            if (!string.Equals(sha, expectedGitSha, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Git HEAD changed before capture: expected " + expectedGitSha + ", observed " + sha + ".");
+            }
+
+            var status = ReadScopedGitStatus(projectRoot);
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                throw new InvalidOperationException("Source scope is dirty before capture: " + status);
+            }
+
+            var sourceFiles = new List<SourceFileHash>(RequiredSourceFiles.Length);
+            for (var i = 0; i < RequiredSourceFiles.Length; i++)
+            {
+                var relativePath = RequiredSourceFiles[i];
+                var absolutePath = Path.Combine(projectRoot, relativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (!File.Exists(absolutePath))
+                {
+                    throw new InvalidOperationException("Required capture source file is missing: " + relativePath);
+                }
+                sourceFiles.Add(new SourceFileHash { path = relativePath, sha256 = Sha256File(absolutePath) });
+            }
+
+            return new SourceInfo { gitSha = sha, gitDirty = false, fileHashes = sourceFiles.ToArray() };
+        }
+
+        private static string ReadScopedGitStatus(string projectRoot)
+        {
+            var pathspec = string.Join(" ", SourceScopeRoots);
+            return RunGit(projectRoot, "status --porcelain=v1 --untracked-files=all -- " + pathspec).Replace('\0', '\n').Trim();
         }
 
         private static string RunGit(string projectRoot, string arguments)
@@ -567,35 +649,15 @@ namespace RocketFooxball.Editor
             var evidence = new BudgetEvidence();
             var renderers = UnityEngine.Object.FindObjectsByType<MeshRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             var meshes = new HashSet<Mesh>();
-            var opaqueMaterials = new HashSet<Material>();
             var activeRenderers = 0;
             for (var i = 0; i < renderers.Length; i++)
             {
                 var renderer = renderers[i];
                 if (!renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
                 activeRenderers++;
-                var transparent = false;
-                var materials = renderer.sharedMaterials ?? Array.Empty<Material>();
-                for (var j = 0; j < materials.Length; j++)
-                {
-                    var material = materials[j];
-                    if (material == null) continue;
-                    var queue = material.renderQueue > 0 ? material.renderQueue : (material.shader != null ? material.shader.renderQueue : 2000);
-                    transparent |= queue >= 3000 || string.Equals(material.GetTag("RenderType", false, string.Empty), "Transparent", StringComparison.OrdinalIgnoreCase);
-                    if (queue < 3000)
-                    {
-                        // Count each distinct opaque material's shader passes once.
-                        // Repeated architecture slots share the same pass program;
-                        // counting every binding would report duplicate shader cost.
-                        if (opaqueMaterials.Add(material))
-                        {
-                            evidence.opaqueMaterialPasses += Math.Max(1, material.passCount);
-                        }
-                    }
-                }
-                if (transparent) evidence.transparentRenderers++;
                 var filter = renderer.GetComponent<MeshFilter>();
                 var mesh = filter != null ? filter.sharedMesh : null;
+                AccountRendererMaterials(renderer, mesh, evidence);
                 if (mesh == null) continue;
                 meshes.Add(mesh);
                 for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
@@ -617,10 +679,88 @@ namespace RocketFooxball.Editor
                 var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePaths[i]);
                 if (texture == null) continue;
                 evidence.maxTextureDimension = Math.Max(evidence.maxTextureDimension, Math.Max(texture.width, texture.height));
-                evidence.authoredTextureRgbaBytes += (long)texture.width * texture.height * 4L;
+                var importer = AssetImporter.GetAtPath(texturePaths[i]) as TextureImporter;
+                var mipmapsEnabled = (importer != null && importer.mipmapEnabled) || texture.mipmapCount > 1;
+                evidence.authoredTextureRgbaBytes += CalculateTextureRgbaBytes(texture.width, texture.height, mipmapsEnabled);
             }
             evidence.pass = evidence.enabledMeshRenderers <= RendererCap && evidence.opaqueMaterialPasses <= OpaquePassCap && evidence.transparentRenderers <= TransparentRendererCap && evidence.visibleTriangles <= TriangleCap && evidence.authoredTextureRgbaBytes <= TextureBytesCap && evidence.maxTextureDimension <= TextureDimensionCap;
             return evidence;
+        }
+
+        private static void AccountRendererMaterials(MeshRenderer renderer, Mesh mesh, BudgetEvidence evidence)
+        {
+            var materials = renderer.sharedMaterials ?? Array.Empty<Material>();
+            var submeshCount = mesh != null ? mesh.subMeshCount : 0;
+            // Unity can expose more or fewer material slots than submeshes. Count the
+            // larger binding set and reuse the last material for missing slots so the
+            // budget cannot be undercounted. Null slots are charged as one opaque pass
+            // and mark the renderer conservatively as transparent/unknown.
+            var bindingCount = Math.Max(submeshCount, materials.Length);
+            var transparent = false;
+            for (var binding = 0; binding < bindingCount; binding++)
+            {
+                var material = materials.Length == 0 ? null : materials[Math.Min(binding, materials.Length - 1)];
+                if (material == null)
+                {
+                    AddOpaquePasses(evidence, 1);
+                    transparent = true;
+                    continue;
+                }
+
+                var queue = material.renderQueue > 0 ? material.renderQueue : (material.shader != null ? material.shader.renderQueue : 2000);
+                var isTransparent = queue >= 3000 || string.Equals(material.GetTag("RenderType", false, string.Empty), "Transparent", StringComparison.OrdinalIgnoreCase);
+                transparent |= isTransparent;
+                if (!isTransparent)
+                {
+                    AddOpaquePasses(evidence, Math.Max(1, material.passCount));
+                }
+            }
+            if (transparent) evidence.transparentRenderers++;
+        }
+
+        private static void AddOpaquePasses(BudgetEvidence evidence, int passes)
+        {
+            var next = (long)evidence.opaqueMaterialPasses + Math.Max(1, passes);
+            evidence.opaqueMaterialPasses = next >= int.MaxValue ? int.MaxValue : (int)next;
+        }
+
+        private static long CalculateTextureRgbaBytes(int width, int height, bool mipmapsEnabled)
+        {
+            if (width <= 0 || height <= 0) return 0L;
+            long bytes = 0L;
+            var mipWidth = width;
+            var mipHeight = height;
+            while (true)
+            {
+                bytes += (long)mipWidth * mipHeight * 4L;
+                if (!mipmapsEnabled || (mipWidth == 1 && mipHeight == 1)) break;
+                mipWidth = Math.Max(1, mipWidth / 2);
+                mipHeight = Math.Max(1, mipHeight / 2);
+            }
+            return bytes;
+        }
+
+        private static void RunBudgetAccountingSelfChecks()
+        {
+            const int repeatedBindings = 80;
+            const int repeatedPassCount = 2;
+            var repeatedPasses = 0;
+            for (var i = 0; i < repeatedBindings; i++)
+            {
+                var next = (long)repeatedPasses + Math.Max(1, repeatedPassCount);
+                repeatedPasses = next >= int.MaxValue ? int.MaxValue : (int)next;
+            }
+            var mipBytes = CalculateTextureRgbaBytes(4, 2, true);
+            var nonMipBytes = CalculateTextureRgbaBytes(4, 2, false);
+            if (repeatedPasses != 160 || repeatedPasses <= OpaquePassCap || mipBytes != 44L || nonMipBytes != 32L)
+            {
+                throw new InvalidOperationException("Bright arena budget accounting self-check failed.");
+            }
+            UnityEngine.Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "BRIGHT_ARENA_BUDGET_ACCOUNTING_SELFTEST repeatedBindings={0} passPerBinding={1} opaquePasses={2} cap={3} pass={4}",
+                repeatedBindings, repeatedPassCount, repeatedPasses, OpaquePassCap, repeatedPasses <= OpaquePassCap));
+            UnityEngine.Debug.Log(string.Format(CultureInfo.InvariantCulture,
+                "BRIGHT_ARENA_BUDGET_ACCOUNTING_SELFTEST mip4x2={0} nonMip4x2={1} formula=downTo1x1", mipBytes, nonMipBytes));
         }
 
         private static CameraState SaveCameraState(Camera camera)
@@ -672,6 +812,15 @@ namespace RocketFooxball.Editor
             using (var hash = SHA256.Create())
             {
                 return BitConverter.ToString(hash.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
+            }
+        }
+
+        private static string Sha256File(string path)
+        {
+            using (var hash = SHA256.Create())
+            using (var stream = File.OpenRead(path))
+            {
+                return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
             }
         }
 
