@@ -1,7 +1,7 @@
 {
     "schemaVersion": 1,
-    "sourceSignature": "68104b81118120e3c33ffcf1ce17f1335fc36aec3dad936c2debac4b18198254",
-    "generatedOutputFingerprint": "048c78101108f0bbf78c33cd3f642dfc17ef4c7aa0c683345b2e140986ab25a7",
+    "sourceSignature": "fdaa8800b1f0d3691a54860de1be2930755a946566ba4f62df86bf7585e5c47f",
+    "generatedOutputFingerprint": "d3466a8f62501225ca9065f7649c2c8b21a9ac88c8c13bd50a7b0a718a4d0785",
     "unityVersion": "6000.5.6f1",
     "fingerprintPaths": [
         "Assets/_Game/Animations/FpsKick.controller",
@@ -62,6 +62,12 @@
         "Assets/_Game/Textures/RetroTrim.png.meta",
         "Assets/_Game/Textures/RetroWall.png",
         "Assets/_Game/Textures/RetroWall.png.meta",
+        "Assets/_Game/Textures/RetroWeaponAccent.png",
+        "Assets/_Game/Textures/RetroWeaponAccent.png.meta",
+        "Assets/_Game/Textures/RetroWeaponDark.png",
+        "Assets/_Game/Textures/RetroWeaponDark.png.meta",
+        "Assets/_Game/Textures/RetroWeaponMetal.png",
+        "Assets/_Game/Textures/RetroWeaponMetal.png.meta",
         "ProjectSettings/DynamicsManager.asset",
         "ProjectSettings/EditorBuildSettings.asset",
         "ProjectSettings/TimeManager.asset"

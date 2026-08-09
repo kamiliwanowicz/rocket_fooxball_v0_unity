@@ -3065,7 +3065,7 @@ namespace RocketFooxball.Editor
                 Mathf.Abs(main.startSize.constantMax - RocketTrailStartSize) > 0.01f ||
                 Mathf.Abs(emission.rateOverDistance.constantMax - RocketTrailRateOverDistance) > 0.01f ||
                 main.startColor.color.a < RocketTrailStartColor.a - 0.01f ||
-                !color.enabled || color.gradient == null || color.gradient.alphaKeys.Length < 2 || color.gradient.alphaKeys[0].alpha < 0.75f)
+                !color.enabled || color.color.gradient == null || color.color.gradient.alphaKeys.Length < 2 || color.color.gradient.alphaKeys[0].alpha < 0.75f)
             {
                 throw new InvalidOperationException("Rocket trail particle visibility contract invalid.");
             }
@@ -3136,10 +3136,10 @@ namespace RocketFooxball.Editor
             if (emitted != 37) throw new InvalidOperationException("Explosion burst count must total 37.");
             if (fire == null || smoke == null || fireBurstCount <= smokeBurstCount ||
                 fire.main.startSize.constantMax <= smoke.main.startSize.constantMax ||
-                !fire.colorOverLifetime.enabled || fire.colorOverLifetime.gradient == null ||
-                !smoke.colorOverLifetime.enabled || smoke.colorOverLifetime.gradient == null ||
-                fire.colorOverLifetime.gradient.alphaKeys.Length < 2 || smoke.colorOverLifetime.gradient.alphaKeys.Length < 2 ||
-                fire.colorOverLifetime.gradient.alphaKeys[0].alpha <= smoke.colorOverLifetime.gradient.alphaKeys[0].alpha)
+                !fire.colorOverLifetime.enabled || fire.colorOverLifetime.color.gradient == null ||
+                !smoke.colorOverLifetime.enabled || smoke.colorOverLifetime.color.gradient == null ||
+                fire.colorOverLifetime.color.gradient.alphaKeys.Length < 2 || smoke.colorOverLifetime.color.gradient.alphaKeys.Length < 2 ||
+                fire.colorOverLifetime.color.gradient.alphaKeys[0].alpha <= smoke.colorOverLifetime.color.gradient.alphaKeys[0].alpha)
             {
                 throw new InvalidOperationException("Explosion VFX must keep fire more visible than smoke.");
             }
