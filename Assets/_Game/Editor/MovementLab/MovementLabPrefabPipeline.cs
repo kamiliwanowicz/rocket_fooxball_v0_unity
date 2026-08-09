@@ -99,6 +99,11 @@ namespace RocketFooxball.Editor
                     camera.clearFlags = CameraClearFlags.SolidColor;
                     camera.backgroundColor = new Color(0.72f, 0.88f, 0.96f, 1f);
                     camera.gameObject.AddComponent<AudioListener>();
+                    camera.allowHDR = true;
+                    var cameraData = camera.GetUniversalAdditionalCameraData();
+                    cameraData.renderPostProcessing = true;
+                    cameraData.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+                    cameraData.antialiasingQuality = AntialiasingQuality.High;
                     var qualityRuntime = camera.gameObject.AddComponent<GraphicsQualityRuntime>();
                     var muzzle = new GameObject("RocketMuzzle").transform;
                     muzzle.SetParent(camera.transform, false);
