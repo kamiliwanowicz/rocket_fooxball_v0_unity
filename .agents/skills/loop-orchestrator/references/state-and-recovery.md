@@ -65,6 +65,7 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - covered requirements: [REQ-*]
 - attempt_id: [current/latest]
 - baseline: [full SHA]
+- execution start SHA: [full SHA or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
@@ -131,7 +132,7 @@ Merge:
 
 ## Dispatch and acceptance writes
 
-Before dispatch, record phase, attempt identity, role/profile, plan status, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
+Before dispatch, record phase, attempt identity, role/profile, plan status, immutable execution start SHA, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
 
 After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
 
@@ -172,7 +173,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
 3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Source drift after binding is ignored.
-4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
+4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
 7. Resume first incomplete mandatory stage. Never repeat completed work whose artifact/SHA/check facts remain valid.
@@ -196,6 +197,7 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
 - source digest mismatch before binding: status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
 - snapshot digest mismatch after binding: status `blocked`; fresh execution attempt and snapshot required; source drift ignored.
+- source-branch drift after worktree creation: no transition; use bound `start_sha..plan_head` comparison.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
 ## Cleanup and completion

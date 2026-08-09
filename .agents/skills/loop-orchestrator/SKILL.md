@@ -71,17 +71,17 @@ Accepted source artifact remains pre-execution input only. Execution binding per
 
 ## EXECUTION
 
-For each accepted plan, LP provisions one isolated branch/worktree from recorded plan baseline. Read accepted source once into unique create-once execution snapshot:
+For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Read accepted source once into unique create-once execution snapshot:
 
 `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/executions/<attempt-id>.md`
 
 Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
-Snapshot binding closes source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator verify bound snapshot only until attempt ends.
+Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
-Accept `complete` only when exact execution identity matches, bound snapshot digest rehash matches, observed branch/worktree match, committed head descends from bound baseline, changed paths stay owned, required checks bind head, and worktree is clean. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
+Accept `complete` only when exact execution identity matches, bound snapshot digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, exact `start_sha..plan_head` changed paths stay owned, required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
 
 ## MERGING
 
@@ -95,7 +95,7 @@ Target drift -> current merge attempt `blocked`. LP follows [target-drift recove
 
 ## Dispatch identity and results
 
-Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, branch/worktree when applicable, owned/protected paths, dependencies, allowed Git operations, checks, and state path.
+Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, immutable execution `start_sha` when applicable, branch/worktree, owned/protected paths, dependencies, allowed Git operations, checks, and state path.
 
 Role-specific statuses:
 

@@ -25,7 +25,7 @@ Never switch mode during attempt. Ambiguous or partial LP handoff -> `blocked`; 
 - accepted plan source path as provenance plus attempt-bound plan snapshot absolute path, SHA-256 digest, byte size;
 - covered requirement IDs and objective;
 - accepted dependency SHAs;
-- exact plan branch and isolated worktree;
+- immutable execution `start_sha`, exact plan branch, and isolated worktree;
 - owned/protected paths;
 - checks, proof boundary, evidence locations;
 - allowed Git operations limited to plan branch/worktree;
@@ -39,9 +39,9 @@ Missing/mismatched field, including active-agent identity or role -> `blocked` b
 
 1. Resolve repository root and accepted plan source absolute path. Generate stable local `plan_id` plus unique `attempt_id`.
 2. Read source once into unique create-once snapshot at `<git-common-dir>/orchestrate-implementation/<plan-id>/executions/<attempt-id>.md`. Reopen snapshot; capture SHA-256 and byte size. Record source path as provenance; bind snapshot as sole plan authority.
-3. Capture launch checkout absolute path, current branch, exact `HEAD` as worktree source, and status. Preserve launch checkout and all existing changes unchanged.
+3. Capture launch checkout absolute path, current branch, exact `HEAD` as `launch_head_sha`, and status. Preserve launch checkout and all existing changes unchanged.
 4. Derive unique `codex/<plan-slug>-<attempt-id>` branch and sibling worktree path outside launch checkout. Confirm target parent writable for active agent and child agents. Existing branch/path -> choose new unique names; preserve existing worktrees and branches.
-5. Create branch/worktree from captured source SHA. Verify worktree root, branch, `HEAD`, and initial status.
+5. Create new branch/worktree from exact `launch_head_sha`. Verify worktree root, branch, and initial `HEAD`; bind that full SHA as immutable execution `start_sha`.
 6. Bind objective, requirements, owned/protected paths, dependencies, checks, proof boundary, and evidence locations from snapshot. Missing execution-critical boundary -> `blocked` with one needed user decision.
 
 All product reads, plan work, child dispatch, Git mutation, and validation use created worktree plus bound snapshot. Active agent owns created plan branch only. Launch checkout leaves attempt authority after snapshot binding. Keep completed worktree/branch for user inspection; integrate into launch branch only when user explicitly requested integration.
@@ -59,7 +59,18 @@ Before first worker dispatch:
 
 Snapshot digest, identity, or mode-contract mismatch -> `blocked` with observed digest/size and needed authority action. Perform no product mutation or child dispatch. Rehash bound snapshot before final return; snapshot mismatch invalidates attempt.
 
-After snapshot gate passes, source plan path, launch checkout, and source branch are out of attempt observation, recovery, and completion gates. Later changes there have no effect on running attempt. Only explicit user/LP cancellation, bound snapshot corruption, plan-worktree drift, or normal execution blockers can stop product work.
+After snapshot gate passes, source plan path leaves attempt observation, recovery, and completion gates. Later changes there have no effect on running attempt.
+
+## Frozen code boundary
+
+- source branch and `launch_head_sha`: bootstrap provenance only;
+- `start_sha`: immutable code baseline for full execution attempt;
+- plan branch `HEAD`: moving execution result owned by orchestrator;
+- checkpoint comparison: exact `review_base_sha..frozen_sha`;
+- final ancestry: `git merge-base --is-ancestor <start_sha> <final_sha>`;
+- final scope/content comparison: `git diff <start_sha>..<final_sha>` plus index/worktree status.
+
+After plan worktree creation, all execution, review, recovery, and completion Git checks use bound worktree, plan branch, and exact SHAs. Source branch movement has no effect on attempt. Compare no execution result against moving source-branch ref. Only explicit user/LP cancellation, bound snapshot corruption, plan-worktree drift, or normal execution blockers can stop product work.
 
 ## Ownership and profiles
 
@@ -108,7 +119,7 @@ Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`,
 4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
 6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
-7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash bound snapshot. Verify owned paths clean, initial unrelated status preserved, branch, dependencies, owned path diff, and requirements.
+7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash bound snapshot. Verify `HEAD` descends from `start_sha`; calculate owned path/content diff from `start_sha..HEAD`; verify clean index/worktree, initial unrelated status, branch, dependencies, and requirements.
 
 Required unowned edit, plan decomposition change, dependency drift, bound snapshot mismatch, or product decision outside accepted plan -> `blocked`. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
 
@@ -121,7 +132,7 @@ Return common facts:
 - source plan path as provenance; bound snapshot path, accepted digest/size, observed final digest/size;
 - exact `start_sha`, dependency SHAs, branch, worktree, initial unrelated-status snapshot;
 - clean committed exact plan SHA when complete;
-- changed paths and scope proof;
+- changed paths and scope proof from exact `start_sha..final_sha`;
 - each checkpoint ID, covered executions, review base/frozen SHA, verdict, accepted finding dispositions;
 - checks: command/workflow, working directory, observed result, evidence, exact SHA;
 - blocker, evidence, and one needed authority action/recheck when blocked.
@@ -130,4 +141,4 @@ Return common facts:
 
 `user-direct` returns facts directly to user, including launch checkout path/branch/status snapshot and created branch/worktree. Result remains isolated unless user explicitly authorized integration.
 
-`complete` requires bound snapshot match, exact committed head, owned paths clean, initial unrelated status preserved, owned-only committed diff, every worker covered by completed checkpoint review/fix flow, and passing final checks.
+`complete` requires bound snapshot match, exact committed head descending from `start_sha`, owned paths clean, initial unrelated status preserved, owned-only `start_sha..final_sha` diff, every worker covered by completed checkpoint review/fix flow, and passing final checks.
