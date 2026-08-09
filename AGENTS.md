@@ -11,7 +11,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 1. Responsive, predictable rocket-jumping
 2. Satisfying ball control and reliable scoring
 3. Fast tuning and stable performance
-4. Visual polish last
+4. Visual polish follows core gameplay unless current task explicitly targets graphics
 
 ## Repository map
 
@@ -20,7 +20,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 - Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity`
 - Input actions: `Assets/InputSystem_Actions.inputactions`
 - Runtime ownership and dependencies: `plans/runtime-architecture.md`
-- Behaviour, tuning, and implementation status: `plans/completed/core-behaviour.md`
+- Active graphics, VFX, containment, and movement overhaul: `plans/comprehensive-graphics-overhaul-coding-plan.md`
 - Unity, package, and project configuration: `ProjectSettings/`, `Packages/`
 
 Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content outside that root unchanged unless task targets it.
@@ -28,7 +28,8 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 ## Architecture
 
 - Preserve current Unity and package versions unless requested.
-- URP rendering. Default to low-cost visuals; measure before adding expensive effects and keep scalable fallbacks.
+- URP rendering. Default Standalone target -> native 1920x1080 High quality with PBR materials, HDR, shadows, SSAO, restrained bloom, modern lighting, baked indirect light, and reflection/light probes. Maintain scalable Low fallback. Validate High/Low visual quality and target-machine performance at 1920x1080.
+- Graphics work may add or replace project-owned arena, ball, rocket, explosion, and containment visuals. Preserve gameplay contracts unless current task explicitly authorizes named gameplay or collision changes.
 - Player collision/movement -> `CharacterController`. Ball and projectile physics -> `Rigidbody` forces and impulses.
 - Critical gameplay simulation -> fixed-step code. Shared physics configuration -> `GamePhysicsSettings`.
 - Device input -> Input System -> `PlayerInputReader` intent -> gameplay components. No legacy `UnityEngine.Input` polling.
