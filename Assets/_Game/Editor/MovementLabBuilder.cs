@@ -99,7 +99,8 @@ namespace RocketFooxball.Editor
         private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/RocketLauncher.cs";
         private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
         private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
-        private const int ManifestSchemaVersion = 2;
+        private const int ManifestSchemaVersion = 3;
+        private const string DetailNormalKeyword = "_DETAIL_MULX2";
         private const string BuildMarkerPrefix = "MovementLabGeneratedT6_";
         private const float BallPrefabScale = 4.32f;
         private const float BallRadius = 2.16f;
@@ -305,9 +306,11 @@ namespace RocketFooxball.Editor
         private static string[] CreateGeneratedFingerprintPaths()
         {
             var paths = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
             {
-                paths.Add(GeneratedYamlAssetPaths[i]);
+                AddGeneratedFingerprintPath(paths, seen, GeneratedYamlAssetPaths[i]);
+                AddGeneratedFingerprintPath(paths, seen, GeneratedYamlAssetPaths[i] + ".meta");
             }
 
             var generatedSourcePaths = new[]
@@ -363,15 +366,55 @@ namespace RocketFooxball.Editor
             };
             for (var i = 0; i < generatedSourcePaths.Length; i++)
             {
-                paths.Add(generatedSourcePaths[i]);
-                paths.Add(generatedSourcePaths[i] + ".meta");
+                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i]);
+                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i] + ".meta");
             }
 
-            paths.Add("ProjectSettings/EditorBuildSettings.asset");
-            paths.Add("ProjectSettings/DynamicsManager.asset");
-            paths.Add("ProjectSettings/TimeManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
+            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TimeManager.asset");
             paths.Sort(StringComparer.Ordinal);
-            return paths.ToArray();
+            var result = paths.ToArray();
+            ValidateGeneratedFingerprintPathList(result);
+            return result;
+        }
+
+        private static void AddGeneratedFingerprintPath(List<string> paths, HashSet<string> seen, string path)
+        {
+            var normalizedPath = NormalizeRepositoryRelativePath(path);
+            if (!seen.Add(normalizedPath))
+            {
+                throw new InvalidOperationException("Duplicate generated fingerprint path: " + normalizedPath);
+            }
+            paths.Add(normalizedPath);
+        }
+
+        private static void ValidateGeneratedFingerprintPathList(string[] paths)
+        {
+            if (paths == null || paths.Length == 0)
+            {
+                throw new InvalidOperationException("Generated fingerprint path list is empty.");
+            }
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (var i = 0; i < paths.Length; i++)
+            {
+                var path = paths[i];
+                var normalizedPath = NormalizeRepositoryRelativePath(path);
+                if (!string.Equals(path, normalizedPath, StringComparison.Ordinal) || !seen.Add(path))
+                {
+                    throw new InvalidOperationException("Generated fingerprint path list is unsafe or duplicated: " + path);
+                }
+            }
+
+            for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+            {
+                var yamlPath = NormalizeRepositoryRelativePath(GeneratedYamlAssetPaths[i]);
+                if (!seen.Contains(yamlPath) || !seen.Contains(yamlPath + ".meta"))
+                {
+                    throw new InvalidOperationException("Generated YAML asset fingerprint coverage is incomplete: " + yamlPath);
+                }
+            }
         }
 
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
@@ -1577,6 +1620,7 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("build manifest fingerprint path list is stale");
             }
+            ValidateGeneratedFingerprintPathList(manifest.fingerprintPaths);
             for (var i = 0; i < GeneratedFingerprintPaths.Length; i++)
             {
                 var expectedPath = GeneratedFingerprintPaths[i];
@@ -1833,16 +1877,28 @@ namespace RocketFooxball.Editor
             material.SetTexture("_OcclusionMap", specification.OcclusionMap);
             material.SetTexture("_EmissionMap", specification.EmissionMap);
             material.SetTexture("_DetailNormalMap", specification.DetailNormalMap);
+            material.SetFloat("_DetailNormalMapScale", 1f);
             material.SetTextureScale("_BaseMap", specification.TextureScale);
             if (specification.NormalMap != null) material.EnableKeyword("_NORMALMAP"); else material.DisableKeyword("_NORMALMAP");
             if (specification.MetallicGlossMap != null) material.EnableKeyword("_METALLICSPECGLOSSMAP"); else material.DisableKeyword("_METALLICSPECGLOSSMAP");
             if (specification.OcclusionMap != null) material.EnableKeyword("_OCCLUSIONMAP"); else material.DisableKeyword("_OCCLUSIONMAP");
             if (specification.EmissionMap != null || specification.EmissionStrength > 0.001f) material.EnableKeyword("_EMISSION"); else material.DisableKeyword("_EMISSION");
-            if (specification.DetailNormalMap != null) material.EnableKeyword("_DETAIL"); else material.DisableKeyword("_DETAIL");
+            SetDetailNormalKeyword(material, specification.DetailNormalMap != null);
             material.SetFloat("_SmoothnessTextureChannel", 0f);
             material.enableInstancing = true;
             EditorUtility.SetDirty(material);
             return material;
+        }
+
+        private static void SetDetailNormalKeyword(Material material, bool enabled)
+        {
+            material.DisableKeyword("_DETAIL");
+            material.DisableKeyword("_DETAIL_MULX2");
+            material.DisableKeyword("_DETAIL_SCALED");
+            if (enabled)
+            {
+                material.EnableKeyword(DetailNormalKeyword);
+            }
         }
 
         private static Material GetOrCreateGridMaterial(string name, Vector2 gridScale)
@@ -2967,28 +3023,28 @@ namespace RocketFooxball.Editor
         {
             var floor = Require(arena.transform.Find("Floor"), "Arena Floor");
             var floorRenderer = Require(floor.GetComponent<Renderer>(), "Arena Floor renderer");
-            ValidatePbrMaterial(floorRenderer.sharedMaterial, LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, new Vector2(32.5f, 22.5f), "Floor");
+            ValidatePbrMaterial(floorRenderer.sharedMaterial, LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), "Floor");
             ValidatePbrScalars(floorRenderer.sharedMaterial, 1f, 1f, 0.75f, 0.65f, 0f, "Floor");
             ValidateEmission(floorRenderer.sharedMaterial, Color.clear, 0f, "Floor");
-            ValidatePbrMaterial(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, new Vector2(8f, 2f), "Wall");
+            ValidatePbrMaterial(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), "Wall");
             ValidatePbrScalars(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, 1f, 1f, 0.80f, 0.80f, 0f, "Wall");
             ValidateEmission(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, Color.clear, 0f, "Wall");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, new Vector2(4f, 1f), "Trim");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), "Trim");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), 1f, 1f, 0.80f, 1f, 0f, "Trim");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), Color.clear, 0f, "Trim");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Hazard.mat"), LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, new Vector2(4f, 1f), "Hazard");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Hazard.mat"), LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), "Hazard");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Hazard.mat"), 1f, 1f, 0.80f, 0.75f, 0f, "Hazard");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Hazard.mat"), Color.clear, 0f, "Hazard");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"), LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, Vector2.one, "ArenaPrimary");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"), LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, "ArenaPrimary");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"), 1f, 1f, 0.80f, 0.80f, 0f, "ArenaPrimary");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaPrimary.mat"), Color.clear, 0f, "ArenaPrimary");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaTrim.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, Vector2.one, "ArenaTrim");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaTrim.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, "ArenaTrim");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaTrim.mat"), 1f, 1f, 0.80f, 1f, 0f, "ArenaTrim");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaTrim.mat"), Color.clear, 0f, "ArenaTrim");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat"), LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, Vector2.one, "ArenaHazard");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat"), LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, "ArenaHazard");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat"), 1f, 1f, 0.80f, 0.75f, 0f, "ArenaHazard");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat"), Color.clear, 0f, "ArenaHazard");
-            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, Vector2.one, "ArenaGlow");
+            ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, "ArenaGlow");
             ValidatePbrScalars(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat"), 1f, 1f, 0.80f, 1f, 2f, "ArenaGlow");
             ValidateEmission(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat"), new Color(0.10f, 0.95f, 0.88f, 1f), 2f, "ArenaGlow");
             var colliders = arena.GetComponentsInChildren<Collider>(true);
@@ -3206,9 +3262,20 @@ namespace RocketFooxball.Editor
 
         private static void ValidatePbrMaterial(Material material, Texture2D baseMap, Texture2D normalMap, Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, Vector2 scale, string label)
         {
+            ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, null, scale, label);
+        }
+
+        private static void ValidatePbrMaterial(Material material, Texture2D baseMap, Texture2D normalMap, Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, Texture2D detailNormalMap, Vector2 scale, string label)
+        {
             if (material == null || material.shader == null || material.shader.name != LitShaderName) throw new InvalidOperationException(label + " must use URP Lit.");
             if (material.GetTexture("_BaseMap") != (baseMap != null ? baseMap : Texture2D.whiteTexture)) throw new InvalidOperationException(label + " base texture mismatch.");
             if (material.GetTexture("_BumpMap") != normalMap || material.GetTexture("_MetallicGlossMap") != metallicMap || material.GetTexture("_OcclusionMap") != occlusionMap || material.GetTexture("_EmissionMap") != emissionMap) throw new InvalidOperationException(label + " PBR map routing mismatch.");
+            if (material.GetTexture("_DetailNormalMap") != detailNormalMap) throw new InvalidOperationException(label + " detail normal map mismatch.");
+            var detailEnabled = detailNormalMap != null;
+            if (material.IsKeywordEnabled("_DETAIL") || material.IsKeywordEnabled("_DETAIL_SCALED") || material.IsKeywordEnabled("_DETAIL_MULX2") != detailEnabled)
+            {
+                throw new InvalidOperationException(label + " detail normal keyword contract mismatch.");
+            }
             if (material.GetTextureScale("_BaseMap") != scale) throw new InvalidOperationException(label + " texture scale mismatch.");
         }
 
@@ -3294,7 +3361,7 @@ namespace RocketFooxball.Editor
             var metallic = label == "WeaponMetal" ? LoadTexture(WeaponMetalMetallicTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkMetallicTexturePath) : LoadTexture(WeaponAccentMetallicTexturePath);
             var occlusion = label == "WeaponMetal" ? LoadTexture(WeaponMetalOcclusionTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkOcclusionTexturePath) : LoadTexture(WeaponAccentOcclusionTexturePath);
             var emission = label == "WeaponAccent" ? LoadTexture(WeaponAccentEmissionTexturePath) : null;
-            ValidatePbrMaterial(material, texture, normal, metallic, occlusion, emission, Vector2.one, label);
+            ValidatePbrMaterial(material, texture, normal, metallic, occlusion, emission, LoadTexture(DetailNormalTexturePath), Vector2.one, label);
             ValidatePbrScalars(material, 1f, 1f, 0.90f, 1f, label == "WeaponAccent" ? 1.5f : 0f, label);
             ValidateEmission(material, label == "WeaponAccent" ? new Color(1f, 0.16f, 0.03f, 1f) : Color.clear, label == "WeaponAccent" ? 1.5f : 0f, label);
             if (material.IsKeywordEnabled("_EMISSION") != (label == "WeaponAccent")) throw new InvalidOperationException(label + " emission keyword contract mismatch.");
@@ -3374,8 +3441,14 @@ namespace RocketFooxball.Editor
             if (importer != null) importer.ReadTextureSettings(settings);
             var platform = importer != null ? importer.GetDefaultPlatformTextureSettings() : default(TextureImporterPlatformSettings);
             var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            var expectedHeight = path == BallTexturePath ? 512 : expectedSize;
-            if (importer == null || texture == null || texture.width != expectedSize || texture.height != expectedHeight || importer.textureType != textureType || importer.sRGBTexture != sRgb || !importer.mipmapEnabled || importer.filterMode != filterMode || importer.anisoLevel != anisoLevel || importer.maxTextureSize != expectedSize || importer.wrapModeU != wrapU || importer.wrapModeV != wrapV || importer.wrapModeW != TextureWrapMode.Clamp || !settings.ignoreMipmapLimit || platform.overridden || platform.maxTextureSize != expectedSize || platform.textureCompression != TextureImporterCompression.CompressedHQ)
+            var expectedWidth = expectedSize;
+            var expectedHeight = expectedSize;
+            if (path == BallTexturePath || path == BallNormalTexturePath || path == BallMetallicTexturePath || path == BallOcclusionTexturePath)
+            {
+                expectedWidth = 1024;
+                expectedHeight = 512;
+            }
+            if (importer == null || texture == null || texture.width != expectedWidth || texture.height != expectedHeight || importer.textureType != textureType || importer.sRGBTexture != sRgb || !importer.mipmapEnabled || importer.filterMode != filterMode || importer.anisoLevel != anisoLevel || importer.maxTextureSize != expectedWidth || importer.wrapModeU != wrapU || importer.wrapModeV != wrapV || importer.wrapModeW != TextureWrapMode.Clamp || !settings.ignoreMipmapLimit || platform.overridden || platform.maxTextureSize != expectedWidth || platform.textureCompression != TextureImporterCompression.CompressedHQ)
             {
                 throw new InvalidOperationException("Texture importer contract invalid: " + path);
             }
