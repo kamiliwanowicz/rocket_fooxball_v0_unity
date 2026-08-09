@@ -406,8 +406,9 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("MovementLab pre-bake evidence path is not durable: " + fullPath);
             }
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("Unable to resolve pre-bake evidence directory."));
-            var temporaryPath = fullPath + ".tmp-" + Guid.NewGuid().ToString("N");
+            var directory = Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("Unable to resolve pre-bake evidence directory.");
+            Directory.CreateDirectory(directory);
+            var temporaryPath = Path.Combine(directory, ".tmp-" + Guid.NewGuid().ToString("N"));
             try
             {
                 var bytes = new System.Text.UTF8Encoding(false).GetBytes(content);
