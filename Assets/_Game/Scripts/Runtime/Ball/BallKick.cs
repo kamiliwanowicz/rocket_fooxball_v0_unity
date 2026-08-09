@@ -1,9 +1,13 @@
 using System;
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Input;
+using RocketFooxball.Runtime.Movement;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Ball
 {
     /// <summary>Fresh-press kick buffer and eligibility owner. BallMotor remains sole velocity owner.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class BallKick : MonoBehaviour
     {
         [Header("References")]
@@ -146,7 +150,7 @@ namespace RocketFooxball
             // ball briefly, so treat that overlap as ball contact instead of
             // leaving the buffered kick pending until the camera exits again.
             var aimOriginInsideBall = (ballSurfacePoint - origin).sqrMagnitude <= Epsilon;
-            if (!aimOriginInsideBall && Physics.Raycast(origin, direction, out var hit, kickRange, ~0, QueryTriggerInteraction.Ignore))
+            if (!aimOriginInsideBall && UnityEngine.Physics.Raycast(origin, direction, out var hit, kickRange, ~0, QueryTriggerInteraction.Ignore))
             {
                 var hitBall = hit.collider.GetComponentInParent<BallMotor>();
                 if (hitBall != ball)

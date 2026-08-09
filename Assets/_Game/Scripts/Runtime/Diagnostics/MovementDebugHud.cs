@@ -1,7 +1,13 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Match;
+using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Weapons;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Diagnostics
 {
+    [MovedFrom("RocketFooxball")]
     public sealed class MovementDebugHud : MonoBehaviour
     {
         [SerializeField] private PlayerMotor player;

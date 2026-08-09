@@ -1,11 +1,15 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Ball;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Match
 {
     /// <summary>Detects ball-centre crossing of one goal plane and emits one score per entry.</summary>
     [RequireComponent(typeof(Collider))]
+    [MovedFrom("RocketFooxball")]
     public sealed class GoalTrigger : MonoBehaviour
     {
+        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "GoalTrigger.GoalSide")]
         public enum GoalSide
         {
             North,

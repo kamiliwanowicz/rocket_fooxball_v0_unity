@@ -1,8 +1,10 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Feedback
 {
     /// <summary>Detaches a projectile's world-space trail on impact and lets emitted particles fade out.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class RocketTrailVfx : MonoBehaviour
     {
         [SerializeField] private ParticleSystem[] particleSystems;

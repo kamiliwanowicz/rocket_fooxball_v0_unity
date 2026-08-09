@@ -1,8 +1,11 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Movement;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Feedback
 {
     /// <summary>Visual-only player feedback. Sole owner of camera pose, FOV, shake, and goal orbit.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class PlayerCameraFeedback : MonoBehaviour
     {
         [Header("References")]

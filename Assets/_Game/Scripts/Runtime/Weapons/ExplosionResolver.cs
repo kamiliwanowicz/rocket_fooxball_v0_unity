@@ -1,8 +1,13 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Movement;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Weapons
 {
     /// <summary>Resolves radial blast falloff, geometry occlusion, and additive player/ball impulses.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class ExplosionResolver : MonoBehaviour
     {
         [Header("Blast")]
@@ -44,7 +49,7 @@ namespace RocketFooxball
                 explosionVfx?.Play();
             }
 
-            var overlapCount = Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
+            var overlapCount = UnityEngine.Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
             var playerCount = 0;
             var ballCount = 0;
 
@@ -308,7 +313,7 @@ namespace RocketFooxball
             }
 
             var direction = offset / distance;
-            if (!Physics.Raycast(origin, direction, out var hit, Mathf.Max(distance - 0.01f, 0f), ~0, QueryTriggerInteraction.Ignore))
+            if (!UnityEngine.Physics.Raycast(origin, direction, out var hit, Mathf.Max(distance - 0.01f, 0f), ~0, QueryTriggerInteraction.Ignore))
             {
                 return false;
             }

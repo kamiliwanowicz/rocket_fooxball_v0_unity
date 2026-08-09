@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using RocketFooxball;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;

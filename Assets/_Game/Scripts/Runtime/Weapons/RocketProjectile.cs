@@ -1,10 +1,13 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Feedback;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Weapons
 {
     /// <summary>Constant-velocity projectile. Collision only requests one explosion; it never applies direct impact force.</summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(Collider))]
+    [MovedFrom("RocketFooxball")]
     public sealed class RocketProjectile : MonoBehaviour
     {
         [SerializeField, Min(1f)] private float speed = 48f;
@@ -50,7 +53,7 @@ namespace RocketFooxball
             }
 
             var distance = speed * deltaTime;
-            if (distance > 0f && Physics.Raycast(body.position, flightDirection, out var hit, distance + ColliderRadius(), ~0, QueryTriggerInteraction.Ignore))
+            if (distance > 0f && UnityEngine.Physics.Raycast(body.position, flightDirection, out var hit, distance + ColliderRadius(), ~0, QueryTriggerInteraction.Ignore))
             {
                 if (!ShouldIgnore(hit.collider))
                 {
@@ -99,7 +102,7 @@ namespace RocketFooxball
         {
             if (projectileCollider != null && other != null && projectileCollider != other)
             {
-                Physics.IgnoreCollision(projectileCollider, other, true);
+                UnityEngine.Physics.IgnoreCollision(projectileCollider, other, true);
             }
         }
 

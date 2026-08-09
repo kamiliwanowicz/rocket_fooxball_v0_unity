@@ -1,10 +1,12 @@
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
+using UnityEngine.Scripting.APIUpdating;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Rendering
 {
     /// <summary>Applies quality-dependent state to one gameplay camera. Project assets stay editor-owned.</summary>
     [DisallowMultipleComponent]
+    [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "GraphicsQualityRuntime")]
     public sealed class GraphicsQualityRuntime : MonoBehaviour
     {
         public const int HighQualityIndex = 0;

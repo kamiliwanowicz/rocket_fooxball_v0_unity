@@ -1,8 +1,10 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Feedback
 {
     /// <summary>Owns one-shot particle playback and lifetime cleanup for an explosion.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class ExplosionVfx : MonoBehaviour
     {
         private const float MaxVisualLifetime = 1.25f;

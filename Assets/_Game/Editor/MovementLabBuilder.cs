@@ -3,7 +3,15 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using RocketFooxball;
+using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Diagnostics;
+using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Input;
+using RocketFooxball.Runtime.Match;
+using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Physics;
+using RocketFooxball.Runtime.Rendering;
+using RocketFooxball.Runtime.Weapons;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -97,7 +105,7 @@ namespace RocketFooxball.Editor
         private const string GridLongWallMaterialPath = MaterialsPath + "/ContainmentGridLongWall.mat";
         private const string GridEndWallMaterialPath = MaterialsPath + "/ContainmentGridEndWall.mat";
         private const string BuilderSourcePath = "Assets/_Game/Editor/MovementLabBuilder.cs";
-        private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/RocketLauncher.cs";
+        private const string RocketLauncherSourcePath = "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs";
         private const string RocketGeneratorSourcePath = "Tools/Blender/generate_low_poly_rocket.py";
         private const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         private const string SkyTexturePath = TexturesPath + "/RetroSunnySky.png";
@@ -547,7 +555,7 @@ namespace RocketFooxball.Editor
             if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
 
             RegisterBuildScene();
-            Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
+            UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
             SetProjectFixedTimestep();
 
             GameObject explosionPrefabProbe = null;
@@ -1824,7 +1832,7 @@ namespace RocketFooxball.Editor
                     for (var z = -36f; z <= 36f; z += 18f)
                     {
                         var position = new Vector3(x, y, z);
-                        var overlaps = Physics.OverlapSphere(position, 0.20f, ~0, QueryTriggerInteraction.Ignore);
+                        var overlaps = UnityEngine.Physics.OverlapSphere(position, 0.20f, ~0, QueryTriggerInteraction.Ignore);
                         var blocked = false;
                         for (var i = 0; i < overlaps.Length; i++)
                         {
@@ -2245,15 +2253,15 @@ namespace RocketFooxball.Editor
                 ShieldShaderPath,
                 SkyShaderPath,
                 "Assets/_Game/Editor/GraphicsQualityConfigurator.cs",
-                "Assets/_Game/Scripts/Runtime/GraphicsQualityRuntime.cs",
-                "Assets/_Game/Scripts/Runtime/ExplosionVfx.cs",
-                "Assets/_Game/Scripts/Runtime/RocketTrailVfx.cs",
-                "Assets/_Game/Scripts/Runtime/PlayerMotor.cs",
-                "Assets/_Game/Scripts/Runtime/PlayerPresentation.cs",
-                "Assets/_Game/Scripts/Runtime/BallKick.cs",
-                "Assets/_Game/Scripts/Runtime/BallMotor.cs",
-                "Assets/_Game/Scripts/Runtime/ExplosionResolver.cs",
-                "Assets/_Game/Scripts/Runtime/RocketProjectile.cs",
+                "Assets/_Game/Scripts/Runtime/Rendering/GraphicsQualityRuntime.cs",
+                "Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs",
+                "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs",
+                "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
+                "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
+                "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
+                "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
+                "Assets/_Game/Scripts/Runtime/Weapons/ExplosionResolver.cs",
+                "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs",
                 RocketLauncherSourcePath,
                 "Tools/Blender/generate_retro_textures.py",
                 "Tools/Blender/generate_arena_kit.py",
@@ -3439,7 +3447,7 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("Fixed timestep is not 60 Hz.");
             }
-            if (Mathf.Abs(Physics.gravity.y + GamePhysicsSettings.GravityMagnitude) > 0.0001f || Mathf.Abs(Physics.gravity.x) > 0.0001f || Mathf.Abs(Physics.gravity.z) > 0.0001f)
+            if (Mathf.Abs(UnityEngine.Physics.gravity.y + GamePhysicsSettings.GravityMagnitude) > 0.0001f || Mathf.Abs(UnityEngine.Physics.gravity.x) > 0.0001f || Mathf.Abs(UnityEngine.Physics.gravity.z) > 0.0001f)
             {
                 throw new InvalidOperationException("Physics gravity does not match shared GamePhysicsSettings.");
             }

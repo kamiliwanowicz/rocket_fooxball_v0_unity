@@ -1,9 +1,13 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Input;
+using RocketFooxball.Runtime.Movement;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Weapons
 {
     /// <summary>Held-fire owner. Tracks every active rocket and owns launcher cooldown/cleanup.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class RocketLauncher : MonoBehaviour
     {
         [Header("References")]
@@ -129,7 +133,7 @@ namespace RocketFooxball
                 var second = other.ProjectileCollider;
                 if (first != null && second != null)
                 {
-                    Physics.IgnoreCollision(first, second, true);
+                    UnityEngine.Physics.IgnoreCollision(first, second, true);
                 }
             }
             activeProjectiles.Add(projectile);

@@ -1,7 +1,10 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Input;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Movement
 {
+    [MovedFrom("RocketFooxball")]
     public sealed class PlayerLook : MonoBehaviour
     {
         [SerializeField] private PlayerInputReader input;

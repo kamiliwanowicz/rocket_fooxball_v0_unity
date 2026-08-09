@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Movement
 {
     /// <summary>Pure, fixed-step movement helpers. Inputs and physics state stay in the caller.</summary>
     public static class MovementMath

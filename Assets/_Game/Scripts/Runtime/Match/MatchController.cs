@@ -1,10 +1,18 @@
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Input;
+using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Weapons;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Match
 {
     /// <summary>Single owner for score, goal freeze, gameplay gate, celebration camera, and reset timing.</summary>
+    [MovedFrom("RocketFooxball")]
     public sealed class MatchController : MonoBehaviour
     {
+        [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "MatchController.MatchState")]
         public enum MatchState
         {
             Playing,

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Physics
 {
     /// <summary>Locks gameplay simulation to the shared 60 Hz and gravity contract.</summary>
     public static class GamePhysicsSettings
@@ -14,7 +14,7 @@ namespace RocketFooxball
         private static void Apply()
         {
             Time.fixedDeltaTime = FixedDeltaTime;
-            Physics.gravity = Vector3.down * GravityMagnitude;
+            UnityEngine.Physics.gravity = Vector3.down * GravityMagnitude;
         }
     }
 }

@@ -1,9 +1,13 @@
 using System;
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Input;
+using RocketFooxball.Runtime.Physics;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Movement
 {
     [RequireComponent(typeof(CharacterController))]
+    [MovedFrom("RocketFooxball")]
     public sealed class PlayerMotor : MonoBehaviour
     {
         [Header("Ground Movement")]

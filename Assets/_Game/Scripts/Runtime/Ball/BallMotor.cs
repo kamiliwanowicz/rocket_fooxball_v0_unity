@@ -1,11 +1,14 @@
 using System;
 using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Movement;
 
-namespace RocketFooxball
+namespace RocketFooxball.Runtime.Ball
 {
     /// <summary>Single owner for ball Rigidbody velocity, impulses, contact assist, and reset state.</summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(Collider))]
+    [MovedFrom("RocketFooxball")]
     public sealed class BallMotor : MonoBehaviour
     {
         [Header("References")]
@@ -263,7 +266,7 @@ namespace RocketFooxball
                 var shield = goalShieldColliders[i];
                 if (shield != null && shield != ballCollider)
                 {
-                    Physics.IgnoreCollision(ballCollider, shield, true);
+                    UnityEngine.Physics.IgnoreCollision(ballCollider, shield, true);
                 }
             }
         }
