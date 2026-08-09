@@ -1,4 +1,4 @@
-"""Generate deterministic bright retro textures and diagnostic previews."""
+"""Generate deterministic retro textures and diagnostic previews."""
 
 import math
 import os
@@ -19,6 +19,9 @@ TEXTURE_PATHS = {
     for name in (
         "RetroGrass",
         "RetroBall",
+        "RetroWeaponMetal",
+        "RetroWeaponDark",
+        "RetroWeaponAccent",
         "RetroExplosion",
         "RetroSmoke",
         "RetroWall",
@@ -255,52 +258,163 @@ def angular_distance(a, b):
     return abs((a - b + math.pi) % math.tau - math.pi)
 
 
+def vector_from_latitude_longitude(latitude, longitude):
+    cos_latitude = math.cos(latitude)
+    return (
+        cos_latitude * math.cos(longitude),
+        math.sin(latitude),
+        cos_latitude * math.sin(longitude),
+    )
+
+
+def dot3(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def cross3(a, b):
+    return (
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    )
+
+
+def normalize3(vector):
+    length = math.sqrt(dot3(vector, vector))
+    if length <= 1.0e-8:
+        return (0.0, 0.0, 1.0)
+    return tuple(component / length for component in vector)
+
+
+def regular_polygon_boundary(radius, angle, sides=5):
+    """Return radial boundary for a regular polygon with circumradius ``radius``."""
+    sector = math.tau / sides
+    offset = (angle + sector * 0.5) % sector - sector * 0.5
+    return radius * math.cos(math.pi / sides) / max(0.20, math.cos(offset))
+
+
 def generate_ball():
+    """Generate a clean black/white football equirectangular texture."""
     width, height = 256, 128
     pixels = make_buffer(width, height)
-    orange = (1.0, 0.26, 0.025, 1.0)
-    orange_dark = (0.50, 0.035, 0.015, 1.0)
-    cream = (1.0, 0.88, 0.50, 1.0)
-    ink = (0.015, 0.012, 0.018, 1.0)
+    rng = random.Random(SEED ^ 0xB411)
+
+    # Pentagon centres distributed in latitude bands.  Local tangent frames
+    # avoid longitude seams and polar singularities during projection.
+    centres = []
+    for latitude, count, longitude_offset in (
+        (0.0, 6, 0.0),
+        (0.58, 5, math.pi / 5.0),
+        (-0.58, 5, 0.0),
+    ):
+        for index in range(count):
+            longitude = longitude_offset + math.tau * index / count
+            centre = vector_from_latitude_longitude(latitude, longitude)
+            north = (0.0, 1.0, 0.0)
+            tangent_v = normalize3(
+                (
+                    north[0] - centre[0] * dot3(north, centre),
+                    north[1] - centre[1] * dot3(north, centre),
+                    north[2] - centre[2] * dot3(north, centre),
+                )
+            )
+            tangent_u = normalize3(cross3(tangent_v, centre))
+            centres.append((centre, tangent_u, tangent_v, rng.random() * math.tau))
 
     for y in range(height):
         latitude = -math.pi / 2.0 + math.pi * y / (height - 1)
-        pole_fade = math.sin(latitude + math.pi / 2.0) ** 2
         for x in range(width):
             longitude = -math.pi + math.tau * x / (width - 1)
-            wave = math.sin(longitude * 3.0 + 0.4) * math.cos(latitude * 2.0)
-            base = rgba_mix(orange_dark, orange, 0.72 + 0.16 * wave)
+            point = vector_from_latitude_longitude(latitude, longitude)
 
-            panel_distance = math.sqrt(
-                (angular_distance(longitude, 0.42) / 0.92) ** 2
-                + ((latitude + 0.03) / 0.66) ** 2
+            leather = 0.5 + 0.5 * (
+                0.55 * math.sin(point[0] * 17.0 + point[2] * 9.0)
+                + 0.45 * math.sin(point[0] * 31.0 - point[1] * 13.0 + 0.7)
             )
-            panel = (1.0 - smoothstep(0.72, 1.0, panel_distance)) * pole_fade
-            color = rgba_mix(base, cream, panel)
+            white = (0.90 + 0.035 * leather, 0.90 + 0.035 * leather, 0.87 + 0.035 * leather, 1.0)
+            colour = white
+            nearest_seam = False
+            for centre, tangent_u, tangent_v, orientation in centres:
+                cosine = max(-1.0, min(1.0, dot3(point, centre)))
+                angular = math.acos(cosine)
+                tangent = (dot3(point, tangent_u), dot3(point, tangent_v))
+                angle = math.atan2(tangent[1], tangent[0]) - orientation
+                polygon_radius = regular_polygon_boundary(0.27, angle)
+                # Angular radius keeps pentagons stable at every latitude.
+                local_radius = angular
+                seam_radius = polygon_radius + 0.040
+                if local_radius <= polygon_radius:
+                    colour = (0.010, 0.012, 0.016, 1.0)
+                    nearest_seam = False
+                    break
+                if local_radius <= seam_radius:
+                    nearest_seam = True
+            if nearest_seam:
+                colour = (0.055, 0.060, 0.066, 1.0)
+            pixels[y * width + x] = colour
 
-            eye_distance = math.sqrt(
-                (angular_distance(longitude, 0.22) / 0.22) ** 2
-                + ((latitude - 0.04) / 0.18) ** 2
-            )
-            pupil_distance = math.sqrt(
-                (angular_distance(longitude, 0.17) / 0.075) ** 2
-                + ((latitude - 0.055) / 0.085) ** 2
-            )
-            slash = abs(latitude + 0.34 - 0.20 * math.sin(longitude - 1.25)) < 0.035
-            slash = slash and angular_distance(longitude, 1.36) < 0.62
-            if pole_fade > 0.08 and eye_distance < 1.0:
-                color = ink
-                if pupil_distance < 1.0:
-                    color = orange
-            if pole_fade > 0.12 and slash:
-                color = ink
-            pixels[y * width + x] = color
-
+    # Duplicate borders and pole rows satisfy spherical texture sampling.
     for x in range(width):
-        pixels[x] = orange_dark
-        pixels[(height - 1) * width + x] = orange_dark
+        pixels[x] = pixels[0]
+        pixels[(height - 1) * width + x] = pixels[(height - 1) * width]
     for y in range(height):
         pixels[y * width + width - 1] = pixels[y * width]
+    return width, height, pixels
+
+
+def generate_weapon_material(kind):
+    """Generate low-resolution, UV-safe industrial weapon texture."""
+    width = height = 128
+    seed_by_kind = {"metal": 0xA1, "dark": 0xA2, "accent": 0xA3}
+    rng = random.Random(SEED ^ seed_by_kind[kind])
+    phases = periodic_phases(rng, 12, max_frequency=17)
+    pixels = make_buffer(width, height)
+
+    palettes = {
+        "metal": ((0.17, 0.12, 0.085, 1.0), (0.46, 0.34, 0.20, 1.0), (0.70, 0.57, 0.36, 1.0)),
+        "dark": ((0.018, 0.023, 0.030, 1.0), (0.065, 0.078, 0.086, 1.0), (0.16, 0.17, 0.16, 1.0)),
+        "accent": ((0.20, 0.018, 0.010, 1.0), (0.56, 0.065, 0.025, 1.0), (0.86, 0.24, 0.055, 1.0)),
+    }
+    shadow, base, highlight = palettes[kind]
+
+    for y in range(height):
+        for x in range(width):
+            u = x / width
+            v = y / height
+            noise = periodic_noise(u, v, phases)
+            quantized = round(clamp01(0.52 + noise * 0.34) * 7.0) / 7.0
+            colour = rgba_mix(shadow, base, quantized)
+            if quantized > 0.66:
+                colour = rgba_mix(colour, highlight, (quantized - 0.66) / 0.34)
+
+            panel_x = x % 32
+            panel_y = y % 32
+            if panel_x in (0, 1) or panel_y in (0, 1):
+                colour = rgba_mix(shadow, colour, 0.34)
+            elif panel_x in (2, 3) or panel_y in (2, 3):
+                colour = rgba_mix(colour, highlight, 0.28)
+            if (x // 16 + y // 16) % 2 == 0 and 6 <= panel_x % 16 <= 9 and panel_y % 16 in (7, 8):
+                colour = rgba_mix(colour, highlight, 0.42)
+
+            if kind == "dark":
+                vent = y % 16
+                if 5 <= vent <= 7 and (x // 8) % 2 == 0:
+                    colour = rgba_mix(shadow, colour, 0.18)
+                elif vent == 4 and (x // 8) % 2 == 0:
+                    colour = rgba_mix(colour, highlight, 0.30)
+            elif kind == "accent":
+                if 48 <= x % 96 <= 55:
+                    colour = rgba_mix(colour, highlight, 0.42)
+                if y % 32 in (14, 15):
+                    colour = rgba_mix(colour, shadow, 0.44)
+            else:
+                if panel_x in (8, 9) and panel_y in (8, 9):
+                    colour = highlight
+                if (x + 2 * y) % 29 == 0:
+                    colour = rgba_mix(colour, highlight, 0.34)
+            pixels[y * width + x] = colour
+
+    close_repeat_edges(pixels, width, height)
     return width, height, pixels
 
 
@@ -308,7 +422,7 @@ def generate_radial_sprite(kind, variant):
     width = height = 32
     pixels = make_buffer(width, height)
     phase = (0.61 if kind == "explosion" else 1.73) + variant * 0.79
-    edge_base = (0.88 if kind == "explosion" else 0.82) + 0.035 * math.sin(variant * 1.9)
+    edge_base = (0.78 if kind == "explosion" else 0.84) + 0.035 * math.sin(variant * 1.9)
     for y in range(height):
         for x in range(width):
             nx = (x + 0.5 - width / 2.0) / (width / 2.0)
@@ -321,24 +435,37 @@ def generate_radial_sprite(kind, variant):
                 + 0.025 * math.sin(13.0 * angle + 0.8 + variant)
             )
             edge = edge_base + irregular
-            alpha = 1.0 - smoothstep(edge - 0.24, edge, radius)
             if kind == "explosion":
-                hot = (1.0, 0.94, 0.36, alpha)
-                orange = (1.0, 0.18 + 0.05 * variant, 0.018, alpha)
-                ember = (0.20, 0.010, 0.008, alpha)
-                color = rgba_mix(hot, orange, smoothstep(0.10, 0.52, radius))
-                color = rgba_mix(color, ember, smoothstep(0.52, edge, radius))
-                cavity = math.sqrt((nx + 0.22 * math.cos(variant)) ** 2 + (ny - 0.16) ** 2)
-                if cavity < 0.13:
-                    color = (0.14, 0.012, 0.009, alpha * 0.82)
+                # White/yellow core -> orange/red tongues. Dark smoke omitted.
+                alpha = 1.0 - smoothstep(edge - 0.18, edge, radius)
+                tongue = 0.5 + 0.5 * math.sin(5.0 * angle + phase + radius * 4.0)
+                if radius > 0.38 and tongue < 0.22:
+                    alpha *= 0.42
+                core = (1.0, 0.99, 0.82, alpha)
+                yellow = (1.0, 0.78, 0.12, alpha)
+                orange = (1.0, 0.25 + 0.03 * variant, 0.018, alpha)
+                red = (0.62, 0.028, 0.008, alpha)
+                colour = rgba_mix(core, yellow, smoothstep(0.10, 0.27, radius))
+                colour = rgba_mix(colour, orange, smoothstep(0.27, 0.56, radius))
+                colour = rgba_mix(colour, red, smoothstep(0.56, edge, radius))
             else:
-                core = (0.39, 0.37, 0.35, alpha * 0.90)
-                rim = (0.07, 0.075, 0.09, alpha * 0.60)
-                color = rgba_mix(core, rim, smoothstep(0.12, edge, radius))
-                puff = 0.12 * math.sin(4.0 * angle + 2.0 * radius + phase)
-                color = (color[0] + puff * alpha, color[1] + puff * alpha, color[2] + puff * alpha, color[3])
-                color = tuple(clamp01(component) for component in color)
-            pixels[y * width + x] = color
+                # Dense charcoal puffs with soft, transparent edge.
+                puff_wave = 0.5 + 0.5 * (
+                    0.62 * math.sin(5.0 * angle + phase)
+                    + 0.38 * math.sin(9.0 * angle - phase * 1.6)
+                )
+                puff_edge = edge + 0.10 * (puff_wave - 0.5)
+                density = 1.0 - smoothstep(0.14, puff_edge, radius)
+                alpha = clamp01(density)
+                highlight = (0.52, 0.49, 0.45, alpha)
+                core = (0.24, 0.23, 0.23, alpha)
+                shadow = (0.055, 0.062, 0.070, alpha * 0.92)
+                colour = rgba_mix(core, shadow, smoothstep(0.30, puff_edge, radius))
+                colour = rgba_mix(highlight, colour, smoothstep(0.10, 0.45, radius))
+                fleck = 0.10 * math.sin(7.0 * angle + radius * 8.0 + phase)
+                colour = (colour[0] + fleck * alpha, colour[1] + fleck * alpha, colour[2] + fleck * alpha, alpha)
+                colour = tuple(clamp01(component) for component in colour)
+            pixels[y * width + x] = colour
     return width, height, pixels
 
 
@@ -513,6 +640,9 @@ def make_previews(textures):
         [
             alpha_preview("07_explosion_sheet_alpha.png", textures["RetroExplosion"], scale=3),
             alpha_preview("08_smoke_sheet_alpha.png", textures["RetroSmoke"], scale=3),
+            tiled_preview("10_weapon_metal_tile.png", textures["RetroWeaponMetal"]),
+            tiled_preview("11_weapon_dark_tile.png", textures["RetroWeaponDark"]),
+            tiled_preview("12_weapon_accent_tile.png", textures["RetroWeaponAccent"]),
         ]
     )
 
@@ -524,6 +654,12 @@ def make_previews(textures):
     blit(atlas, 768, 512, textures["RetroShield"][2], 128, 128, 256, 0, scale=2, alpha_blend=True)
     blit(atlas, 768, 512, textures["RetroExplosion"][2], 128, 128, 512, 0, scale=2, alpha_blend=True)
     previews.append(("09_texture_atlas_overview.png", 768, 512, atlas))
+
+    weapon_atlas = checker(768, 256, 16)
+    blit(weapon_atlas, 768, 256, textures["RetroWeaponMetal"][2], 128, 128, 0, 0, scale=2)
+    blit(weapon_atlas, 768, 256, textures["RetroWeaponDark"][2], 128, 128, 256, 0, scale=2)
+    blit(weapon_atlas, 768, 256, textures["RetroWeaponAccent"][2], 128, 128, 512, 0, scale=2)
+    previews.append(("13_weapon_materials_atlas.png", 768, 256, weapon_atlas))
 
     for filename, width, height, pixels in previews:
         path = os.path.join(PREVIEW_DIRECTORY, filename)
@@ -543,6 +679,9 @@ def main():
         "RetroHazard": generate_hazard(),
         "RetroShield": generate_shield(),
         "RetroBall": generate_ball(),
+        "RetroWeaponMetal": generate_weapon_material("metal"),
+        "RetroWeaponDark": generate_weapon_material("dark"),
+        "RetroWeaponAccent": generate_weapon_material("accent"),
         "RetroExplosion": generate_sprite_sheet("explosion"),
         "RetroSmoke": generate_sprite_sheet("smoke"),
     }
@@ -553,6 +692,9 @@ def main():
         "RetroHazard": ((128, 128), True, True, False, None, False),
         "RetroShield": ((128, 128), False, False, False, (0.05, 0.70), False),
         "RetroBall": ((256, 128), True, False, True, None, False),
+        "RetroWeaponMetal": ((128, 128), True, True, False, None, False),
+        "RetroWeaponDark": ((128, 128), True, True, False, None, False),
+        "RetroWeaponAccent": ((128, 128), True, True, False, None, False),
         "RetroExplosion": ((128, 128), False, False, False, (0.01, 0.50), True),
         "RetroSmoke": ((128, 128), False, False, False, (0.01, 0.50), True),
     }
@@ -575,7 +717,7 @@ def main():
         print(f"OUTPUT {TEXTURE_PATHS[name]}: {os.path.getsize(TEXTURE_PATHS[name])} bytes")
 
     make_previews(textures)
-    print("AUDIT RetroTextures: PASS (8 textures, 9 previews, deterministic seed)")
+    print("AUDIT RetroTextures: PASS (11 textures, 13 previews, deterministic seed)")
 
 
 if __name__ == "__main__":
