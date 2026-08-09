@@ -295,11 +295,9 @@ namespace RocketFooxball.Editor
                     MovementLabPrefabPipeline.ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath));
 
                     ValidateReference(north, "ball", ballMotor, "NorthGoal.ball");
-                    ValidateReference(north, "match", match, "NorthGoal.match");
                     ValidateReference(north, "planeReference", north.transform, "NorthGoal.planeReference");
                     ValidateReference(north, "openingTrigger", north.GetComponent<Collider>(), "NorthGoal.openingTrigger");
                     ValidateReference(south, "ball", ballMotor, "SouthGoal.ball");
-                    ValidateReference(south, "match", match, "SouthGoal.match");
                     ValidateReference(south, "planeReference", south.transform, "SouthGoal.planeReference");
                     ValidateReference(south, "openingTrigger", south.GetComponent<Collider>(), "SouthGoal.openingTrigger");
 
@@ -312,6 +310,10 @@ namespace RocketFooxball.Editor
                     ValidateReference(match, "kick", kick, "MatchController.kick");
                     ValidateReference(match, "northGoal", north, "MatchController.northGoal");
                     ValidateReference(match, "southGoal", south, "MatchController.southGoal");
+                    if (typeof(GoalTrigger).GetEvent("GoalCrossed") == null || typeof(GoalTrigger).GetField("match", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) != null)
+                    {
+                        throw new InvalidOperationException("GoalTrigger event-owner contract invalid.");
+                    }
                     ValidateSerializedFloat(match, "goalFreezeDuration", GoalFreezeDuration, "MatchController.goalFreezeDuration");
                     ValidateSerializedVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f), "MatchController.ballResetPosition");
                     ValidateSerializedVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f), "MatchController.playerResetPosition");

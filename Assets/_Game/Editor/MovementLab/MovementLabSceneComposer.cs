@@ -164,8 +164,6 @@ namespace RocketFooxball.Editor
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
-                    SetObjectReference(arena.NorthGoal.Trigger, "match", match);
-                    SetObjectReference(arena.SouthGoal.Trigger, "match", match);
 
                     var hud = new GameObject("DebugHUD");
                     var hudComponent = hud.AddComponent<MovementDebugHud>();

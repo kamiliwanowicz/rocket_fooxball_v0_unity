@@ -10,6 +10,13 @@ namespace RocketFooxball.Runtime.Weapons
     [MovedFrom("RocketFooxball")]
     public sealed class RocketProjectile : MonoBehaviour
     {
+        public enum ProjectileState
+        {
+            Flying,
+            Detonated,
+            Cancelled
+        }
+
         [SerializeField, Min(1f)] private float speed = 48f;
         [SerializeField, Min(0.1f)] private float lifetime = 8f;
         [SerializeField] private Rigidbody body;
@@ -21,15 +28,17 @@ namespace RocketFooxball.Runtime.Weapons
         private RocketLauncher launcher;
         private Vector3 flightDirection = Vector3.forward;
         private float lifeRemaining;
-        private bool detonated;
+        private ProjectileState state;
         private bool simulationEnabled = true;
+        private bool unregistered;
 
         public Rigidbody Body => body;
         public Collider ProjectileCollider => projectileCollider;
         public Transform OwnerRoot => ownerRoot;
         public Vector3 Velocity => flightDirection * speed;
         public float Speed => speed;
-        public bool IsDetonated => detonated;
+        public bool IsDetonated => state == ProjectileState.Detonated;
+        public ProjectileState State => state;
 
         private void Awake()
         {
@@ -39,7 +48,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void FixedUpdate()
         {
-            if (!simulationEnabled || detonated || body == null)
+            if (!simulationEnabled || state != ProjectileState.Flying || body == null)
             {
                 return;
             }
@@ -48,7 +57,7 @@ namespace RocketFooxball.Runtime.Weapons
             lifeRemaining -= deltaTime;
             if (lifeRemaining <= 0f)
             {
-                TryDetonate(null, body.position);
+                TryDetonate(null, default, false);
                 return;
             }
 
@@ -57,7 +66,7 @@ namespace RocketFooxball.Runtime.Weapons
             {
                 if (!ShouldIgnore(hit.collider))
                 {
-                    TryDetonate(hit.collider, hit.point);
+                    TryDetonate(hit.collider, hit.point, true);
                     return;
                 }
             }
@@ -68,18 +77,23 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnCollisionEnter(Collision collision)
         {
-            if (collision == null || collision.collider == null)
+            if (state != ProjectileState.Flying || collision == null || collision.collider == null)
             {
                 return;
             }
 
             var point = collision.contactCount > 0 ? collision.GetContact(0).point : body.position;
-            TryDetonate(collision.collider, point);
+            TryDetonate(collision.collider, point, true);
         }
 
         private void OnTriggerEnter(Collider other)
         {
-            TryDetonate(other, other != null ? other.ClosestPoint(body != null ? body.position : transform.position) : transform.position);
+            if (state != ProjectileState.Flying)
+            {
+                return;
+            }
+
+            TryDetonate(other, other != null ? other.ClosestPoint(body != null ? body.position : transform.position) : default, other != null);
         }
 
         /// <summary>Initializes owner collision filters, world direction, and explosion callback.</summary>
@@ -91,8 +105,9 @@ namespace RocketFooxball.Runtime.Weapons
             explosionResolver = resolver != null ? resolver : explosionResolver;
             flightDirection = direction.sqrMagnitude > 0.000001f ? direction.normalized : transform.forward;
             lifeRemaining = lifetime;
-            detonated = false;
+            state = ProjectileState.Flying;
             simulationEnabled = true;
+            unregistered = false;
             ConfigureBody();
             IgnoreOwnerCollisions();
         }
@@ -109,13 +124,16 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Stops flight without changing transform; launcher normally destroys rockets on freeze.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
-            simulationEnabled = enabled;
+            if (state == ProjectileState.Flying)
+            {
+                simulationEnabled = enabled;
+            }
         }
 
         /// <summary>Requests one explosion and unregisters projectile before destruction.</summary>
-        public bool TryDetonate(Collider hitCollider, Vector3 hitPoint)
+        public bool TryDetonate(Collider hitCollider, Vector3 hitPoint, bool hasHitPoint)
         {
-            if (detonated)
+            if (state != ProjectileState.Flying)
             {
                 return false;
             }
@@ -124,19 +142,32 @@ namespace RocketFooxball.Runtime.Weapons
                 return false;
             }
 
-            detonated = true;
+            state = ProjectileState.Detonated;
             simulationEnabled = false;
-            var explosionPosition = hitPoint != Vector3.zero ? hitPoint : (body != null ? body.position : transform.position);
-            launcher?.UnregisterProjectile(this);
+            var explosionPosition = hasHitPoint ? hitPoint : (body != null ? body.position : transform.position);
+            UnregisterOnce();
             trailVfx?.DetachAndFade();
             explosionResolver?.ResolveExplosion(explosionPosition, this, hitCollider);
             Destroy(gameObject);
             return true;
         }
 
+        /// <summary>Cancels terminal flight before deferred destruction; cancelled rockets cannot detonate.</summary>
+        public void Cancel()
+        {
+            if (state != ProjectileState.Flying)
+            {
+                return;
+            }
+
+            state = ProjectileState.Cancelled;
+            simulationEnabled = false;
+            UnregisterOnce();
+        }
+
         private void OnDestroy()
         {
-            launcher?.UnregisterProjectile(this);
+            UnregisterOnce();
         }
 
         private void CacheReferences()
@@ -205,6 +236,17 @@ namespace RocketFooxball.Runtime.Weapons
 
             var extents = projectileCollider.bounds.extents;
             return Mathf.Max(extents.x, extents.y, extents.z);
+        }
+
+        private void UnregisterOnce()
+        {
+            if (unregistered)
+            {
+                return;
+            }
+
+            unregistered = true;
+            launcher?.UnregisterProjectile(this);
         }
     }
 }

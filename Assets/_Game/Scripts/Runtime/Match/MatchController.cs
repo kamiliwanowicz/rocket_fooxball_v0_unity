@@ -37,16 +37,16 @@ namespace RocketFooxball.Runtime.Match
         [SerializeField] private Vector3 playerResetPosition = new Vector3(3f, 0f, 0f);
         [SerializeField] private Vector3 resetLookTarget = Vector3.zero;
 
-        private MatchState state = MatchState.Playing;
+        private MatchRules.MatchState state = MatchRules.MatchState.Playing;
         private float freezeRemaining;
         private int northScore;
         private int southScore;
 
-        public MatchState State => state;
+        public MatchState State => (MatchState)state;
         public float FreezeRemaining => Mathf.Max(freezeRemaining, 0f);
         public int NorthScore => northScore;
         public int SouthScore => southScore;
-        public bool GameplayEnabled => state == MatchState.Playing;
+        public bool GameplayEnabled => state == MatchRules.MatchState.Playing;
 
         private void Awake()
         {
@@ -56,55 +56,67 @@ namespace RocketFooxball.Runtime.Match
             }
         }
 
+        private void OnEnable()
+        {
+            if (northGoal != null)
+            {
+                northGoal.GoalCrossed += OnGoalCrossed;
+            }
+            if (southGoal != null)
+            {
+                southGoal.GoalCrossed += OnGoalCrossed;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (northGoal != null)
+            {
+                northGoal.GoalCrossed -= OnGoalCrossed;
+            }
+            if (southGoal != null)
+            {
+                southGoal.GoalCrossed -= OnGoalCrossed;
+            }
+        }
+
         private void Update()
         {
-            if (state != MatchState.GoalFreeze)
+            if (state != MatchRules.MatchState.GoalFreeze)
             {
                 return;
             }
 
-            freezeRemaining = Mathf.Max(freezeRemaining - Time.unscaledDeltaTime, 0f);
+            freezeRemaining = MatchRules.AdvanceGoalFreeze(freezeRemaining, Time.unscaledDeltaTime);
             if (freezeRemaining <= 0f)
             {
                 ResetMatch();
             }
         }
 
-        /// <summary>Receives one goal event and starts unscaled five-second freeze.</summary>
-        public void NotifyGoal(GoalTrigger goal)
+        private void OnGoalCrossed(GoalTrigger goal)
         {
-            if (goal != null)
-            {
-                NotifyGoal(goal.Side);
-            }
-        }
-
-        /// <summary>Scores opposing side; own goals remain valid physics outcomes.</summary>
-        public void NotifyGoal(GoalTrigger.GoalSide goalSide)
-        {
-            if (state != MatchState.Playing)
+            if (goal == null)
             {
                 return;
             }
 
-            if (goalSide == GoalTrigger.GoalSide.North)
+            var transition = MatchRules.BeginGoal(state, northScore, southScore, goal.Side, goalFreezeDuration);
+            if (!transition.EnteredGoalFreeze)
             {
-                southScore++;
-            }
-            else
-            {
-                northScore++;
+                return;
             }
 
-            state = MatchState.GoalFreeze;
-            freezeRemaining = Mathf.Max(goalFreezeDuration, 0.1f);
-            SetGameplayEnabled(false);
+            state = transition.State;
+            freezeRemaining = transition.FreezeRemaining;
+            northScore = transition.NorthScore;
+            southScore = transition.SouthScore;
+            ApplyGameplayGate(false);
             launcher?.DestroyAllProjectiles();
             cameraFeedback?.BeginGoalCelebration(freezeRemaining);
         }
 
-        /// <summary>Explicit gameplay gate used by external reset tooling.</summary>
-        public void SetGameplayEnabled(bool enabled)
+        private void ApplyGameplayGate(bool enabled)
         {
             if (input != null)
             {
@@ -119,10 +131,7 @@ namespace RocketFooxball.Runtime.Match
         /// <summary>Immediate reset command; normal flow calls after unscaled freeze.</summary>
         public void ResetMatch()
         {
-            cameraFeedback?.EndGoalCelebration();
-            state = MatchState.Reset;
-            SetGameplayEnabled(false);
-            launcher?.DestroyAllProjectiles();
+            state = MatchRules.MatchState.Reset;
 
             if (ball != null)
             {
@@ -148,9 +157,9 @@ namespace RocketFooxball.Runtime.Match
             {
                 input.ResetInputState();
             }
-            SetGameplayEnabled(true);
             freezeRemaining = 0f;
-            state = MatchState.Playing;
+            state = MatchRules.CompleteReset();
+            ApplyGameplayGate(true);
         }
 
         /// <summary>Clears score and resets current frame without changing gameplay contract.</summary>

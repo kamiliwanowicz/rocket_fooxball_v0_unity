@@ -26,7 +26,8 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField, Min(0f)] private float contactAssistImpulseCap = 5f;
 
         private const float Epsilon = 0.000001f;
-        private Vector3 queuedImpulse;
+        private Vector3 queuedContactAssistImpulse;
+        private Vector3 queuedExternalImpulse;
         private bool groundedContact;
         private bool simulationEnabled = true;
         private bool freezeStored;
@@ -87,10 +88,12 @@ namespace RocketFooxball.Runtime.Ball
             var grounded = groundedContact;
             groundedContact = false;
 
+            var queuedImpulse = queuedContactAssistImpulse + queuedExternalImpulse;
+            queuedContactAssistImpulse = Vector3.zero;
+            queuedExternalImpulse = Vector3.zero;
             if (queuedImpulse.sqrMagnitude > Epsilon)
             {
                 body.AddForce(queuedImpulse, ForceMode.Impulse);
-                queuedImpulse = Vector3.zero;
             }
 
             if (grounded)
@@ -114,38 +117,26 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Queues an additive impulse for next fixed-step ball simulation.</summary>
         public void QueueImpulse(Vector3 impulse)
         {
-            if (!simulationEnabled || !IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
+            if (!simulationEnabled || !BallMotionRules.IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
             {
                 return;
             }
 
-            queuedImpulse += impulse;
+            queuedExternalImpulse += impulse;
         }
 
         /// <summary>Applies aimed kick velocity while preserving useful incoming momentum.</summary>
         public bool ApplyKick(Vector3 aimDirection, Vector3 playerVelocity, float speedFraction = 0.91f, float playerMomentumShare = 0.20f)
         {
-            if (body == null || !simulationEnabled || !IsFinite(aimDirection) || aimDirection.sqrMagnitude <= Epsilon)
+            if (body == null || !simulationEnabled || !BallMotionRules.IsFinite(aimDirection) || aimDirection.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
 
-            var direction = aimDirection.normalized;
-            var current = body.linearVelocity;
-            var opposing = Vector3.Dot(current, direction);
-            if (opposing < 0f)
-            {
-                current -= direction * opposing * 0.65f;
-            }
-
-            var momentum = Mathf.Clamp(Vector3.Dot(playerVelocity, direction), 0f, HardCap * 0.25f) * Mathf.Clamp01(playerMomentumShare);
-            var kickVelocity = HardCap * Mathf.Clamp(speedFraction, 0f, 1f);
             // A successful kick supersedes contact-assist impulses accumulated while
-            // the player was touching the ball. Letting those fire one step later
-            // made high-speed kicks feel delayed and unpredictable.
-            queuedImpulse = Vector3.zero;
-            body.linearVelocity = current + direction * (kickVelocity + momentum);
-            ClampVelocity();
+            // the player was touching the ball, never external blast impulses.
+            queuedContactAssistImpulse = Vector3.zero;
+            body.linearVelocity = BallMotionRules.ApplyKick(body.linearVelocity, aimDirection, playerVelocity, HardCap, speedFraction, playerMomentumShare);
             return true;
         }
 
@@ -170,7 +161,7 @@ namespace RocketFooxball.Runtime.Ball
                 preFreezeVelocity = body.linearVelocity;
                 preFreezeAngularVelocity = body.angularVelocity;
                 body.isKinematic = true;
-                queuedImpulse = Vector3.zero;
+                ClearQueuedState();
             }
             else if (freezeStored)
             {
@@ -184,7 +175,8 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Clears pending impulses and contact state without moving the body.</summary>
         public void ClearQueuedState()
         {
-            queuedImpulse = Vector3.zero;
+            queuedContactAssistImpulse = Vector3.zero;
+            queuedExternalImpulse = Vector3.zero;
             groundedContact = false;
         }
 
@@ -301,7 +293,7 @@ namespace RocketFooxball.Runtime.Ball
 
             var direction = playerVelocity.normalized;
             var impulse = Mathf.Min(contactAssistImpulseCap, speed * contactAssistStrength);
-            QueueImpulse(direction * impulse);
+            queuedContactAssistImpulse += direction * impulse;
         }
 
         private void RecordGroundContact(Collision collision)
@@ -324,18 +316,7 @@ namespace RocketFooxball.Runtime.Ball
 
         private void ApplyRollingResistance(float deltaTime)
         {
-            var velocity = body.linearVelocity;
-            var horizontal = new Vector3(velocity.x, 0f, velocity.z);
-            var nextMagnitude = Mathf.MoveTowards(horizontal.magnitude, 0f, rollingResistance * Mathf.Max(deltaTime, 0f));
-            if (nextMagnitude <= restSpeed)
-            {
-                horizontal = Vector3.zero;
-            }
-            else if (horizontal.sqrMagnitude > Epsilon)
-            {
-                horizontal = horizontal.normalized * nextMagnitude;
-            }
-            body.linearVelocity = new Vector3(horizontal.x, velocity.y, horizontal.z);
+            body.linearVelocity = BallMotionRules.ApplyRollingResistance(body.linearVelocity, rollingResistance, restSpeed, deltaTime);
         }
 
         private void ClampVelocity()
@@ -345,17 +326,7 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
-            body.linearVelocity = Vector3.ClampMagnitude(body.linearVelocity, HardCap);
-        }
-
-        private static bool IsFinite(Vector3 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
+            body.linearVelocity = BallMotionRules.ClampVelocity(body.linearVelocity, HardCap);
         }
     }
 }

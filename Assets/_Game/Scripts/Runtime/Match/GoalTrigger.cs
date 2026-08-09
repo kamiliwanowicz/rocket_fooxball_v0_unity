@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
@@ -18,7 +19,6 @@ namespace RocketFooxball.Runtime.Match
 
         [Header("References")]
         [SerializeField] private BallMotor ball;
-        [SerializeField] private MatchController match;
         [SerializeField] private Transform planeReference;
         [SerializeField] private Collider openingTrigger;
 
@@ -31,10 +31,8 @@ namespace RocketFooxball.Runtime.Match
         [SerializeField, Min(0.01f)] private float rearmDistance = 0.5f;
 
         private Collider ownCollider;
-        private float previousSignedDistance;
         private bool previousDistanceValid;
         private bool entryLatched;
-        private bool ballInsideTrigger;
         private int previousNonZeroSide;
 
         private const float PlaneDeadband = 0.0001f;
@@ -42,6 +40,7 @@ namespace RocketFooxball.Runtime.Match
         public GoalSide Side => goalSide;
         public bool EntryLatched => entryLatched;
         public Collider OpeningTrigger => openingTrigger;
+        public event Action<GoalTrigger> GoalCrossed;
 
         private void Awake()
         {
@@ -60,10 +59,6 @@ namespace RocketFooxball.Runtime.Match
             }
 
             var signedDistance = SignedDistance(ball.transform.position);
-            if (ballInsideTrigger && Mathf.Abs(signedDistance) > rearmDistance)
-            {
-                ballInsideTrigger = false;
-            }
 
             if (entryLatched)
             {
@@ -77,7 +72,6 @@ namespace RocketFooxball.Runtime.Match
 
             if (!previousDistanceValid)
             {
-                previousSignedDistance = signedDistance;
                 previousNonZeroSide = SignOutsideDeadband(signedDistance);
                 previousDistanceValid = true;
                 return;
@@ -90,40 +84,9 @@ namespace RocketFooxball.Runtime.Match
                 TryScore();
             }
 
-            previousSignedDistance = signedDistance;
             if (currentNonZeroSide != 0)
             {
                 previousNonZeroSide = currentNonZeroSide;
-            }
-        }
-
-        private void OnTriggerEnter(Collider other)
-        {
-            if (other == null || ball == null)
-            {
-                return;
-            }
-
-            var otherBall = other.GetComponentInParent<BallMotor>();
-            if (otherBall == ball)
-            {
-                // Trigger entry only observes the candidate. Scoring remains
-                // gated by the signed ball-centre plane crossing in FixedUpdate.
-                ballInsideTrigger = true;
-            }
-        }
-
-        private void OnTriggerExit(Collider other)
-        {
-            if (other == null || ball == null)
-            {
-                return;
-            }
-
-            var otherBall = other.GetComponentInParent<BallMotor>();
-            if (otherBall == ball)
-            {
-                ballInsideTrigger = false;
             }
         }
 
@@ -132,16 +95,14 @@ namespace RocketFooxball.Runtime.Match
         {
             entryLatched = false;
             previousDistanceValid = false;
-            previousSignedDistance = 0f;
             previousNonZeroSide = 0;
-            ballInsideTrigger = false;
         }
 
         private bool ValidateComposition()
         {
-            if (ownCollider == null || ball == null || match == null || planeReference == null || openingTrigger == null)
+            if (ownCollider == null || ball == null || planeReference == null || openingTrigger == null)
             {
-                Debug.LogError("GoalTrigger requires serialized references: ball, match, planeReference, openingTrigger.", this);
+                Debug.LogError("GoalTrigger requires serialized references: ball, planeReference, openingTrigger.", this);
                 enabled = false;
                 return false;
             }
@@ -151,13 +112,13 @@ namespace RocketFooxball.Runtime.Match
 
         private void TryScore()
         {
-            if (entryLatched || match == null)
+            if (entryLatched)
             {
                 return;
             }
 
             entryLatched = true;
-            match.NotifyGoal(this);
+            GoalCrossed?.Invoke(this);
         }
 
         private float SignedDistance(Vector3 worldPosition)

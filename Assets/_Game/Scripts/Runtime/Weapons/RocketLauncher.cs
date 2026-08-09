@@ -95,7 +95,7 @@ namespace RocketFooxball.Runtime.Weapons
                 var projectile = activeProjectiles[i];
                 if (projectile != null)
                 {
-                    projectile.SetSimulationEnabled(false);
+                    projectile.Cancel();
                     Object.Destroy(projectile.gameObject);
                 }
             }
