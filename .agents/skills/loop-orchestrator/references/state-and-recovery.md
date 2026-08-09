@@ -1,41 +1,196 @@
 # State and Recovery
 
-Use this reference for identity checks, writer safety, recovery, target drift, and cleanup. Git and collaboration observations outrank worker prose.
+Every loop run uses one durable state document:
 
-## Identity and acceptance
+`<git-common-dir>/loop-orchestrator/<run-id>/state.md`
 
-Every dispatch and return shares one single-use `execution_id`, exact `assigned_agent`, task, role, full `baseline_sha`, branch, worktree, owned paths, protected paths, dependencies, and allowed Git operations.
+`run_id` is globally unique for repository. Never reuse another run directory, including missing/corrupt-state recovery. Product tree contains no orchestration state.
 
-Accept completed current assignment only when:
+State contains current run facts only: bound plan worktrees and integration worktree. No repository-wide worktree inventory.
 
-1. Return carries same single-use `execution_id` and exact `assigned_agent` binding; collaboration state shows current assignment completed or stopped, not interrupted or replaced.
-2. Git shows same worktree, branch, baseline ancestry, current head, clean status, and path scope.
-3. Return names changed paths or reviewed SHA, checks/evidence, and completion or blocker action.
+## Ownership and truth
 
-Reject late, duplicate, replaced, interrupted, or foreign result when identity, Git facts, or scope differ. Keep rejected report as evidence hint; never promote it by rewriting fields. Recheck current facts before retry.
+LP is sole state writer. Breakdown, planner, execution orchestrator, workers, reviewers, fixes, and merging agent read state and return facts for LP recording. Concurrent state edits are invalid.
 
-## Writer barrier
+Truth priority:
 
-Child writers edit only owned paths and perform no Git operations. One active writer per path. Parent inspects `git status` and diff, confirms every changed path, stops writers, and closes barrier before stage, commit, freeze, review, or shared validation.
+`observed Git + live-agent facts -> accepted immutable artifact bytes -> state claims -> agent prose`
 
-Uncertain writer identity, overlapping scope, or abandoned process -> interrupt siblings sharing worktree; quarantine uncertain changes outside accepted scope or report `blocked`. Do not stage or commit while uncertainty remains.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or artifact digest.
 
-## Review and fix binding
+## Atomic write
 
-Independent read-only review starts from clean committed exact full SHA. Reviewer records reviewed SHA and Critical/High findings only. Accepted finding receives one fresh fix worker with narrow path scope. Fix worker returns changed paths, proof/check evidence, and finding disposition only. Parent closes writer barrier, verifies scope, stages/commits, freezes and records new clean full SHA, then reruns invalidated checks and final validation. Do not re-review fix; pre-fix review never proves post-fix SHA.
+Before every dispatch and after every accepted result, LP:
 
-## Recovery bootstrap
+1. Build complete next state bytes in unique temporary file inside run directory.
+2. Flush and close temporary file.
+3. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
+4. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
+5. Keep backup until verification passes.
+6. Reopen `state.md`; verify readable run ID and intended phase/status before continuing.
 
-For long or multi-worktree runs, LP may write optional facts-only phase checkpoint under Git common dir, never product tree. Note current flow step, objective, baseline SHA, active execution IDs, branches/worktrees, owned/protected paths, accepted SHAs, blockers, and cleanup candidates. Omit checkpoint for short single-plan work.
+State field change -> build complete next document. Targeted text patch must match section plus exact field key exactly once. Zero or multiple matches -> stop. After replacement, verify intended field, expected phase, and unchanged neighboring identifiers.
 
-On resume, inspect Git and collaboration tools first. Treat checkpoint as stale when facts differ. Preserve every reachable useful commit. For ambiguous Git/tool operation, inspect current repository and process state before repeating operation. Never infer success from missing output.
+Partial write, rename failure, or verification mismatch -> no dispatch. Preserve old readable state and return blocker evidence. Never let another agent repair state.
 
-## Target drift and integration recovery
+## Required state shape
 
-Integrator rereads target branch HEAD immediately before merge and final handoff. Fast-forward only when target remains expected or is ancestor of candidate. Target divergence -> integrator stops current attempt, records observed target HEAD, returns `blocked`, and performs no further Git or file mutation. LP provisions and binds fresh isolated branch/worktree from observed target baseline with exact allowed Git operations, accepted SHAs, and new single-use execution ID before fresh reintegration. Mark prior checks invalid; rerun at new SHA. User branch remains unchanged without explicit authority binding target and candidate SHA.
+Use compact Markdown headings/list fields; no YAML ledger or event history.
 
-## Cleanup
+```markdown
+# Loop Run State
 
-Stop and verify every writer before cleanup. Remove temporary worktrees or branches only after useful SHAs remain reachable, final evidence is readable, and no accepted result can still be mutated. Preserve ambiguous or rejected artifacts until LP records disposition.
+Run ID: [unique run_id]
+Objective: [bounded outcome]
+Phase: INIT | BREAKDOWN | PLANNING | EXECUTION | MERGING | READY_FOR_USER_MERGE | BLOCKED
+Baseline SHA: [accepted full SHA]
+Authority: [allowed operations; user target branch/candidate approval or None]
+Question: [material active question or None]
+Blocker: [active blocker + evidence + recheck/action or None]
 
-Completion: current Git facts, accepted SHA, scope, review/fix proof, checks, and cleanup all agree; otherwise return `blocked` with exact mismatch and needed action.
+## Requirements
+- REQ-[stable ID]: [requirement] -> [plan_id or unassigned] -> [pending | covered | accepted]
+
+## Breakdown
+- attempt_id: [current/latest]
+- status: pending | ready | awaiting_user | blocked
+- decision: single_plan | multi_sequential | multi_parallel | hybrid | None
+- baseline: [full SHA]
+- result evidence: [accepted result location/identity or None]
+- integration order: [plan_id list or None]
+
+## Plans
+### [plan_id]
+- status: pending | planning | awaiting_user | planned | executing | done | blocked | merged
+- covered requirements: [REQ-*]
+- attempt_id: [current/latest]
+- baseline: [full SHA]
+- dependencies: [plan IDs + accepted SHAs or None]
+- owned paths: [exact paths]
+- protected paths: [exact paths]
+- artifact: [absolute path or None]
+- artifact sha256: [lowercase digest or None]
+- artifact bytes: [integer or None]
+- branch: [exact name or None]
+- worktree: [absolute path or None]
+- accepted execution SHA: [full SHA or None]
+- merge wave/status: [wave + pending | merged | blocked]
+- accepted integration SHA: [full SHA or None]
+- checks: [check -> result/evidence/SHA or pending]
+- question: [one question or None]
+- blocker: [evidence + needed action/recheck or None]
+
+## Integration
+- branch: [isolated branch or None]
+- worktree: [absolute path or None]
+- last accepted integration SHA: [full SHA; initial accepted baseline until first accepted merge]
+- expected pre-merge head: [full SHA or None]
+- accepted input SHAs: [ordered list or None]
+- merged input SHAs: [ordered list or None]
+- retry baseline SHA: [full SHA or None]
+- retry input SHAs: [ordered list or None]
+- drift: [expected/observed full SHAs + rejected | pending_acceptance | accepted + evidence/authority or None]
+- merge status: pending | active | blocked | complete
+- final SHA: [full SHA or None]
+- checks: [check -> result/evidence/SHA or pending]
+- clean: true | false | unknown
+```
+
+Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
+
+## Plan status transitions
+
+Normal:
+
+`pending -> planning -> planned -> executing -> done -> merged`
+
+User wait:
+
+`planning -> awaiting_user -> planning (fresh attempt_id)`
+
+Blocked:
+
+`planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
+
+Digest mismatch:
+
+`planned -> blocked`; preserve accepted artifact metadata, record observed digest/size, mutate no product worktree, and start fresh planning attempt only after LP selects new reserved artifact path.
+
+Merge:
+
+`done -> merged` only after merging agent result matches observed integration Git facts. Merge blocker keeps plan `done` when plan output remains accepted; record integration `blocked`. Plan status `blocked` applies only when plan artifact/execution acceptance itself fails.
+
+`needs_user` always maps to `awaiting_user`, never `blocked`. User response creates fresh role attempt. Blocker resolution requires observable recheck before fresh attempt.
+
+## Dispatch and acceptance writes
+
+Before dispatch, record phase, attempt identity, role/profile, plan status, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
+
+After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
+
+Planner acceptance:
+
+1. Stop planner.
+2. Verify reserved artifact exists and was create-once.
+3. Compute SHA-256 and byte size.
+4. Record artifact path/digest/size and status `planned` atomically.
+5. Rehash immediately before execution dispatch. Mismatch follows digest-mismatch transition.
+
+Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
+
+## Target-drift recovery
+
+Unexpected integration HEAD has no acceptance. Current attempt -> `blocked`; record expected/observed full SHAs and last completed input.
+
+Default retry:
+
+1. Bind `retry baseline SHA` to last recorded accepted integration SHA before drift. Before first accepted merge, use run's accepted baseline SHA.
+2. Derive `retry input SHAs` from accepted execution SHAs not already recorded merged at retry baseline. Preserve declared order.
+3. Provision fresh isolated integration branch/worktree at exact retry baseline.
+4. Dispatch fresh attempt with fresh `attempt_id`; replay retry inputs. Drift SHA remains outside retry ancestry.
+
+Retain drift SHA only when LP records all gate evidence before retry:
+
+- exact observed full SHA and ancestry from last accepted integration SHA;
+- exact changed-path and content scope from last accepted integration SHA;
+- independent Critical/High review and dispositions bound to drift SHA;
+- required checks passing at drift SHA;
+- authority acceptance binding drift SHA and scope. Obtain explicit user authority for any scope, behavior, permission, or mutation outside authority already recorded in state.
+
+Complete gate -> record drift `accepted`, promote exact drift SHA to last accepted integration SHA/retry baseline, and derive remaining inputs from verified ancestry plus prior accepted merge records. Incomplete gate -> record drift `rejected`; use default retry. Observed ancestry alone never accepts drift.
+
+## Resume
+
+1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
+2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
+3. Rehash every accepted artifact; compare digest/size.
+4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
+5. Inspect live agents: identity, status, current assignment, writer ownership.
+6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
+7. Resume first incomplete mandatory stage. Never repeat completed work whose artifact/SHA/check facts remain valid.
+
+Missing or corrupt state:
+
+- stop new dispatches and writers whose ownership is uncertain;
+- inspect Git common run directory, exact run-provisioned branches/worktrees proven by run evidence, reachable commits, artifacts, and live agents;
+- recover only facts supported by Git/live observations and artifact hashes;
+- write repaired state for same run only when run identity is independently proven;
+- otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
+
+Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+
+## Recovery scenarios
+
+- one plan: `pending -> planning -> planned -> executing -> done -> merged`; integration pre-head baseline, input execution SHA, final SHA may equal input after fast-forward.
+- parallel: disjoint plans share wave; each reaches `done`; merger consumes breakdown order; each becomes `merged` at one observed integration SHA.
+- sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
+- user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
+- blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
+- digest mismatch: rehash differs; status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
+- target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
+
+## Cleanup and completion
+
+Stop/verify writers before cleanup. Remove current run's temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
+
+Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged, integration worktree clean, final checks bound final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.

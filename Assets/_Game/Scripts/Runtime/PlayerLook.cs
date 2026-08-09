@@ -11,6 +11,9 @@ namespace RocketFooxball
 
         private float pitch;
 
+        public float PitchDegrees => pitch;
+        public Transform Head => head;
+
         private void Awake()
         {
             SetCursorCapture(true);
@@ -41,6 +44,34 @@ namespace RocketFooxball
             transform.Rotate(Vector3.up, look.x * mouseSensitivity * Mathf.Rad2Deg, Space.World);
             pitch = Mathf.Clamp(pitch - look.y * mouseSensitivity * Mathf.Rad2Deg, -maxPitchDegrees, maxPitchDegrees);
             head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        }
+
+        /// <summary>Resets pitch and keeps current horizontal facing.</summary>
+        public void ResetView()
+        {
+            ResetView(transform.forward);
+        }
+
+        /// <summary>Resets pitch and faces a supplied world-space direction without changing camera aim mechanically.</summary>
+        public void ResetView(Vector3 worldForward)
+        {
+            var flatForward = new Vector3(worldForward.x, 0f, worldForward.z);
+            if (flatForward.sqrMagnitude > 0.000001f)
+            {
+                transform.rotation = Quaternion.LookRotation(flatForward.normalized, Vector3.up);
+            }
+
+            pitch = 0f;
+            if (head != null)
+            {
+                head.localRotation = Quaternion.identity;
+            }
+        }
+
+        /// <summary>Compatibility alias used by match reset owners.</summary>
+        public void ResetAim(Vector3 worldForward)
+        {
+            ResetView(worldForward);
         }
 
         private static void SetCursorCapture(bool captured)

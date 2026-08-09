@@ -1,6 +1,6 @@
 # Runtime Architecture
 
-Cross-component ownership and dependency contract only. Behaviour, tuning, slice status -> `plans/core-behaviour.md`. Generated MovementLab assets -> `MovementLabBuilder`.
+Cross-component ownership and dependency contract only. Behaviour, tuning, slice status -> `plans/completed/core-behaviour.md`. Generated MovementLab assets -> `Assets/_Game/Editor/MovementLabBuilder.cs`.
 
 ## Rules
 
@@ -9,7 +9,7 @@ Cross-component ownership and dependency contract only. Behaviour, tuning, slice
 - Leaf gameplay components report narrow events upward. Leaves never own score or coordinated reset.
 - `MatchController` alone owns score, match state, gameplay-gate policy, and reset timing.
 
-## Planned ownership
+## Runtime ownership
 
 - `BallMotor`: ball `Rigidbody`, velocity mutation, cap, resistance, contact response, containment, reset
 - `RocketLauncher`: held-fire cooldown, spawn, active-projectile tracking, cleanup execution
@@ -23,4 +23,4 @@ Cross-component ownership and dependency contract only. Behaviour, tuning, slice
 
 ## Generated assets
 
-`MovementLabBuilder` owns `Player.prefab` and `MovementLab.unity` generated wiring. Change builder/source contract -> rebuild -> inspect generated diff. Manual generated-asset edits are not authoritative.
+`MovementLabBuilder` owns generated MovementLab scene, gameplay prefabs, materials, wiring, build-scene entry, and physics settings. Change builder/source contract -> rebuild -> validate -> inspect diff. Manual generated-asset edits are not authoritative.

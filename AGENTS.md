@@ -2,22 +2,9 @@
 
 ## Goal
 
-First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, scoring feel fun, readable, skill-based.
+First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based.
 
 User new to Unity. Explain Unity-specific concepts at junior level. Keep general technical discussion concise.
-
-## Tech contract
-
-- Unity: `6000.5.6f1`; do not upgrade editor or packages unless requested
-- Renderer: Universal Render Pipeline (`com.unity.render-pipelines.universal`)
-- Input: Input System package; do not add legacy `UnityEngine.Input` polling
-- Platform: Windows + Git
-- Player movement: `CharacterController`, not `Rigidbody`
-- Ball physics: `Rigidbody` when added
-- Gameplay root: `Assets/_Game/`
-- Input actions: `Assets/InputSystem_Actions.inputactions`
-- Runtime assembly: `RocketFooxball.Runtime`
-- Editor assembly: `RocketFooxball.Editor`, Editor-only
 
 ## Priorities
 
@@ -26,122 +13,63 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 3. Fast tuning and stable performance
 4. Visual polish last
 
-## Graphics and performance
+## Repository map
 
-- Target system: HP EliteBook 840 14 inch G11 Notebook PC; Intel Core Ultra 5 135U (12 cores, 14 logical processors); integrated Intel Graphics; 32 GB RAM; 1920x1200 at 60 Hz.
-- POC must run smoothly at 1920x1200 on target system.
-- Default to simple, low-cost graphics: primitive geometry, basic URP materials, limited effects.
-- Preserve upgrade path for considerably higher visual fidelity when requested.
-- Add higher-cost graphics only after measuring target-system performance; keep scalable quality options or fallbacks.
+- Runtime gameplay: `Assets/_Game/Scripts/Runtime/`; namespace `RocketFooxball`
+- Editor tooling and authoritative lab generator: `Assets/_Game/Editor/MovementLabBuilder.cs`; namespace `RocketFooxball.Editor`
+- Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity`
+- Input actions: `Assets/InputSystem_Actions.inputactions`
+- Runtime ownership and dependencies: `plans/runtime-architecture.md`
+- Behaviour, tuning, and implementation status: `plans/completed/core-behaviour.md`
+- Unity, package, and project configuration: `ProjectSettings/`, `Packages/`
 
-## MVP
+Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content outside that root unchanged unless task targets it.
 
-- Enclosed arena + two goals
-- One controllable player + physics ball
-- Rocket launcher, rocket-jumping, explosions affecting ball
-- Goal detection, score, reset, debug HUD
-- Primitive geometry, simple URP materials
+## Architecture
 
-## Scope limits
-
-Exclude unless requested:
-
-- Multiplayer/networking, accounts, progression, inventory, classes
-- Extra weapons, realistic football rules, advanced AI
-- Detailed characters, animation, procedural levels
-- New third-party assets/plugins, advanced shaders, post-processing, destruction
-
-Expand scope only after core interaction validates.
-
-## Repository layout
-
-- `Assets/_Game/Scripts/Runtime/`: runtime gameplay C#; namespace `RocketFooxball`
-- `Assets/_Game/Editor/`: editor tooling; namespace `RocketFooxball.Editor`
-- `Assets/_Game/Scenes/MovementLab.unity`: current isolated playtest scene and enabled build scene
-- `Assets/_Game/Prefabs/Player.prefab`: current player prefab
-- `Assets/_Game/Materials/`: project-owned URP materials
-- `Packages/manifest.json`, `Packages/packages-lock.json`: package contract
-- `ProjectSettings/`: shared Unity project configuration
-
-Keep new project-owned gameplay assets under `Assets/_Game/`. Do not extend Unity starter content under `Assets/Scenes`, `Assets/Settings`, or `Assets/TutorialInfo` unless task concerns it.
-
-Maintain assembly boundaries:
-
-- Runtime code must not reference `UnityEditor` or Editor assembly.
-- Editor code may reference Runtime assembly.
-- Add asmdef references explicitly when introducing package APIs.
-- Do not collapse asmdefs or move Editor code into Runtime assembly.
-
-## Gameplay implementation
-
-- Runtime ownership/dependency source of truth: `plans/runtime-architecture.md`; behaviour and tuning source: `plans/core-behaviour.md`.
-- Treat `MovementLab` as primary movement sandbox. Preserve quick iteration, visible telemetry, predictable reset behavior.
-- Run gameplay simulation in fixed-step code. Use `Time.fixedDeltaTime` for critical movement/physics math.
-- Preserve `GamePhysicsSettings` contract: 60 Hz fixed step and gravity magnitude `16.875`, unless task explicitly retunes it.
-- Keep movement formulas deterministic where practical: seeded randomness, pure math helpers, no frame-rate-dependent critical state.
-- `CharacterController` owns player collision. Apply gravity and velocity explicitly; move through `CharacterController.Move`.
-- Keep tunable gameplay values serialized with useful constraints. Avoid hidden magic values spread across components.
-- Preserve Input System action asset and `PlayerInputReader` boundary. Gameplay components consume intent, not device APIs.
-- Use `Rigidbody` forces/impulses for future ball and explosion interactions. Do not move dynamic rigidbodies by editing transforms.
-- Prefer invariants and bounds over exact physics outcomes: no wall tunnelling, velocity cap respected, impulse direction correct, ball contained, goal event once per entry.
+- Preserve current Unity and package versions unless requested.
+- URP rendering. Default to low-cost visuals; measure before adding expensive effects and keep scalable fallbacks.
+- Player collision/movement -> `CharacterController`. Ball and projectile physics -> `Rigidbody` forces and impulses.
+- Critical gameplay simulation -> fixed-step code. Shared physics configuration -> `GamePhysicsSettings`.
+- Device input -> Input System -> `PlayerInputReader` intent -> gameplay components. No legacy `UnityEngine.Input` polling.
+- Runtime code -> `RocketFooxball.Runtime`, no `UnityEditor`. Editor tooling -> `RocketFooxball.Editor` with explicit assembly references.
+- `MovementLabBuilder` owns generated MovementLab scene, gameplay prefabs, materials, wiring, build-scene entry, and physics settings.
 
 ## Unity asset safety
 
-- Treat `.unity`, `.prefab`, `.asset`, `.mat`, `.inputactions`, and `.meta` files as serialized project state.
-- Keep every asset with its existing `.meta`. Move/delete asset and `.meta` together. Never regenerate GUIDs to resolve conflicts.
-- Avoid hand-editing scene/prefab YAML. Use Unity Editor APIs or targeted text edits only when serialization format and GUID impact are understood.
-- For editor-generated content, use `SerializedObject`, `PrefabUtility`, `EditorSceneManager`, and `AssetDatabase`; save assets/scenes explicitly.
-- Apply intended prefab changes to prefab asset, not only one scene instance. Check overrides before saving.
-- Preserve serialized data when renaming fields; use `FormerlySerializedAs` where required.
-- Inspect diffs after editor saves. Reject unrelated mass reserialization, GUID churn, or scene/prefab changes.
-- Do not run two Unity Editor processes against this project. Close interactive Editor before batch-mode mutation.
+- Preserve `.meta` files and GUIDs. Move or delete asset and `.meta` together.
+- Prefer `MovementLabBuilder` or Unity Editor APIs over direct serialized-YAML edits.
+- Builder-owned change -> edit source/builder -> rebuild -> validate -> inspect diff. Manual generated-asset edits are not authoritative.
+- Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
+- Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
+- Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
+- Reject unrelated reserialization, GUID churn, and prefab/scene changes after Editor saves.
 
-## Movement lab workflow
+## Unity execution
 
-Interactive rebuild: Unity menu -> `Rocket Fooxball/Build Movement Lab`.
-
-Batch rebuild, with matching Unity executable:
-
-```powershell
-& '<Unity.exe>' -batchmode -quit -projectPath '<repo-root>' -executeMethod RocketFooxball.Editor.MovementLabBuilder.BuildMovementLab -logFile '<log-path>'
-```
-
-Builder overwrites `Assets/_Game/Prefabs/Player.prefab` and `Assets/_Game/Scenes/MovementLab.unity`, updates materials/build scene/fixed timestep. Run only when task intends those changes. Inspect generated diff and log. Omit `-nographics` unless command is known not to require graphics/shader initialization.
+- Tooling: no Computer Use or related `sky.documentation` / `node_repl` tools.
+- Unity worktrees: use short paths such as `C:\wt\<id>`. Existing long path -> verified junction or `subst` drive. Use same short project path for all Unity commands and process checks.
+- Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture exit code -> confirm process and project lock release.
+- Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
+- C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
+- `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
+- Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
+- IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
 ## Validation
 
-Tests intentionally deferred until test strategy is redesigned. Do not add tests or require current automated tests for completion unless user requests them.
+- Test creation deferred unless user requests it. Run relevant existing tests.
+- Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
+- C# changes: Unity compile with zero Console errors.
+- Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
+- Builder-generated change: run build twice from same SHA. Build 2 must reuse existing outputs; compare hashes for owned scenes, prefabs, controllers, materials, and importer metadata. Any mismatch -> nondeterministic build bug.
+- Run `ValidateMovementLab()` in separate Unity process after build 2. Build success alone does not prove persisted references or bindings.
+- Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
+- Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
+- Documentation-only changes: inspect diff; Unity launch unnecessary.
+- Report only checks run.
+- When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`
 
-Validate changes proportionally:
+## Code clarity
 
-- C# change: Unity script compile with zero Console errors.
-- Movement/input change: play `Assets/_Game/Scenes/MovementLab.unity`; verify affected controls, collision, jump states, HUD, and frame-rate independence.
-- Scene/prefab/editor-tool change: run intended editor workflow, save, reopen affected asset, inspect Console/batch log and Git diff.
-- Project/package setting change: restart Unity when required; confirm URP, Input System, build scene, and assembly compilation remain intact.
-- Documentation-only change: inspect diff; Unity launch unnecessary.
-
-Skill change: run official validator and require `Skill is valid!`:
-
-```powershell
-python "$env:USERPROFILE\.codex\skills\.system\skill-creator\scripts\quick_validate.py" ".agents\skills\<skill-name>"
-```
-
-If validator reports `ModuleNotFoundError: No module named 'yaml'`, install dependency, then rerun validator:
-
-```powershell
-python -m pip install --user PyYAML
-```
-
-Do not claim Unity validation unless Editor or batch command actually ran. Report skipped validation and reason.
-
-Future test redesign should favor pure deterministic math tests, scene-level smoke/invariant checks, and playtests. Do not assert exact simulated positions or test subjective feel/rendering.
-
-## Generated state
-
-Never edit, review as source, or commit generated/local state:
-
-- `Library/`, `Temp/`, `Obj/`, `Logs/`, `UserSettings/`
-- `Build/`, `Builds/`, `MemoryCaptures/`, `Recordings/`
-- generated IDE files such as `*.csproj`, `*.sln`, `*.suo`, `.vs/`
-
-Commit relevant source assets, `.meta` files, package manifests, and intentional `ProjectSettings/` changes. Preserve unrelated user work in dirty worktrees.
+- Write self-documenting code. Add short comments or class/method descriptions only for non-obvious intent.
