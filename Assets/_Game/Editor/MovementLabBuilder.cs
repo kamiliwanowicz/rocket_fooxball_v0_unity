@@ -94,6 +94,8 @@ namespace RocketFooxball.Editor
             scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
             var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Production);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
             MovementLabPreBakeGate.RevalidatePassRecord(passPath, MovementLabLightingProfiles.ProfileId.Production);
             MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
@@ -171,6 +173,8 @@ namespace RocketFooxball.Editor
             scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
             var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Development);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
             MovementLabPreBakeGate.RevalidatePassRecord(passPath, MovementLabLightingProfiles.ProfileId.Development);
             MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
