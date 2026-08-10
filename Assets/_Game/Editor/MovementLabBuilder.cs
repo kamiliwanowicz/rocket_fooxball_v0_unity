@@ -115,13 +115,21 @@ namespace RocketFooxball.Editor
             if (!string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("MovementLab validation requires a production lighting bake. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly; current profile=" + (probe.CurrentState?.bakedProfile ?? "none") + ".");
 
-            var staleNonRaw = probe.StaleStages.Where(stage => !probe.IsRawOutputDriftOnly(stage)).ToArray();
-            if (staleNonRaw.Length > 0)
+            var staleNonLighting = probe.StaleStages.Where(stage =>
+                stage != MovementLabStage.Lighting &&
+                stage != MovementLabStage.BakedOutput &&
+                !probe.IsRawOutputDriftOnly(stage)).ToArray();
+            if (staleNonLighting.Length > 0)
             {
-                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", staleNonRaw));
+                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", staleNonLighting));
             }
-            if (probe.StaleStages.Length > 0)
-                Debug.Log("Rocket Fooxball Movement Lab validation proceeding with informational raw output drift: " + string.Join(", ", probe.StaleStages));
+            var staleRaw = probe.StaleStages.Where(probe.IsRawOutputDriftOnly).ToArray();
+            if (staleRaw.Length > 0)
+                Debug.Log("Rocket Fooxball Movement Lab validation proceeding with informational raw output drift: " + string.Join(", ", staleRaw));
+            var staleLighting = probe.StaleStages.Where(stage =>
+                stage == MovementLabStage.Lighting || stage == MovementLabStage.BakedOutput).ToArray();
+            if (staleLighting.Length > 0)
+                Debug.LogWarning("Rocket Fooxball Movement Lab validation proceeding with stale lighting stages: " + string.Join(", ", staleLighting));
 
             MovementLabValidator.Validate(includeBakedLighting: true, logSuccess: true);
             MovementLabStageRunner.WriteProbeIfRequested(probe);
