@@ -228,7 +228,9 @@ Graphics profile:
 
 - baked GI: off for preview; accepted baked files preserved untouched
 - realtime GI: off
-- lighting: simple realtime directional sun + ambient sky/gradient
+- lighting: realtime directional sun + `Trilight` ambient
+- ambient: sky `(0.62, 0.70, 0.78)`, equator `(0.48, 0.52, 0.56)`, ground `(0.28, 0.31, 0.35)`, intensity `1.6`
+- renderer bindings: snapshot baked/realtime lightmap indices + scale offsets; set indices to `-1`; restore exact state after preview
 - shadows: off by default; one low-cost directional shadow only when movement/depth readability needs it
 - HDR, SSAO, bloom, post-processing: off
 - reflection-probe bake: off; use sky/default reflection or last stable cubemap
@@ -245,15 +247,18 @@ Execution rules:
 
 ### Fast development bake
 
-Initial candidate profile:
+Measured accepted profile:
 
 - lightmapper: Progressive CPU
-- lightmap resolution: `5` texels/m instead of production `10`
-- indirect bounces: `1` instead of production `2`
-- light-probe positions: `80` instead of production `200`; test `40` only if moving-object readability remains acceptable
+- lightmap resolution: `5` texels/m
+- bounces: `1` minimum, `1` maximum
+- samples: direct `16`, indirect `128`, environment `64`
+- light-probe positions: `80`
 - probe multiplier: `1`
-- indirect/environment samples: reduced; select exact values through controlled timing + visual comparison
-- reflection probes: `64` resolution or reuse last accepted cubemaps when reflection inputs remain unchanged
+- reflection resolution: `64`
+- measured bake/process: `31.46s` / `43.67s`
+- measured outputs: `10,389,759` bytes
+- production comparison: `6.64x` faster bake, about `60%` smaller outputs, maximum fixed-view mean absolute RGB difference `0.4744/255`
 
 Development bake rules:
 
@@ -413,52 +418,83 @@ Hashing cost controls:
 - final proof -> one full owned/protected inventory
 - evidence manifest -> write once after evidence set closes; exclude manifest/self-hash recursion
 
-## Lighting experiments
+## Lighting experiment results
 
-Run after builder remediation. Isolate one variable per component experiment; benchmark combined development profile only after component selection. Same scene, Unity version, path, warm Library, power state.
+Run: `2026-08-10`, Unity `6000.5.6f1`, Standalone Windows, Balanced power, isolated warm `Library/`.
 
-1. Probe scaling
-   - variants: `40`, `80`, `200`
-   - record preprocess, lightmap, probe, reflection, import, total durations
-   - inspect player/ball/rocket lighting near goals, walls, ramps, center
+Execution binding:
 
-2. Development bake profile
-   - benchmark candidate profile from `Bake operating modes`
-   - compare total duration and output size against production baseline
-   - inspect dynamic player/ball/rocket lighting plus static goals, walls, ramps, and center
-   - accept candidate only when gameplay readability remains intact
+- experiment branch: `codex/graphics-efficiency-experiments-46075b`
+- final SHA: `7ed37f173903826e0c770fd96d4c59c44dd111b3`
+- harness: `Assets/_Game/Editor/MovementLabEfficiencyExperiments.cs`
+- evidence root: `C:\rfx\46075b`
+- evidence manifest SHA-256: `c5b3877af3041f9e46c1c4527cc32b03838bd57d9492b4d0fe5f8d12a333f54a`
+- final compile: `13.156s`, exit `0`
+- final read-only audit: `10.134s`, exit `0`
+- generated-lighting restoration: `23` files checked, `0` baseline mismatches
 
-3. CPU vs GPU
-   - current machine: Intel Core Ultra 5 135U; integrated Intel Graphics; reported 2 GiB VRAM
-   - benchmark; no default switch without stable-output + quality evidence
+### Probe scaling
 
-4. No-bake POC A/B
-   - production baked state vs iteration profile: realtime sun + ambient, no baked GI, no SSAO/bloom/HDR, stable/default reflection
-   - blind visual/readability comparison
-   - keep iteration profile default during active development
-   - remove baked-GI subsystem only if production A/B shows no material gameplay/readability win
+- `40`: bake `224.263s`, process `237.080s`, LightBaker `198.682s`, probe render `6.160s`, outputs `26,052,580` bytes
+- `80`: bake `204.313s`, process `218.307s`, LightBaker `180.861s`, probe render `5.762s`, outputs `26,076,206` bytes
+- `200`: bake `208.982s`, process `220.080s`, LightBaker `184.914s`, probe render `5.485s`, outputs `26,142,196` bytes
+- result: no monotonic speed reduction; run variance exceeds probe-count effect
+- visual delta: `40`/`80` versus `200` below `0.47/255` maximum fixed-view mean absolute RGB difference
+- decision: keep `200` production probes; probe reduction adds no useful bake-speed win
 
-5. Static lighting scene split
-   - `MovementLabLighting.unity` -> static renderers, sun, probes, baked data
-   - `MovementLabGameplay.unity` -> colliders, player, ball, controllers, HUD
-   - additive-load + alignment validation required
+### Development bake
+
+- Progressive CPU, `80` probes: bake `31.461s`, process `43.670s`, LightBaker `19.789s`, probe render `5.436s`
+- outputs: `10,389,759` bytes
+- production `200` comparison: bake `6.64x` faster; process below `60s` iteration target; outputs about `60%` smaller
+- visual delta: maximum fixed-view mean absolute RGB difference `0.4744/255`
+- readability: ball, ramp, goals, walls, center retained
+- decision: accept measured development CPU profile for local GI checks; reject as final bake proof
+
+### CPU versus GPU
+
+- CPU: bake `31.461s`, process `43.670s`
+- Intel Graphics OpenCL GPU: bake `35.300s`, process `46.408s`, LightBaker `22.515s`, probe render `0.703s`, shader load `17.638s`
+- CPU/GPU visual delta: maximum fixed-view mean absolute RGB difference `0.2806/255`
+- decision: keep Progressive CPU default; GPU adds startup cost without total-time win
+
+### No-bake A/B
+
+- initial failure cause: global lightmaps cleared while renderer lightmap indices remained bound -> static renderers sampled missing data
+- corrected profile: detach renderer lightmap bindings + realtime sun + `Trilight` ambient + no shadows/lightmaps/probes/post/HDR
+- corrected dark-pixel fractions: FirstPerson `0.100`, Overview `0.001`, NorthGoal `0.000`, SouthGoal `0.001`, Ramp `0.003`, BallDetail `0.015`
+- baked dark-pixel fractions: FirstPerson `0.262`, Overview `0.001`, NorthGoal `0.045`, SouthGoal `0.150`, Ramp `0.165`, BallDetail `0.141`
+- result: corrected no-bake profile readable; flatter depth and weaker polish than baked state
+- decision: no-bake default for routine work; preserve production baked GI
+
+### Static lighting scene split
+
+- clone/alignment proof: `9` roots, `152` transforms, `0` alignment failures
+- ownership inventory: `68` static renderers, `5` lights, `1` LightProbeGroup, `3` reflection probes, `37` colliders, `33` gameplay MonoBehaviours
+- blockers: `28` mixed-ownership objects, `24` renderer/collider co-locations, `40` gameplay-owned objects under proposed lighting roots, `4` cross-root serialized references
+- cross-root references: two `GoalTrigger.ball`; `MatchController.northGoal`; `MatchController.southGoal`
+- result: root-only `Arena` + `Environment` split rejected; `targetApproved=false`
+- next step: separate renderers from colliders/gameplay, define prefab/component ownership, rewire cross-scene references, then run persisted additive load proof
+
+### Run findings
+
+- warm compile steady state: about `12-13s`; `<=30s` goal passed
+- cold fresh-`Library/` attempt: `630.679s`, then harness compile error; cold worktree import remains high-cost
+- evidence under long repo path hit old-.NET atomic-temp path limit; short `C:\rfx\46075b` root fixed run
+- capture blocker: `Assets/_Game/Shaders/RetroPowerGrid.shader` lines `115-116` fail D3D11 compilation (`syntax error: unexpected token 'line'`; `saturate` receives zero parameters) -> containment ceiling magenta
+- visual acceptance: blocked until shader fix; timing/readability comparisons remain usable because defect appears across compared profiles
 
 ## Reflection-probe audit
 
-Current builder runs `Lightmapping.Bake()`, then explicitly runs `BakeReflectionProbe()` for three probes.
+Unity dependency audit completed.
 
-Current outputs include:
-
-- four scene-folder `ReflectionProbe-*.exr` files
-- three named `Assets/_Game/Lighting/ReflectionProbe_*.exr` files
-- scene probe `m_CustomBakedTexture` references are zero
-- named EXR GUIDs have no textual project references
-
-Before deletion/change:
-
-- query `AssetDatabase.GetDependencies()` for scene + `LightingData.asset`
-- compare probe assignments and captures with explicit loop removed
-- retain only authoritative referenced outputs
+- authoritative outputs: scene-folder `ReflectionProbe-0.exr` through `ReflectionProbe-3.exr`; all direct `LightingData.asset` dependencies
+- scene assignments: Center -> `ReflectionProbe-1.exr`; EastGoal -> `ReflectionProbe-0.exr`; WestGoal -> `ReflectionProbe-2.exr`
+- `ReflectionProbe-3.exr`: direct `LightingData.asset` dependency; preserve
+- duplicate outputs: three named `Assets/_Game/Lighting/ReflectionProbe_*.exr`; absent from scene and `LightingData.asset` direct/recursive dependencies
+- explicit named-probe loop: Center `1.460s`, West `0.268s`, East `0.256s`, total `1.985s`
+- loop result: named EXRs rewritten but remain unreferenced
+- decision: remove explicit named-probe loop + named EXRs only with builder contract, validator, fingerprint, and paired-meta updates
 
 ## Validator purity
 
