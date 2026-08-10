@@ -1,13 +1,151 @@
 # Graphics Overhaul Run Efficiency Coding Plan
 
-Status: accepted
+Status: in progress; CP5 recovery open
 Source: direct request based on `plans/graphics-overhaul-run-efficiency-handoff.md`
 Run ID: direct
-Plan ID: direct
-Attempt ID: direct
+Plan ID: graphics-overhaul-run-efficiency
+Attempt ID: 20260810T111004014-091dc7
 Covered Requirements: stage-local MovementLab generation; fast preview/build loop; development and production lighting profiles; read-only exhaustive validation; shader/reflection cleanup; targeted vectorized texture generation; cost-aware orchestration scripts; final exact-SHA proof
 Baseline: 7a4dafe58ef2f43284c017bf8938dfb0c1a1daef
+Execution start SHA: 2a45007da3e386b6bb67ea31647afe88147d4af4
 Dependencies: None
+
+## Implementation Progress
+
+### Execution State
+
+- worktree: `C:\wt\eff-091dc7`
+- branch: `codex/graphics-overhaul-run-efficiency-20260810T111004014-091dc7`
+- current committed HEAD: `ec8d1e015e65ea1e0b29d4800be4ec56bcb3b9a7`
+- immutable snapshot: `<git-common-dir>/orchestrate-implementation/graphics-overhaul-run-efficiency/executions/20260810T111004014-091dc7.md`
+- snapshot SHA-256: `5fe68ee42c98d7a961dba80e4fb67c6050f92b8a7ceabe84883fd39617c048e6`
+- evidence root: `<git-common-dir>/movement-lab-proof/20260810T111004014-091dc7/`
+- Unity: `6000.5.6f1`; private warm `Library`; no production bake run
+- agent state: CP5 fix worker stopped; Sol-high investigator `exec-cp5-investigate-091dc7-01` complete; no continuing worker authorized
+- generated state: intermediate Development/Iteration/scene/lighting outputs dirty in worktree; preserve unstaged until T7
+
+### Completed Gates
+
+- T1 + CP1: complete
+  - implementation commit: `24040c6e`
+  - CP1 fix commit: `7008993864`
+  - result: cost-aware orchestration docs/scripts, review-marker writer, workflow wrapper, ledger/invalidation contracts
+  - proof: PowerShell parse, Markdown link/heading resolution, schema/trace/safety checks, PlanOnly workflow
+- T2 + CP2: complete
+  - implementation commit: `163f7b2358`
+  - CP2 fix commit: `026b4c46`
+  - result: NumPy vectorized targeted generator, 15-family registry, canonical PNG compressor, deterministic manifest/comparator
+  - proof: isolated `--family wall` -> four accepted hashes, two previews, audit PASS, unselected 44 repo PNG hashes/mtimes unchanged
+  - deferred by plan: full `--family all --proof-two-run` remains T7 production-final proof
+- T3 + CP3: complete
+  - implementation commit: `3c9a9ea`
+  - result: `RetroPowerGrid.shader` reserved local `line` -> `gridLine`; expression-only change
+  - proof: static equivalence + JOIN1 Unity shader compile
+- T4 + CP4: complete
+  - implementation commit: `66cf132`
+  - CP4 fix commit: `2c9c1bf`
+  - result: stage-local generation, schema-7 manifest/probe, selective runner, explicit ownership/digests, force-full comparator, bake reuse
+- JOIN1: complete
+  - compile-fix commit: `45a348548`
+  - proof: serialized Unity compile/probe PASS; no generated writes/bake
+- T5 feature source: implemented; CP5 recovery/proof open
+  - implementation commit: `a320fc10`
+  - accepted fix-chain commits: `ebac6ebb` -> `82f4fcee` -> `905e1e4b` -> `060e6149` -> `a1448f61` -> `73c61288` -> `2490dc8b` -> `8d7758c1` -> `b63a3b39` -> `1e28df8d` -> `ec8d1e01`
+  - result: transient Fast session, lifecycle restoration, Iteration quality, Development/Production profiles, material bake purity, typed profile manifest, profile-bound pre-bake gate
+  - Fast proof: `BuildMovementLabFast` PASS at `2490dc8b`; preview apply/restore PASS; no bake
+  - latest source compile: PASS at `ec8d1e01`
+  - CP5 review report: `<git-common-dir>/movement-lab-proof/20260810T111004014-091dc7/cp5/review-exec-cp5-review-091dc7-01.json`
+  - review report SHA-256: `1496f449fbebf614e9eea59a544ebe93bd8e2c21aadf9058dee30d42fe850ea2`
+  - existing `ec8d1e01` review marker becomes historical after next source commit; create new exact-SHA marker
+
+### CP5 Open Recovery
+
+#### Why CP5 Expanded
+
+- static review found seven High lifecycle/profile/purity defects; fixes passed editor-project builds
+- serialized Unity runs then exposed persisted-state edges sequentially -> profile ordering, scene reopen, Fast lifecycle restore, reflection API state, quality/gameplay contract migration, pre-bake handoff, `.slnx` checkpoint exemption
+- each fix retained fail-closed validation; production bake stayed deferred
+- latest remaining defect occurs after successful Development bake, not during compile/profile setup/bake
+
+#### Current Failure
+
+- command: `BakeMovementLabLightingDevelopment()` at `ec8d1e01`
+- bake: `Lightmapping.Bake()` PASS in `22.06s`
+- command: exit `1`; probe JSON absent
+- error prefix: `InvalidOperationException: MovementLab output drift in MaterialPrefab; generation stopped.`
+- drift set: exactly 35 raw SHA-256 mismatches -> 30 materials, four prefabs, one controller; zero metas
+- live files: zero trailing-whitespace lines after failure
+- manifest: schema `7`, structurally valid, stale only for `Lighting,BakedOutput`, stored old raw MaterialPrefab hashes
+- log: `<git-common-dir>/movement-lab-proof/20260810T111004014-091dc7/t5-postfix/development-bake-ec8d1e01.log`
+
+#### Failure Mechanism
+
+`Lightmapping.Bake()` -> material hash/dirty guard PASS -> scene save -> broad `NormalizeGeneratedYamlWhitespace()` -> 35 MaterialPrefab-owned YAML files trimmed -> lighting manifest write uses non-throwing `Probe(false)` -> `RevalidatePassRecord()` uses `Probe(true)` -> raw output drift hard stop
+
+- bake purity guard brackets only `Lightmapping.Bake()`; post-bake normalizer runs after guard
+- broad normalizer owns full generated YAML list -> materials, prefabs, controllers, scene, metas
+- normalization changed bytes without semantic material/prefab edits
+- hard stop correct: stage manifest promises byte identity; validator cannot infer harmless drift from hashes alone
+
+#### Recovery Deadlock
+
+- narrow future normalization prevents recurrence; existing 35 mismatches remain
+- `MovementLabStageRunner.RunSelective()` starts with `Probe(true)` -> throws before authoritative writer
+- current-schema manifest remains readable -> `EnsureWriteAuthorization()` returns without consuming migration authorization
+- normal `AuthorizeMovementLabManifestMigration()` cannot reach replay path
+- direct manifest/output edit would bypass builder ownership and exact drift proof
+
+#### Uncommitted Prevention Patch
+
+- `Assets/_Game/Editor/MovementLabBuilder.cs` -> both bake paths call `MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace()`
+- `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs` -> normalization limited to scene + `LightingData.asset`
+- required refinement: use explicit `MovementLabContract.ScenePath` + `MovementLabContract.BakedLightingPath + "/LightingData.asset"`; avoid positional `GeneratedBakedLightingPaths[0]`
+- protected bytes: material/prefab/controller outputs excluded
+- static proof: editor project restore/build PASS, zero errors; no Unity run
+
+#### Proposed Fail-Closed Fix
+
+1. Keep narrow post-bake normalization patch with explicit paths.
+2. `MovementLabStageGraph` -> add `PreviousMaterialContract = "material-prefab-contract:3"`; bump `MaterialContract` to `material-prefab-contract:4`.
+3. Add one-time migration predicate:
+   - stage exactly `MaterialPrefab`
+   - prior contract exactly `material-prefab-contract:3;serialized:1`
+   - current contract exactly `material-prefab-contract:4;serialized:1`
+   - drift nonempty
+   - every `changed:`/`missing:` token targets exact MaterialPrefab owned output/meta set
+4. Predicate suppresses initial drift exception only. Preserve `contract-changed` + every drift reason; stage remains stale.
+5. Runner executes authoritative MaterialPrefab generator -> targeted save/import/reload -> raw hash recapture -> stage-record merge.
+6. Contract-4 probe re-enables normal hard stop. Later unchanged-contract byte drift fails before writer.
+
+#### Rejected Fixes
+
+- canonical/semantic output hashes -> hide future whitespace/manual byte drift
+- generic `declaredInputChanged` drift allowance -> broad overwrite authority
+- manifest schema bump -> unrelated full-manifest migration
+- generic authorization bypass -> current valid manifest trust weakened
+- `MarkCurrent()` over live drift -> adopts untrusted bytes without authoritative replay
+- direct generated-file/manifest repair -> violates builder ownership
+
+### Resume Gate
+
+1. Inspect uncommitted narrow-normalization patch. Replace positional baked path with explicit `LightingData.asset` path.
+2. Fresh fix worker -> exact MaterialPrefab contract `3 -> 4` migration gate. Source only; no generated edits/Git/Unity.
+3. Root -> static checks, commit source, create new exact-SHA CP5 review marker. CP5 fixes receive no re-review.
+4. Unity compile.
+5. Fast build 1 -> exact v3-to-v4 migration accepted; authoritative MaterialPrefab replay; zero non-lighting stale stages.
+6. Fast build 2 -> no-op; identical raw non-lighting hashes.
+7. Capture MaterialPrefab hashes -> Development bake -> post-bake probe current Development -> hashes unchanged.
+8. Separate probe process -> PASS. Production validator -> expected explicit `current profile=Development` rejection.
+9. Disposable validation copy -> mutate contract-4 MaterialPrefab output -> pre-write hard stop.
+10. CP5 accepted only after steps 1-9. Then T6 -> CP6 -> SOURCE_FREEZE -> T7. Production bake remains T7-only.
+
+### Pending Gates
+
+- CP5: open; blocked only by exact recovery/validation sequence above
+- T6 + CP6: not started
+- SOURCE_FREEZE: not reached
+- T7 + CP7: not started
+- FINAL: not reached
 
 ## Objective
 
@@ -286,7 +424,7 @@ Make routine graphics iteration fast and explicit. Validator/code edits must com
 
 ## Final Verification
 
-- exact head: clean committed descendant of `7a4dafe58ef2f43284c017bf8938dfb0c1a1daef`; SOURCE_FREEZE and generated final SHA both recorded; plan bytes unchanged
+- exact head: clean committed descendant of execution start SHA; SOURCE_FREEZE and generated final SHA recorded; immutable execution-snapshot bytes unchanged; live plan progress section may advance
 - control plane: all skill links/headings valid; structured check ledger complete; PowerShell wrappers parsed; no user-branch/state/Git ownership regression
 - compile: one joined source compile plus final workflow import at exact relevant SHAs; zero C#/shader/Console errors; no extra compile when later process already supplies same proof
 - stage matrix: validator/runtime gameplay edits avoid generated stages; importer/material/gameplay/quality execute selectively; lighting hashes only render inputs; exact drift reasons/paths
@@ -304,7 +442,7 @@ Make routine graphics iteration fast and explicit. Validator/code edits must com
 
 - changed paths: orchestration skills/state/prompts; `AGENTS.md`; MovementLab workflow scripts; texture generator; RetroPowerGrid shader; MovementLab facade/stage/lighting/validation modules; Iteration URP assets; development LightingSettings; authoritative generated assets/manifests; removed named reflection EXRs/metas
 - residual risks: fast editor crash before lifecycle restore relies on unsaved transient state; Blender bundled NumPy version unverified until execution; machine timing varies; no formal test assemblies; dependency coverage proof is periodic forced rebuild, not exhaustive static graph proof
-- authority: execution orchestrator owns isolated plan branch/worktree and commits; generated writers run only after source freeze; user authorizes integration of exact accepted final SHA; user branch unchanged until explicit approval
+- authority: execution orchestrator owns isolated implementation branch/worktree and commits; generated writers run only after source freeze; live plan progress edit user-authorized; implementation integration still requires explicit approval
 
 ## Done Criteria
 
