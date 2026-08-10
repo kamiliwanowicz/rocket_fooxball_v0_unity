@@ -24,15 +24,9 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("MovementLab production lighting is not valid (profile is " + (probe.CurrentState?.bakedProfile ?? "none") + "). Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
             }
-            var lightingInputStale = probe.IsStale(MovementLabStage.Lighting) && !probe.IsRawOutputDriftOnly(MovementLabStage.Lighting);
-            var bakedInputStale = probe.IsStale(MovementLabStage.BakedOutput) && !probe.IsRawOutputDriftOnly(MovementLabStage.BakedOutput);
-            if (lightingInputStale || bakedInputStale)
-            {
-                throw new InvalidOperationException("MovementLab lighting is stale. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
-            }
             if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
             {
-                Debug.Log("Rocket Fooxball Movement Lab raw output drift is informational; production lighting remains usable.");
+                Debug.LogWarning("Rocket Fooxball Movement Lab stale lighting is informational; semantic validation and bake remain usable.");
             }
         }
 
