@@ -75,13 +75,14 @@ After plan worktree creation, all execution, review, recovery, and completion Gi
 ## Ownership and profiles
 
 - Active execution orchestrator: sole Git owner for plan worktree and coordinator for every checkpoint. Creates no additional plan/integration worktrees.
-- Child roles: implementation worker, reviewer, fix worker only. Active agent retains plan sequencing, worker coordination, result acceptance, Git operations, review gates, finding disposition, and final validation.
+- Child roles: implementation worker, reviewer, fix worker, investigator only. Active agent retains plan sequencing, worker coordination, result acceptance, Git operations, review gates, finding disposition, and final validation.
 - Implementation/fix workers: edit assigned owned paths only; no Git staging, commits, branch/worktree operations, or state edits.
 - One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared contracts, generated/serialized assets, migrations, and shared validation environments.
 - Reviewer: fresh exact `sol_high` per review checkpoint; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Stuck-child takeover: any child blocker, request for rescue, repeated failed approach, scope drift, confusion, or loss of useful progress -> interrupt immediately. Orchestrator takes over diagnosis: inspect repository/evidence, reproduce failure, run safe checks, determine solution, and remove blocker or improve task contract. Retire old child/result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, then dispatch fresh role-appropriate child with new `execution_id` and blocker-free contract. Never coach, resume, or retry stuck child. Ambiguous edit ownership or unresolved authority/product decision -> `blocked`.
+- Recurring-issue escalation: same material worker issue recurs after stuck-child takeover, and orchestrator cannot produce reasonable verified fix -> dispatch one fresh exact `sol_high` investigator. Investigator is read-only: inspect repository/evidence, reproduce issue, test safe hypotheses, then decide `fix_found | no_reasonable_fix`. `fix_found` -> return precise cause, fix instructions, affected paths, and verification steps; orchestrator dispatches fresh standard role-appropriate implementation/fix worker with those instructions and new `execution_id`. Investigator never edits or becomes fix worker. `no_reasonable_fix` -> stop execution, prohibit further worker retries, return `blocked`, and inform user directly in `user-direct` or through LP in `lp-dispatched`. Investigator launch is last recovery step before blocker return.
 - Proactive context reset: massive implementation chunk or overwhelmed child context -> same stuck-child takeover flow before failure compounds.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
@@ -89,15 +90,16 @@ Writer barriers follow ownership: completed disjoint lane closes independently b
 
 ## Child dispatch contract
 
-Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer), checks, proof/evidence boundary, and bound snapshot identity/path/digest.
+Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer/investigator), checks, proof/evidence boundary, and bound snapshot identity/path/digest.
 
-Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria.
+Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria. Investigator dispatch binds recurring issue evidence, attempted orchestrator fixes, failed verification, affected task/path slice, and decision contract `fix_found | no_reasonable_fix`.
 
 Child return repeats identity and role unchanged:
 
 - `status`: `complete | blocked`;
 - implementation/fix: changed paths, checks, evidence, finding disposition when applicable;
 - reviewer: reviewed SHA, verdict, Critical/High findings with exact paths/symbols and evidence;
+- investigator: decision, reproduced evidence, hypotheses checked, and either precise worker fix contract or reason no reasonable fix remains;
 - blocked: exact blocker plus one needed action/recheck.
 
 Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inconsistent result. Preserve as evidence only.
@@ -138,7 +140,7 @@ PoC review filter: prioritize failures blocking playtest learning or reliable it
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Monitor running children for stuck signals. Signal -> interrupt, diagnose directly, remove blocker or improve contract, restore writer boundary, then dispatch fresh child. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. No retry on old worker.
+2. Monitor running children for stuck signals. Signal -> interrupt, diagnose directly, remove blocker or improve contract, restore writer boundary, then dispatch fresh child. Recurring issue unresolved by orchestrator -> run recurring-issue escalation; `fix_found` dispatches fresh standard worker from investigator contract, `no_reasonable_fix` stops execution as `blocked`. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. No retry on old worker.
 3. Per-worker checkpoint -> satisfy worker -> reviewer barrier; dispatch fresh exact `sol_high` reviewer. Keep unrelated disjoint workers running. Grouped checkpoint -> wait for terminal returns from all named workers plus join condition, then satisfy same barrier.
 4. Reviewer inspects bound Git objects at frozen SHA, applies review-scope materiality and PoC filters, reports qualifying Critical/High findings only, and performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
