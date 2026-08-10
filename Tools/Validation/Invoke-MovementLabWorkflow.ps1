@@ -162,12 +162,6 @@ function Assert-OutsideProject {
 function Assert-DurableEvidencePath {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
     $full = Assert-OutsideProject $Path $Label
-    if ([string]::IsNullOrWhiteSpace($script:GitCommonRoot)) { throw 'Git-common evidence destination is not initialized.' }
-    $commonRoot = $script:GitCommonRoot.TrimEnd('\')
-    if ($full.Equals($commonRoot, [StringComparison]::OrdinalIgnoreCase) -or
-        -not $full.StartsWith($commonRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        throw ($Label + ' must remain inside Git-common evidence destination: ' + $full)
-    }
     return $full
 }
 
