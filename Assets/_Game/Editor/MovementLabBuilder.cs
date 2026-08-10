@@ -103,8 +103,7 @@ namespace RocketFooxball.Editor
             var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Production);
             scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath, MovementLabLightingProfiles.ProfileId.Production);
-            MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
+            scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
             MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
@@ -186,8 +185,7 @@ namespace RocketFooxball.Editor
             var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Development);
             scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath, MovementLabLightingProfiles.ProfileId.Development);
-            MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
+            scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
             MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
             MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
