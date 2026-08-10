@@ -69,7 +69,9 @@ namespace RocketFooxball.Editor
             ValidatePersistentIdentity(property.objectReferenceValue, label);
             if (component != null)
             {
-                var sourceComponent = PrefabUtility.GetCorrespondingObjectFromSource(component);
+                var sourceComponent = EditorUtility.IsPersistent(component)
+                    ? component
+                    : PrefabUtility.GetCorrespondingObjectFromSource(component);
                 if (sourceComponent == null || !string.Equals(AssetDatabase.GetAssetPath(sourceComponent), prefabPath, StringComparison.Ordinal))
                     throw new InvalidOperationException(label + " prefab component provenance is not persisted: " + prefabPath);
                 ValidatePersistentIdentity(sourceComponent, label + " source component");
