@@ -347,7 +347,7 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("MovementLab lighting bake requires the prepared MovementLab scene to remain active.");
                     MovementLabLightingProfiles.LoadValidatedSettings(profile);
                     MovementLabLightingProfiles.ValidatePreparedScene(profile);
-                    MovementLabPreBakeGate.RevalidatePassRecord(passPath, false, profile);
+                    MovementLabPreBakeGate.RevalidatePassRecord(passPath, profile);
                     var materialHashes = CaptureGeneratedMaterialHashes();
                     var materialDirty = CaptureGeneratedMaterialDirtyState();
                     try

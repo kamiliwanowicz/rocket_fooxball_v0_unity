@@ -72,7 +72,7 @@ namespace RocketFooxball.Editor
         {
             ValidatePersistedNonLightingState();
             MovementLabValidator.ValidatePreBakeSemantics();
-            var probe = ProbePreparedScene(profile, allowBakedOutputDrift: false);
+            var probe = ProbePreparedScene(profile);
 
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrEmpty(projectRoot)) throw new InvalidOperationException("Unable to resolve Unity project root.");
@@ -105,12 +105,12 @@ namespace RocketFooxball.Editor
             return passPath;
         }
 
-        internal static void RevalidatePassRecord(string passPath, bool allowBakedOutputDrift = false)
+        internal static void RevalidatePassRecord(string passPath)
         {
-            RevalidatePassRecord(passPath, allowBakedOutputDrift, MovementLabLightingProfiles.ProfileId.Production);
+            RevalidatePassRecord(passPath, MovementLabLightingProfiles.ProfileId.Production);
         }
 
-        internal static void RevalidatePassRecord(string passPath, bool allowBakedOutputDrift, MovementLabLightingProfiles.ProfileId profile)
+        internal static void RevalidatePassRecord(string passPath, MovementLabLightingProfiles.ProfileId profile)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrEmpty(projectRoot)) throw new InvalidOperationException("Unable to resolve Unity project root.");
@@ -166,22 +166,23 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("MovementLab pre-bake review marker changed after pass validation.");
             }
 
-            var probe = ProbePreparedScene(profile, allowBakedOutputDrift);
+            var probe = ProbePreparedScene(profile);
             if (!string.Equals(probe.LightingInputDigest, pass.lightingInputDigest, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("MovementLab pre-bake finalized lighting digest or non-lighting state changed after pass validation.");
             }
         }
 
-        private static MovementLabStageProbe ProbePreparedScene(MovementLabLightingProfiles.ProfileId profile, bool allowBakedOutputDrift)
+        private static MovementLabStageProbe ProbePreparedScene(MovementLabLightingProfiles.ProfileId profile)
         {
             // Profile preparation intentionally rewrites lighting-owned fields
             // in the serialized scene. The StageGraph allowance is narrow for
             // GameplayScene (all output drift must be this exact scene path),
-            // while every other stage/path remains fail-closed below.
+            // while every non-lighting stage/path remains fail-closed below.
+            // Prior BakedOutput files are replaced by the selected bake and
+            // therefore are not pre-bake prerequisites.
             MovementLabLightingProfiles.ValidatePreparedScene(profile);
             var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true);
-            ValidateBakedOutputDrift(probe, allowBakedOutputDrift);
 
             var stale = RequiredPreBakeStages
                 .Where(stage => probe.IsStale(stage) &&
@@ -207,24 +208,6 @@ namespace RocketFooxball.Editor
             return tokens.Length == 1 &&
                 (string.Equals(tokens[0], "changed:" + MovementLabContract.ScenePath, StringComparison.Ordinal) ||
                  string.Equals(tokens[0], "missing:" + MovementLabContract.ScenePath, StringComparison.Ordinal));
-        }
-
-        private static void ValidateBakedOutputDrift(MovementLabStageProbe probe, bool allowBakedOutputDrift)
-        {
-            if (allowBakedOutputDrift || probe == null || !probe.IsStale(MovementLabStage.BakedOutput) ||
-                !probe.TryGetStaleReason(MovementLabStage.BakedOutput, out var reason)) return;
-
-            var drift = (reason ?? string.Empty)
-                .Split(new[] { ';' }, StringSplitOptions.None)
-                .Where(token => token.StartsWith("changed:", StringComparison.Ordinal) ||
-                                token.StartsWith("missing:", StringComparison.Ordinal))
-                .ToArray();
-            if (drift.Length == 0 || drift.All(token =>
-                    string.Equals(token, "changed:" + MovementLabContract.ScenePath, StringComparison.Ordinal) ||
-                    string.Equals(token, "missing:" + MovementLabContract.ScenePath, StringComparison.Ordinal))) return;
-
-            throw new InvalidOperationException("MovementLab output drift in BakedOutput; generation stopped. " +
-                string.Join(", ", drift.OrderBy(token => token, StringComparer.Ordinal)));
         }
 
         private static void ValidatePersistedNonLightingState()
