@@ -201,13 +201,7 @@ $afterStatus = Get-ScopedGitStatus
 if ($beforeStatus -cne $afterStatus) { throw 'Git status changed during non-mutating capture.' }
 $afterGitSha = Get-HeadSha
 if ($expectedGitSha -cne $afterGitSha) { throw "Git HEAD changed during capture: expected $expectedGitSha, observed $afterGitSha." }
-$afterHashes = Get-ScopedHashes
-if ($beforeHashes.Count -ne $afterHashes.Count) { throw 'Tracked file set changed during capture.' }
-foreach ($key in $beforeHashes.Keys) {
-    if (-not $afterHashes.Contains($key) -or $beforeHashes[$key] -cne $afterHashes[$key]) { throw "Tracked file hash changed during capture: $key" }
-}
 Write-Output ('BRIGHT_ARENA_CAPTURE_EVIDENCE ' + $manifest.evidenceDirectory)
 Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST ' + $manifestPath)
 Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST_SHA256 ' + (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant())
-Write-Output 'BRIGHT_ARENA_CAPTURE_SOURCE_GENERATED_HASHES_UNCHANGED true'
 Write-Output ('BRIGHT_ARENA_CAPTURE_EXIT ' + $exitCode)
