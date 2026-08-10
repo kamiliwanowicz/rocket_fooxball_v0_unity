@@ -97,7 +97,7 @@ Child return repeats identity and role unchanged:
 
 - `status`: `complete | blocked`;
 - implementation/fix: changed paths, checks, evidence, finding disposition when applicable;
-- reviewer: reviewed SHA, verdict, Critical/High findings with exact paths/symbols and evidence;
+- reviewer: reviewed SHA, verdict, Critical/High findings using `Review checkpoints` format;
 - investigator: decision, reproduced evidence, hypotheses checked, and either precise worker fix contract or reason no reasonable fix remains;
 - blocked: exact blocker plus one needed action/recheck.
 
@@ -111,6 +111,8 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 - Returned child: capture immutable report, mark `returned`, then retire immediately. Result acceptance, Git verification, and checkpoint work use captured report; returned agent stays retired.
 - Replaced, restarted, cancelled, or no-longer-needed running child: call `interrupt_agent`, wait for terminal state, capture late output as evidence only, then mark `retired`. Finish retirement before replacement dispatch or lane-barrier close.
 - Exit drain: before any `complete` or `blocked` return, call `list_agents`; interrupt every running descendant, wait for terminal states, then call `list_agents` again. `complete` requires zero running descendants and every registry entry `retired`. Unresolved descendant -> `blocked` with exact agent ID, role, state, and cleanup attempts.
+
+- Quiet reporting: update user only on kickoff, material checkpoint/fix/validation/blocker/completion change, or required one-line heartbeat; unchanged waits and routine child state -> silent; batch concurrent changes; full roster only on request or final return.
 
 ## Worker -> reviewer barrier
 
@@ -135,6 +137,16 @@ Plan fan-out -> launch every ready sibling after shared predecessors. Worker ter
 Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus material Critical/High integration risks visible at frozen SHA. Finding qualifies only with concrete trigger, harmful outcome, and code/evidence showing realistic risk. Harmful outcome must break scoped behavior, correctness, safety, security, data/asset integrity, required contract, build/integration/validation, or materially slow runtime or team iteration.
 
 PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
+
+Reviewer finding format: one block per finding, exactly three fields:
+
+```markdown
+location: [exact paths/symbols]
+issue: [concrete trigger, harmful outcome, and code/evidence proving realistic material risk]
+proposed fix: [narrow remediation plus acceptance boundary and contracts/safeguards to preserve]
+```
+
+Orchestrator assigns checkpoint-scoped finding IDs during disposition. Reviewer keeps reviewed SHA and verdict outside finding blocks.
 
 ## Execution loop
 
