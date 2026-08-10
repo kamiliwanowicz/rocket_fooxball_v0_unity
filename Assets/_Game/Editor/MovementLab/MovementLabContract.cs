@@ -6,7 +6,9 @@ namespace RocketFooxball.Editor
 {
     internal static class MovementLabContract
     {
-        internal const int ManifestSchemaVersion = 6;
+        // Stage-local manifests carry explicit ownership, stale reasons, and a
+        // top-level fingerprint/path union. Bump whenever that wire contract changes.
+        internal const int ManifestSchemaVersion = 7;
         internal const int SerializedContractVersion = 1;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
@@ -97,7 +99,7 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/ContainmentGridCeiling.mat", MaterialsPath + "/ContainmentGridLongWall.mat", MaterialsPath + "/ContainmentGridEndWall.mat",
             MaterialsPath + "/RetroSunnySky.mat", MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat",
-            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat", VolumeProfilePath, LightingSettingsPath
+            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat"
         };
 
         internal static readonly string[] GameplaySceneOutputs =

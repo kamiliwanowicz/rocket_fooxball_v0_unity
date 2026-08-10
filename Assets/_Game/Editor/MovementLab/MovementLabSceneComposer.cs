@@ -36,6 +36,253 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabSceneComposer
     {
+                // Stage-local entry points. The legacy monolithic method below is
+                // retained for compatibility/forced comparison; normal assembly
+                // uses these bounded operations through MovementLabStageRunner.
+                internal static void AssembleQualityStage()
+                {
+                    EnsureFolders();
+                    GraphicsQualityConfigurator.Configure();
+                }
+
+                internal static void AssembleImporterStage()
+                {
+                    EnsureFolders();
+                    MovementLabImportPipeline.Apply();
+                }
+
+                internal static void AssembleMaterialPrefabStage()
+                {
+                    EnsureFolders();
+
+                    var ballSurface = GetOrCreatePhysicMaterial();
+                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
+                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
+                    var trimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Trim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
+                    var hazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Hazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
+                    var markingMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Marking", null, null, null, null, null, null, Vector2.one, new Color(1.00f, 0.96f, 0.78f, 1f), Color.clear, 0f, 0f, 0.5f, 1f, 1f));
+                    var ballMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Ball", LoadTexture(BallTexturePath), LoadTexture(BallNormalTexturePath), LoadTexture(BallMetallicTexturePath), LoadTexture(BallOcclusionTexturePath), null, null, Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.65f, 0.45f));
+                    var rocketMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Rocket", LoadTexture(RocketTexturePath), LoadTexture(RocketNormalTexturePath), LoadTexture(RocketMetallicTexturePath), LoadTexture(RocketOcclusionTexturePath), null, null, Vector2.one, RocketBaseColor, Color.clear, 0f, 1f, 1f, 0.85f, 0.80f));
+                    var rocketHotMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("RocketHot", LoadTexture(RocketTexturePath), LoadTexture(RocketNormalTexturePath), LoadTexture(RocketMetallicTexturePath), LoadTexture(RocketOcclusionTexturePath), LoadTexture(RocketEmissionTexturePath), null, Vector2.one, Color.white, RocketEmissionColor, RocketEmissionStrength, 1f, 1f, 0.85f, 0.80f));
+                    var projectileGlowMaterial = GetOrCreateAdditiveParticleMaterial("ProjectileGlow", Color.white, LoadTexture(RocketGlowTexturePath), 2.5f);
+                    var frameMaterial = trimMaterial;
+                    var shieldMaterial = GetOrCreateShieldMaterial("Shield", new Color(0.10f, 0.75f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+                    var arenaPrimaryMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaPrimary", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
+                    var arenaTrimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaTrim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
+                    var arenaHazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaHazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
+                    var arenaGlowMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaGlow", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, new Color(0.10f, 0.95f, 0.88f, 1f), 2.0f, 1f, 1f, 0.80f, 1f));
+                    var gridCeilingMaterial = GetOrCreateGridMaterial("ContainmentGridCeiling", new Vector2(32.5f, 22.5f));
+                    var gridLongWallMaterial = GetOrCreateGridMaterial("ContainmentGridLongWall", new Vector2(32.5f, 10f));
+                    var gridEndWallMaterial = GetOrCreateGridMaterial("ContainmentGridEndWall", new Vector2(22.5f, 10f));
+                    var shieldBlueMaterial = GetOrCreateShieldMaterial("ShieldBlue", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+                    var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
+                    MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
+
+                    var rocketPrefab = BuildRocketPrefab(rocketMaterial, rocketHotMaterial, projectileGlowMaterial);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(RocketPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    rocketPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath);
+                    var ballPrefab = BuildBallPrefab(ballMaterial, ballSurface);
+                    BuildPlayerPrefab(rocketPrefab);
+                    BuildExplosionVfxPrefab();
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(ExplosionPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    var explosionRootAsset = AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath);
+                    var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
+                    if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
+                    if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
+                }
+
+                internal static void AssembleGameplaySceneStage()
+                {
+                    EnsureFolders();
+                    // Rebuilding gameplay/wiring creates a fresh scene, but
+                    // accepted baked LightmapSettings belongs to the lighting
+                    // stage and must survive a lighting-neutral rebuild.
+                    var preservedLightmapSettings = CaptureExistingLightmapSettingsDocument();
+                    var builderSignature = ComputeBuilderSignature();
+                    var ballSurface = LoadRequiredAsset<PhysicsMaterial>(BallSurfacePath);
+                    var floorMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/Floor.mat");
+                    var wallMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/Wall.mat");
+                    var markingMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/Marking.mat");
+                    var frameMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/Trim.mat");
+                    var shieldMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/Shield.mat");
+                    var arenaPrimaryMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ArenaPrimary.mat");
+                    var arenaTrimMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ArenaTrim.mat");
+                    var arenaHazardMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ArenaHazard.mat");
+                    var arenaGlowMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ArenaGlow.mat");
+                    var gridCeilingMaterial = LoadRequiredAsset<Material>(GridCeilingMaterialPath);
+                    var gridLongWallMaterial = LoadRequiredAsset<Material>(GridLongWallMaterialPath);
+                    var gridEndWallMaterial = LoadRequiredAsset<Material>(GridEndWallMaterialPath);
+                    var shieldBlueMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ShieldBlue.mat");
+                    var shieldRedMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ShieldRed.mat");
+                    var rocketPrefab = LoadRequiredAsset<GameObject>(RocketPrefabPath);
+                    var ballPrefab = LoadRequiredAsset<GameObject>(BallPrefabPath);
+                    var playerPrefab = LoadRequiredAsset<GameObject>(PlayerPrefabPath);
+                    var explosionRootAsset = LoadRequiredAsset<GameObject>(ExplosionPrefabPath);
+                    var explosionPrefab = GetSerializablePrefabComponent<ExplosionVfx>(explosionRootAsset, out var explosionPrefabProbe);
+                    try
+                    {
+                        if (explosionPrefab == null) throw new InvalidOperationException("Explosion VFX prefab source component could not be resolved.");
+                        RegisterBuildScene();
+                        UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
+                        SetProjectFixedTimestep();
+                        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
+                        var defaultCamera = Camera.main;
+                        if (defaultCamera != null) UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
+                        var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial);
+                        var shieldSetObject = new GameObject("GoalShieldSet");
+                        var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
+                        SetObjectArray(goalShieldSet, "colliders", arena.Shields);
+                        var explosionObject = new GameObject("ExplosionResolver");
+                        var explosionResolver = explosionObject.AddComponent<ExplosionResolver>();
+                        var explosionVfxSpawner = explosionObject.AddComponent<ExplosionVfxSpawner>();
+                        SetObjectReference(explosionResolver, "goalShieldSet", goalShieldSet);
+                        SetObjectReference(explosionResolver, "explosionVfxSpawner", explosionVfxSpawner);
+                        SetObjectReference(explosionVfxSpawner, "explosionVfxPrefab", explosionPrefab);
+                        SetFloat(explosionResolver, "blastRadius", BlastRadius);
+                        SetFloat(explosionResolver, "playerImpulseStrength", 24f);
+                        SetFloat(explosionResolver, "ballImpulseStrength", 16f);
+                        SetFloat(explosionResolver, "occludedForce", 0.25f);
+                        SetFloat(explosionResolver, "playerUpBias", 0.18f);
+                        SetFloat(explosionResolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
+                        SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
+                        SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                        SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
+                        var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
+                        player.name = "Player";
+                        player.transform.SetPositionAndRotation(new Vector3(PlayerSpawnOffset, 0f, 0f), Quaternion.LookRotation(Vector3.left, Vector3.up));
+                        var ball = (GameObject)PrefabUtility.InstantiatePrefab(ballPrefab);
+                        ball.name = "Ball";
+                        ball.transform.SetPositionAndRotation(new Vector3(0f, BallSpawnHeight, 0f), Quaternion.identity);
+                        var playerMotor = player.GetComponent<PlayerMotor>();
+                        var playerInput = player.GetComponent<PlayerInputReader>();
+                        var playerLook = player.GetComponent<PlayerLook>();
+                        var cameraFeedback = player.GetComponent<PlayerCameraFeedback>();
+                        var launcher = player.GetComponent<RocketLauncher>();
+                        var kick = player.GetComponent<BallKick>();
+                        var ballMotor = ball.GetComponent<BallMotor>();
+                        var ballBody = ball.GetComponent<Rigidbody>();
+                        var ballCollider = ball.GetComponent<Collider>();
+                        SetObjectReference(ballMotor, "body", ballBody);
+                        SetObjectReference(ballMotor, "ballCollider", ballCollider);
+                        SetObjectReference(ballMotor, "player", playerMotor);
+                        SetObjectReference(ballMotor, "goalShieldSet", goalShieldSet);
+                        SetObjectReference(kick, "ball", ballMotor);
+                        SetObjectReference(launcher, "explosionResolver", explosionResolver);
+                        SetObjectReference(cameraFeedback, "player", playerMotor);
+                        SetObjectReference(cameraFeedback, "targetCamera", player.GetComponentInChildren<Camera>(true));
+                        SetObjectReference(cameraFeedback, "viewmodels", player.transform.Find("Head/Camera/Viewmodels").gameObject);
+                        SetObjectReference(cameraFeedback, "crosshairCanvas", player.transform.Find("Head/Camera/CrosshairCanvas").gameObject);
+                        SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
+                        SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
+                        SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
+                        SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
+                        var matchObject = new GameObject("MatchController");
+                        var match = matchObject.AddComponent<MatchController>();
+                        SetObjectReference(match, "input", playerInput);
+                        SetObjectReference(match, "player", playerMotor);
+                        SetObjectReference(match, "playerLook", playerLook);
+                        SetObjectReference(match, "cameraFeedback", cameraFeedback);
+                        SetObjectReference(match, "ball", ballMotor);
+                        SetObjectReference(match, "launcher", launcher);
+                        SetObjectReference(match, "kick", kick);
+                        SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
+                        SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
+                        SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+                        SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                        SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
+                        SetVector3(match, "resetLookTarget", Vector3.zero);
+                        var hud = new GameObject("DebugHUD");
+                        var hudComponent = hud.AddComponent<MovementDebugHud>();
+                        SetObjectReference(hudComponent, "player", playerMotor);
+                        SetObjectReference(hudComponent, "ball", ballMotor);
+                        SetObjectReference(hudComponent, "launcher", launcher);
+                        SetObjectReference(hudComponent, "kick", kick);
+                        SetObjectReference(hudComponent, "match", match);
+                        new GameObject(GetBuildMarkerName(builderSignature));
+                        ConfigureSceneEnvironment(scene, arena);
+                        EditorSceneManager.SaveScene(scene, ScenePath);
+                        RestoreLightmapSettingsDocument(preservedLightmapSettings);
+                        AssetDatabase.SaveAssets();
+                        NormalizeGeneratedYamlWhitespace();
+                    }
+                    finally
+                    {
+                        if (explosionPrefabProbe != null) UnityEngine.Object.DestroyImmediate(explosionPrefabProbe);
+                    }
+                }
+
+                private static string CaptureExistingLightmapSettingsDocument()
+                {
+                    var path = MovementLabManifestStore.ResolveProjectPath(ScenePath);
+                    if (!File.Exists(path)) return null;
+                    var normalized = File.ReadAllText(path, Encoding.UTF8).Replace("\r\n", "\n").Replace("\r", "\n");
+                    var lines = normalized.Split(new[] { '\n' }, StringSplitOptions.None);
+                    var trailingNewline = normalized.EndsWith("\n", StringComparison.Ordinal);
+                    var contentLineCount = lines.Length - (trailingNewline ? 1 : 0);
+                    for (var start = 0; start < contentLineCount; start++)
+                    {
+                        if (!lines[start].StartsWith("--- !u!157 ", StringComparison.Ordinal)) continue;
+                        var end = start + 1;
+                        while (end < contentLineCount && !lines[end].StartsWith("--- !u!", StringComparison.Ordinal)) end++;
+                        var document = string.Join("\n", lines, start, end - start);
+                        if (document.IndexOf("LightmapSettings:", StringComparison.Ordinal) >= 0) return document;
+                        start = end - 1;
+                    }
+                    return null;
+                }
+
+                private static void RestoreLightmapSettingsDocument(string preservedDocument)
+                {
+                    if (string.IsNullOrWhiteSpace(preservedDocument)) return;
+                    var path = MovementLabManifestStore.ResolveProjectPath(ScenePath);
+                    if (!File.Exists(path)) return;
+                    var normalized = File.ReadAllText(path, Encoding.UTF8).Replace("\r\n", "\n").Replace("\r", "\n");
+                    var lines = normalized.Split(new[] { '\n' }, StringSplitOptions.None);
+                    var trailingNewline = normalized.EndsWith("\n", StringComparison.Ordinal);
+                    var contentLineCount = lines.Length - (trailingNewline ? 1 : 0);
+                    var output = new List<string>();
+                    var replaced = false;
+                    for (var start = 0; start < contentLineCount;)
+                    {
+                        if (!lines[start].StartsWith("--- !u!", StringComparison.Ordinal))
+                        {
+                            output.Add(lines[start++]);
+                            continue;
+                        }
+
+                        var end = start + 1;
+                        while (end < contentLineCount && !lines[end].StartsWith("--- !u!", StringComparison.Ordinal)) end++;
+                        var document = string.Join("\n", lines, start, end - start);
+                        if (lines[start].StartsWith("--- !u!157 ", StringComparison.Ordinal) && document.IndexOf("LightmapSettings:", StringComparison.Ordinal) >= 0)
+                        {
+                            if (!replaced)
+                            {
+                                output.Add(preservedDocument);
+                                replaced = true;
+                            }
+                        }
+                        else
+                        {
+                            output.Add(document);
+                        }
+                        start = end;
+                    }
+
+                    if (!replaced) output.Add(preservedDocument);
+                    var restored = string.Join("\n", output) + (trailingNewline ? "\n" : string.Empty);
+                    File.WriteAllText(path, restored, new UTF8Encoding(false));
+                }
+
+                private static T LoadRequiredAsset<T>(string path) where T : UnityEngine.Object
+                {
+                    var asset = AssetDatabase.LoadAssetAtPath<T>(path);
+                    if (asset == null) throw new InvalidOperationException("Required stage asset is missing: " + path);
+                    return asset;
+                }
+
                 internal static void AssembleMovementLabUnstaged()
                 {
                     var builderSignature = ComputeBuilderSignature();

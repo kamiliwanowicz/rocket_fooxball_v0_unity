@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -16,6 +15,7 @@ namespace RocketFooxball.Editor
             AssembleMovementLab();
             ValidateMovementLabPreBake();
             var probe = MovementLabStageGraph.Probe(true);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
             if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
             {
                 throw new InvalidOperationException("MovementLab lighting is stale. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
@@ -25,25 +25,11 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Assemble Movement Lab")]
         public static void AssembleMovementLab()
         {
-            var probe = MovementLabStageGraph.Probe(true);
-            var generationStages = new[]
-            {
-                MovementLabStage.Importer,
-                MovementLabStage.MaterialPrefab,
-                MovementLabStage.GameplayScene,
-                MovementLabStage.Quality
-            };
-            if (!generationStages.Any(probe.IsStale))
-            {
-                Debug.Log("Rocket Fooxball Movement Lab assembly reused generated state: " + MovementLabContract.ScenePath);
-                return;
-            }
-
-            MovementLabManifestStore.EnsureWriteAuthorization();
-            MovementLabSceneComposer.AssembleMovementLabUnstaged();
-            MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureAssembledState());
-            AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
-            Debug.Log("Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
+            var probe = MovementLabStageRunner.RunSelective();
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
+            Debug.Log(probe.StaleStages.Length == 0
+                ? "Rocket Fooxball Movement Lab assembly reused generated state: " + MovementLabContract.ScenePath
+                : "Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
         }
 
         [MenuItem("Rocket Fooxball/Authorize Movement Lab Manifest Migration")]
@@ -65,9 +51,18 @@ namespace RocketFooxball.Editor
         public static void ProbeMovementLabGeneratedState()
         {
             var probe = MovementLabStageGraph.Probe(true);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
             Debug.Log("Rocket Fooxball Movement Lab stale stages: " +
                 (probe.StaleStages.Length == 0 ? "none" : string.Join(", ", probe.StaleStages)) +
                 "; lighting input digest: " + probe.LightingInputDigest);
+        }
+
+        [MenuItem("Rocket Fooxball/Compare Movement Lab Non-Lighting Builds")]
+        public static void CompareMovementLabNonLightingBuilds()
+        {
+            var probe = MovementLabStageRunner.RunForceAllNonLighting();
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
+            Debug.Log("Rocket Fooxball Movement Lab forced non-lighting comparison passed.");
         }
 
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting")]
@@ -84,6 +79,7 @@ namespace RocketFooxball.Editor
             MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true));
             Debug.Log("Rocket Fooxball Movement Lab lighting baked explicitly: " + MovementLabContract.ScenePath);
         }
 
@@ -96,6 +92,7 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", probe.StaleStages));
             }
             MovementLabValidator.Validate(includeBakedLighting: true, logSuccess: true);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
         }
     }
 }

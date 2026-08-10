@@ -86,6 +86,11 @@ namespace RocketFooxball.Editor
                     ConfigureTextureImporter(ShieldTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ConfigureTextureImporter(ExplosionTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ConfigureTextureImporter(SmokeTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
+                    // Sky panorama is a regular sRGB 2D texture. Preserve the
+                    // accepted repeat/bilinear importer contract used by the
+                    // SunnyArenaSky material while making its metadata explicit
+                    // in the importer stage.
+                    ConfigureTextureImporter(SkyTexturePath, 2048, true, TextureImporterType.Default, TextureWrapMode.Repeat, TextureWrapMode.Repeat, FilterMode.Bilinear, 1);
                 }
 
                 internal static void ConfigureTextureImporter(string path, int maxSize, bool sRgb, TextureImporterType textureType, TextureWrapMode wrapU, TextureWrapMode wrapV, FilterMode filterMode, int anisoLevel)

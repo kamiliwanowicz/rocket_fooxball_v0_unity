@@ -173,7 +173,7 @@ namespace RocketFooxball.Editor
             WeaponAccentTexturePath + ".meta", WeaponAccentNormalTexturePath + ".meta", WeaponAccentMetallicTexturePath + ".meta", WeaponAccentOcclusionTexturePath + ".meta",
             WeaponAccentEmissionTexturePath + ".meta",
             RocketTexturePath + ".meta", RocketNormalTexturePath + ".meta", RocketMetallicTexturePath + ".meta", RocketOcclusionTexturePath + ".meta", RocketEmissionTexturePath + ".meta", RocketGlowTexturePath + ".meta",
-            ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta"
+            ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
 
         internal static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
@@ -241,11 +241,11 @@ namespace RocketFooxball.Editor
                 AddGeneratedFingerprintPath(paths, seen, GeneratedYamlAssetPaths[i] + ".meta");
             }
 
-            var generatedSourcePaths = MovementLabContract.ImportedAssetPaths;
-            for (var i = 0; i < generatedSourcePaths.Length; i++)
+            // Raw FBX/PNG sources are stage inputs, never trusted owned outputs.
+            // Importer metadata is the builder-owned output and remains drift-protected.
+            for (var i = 0; i < GeneratedImporterMetadataPaths.Length; i++)
             {
-                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i]);
-                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i] + ".meta");
+                AddGeneratedFingerprintPath(paths, seen, GeneratedImporterMetadataPaths[i]);
             }
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");

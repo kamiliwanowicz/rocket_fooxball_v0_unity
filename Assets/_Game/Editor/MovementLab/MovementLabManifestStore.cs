@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using UnityEngine;
 
@@ -86,18 +89,33 @@ namespace RocketFooxball.Editor
         {
             if (state == null || state.schemaVersion != MovementLabContract.ManifestSchemaVersion || state.stages == null ||
                 string.IsNullOrWhiteSpace(state.sourceSignature) || string.IsNullOrWhiteSpace(state.generatedOutputFingerprint) ||
-                string.IsNullOrWhiteSpace(state.unityVersion) || state.fingerprintPaths == null)
+                string.IsNullOrWhiteSpace(state.unityVersion) || string.IsNullOrWhiteSpace(state.gitSha) ||
+                state.gitSha.Length != 40 || string.IsNullOrWhiteSpace(state.manifestStatus) ||
+                (state.manifestStatus != "current" && state.manifestStatus != "stale") ||
+                string.IsNullOrWhiteSpace(state.bakedProfile) || state.fingerprintPaths == null || state.fingerprintHashes == null ||
+                state.fingerprintPaths.Length != state.fingerprintHashes.Length ||
+                state.staleStages == null || state.staleReasons == null || state.staleStages.Length != state.staleReasons.Length)
             {
                 return false;
             }
+            if (state.manifestStatus == "current" && state.staleStages.Length != 0) return false;
+            var staleStageNames = new HashSet<string>(StringComparer.Ordinal);
+            for (var staleIndex = 0; staleIndex < state.staleStages.Length; staleIndex++)
+            {
+                if (string.IsNullOrWhiteSpace(state.staleStages[staleIndex]) ||
+                    !Enum.IsDefined(typeof(MovementLabStage), state.staleStages[staleIndex]) ||
+                    !staleStageNames.Add(state.staleStages[staleIndex]) ||
+                    string.IsNullOrWhiteSpace(state.staleReasons[staleIndex])) return false;
+            }
 
-            var fingerprintPaths = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            var fingerprintPaths = new HashSet<string>(StringComparer.Ordinal);
             for (var i = 0; i < state.fingerprintPaths.Length; i++)
             {
                 try
                 {
                     var normalized = NormalizeRepositoryPath(state.fingerprintPaths[i]);
-                    if (!string.Equals(normalized, state.fingerprintPaths[i], StringComparison.Ordinal) || !fingerprintPaths.Add(normalized)) return false;
+                    if (!string.Equals(normalized, state.fingerprintPaths[i], StringComparison.Ordinal) || !fingerprintPaths.Add(normalized) ||
+                        string.IsNullOrWhiteSpace(state.fingerprintHashes[i])) return false;
                 }
                 catch (InvalidOperationException)
                 {
@@ -113,25 +131,41 @@ namespace RocketFooxball.Editor
                 MovementLabStage.GameplayScene.ToString(),
                 MovementLabStage.Quality.ToString()
             };
-            var seen = new System.Collections.Generic.HashSet<string>(StringComparer.Ordinal);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var outputPathDigests = new Dictionary<string, MovementLabPathDigest>(StringComparer.Ordinal);
             for (var i = 0; i < state.stages.Length; i++)
             {
                 var record = state.stages[i];
                 if (record == null || string.IsNullOrWhiteSpace(record.stage) || !Enum.IsDefined(typeof(MovementLabStage), record.stage) || !seen.Add(record.stage) ||
                     record.schemaVersion != MovementLabContract.ManifestSchemaVersion ||
                     string.IsNullOrWhiteSpace(record.contractVersion) || string.IsNullOrWhiteSpace(record.inputDigest) ||
-                    string.IsNullOrWhiteSpace(record.outputDigest) || record.predecessorDigests == null || record.outputs == null)
+                    string.IsNullOrWhiteSpace(record.repositoryInputDigest) || string.IsNullOrWhiteSpace(record.dependencyDigest) ||
+                    string.IsNullOrWhiteSpace(record.outputDigest) || record.unityVersion == null || record.predecessorDigests == null || record.outputs == null)
                 {
                     return false;
                 }
 
+                var stageOutputPaths = new HashSet<string>(StringComparer.Ordinal);
                 for (var outputIndex = 0; outputIndex < record.outputs.Length; outputIndex++)
                 {
                     var output = record.outputs[outputIndex];
-                    if (output == null || string.IsNullOrWhiteSpace(output.path) || (!output.missing && string.IsNullOrWhiteSpace(output.digest)))
+                    string normalizedOutputPath = null;
+                    try
+                    {
+                        normalizedOutputPath = output == null ? null : NormalizeRepositoryPath(output.path);
+                    }
+                    catch (InvalidOperationException)
                     {
                         return false;
                     }
+                    if (output == null || string.IsNullOrWhiteSpace(output.path) || !stageOutputPaths.Add(output.path) ||
+                        !string.Equals(normalizedOutputPath, output.path, StringComparison.Ordinal) ||
+                        (!output.missing && string.IsNullOrWhiteSpace(output.digest)))
+                    {
+                        return false;
+                    }
+
+                    outputPathDigests[output.path] = output;
                 }
             }
 
@@ -140,12 +174,28 @@ namespace RocketFooxball.Editor
                 if (!seen.Contains(requiredStages[i])) return false;
             }
 
-            return true;
+            var expectedPaths = outputPathDigests.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray();
+            if (!expectedPaths.SequenceEqual(state.fingerprintPaths, StringComparer.Ordinal)) return false;
+            for (var i = 0; i < expectedPaths.Length; i++)
+            {
+                var output = outputPathDigests[expectedPaths[i]];
+                var expectedHash = output.missing ? Sha256Text("missing:" + output.path + "\n") : output.digest;
+                if (!string.Equals(expectedHash, state.fingerprintHashes[i], StringComparison.Ordinal)) return false;
+            }
+
+            var expectedSource = Sha256Text(string.Join("\n", state.stages.Select(record => record.stage + ":" + record.inputDigest).OrderBy(value => value, StringComparer.Ordinal)) + "\n");
+            var expectedOutput = Sha256Text(string.Join("\n", state.stages.Select(record => record.stage + ":" + record.outputDigest).OrderBy(value => value, StringComparer.Ordinal)) + "\n");
+            return string.Equals(expectedSource, state.sourceSignature, StringComparison.Ordinal) &&
+                string.Equals(expectedOutput, state.generatedOutputFingerprint, StringComparison.Ordinal);
         }
 
         internal static void WriteAtomic(MovementLabGeneratedState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
+            if (!IsCurrentAndReadable(state))
+            {
+                throw new InvalidOperationException("MovementLab manifest write rejected: top-level signature, fingerprint, path-union, or stage schema is invalid.");
+            }
             var read = Read();
             if (read.Status != MovementLabManifestReadStatus.Current || !IsCurrentAndReadable(read.State))
             {
@@ -236,6 +286,11 @@ namespace RocketFooxball.Editor
             return path;
         }
 
+        internal static string GetCurrentGitSha()
+        {
+            return ReadGitSha();
+        }
+
         internal static string ResolveAuthorizationPath()
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
@@ -296,6 +351,15 @@ namespace RocketFooxball.Editor
             var sha = RunGit(projectRoot, "rev-parse HEAD");
             if (sha.Length != 40) throw new InvalidOperationException("MovementLab manifest authorization requires exact 40-character Git SHA.");
             return sha;
+        }
+
+        private static string Sha256Text(string value)
+        {
+            using (var sha = SHA256.Create())
+            {
+                return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty)))
+                    .Replace("-", string.Empty).ToLowerInvariant();
+            }
         }
 
         private static string RunGit(string projectRoot, string arguments)
