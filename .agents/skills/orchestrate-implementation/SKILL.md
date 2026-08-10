@@ -78,11 +78,11 @@ After plan worktree creation, all execution, review, recovery, and completion Gi
 - Child roles: implementation worker, reviewer, fix worker, investigator only. Active agent retains plan sequencing, worker coordination, result acceptance, Git operations, review gates, finding disposition, and final validation.
 - Implementation/fix workers: edit assigned owned paths only; no Git staging, commits, branch/worktree operations, or state edits.
 - One writer per path. Parallel writers require disjoint paths and stable inputs. Serialize shared contracts, generated/serialized assets, migrations, and shared validation environments.
-- Reviewer: fresh exact `sol_high` per review checkpoint; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
+- Reviewer: fresh exact `sol_high` per review dispatch; read-only Git-object inspection at exact frozen SHA, independent of live worktree state.
 - Implementation worker: exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Fix worker: fresh exact profile required by plan/user/AGENTS; otherwise `luna_max`.
 - Repeated-struggle takeover: same material issue survives two failed approaches or rechecks by current child -> orchestrator diagnoses repository/evidence, reproduces failure, and supplies targeted guidance. Issue survives guided recheck -> interrupt child, retire old result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, then dispatch fresh role-appropriate child with new `execution_id` and blocker-free contract. Isolated blocker, rescue request, scope correction, confusion, large task, or large context -> keep current child assigned. Ambiguous edit ownership or unresolved authority/product decision -> `blocked`.
-- Recurring-issue escalation: same material worker issue recurs after repeated-struggle takeover, and orchestrator cannot produce reasonable verified fix -> dispatch one fresh exact `sol_high` investigator. Investigator is read-only: inspect repository/evidence, reproduce issue, test safe hypotheses, then decide `fix_found | no_reasonable_fix`. `fix_found` -> return precise cause, fix instructions, affected paths, and verification steps; orchestrator dispatches fresh standard role-appropriate implementation/fix worker with those instructions and new `execution_id`. Investigator never edits or becomes fix worker. `no_reasonable_fix` -> stop execution, prohibit further worker retries, return `blocked`, and inform user directly in `user-direct` or through LP in `lp-dispatched`. Investigator launch is last recovery step before blocker return.
+- Recurring-issue escalation: same material worker issue recurs after repeated-struggle takeover, and orchestrator cannot produce reasonable verified fix -> dispatch one fresh exact `sol_high` investigator. Investigator is read-only: inspect repository/evidence, reproduce issue, test safe hypotheses, then decide `fix_found | no_reasonable_fix`. `fix_found` -> return precise cause, fix instructions, affected paths, and verification steps; orchestrator dispatches fresh standard role-appropriate implementation/fix worker with those instructions and new `execution_id`. Standard worker then exposes or blocks on wider recovery issue -> do not stop solely to request revised-attempt authority. Dispatch one fresh exact `sol_high` role-appropriate implementation/fix worker with new `execution_id`, blocker evidence, and bounded authority to diagnose and complete in-scope recovery. In-scope recovery may revise attempt mechanics, repair related owned paths, perform needed replacement production/build/bake run, and return generated outputs for orchestrator-owned staging and commit. Recovery must preserve bound objective, requirements, owned paths, dependencies, and Git ownership. Investigator never edits or becomes fix worker. `no_reasonable_fix`, recovery requiring authority outside those bounds, or blocked `sol_high` recovery worker -> stop execution, prohibit further worker retries, return `blocked`, and inform user directly in `user-direct` or through LP in `lp-dispatched`. Investigator plus conditional `sol_high` recovery worker form last recovery step before blocker return.
 - Required profile unavailable -> `blocked`; no silent substitution.
 
 Writer barriers follow ownership: completed disjoint lane closes independently before Git mutation, freeze, or review; unrelated lanes continue. Shared path, contract, or validation environment -> global barrier.
@@ -91,7 +91,7 @@ Writer barriers follow ownership: completed disjoint lane closes independently b
 
 Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer/investigator), checks, proof/evidence boundary, and bound snapshot identity/path/digest.
 
-Reviewer dispatch also binds `checkpoint_id`, covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria. Investigator dispatch binds recurring issue evidence, attempted orchestrator fixes, failed verification, affected task/path slice, and decision contract `fix_found | no_reasonable_fix`.
+Reviewer dispatch also binds `checkpoint_id`, unique `review_cycle_id`, review kind (`initial | fix-re-review`), covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds originating `review_cycle_id`, `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria. Investigator dispatch binds recurring issue evidence, attempted orchestrator fixes, failed verification, affected task/path slice, and decision contract `fix_found | no_reasonable_fix`.
 
 Child return repeats identity and role unchanged:
 
@@ -126,6 +126,8 @@ Reviewer dispatch requires all checkpoint-covered implementation workers through
 
 Per-worker checkpoint covers one worker. Grouped checkpoint covers every named worker. Any covered worker still `running`, lacking terminal return, blocked, or unverified -> reviewer barrier remains open. Unrelated disjoint workers outside checkpoint may keep running.
 
+Conditional fix re-review uses same terminal-return, retirement, writer-barrier, commit, frozen-SHA, scope, and unrelated-status gates for covered fix worker.
+
 ## Review checkpoints
 
 Default: one checkpoint per implementation worker. Satisfy worker -> reviewer barrier, then review before dependent work.
@@ -136,7 +138,9 @@ Plan fan-out -> launch every ready sibling after shared predecessors. Worker ter
 
 Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus material Critical/High integration risks visible at frozen SHA. Finding qualifies only with concrete trigger, harmful outcome, and code/evidence showing realistic risk. Harmful outcome must break scoped behavior, correctness, safety, security, data/asset integrity, required contract, build/integration/validation, or materially slow runtime or team iteration.
 
-PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
+PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists.
+
+Fix re-review gate: after fix commit, calculate `fix_loc` from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>` by summing added+deleted counts for text rows. Binary rows add zero LOC but remain in review scope. Count all Critical/High findings reported by originating review before disposition. `fix_loc > 300` or reported finding count `> 4` -> mandatory fresh exact `sol_high` re-review. Bind `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, kind `fix-re-review`, and same checkpoint task/path slice. Apply normal review scope, materiality, and PoC filters. Otherwise fix advances accepted head without re-review. Re-review findings -> fresh fix worker, then apply gate again to that review/fix cycle. Next lane or wave uses accepted post-fix head as `review_base_sha`.
 
 Reviewer finding format: one block per finding, exactly three fields:
 
@@ -151,14 +155,14 @@ Orchestrator assigns checkpoint-scoped finding IDs during disposition. Reviewer 
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
-2. Keep running child assigned through normal difficulty. Same material issue survives two failed approaches or rechecks -> diagnose and guide current child. Guided recheck fails -> interrupt, retire, restore writer boundary, then dispatch fresh child. Recurring issue unresolved by orchestrator -> run recurring-issue escalation; `fix_found` dispatches fresh standard worker from investigator contract, `no_reasonable_fix` stops execution as `blocked`. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity.
+2. Keep running child assigned through normal difficulty. Same material issue survives two failed approaches or rechecks -> diagnose and guide current child. Guided recheck fails -> interrupt, retire, restore writer boundary, then dispatch fresh child. Recurring issue unresolved by orchestrator -> run recurring-issue escalation; `fix_found` dispatches fresh standard worker from investigator contract. Wider in-scope recovery issue exposed by that worker -> dispatch fresh exact `sol_high` recovery worker under escalation bounds. `no_reasonable_fix` or failed/out-of-bounds `sol_high` recovery -> stop execution as `blocked`. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity.
 3. Per-worker checkpoint -> satisfy worker -> reviewer barrier; dispatch fresh exact `sol_high` reviewer. Keep unrelated disjoint workers running. Grouped checkpoint -> wait for terminal returns from all named workers plus join condition, then satisfy same barrier.
 4. Reviewer inspects bound Git objects at frozen SHA, applies review-scope materiality and PoC filters, reports qualifying Critical/High findings only, and performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
-6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
+6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Apply fix re-review gate. Triggered -> dispatch fresh exact `sol_high` reviewer and route results through steps 4-6. Not triggered -> advance checkpoint from post-fix head.
 7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash bound snapshot. Verify `HEAD` descends from `start_sha`; calculate owned path/content diff from `start_sha..HEAD`; verify clean index/worktree, initial unrelated status, branch, dependencies, and requirements.
 
-Required unowned edit, plan decomposition change, dependency drift, bound snapshot mismatch, or product decision outside accepted plan -> `blocked`. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
+Required unowned edit, plan decomposition change, dependency drift, bound snapshot mismatch, or product decision outside accepted plan -> `blocked`. In-scope attempt-mechanics revision authorized by recurring-issue escalation is recovery, not plan decomposition change. Route one needed action to LP in `lp-dispatched`; route it to user in `user-direct`. Active agent preserves accepted plan boundary and authority state.
 
 ## Completion routing
 
@@ -170,7 +174,7 @@ Return common facts:
 - exact `start_sha`, dependency SHAs, branch, worktree, initial unrelated-status snapshot;
 - clean committed exact plan SHA when complete;
 - changed paths and scope proof from exact `start_sha..final_sha`;
-- each checkpoint ID, covered executions, review base/frozen SHA, verdict, accepted finding dispositions;
+- each checkpoint ID, covered executions, each review cycle/kind/base/frozen SHA, verdict, reported finding count, fix LOC, re-review decision, and accepted finding dispositions;
 - checks: command/workflow, working directory, observed result, evidence, exact SHA;
 - blocker, evidence, and one needed authority action/recheck when blocked.
 
@@ -178,4 +182,4 @@ Return common facts:
 
 `user-direct` returns facts directly to user, including launch checkout path/branch/status snapshot and created branch/worktree. Result remains isolated unless user explicitly authorized integration.
 
-`complete` requires bound snapshot match, exact committed head descending from `start_sha`, owned paths clean, initial unrelated status preserved, owned-only `start_sha..final_sha` diff, every worker covered by completed checkpoint review/fix flow, passing final checks, and satisfied child lifecycle gate.
+`complete` requires bound snapshot match, exact committed head descending from `start_sha`, owned paths clean, initial unrelated status preserved, owned-only `start_sha..final_sha` diff, every worker covered by completed checkpoint review/fix/re-review flow, every triggered re-review resolved, passing final checks, and satisfied child lifecycle gate.
