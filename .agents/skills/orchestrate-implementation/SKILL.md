@@ -131,14 +131,16 @@ Accepted plan may group multiple implementation workers into one checkpoint only
 
 Plan fan-out -> launch every ready sibling after shared predecessors. Worker terminal return -> satisfy worker -> reviewer barrier for declared per-worker checkpoint immediately; unrelated disjoint workers continue. Grouped checkpoint waits only for terminal returns from all named members plus join condition. Branch checkpoint gates fan-in. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
 
-Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus Critical/High integration risks visible at frozen SHA. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
+Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus material Critical/High integration risks visible at frozen SHA. Finding qualifies only with concrete trigger, harmful outcome, and code/evidence showing realistic risk. Harmful outcome must break scoped behavior, correctness, safety, security, data/asset integrity, required contract, build/integration/validation, or materially slow runtime or team iteration.
+
+PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists. Fix result advances accepted head without re-review. Next lane or wave uses post-fix head as `review_base_sha`.
 
 ## Execution loop
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
 2. Monitor running children for stuck signals. Signal -> interrupt, diagnose directly, remove blocker or improve contract, restore writer boundary, then dispatch fresh child. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity. No retry on old worker.
 3. Per-worker checkpoint -> satisfy worker -> reviewer barrier; dispatch fresh exact `sol_high` reviewer. Keep unrelated disjoint workers running. Grouped checkpoint -> wait for terminal returns from all named workers plus join condition, then satisfy same barrier.
-4. Reviewer inspects bound Git objects at frozen SHA, reports Critical/High findings only, performs no edits/tests unless explicitly assigned.
+4. Reviewer inspects bound Git objects at frozen SHA, applies review-scope materiality and PoC filters, reports qualifying Critical/High findings only, and performs no edits/tests unless explicitly assigned.
 5. No accepted finding -> mark checkpoint accepted. Accepted finding -> one fresh fix worker with narrow finding-owned scope.
 6. Stop fix writer, close lane barrier, verify scope, stage, commit, require owned paths clean, and freeze new full SHA. Do not re-review fix. Rerun checks invalidated by fix; pre-fix review does not prove post-fix behavior. Advance checkpoint from post-fix head.
 7. Fan-in waits for every branch checkpoint, not unrelated worker completion alone. Repeat until every checkpoint has verdict and finding disposition. Run final checks at exact committed `HEAD`. Rehash bound snapshot. Verify `HEAD` descends from `start_sha`; calculate owned path/content diff from `start_sha..HEAD`; verify clean index/worktree, initial unrelated status, branch, dependencies, and requirements.

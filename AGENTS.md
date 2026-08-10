@@ -13,6 +13,13 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 3. Fast tuning and stable performance
 4. Visual polish follows core gameplay unless current task explicitly targets graphics
 
+## Delivery posture
+
+- PoC -> optimize for fast gameplay learning, not production completeness.
+- Prefer smallest reversible change proving intended behavior. Reuse existing patterns and assets.
+- Spend effort on issues likely to break playtests, builds, integration, project assets, or iteration speed.
+- Defer broad abstraction, speculative future-proofing, production hardening, exhaustive edge-case handling, and untargeted polish unless required for core-loop reliability or explicitly requested.
+
 ## Repository map
 
 - Runtime gameplay: `Assets/_Game/Scripts/Runtime/`; namespace `RocketFooxball`

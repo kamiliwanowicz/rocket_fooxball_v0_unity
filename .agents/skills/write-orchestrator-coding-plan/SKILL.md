@@ -101,7 +101,7 @@ Every plan contains:
 - review checkpoints: every task maps to one checkpoint; default per worker; grouped checkpoint records covered tasks/workers, join condition, dependency gate, and technical rationale.
 - checks: command/workflow, owner, run point, expected result, evidence, invalidation.
 - proof: discriminatory scenario or safe alternate proof.
-- review focus: Critical/High regression, safety, contract, evidence risks.
+- review focus: concrete material Critical/High failure or delivery risks under `$orchestrate-implementation` PoC review filter.
 - handoff: exact head requirement, changed paths, residual risks, integration/user-branch authority.
 
 Each task names objective, done condition, dependency, owned/protected paths, focused reads, implementation instructions, validation, proof, and return evidence.
@@ -170,7 +170,7 @@ Dependencies: [accepted full SHAs or None]
 - done when: [observable acceptance]
 - checks: [owner, command/workflow, result, evidence, invalidation]
 - proof: [discriminatory evidence]
-- review_focus: [Critical/High risks]
+- review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
 - return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
