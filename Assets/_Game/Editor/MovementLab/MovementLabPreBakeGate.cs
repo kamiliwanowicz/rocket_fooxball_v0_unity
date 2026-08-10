@@ -15,6 +15,7 @@ namespace RocketFooxball.Editor
 {
     internal static class MovementLabPreBakeGate
     {
+        private const int PassRecordSchemaVersion = 2;
         [Serializable]
         private sealed class ReviewMarker
         {
@@ -40,9 +41,11 @@ namespace RocketFooxball.Editor
         [Serializable]
         private sealed class PassRecord
         {
-            public int schemaVersion = 1;
+            public int schemaVersion = PassRecordSchemaVersion;
             public string gitSha;
             public string unityVersion;
+            public string profileId;
+            public string profileTag;
             public string lightingInputDigest;
             public string reviewMarkerPath;
             public string reviewMarkerDigest;
@@ -54,8 +57,14 @@ namespace RocketFooxball.Editor
 
         internal static string ValidateAndWritePassRecord()
         {
+            return ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Production);
+        }
+
+        internal static string ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId profile)
+        {
             ValidatePersistedNonLightingState();
             MovementLabValidator.ValidatePreBakeSemantics();
+            MovementLabLightingProfiles.ValidatePreparedScene(profile);
             var probe = MovementLabStageGraph.Probe(true);
             var required = new[] { MovementLabStage.Importer, MovementLabStage.MaterialPrefab, MovementLabStage.GameplayScene, MovementLabStage.Quality };
             var stale = required.Where(probe.IsStale).Select(stage => stage.ToString()).ToArray();
@@ -81,6 +90,8 @@ namespace RocketFooxball.Editor
             {
                 gitSha = gitSha,
                 unityVersion = Application.unityVersion,
+                profileId = profile.ToString(),
+                profileTag = MovementLabLightingProfiles.Get(profile).Tag,
                 lightingInputDigest = probe.LightingInputDigest,
                 reviewMarkerPath = reviewMarkerPath,
                 reviewMarkerDigest = review.Digest,
@@ -94,6 +105,11 @@ namespace RocketFooxball.Editor
         }
 
         internal static void RevalidatePassRecord(string passPath, bool allowBakedOutputDrift = false)
+        {
+            RevalidatePassRecord(passPath, allowBakedOutputDrift, MovementLabLightingProfiles.ProfileId.Production);
+        }
+
+        internal static void RevalidatePassRecord(string passPath, bool allowBakedOutputDrift, MovementLabLightingProfiles.ProfileId profile)
         {
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrEmpty(projectRoot)) throw new InvalidOperationException("Unable to resolve Unity project root.");
@@ -112,9 +128,12 @@ namespace RocketFooxball.Editor
             }
 
             var gitSha = RunGit(projectRoot, "rev-parse HEAD");
-            if (gitSha.Length != 40 || pass == null || pass.schemaVersion != 1 ||
+            var expectedProfile = MovementLabLightingProfiles.Get(profile);
+            if (gitSha.Length != 40 || pass == null || pass.schemaVersion != PassRecordSchemaVersion ||
                 !string.Equals(pass.gitSha, gitSha, StringComparison.Ordinal) ||
                 !string.Equals(pass.unityVersion, Application.unityVersion, StringComparison.Ordinal) ||
+                !string.Equals(pass.profileId, profile.ToString(), StringComparison.Ordinal) ||
+                !string.Equals(pass.profileTag, expectedProfile.Tag, StringComparison.Ordinal) ||
                 string.IsNullOrWhiteSpace(pass.lightingInputDigest) || string.IsNullOrWhiteSpace(pass.reviewMarkerPath) ||
                 string.IsNullOrWhiteSpace(pass.reviewMarkerDigest) || string.IsNullOrWhiteSpace(pass.checkpoint) ||
                 string.IsNullOrWhiteSpace(pass.reviewer))
@@ -146,6 +165,7 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("MovementLab pre-bake review marker changed after pass validation.");
             }
 
+            MovementLabLightingProfiles.ValidatePreparedScene(profile);
             var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift);
             var required = new[] { MovementLabStage.Importer, MovementLabStage.MaterialPrefab, MovementLabStage.GameplayScene, MovementLabStage.Quality };
             var stale = required.Where(probe.IsStale).Select(stage => stage.ToString()).ToArray();

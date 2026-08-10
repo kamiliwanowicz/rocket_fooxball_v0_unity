@@ -83,16 +83,24 @@ namespace RocketFooxball.Editor
         public static void BakeMovementLabLighting()
         {
             MovementLabFastModeSession.RestoreIfActive();
-            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord();
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath);
             MovementLabLightingProfiles.EnsurePersistedProductionSettings();
+            // Always prepare the selected profile first. This makes a
+            // production bake valid even when the persisted scene currently
+            // contains the development intermediate.
+            MovementLabLightingProfiles.PrepareScene(scene, MovementLabLightingProfiles.ProfileId.Production);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
+            EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Production);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath, false, MovementLabLightingProfiles.ProfileId.Production);
             MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
             MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Production, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true, profile: MovementLabLightingProfiles.ProfileId.Production);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true));
@@ -130,9 +138,9 @@ namespace RocketFooxball.Editor
             {
                 AssembleMovementLab();
                 // Fast mode intentionally accepts the bounded Development
-                // lighting intermediate; only persisted quality bindings are
-                // checked here. Full scene/probe semantics remain production
-                // gates in Build/Validate.
+                // lighting intermediate, but still proves persisted semantic
+                // state without review/pass/baked-output/capture work.
+                MovementLabValidator.ValidateFastPersistedSemantics();
                 GraphicsQualityConfigurator.Validate();
                 var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true);
                 MovementLabStageRunner.WriteProbeIfRequested(probe);
@@ -159,10 +167,16 @@ namespace RocketFooxball.Editor
             MovementLabLightingProfiles.EnsurePersistedDevelopmentSettings();
             MovementLabLightingProfiles.PrepareScene(scene, MovementLabLightingProfiles.ProfileId.Development);
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
-            MovementLabLightingPipeline.BakeSceneLighting(scene, null, MovementLabLightingProfiles.ProfileId.Development);
+            EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Development);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath, false, MovementLabLightingProfiles.ProfileId.Development);
+            MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
             MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace();
             MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
+            MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true, profile: MovementLabLightingProfiles.ProfileId.Development);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true));

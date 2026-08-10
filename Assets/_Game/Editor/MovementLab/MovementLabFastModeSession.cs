@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using UnityEditor;
@@ -32,7 +33,9 @@ namespace RocketFooxball.Editor
         {
             EditorApplication.quitting += RestoreIfActive;
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
-            SceneManager.sceneUnloaded += _ => RestoreIfActive();
+            AssemblyReloadEvents.beforeAssemblyReload += RestoreIfActive;
+            EditorSceneManager.sceneClosing += OnSceneClosing;
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
             EditorSceneManager.sceneOpened += (_, __) => RestoreIfActive();
         }
 
@@ -58,20 +61,21 @@ namespace RocketFooxball.Editor
             var scene = SceneManager.GetActiveScene();
             if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
                 throw new InvalidOperationException("Fast preview requires the loaded MovementLab scene: " + MovementLabContract.ScenePath);
-            if (scene.isDirty) throw new InvalidOperationException("Fast preview requires a clean loaded MovementLab scene; save or discard scene edits first.");
-
             snapshot = Capture(scene);
             try
             {
+                applying = true;
                 Apply(snapshot);
                 AssertApplied(snapshot);
                 Debug.Log("Rocket Fooxball fast preview entered: quality=Iteration index=" + FastQualityIndex + "; renderer lightmap bindings detached.");
             }
             catch
             {
-                try { RestoreSnapshot(snapshot); } finally { snapshot = null; }
+                applying = false;
+                try { RestoreIfActive(); } catch { /* retain snapshot; lifecycle/save remains fail-closed */ }
                 throw;
             }
+            finally { applying = false; }
         }
 
         internal static void RestoreIfActive()
@@ -81,13 +85,15 @@ namespace RocketFooxball.Editor
             try
             {
                 applying = true;
+                EnsurePreviewStateIntact(current);
                 RestoreSnapshot(current);
                 AssertRestored(current);
+                AssertPersistedAssetHashesUnchanged(current);
+                snapshot = null;
             }
             finally
             {
                 applying = false;
-                snapshot = null;
             }
         }
 
@@ -130,7 +136,26 @@ namespace RocketFooxball.Editor
                     identity = Identity(probe.transform), probe = probe, enabled = probe.enabled, mode = probe.mode,
                     refreshMode = probe.refreshMode, timeSlicingMode = probe.timeSlicingMode, resolution = probe.resolution,
                     hdr = probe.hdr, boxProjection = probe.boxProjection, intensity = probe.intensity
+                 }).ToArray();
+
+            var cameras = UnityEngine.Object.FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                .Where(camera => camera != null && camera.gameObject.scene == scene)
+                .OrderBy(camera => Identity(camera.transform), StringComparer.Ordinal)
+                .Select(camera =>
+                {
+                    var additional = camera.GetComponent<UniversalAdditionalCameraData>();
+                    return new CameraSnapshot
+                    {
+                        identity = Identity(camera.transform), camera = camera, allowHdr = camera.allowHDR,
+                        additional = additional, renderPostProcessing = additional != null && additional.renderPostProcessing
+                    };
                 }).ToArray();
+
+            var rendererFeatures = CaptureFastRendererFeatures();
+            var sceneObjects = CaptureSceneObjects(scene);
+            var persistedAssetHashes = CapturePersistedAssetHashes();
+            var persistedAssetDirty = CapturePersistedAssetDirtyState();
+            var persistedAssetDigests = CapturePersistedAssetDigests();
 
             var sceneDirty = scene.isDirty;
             return new Snapshot
@@ -144,6 +169,18 @@ namespace RocketFooxball.Editor
                 ambientGround = RenderSettings.ambientGroundColor,
                 ambientIntensity = RenderSettings.ambientIntensity,
                 sun = RenderSettings.sun,
+                skybox = RenderSettings.skybox,
+                fog = RenderSettings.fog,
+                fogColor = RenderSettings.fogColor,
+                fogMode = RenderSettings.fogMode,
+                fogStartDistance = RenderSettings.fogStartDistance,
+                fogEndDistance = RenderSettings.fogEndDistance,
+                fogDensity = RenderSettings.fogDensity,
+                customReflection = RenderSettings.customReflection,
+                subtractiveShadowColor = RenderSettings.subtractiveShadowColor,
+                haloStrength = RenderSettings.haloStrength,
+                flareStrength = RenderSettings.flareStrength,
+                flareFadeSpeed = RenderSettings.flareFadeSpeed,
                 defaultReflectionMode = RenderSettings.defaultReflectionMode,
                 defaultReflectionResolution = RenderSettings.defaultReflectionResolution,
                 reflectionBounces = RenderSettings.reflectionBounces,
@@ -151,13 +188,170 @@ namespace RocketFooxball.Editor
                 renderers = renderers,
                 lights = lights,
                 volumes = volumes,
-                probes = probes
+                probes = probes,
+                cameras = cameras,
+                rendererFeatures = rendererFeatures,
+                sceneObjects = sceneObjects,
+                persistedAssetHashes = persistedAssetHashes,
+                persistedAssetDirty = persistedAssetDirty,
+                persistedAssetDigests = persistedAssetDigests
             };
+        }
+
+        private static Dictionary<string, string> CapturePersistedAssetHashes()
+        {
+            var paths = new[]
+            {
+                GraphicsQualityConfigurator.HighPipelinePath, GraphicsQualityConfigurator.HighRendererPath,
+                GraphicsQualityConfigurator.LowPipelinePath, GraphicsQualityConfigurator.LowRendererPath,
+                GraphicsQualityConfigurator.IterationPipelinePath, GraphicsQualityConfigurator.IterationRendererPath,
+                GraphicsQualityConfigurator.QualitySettingsPath, GraphicsQualityConfigurator.ProjectSettingsPath
+            };
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            for (var i = 0; i < paths.Length; i++)
+            {
+                var absolute = MovementLabManifestStore.ResolveProjectPath(paths[i]);
+                result[paths[i]] = File.Exists(absolute) ? HashFile(absolute) : "missing";
+            }
+            return result;
+        }
+
+        private static void AssertPersistedAssetHashesUnchanged(Snapshot state)
+        {
+            if (state.persistedAssetHashes == null) throw new InvalidOperationException("Fast preview persisted asset snapshot is unavailable.");
+            var current = CapturePersistedAssetHashes();
+            foreach (var pair in state.persistedAssetHashes)
+            {
+                if (!current.TryGetValue(pair.Key, out var value) || !string.Equals(value, pair.Value, StringComparison.Ordinal))
+                    throw new InvalidOperationException("Fast preview persisted asset changed during preview: " + pair.Key);
+            }
+        }
+
+        private static Dictionary<string, bool> CapturePersistedAssetDirtyState()
+        {
+            var result = new Dictionary<string, bool>(StringComparer.Ordinal);
+            foreach (var path in CapturePersistedAssetHashes().Keys)
+            {
+                var target = AssetDatabase.LoadMainAssetAtPath(path);
+                if (target != null) result[path] = EditorUtility.IsDirty(target);
+            }
+            return result;
+        }
+
+        private static void RestorePersistedAssetDirtyState(Snapshot state)
+        {
+            if (state.persistedAssetDirty == null) return;
+            foreach (var pair in state.persistedAssetDirty)
+            {
+                var target = AssetDatabase.LoadMainAssetAtPath(pair.Key);
+                if (target == null) continue;
+                if (state.persistedAssetDigests == null || !state.persistedAssetDigests.TryGetValue(pair.Key, out var beforeDigest) ||
+                    !DigestMatches(beforeDigest, target)) continue;
+                var absolute = MovementLabManifestStore.ResolveProjectPath(pair.Key);
+                var unchangedOnDisk = File.Exists(absolute) && state.persistedAssetHashes != null &&
+                    state.persistedAssetHashes.TryGetValue(pair.Key, out var beforeHash) &&
+                    string.Equals(HashFile(absolute), beforeHash, StringComparison.Ordinal);
+                if (!unchangedOnDisk) continue;
+                if (pair.Value) EditorUtility.SetDirty(target); else EditorUtility.ClearDirty(target);
+            }
+        }
+
+        private static Dictionary<string, string> CapturePersistedAssetDigests()
+        {
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var path in CapturePersistedAssetHashes().Keys)
+            {
+                var target = AssetDatabase.LoadMainAssetAtPath(path);
+                if (target != null) result[path] = SerializedDigest(target);
+            }
+            return result;
+        }
+
+        private static string HashFile(string path)
+        {
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+            using (var stream = System.IO.File.OpenRead(path))
+                return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+        }
+
+        private static RendererFeatureSnapshot[] CaptureFastRendererFeatures()
+        {
+            var renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(GraphicsQualityConfigurator.IterationRendererPath);
+            if (renderer == null || renderer.rendererFeatures == null) return Array.Empty<RendererFeatureSnapshot>();
+            return renderer.rendererFeatures.OfType<ScreenSpaceAmbientOcclusion>()
+                .Select(feature =>
+                {
+                    if (feature == null) return null;
+                    var digest = SerializedDigest(feature);
+                    if (string.IsNullOrEmpty(digest))
+                        throw new InvalidOperationException("Fast preview cannot prove SSAO renderer-feature serialization.");
+                    return new RendererFeatureSnapshot
+                    {
+                        identity = feature.name,
+                        feature = feature,
+                        active = feature.isActive,
+                        dirty = EditorUtility.IsDirty(feature),
+                        digest = digest
+                    };
+                })
+                .Where(feature => feature != null)
+                .ToArray();
+        }
+
+        private static SceneObjectSnapshot[] CaptureSceneObjects(Scene scene)
+        {
+            var result = new List<SceneObjectSnapshot>();
+            var roots = scene.GetRootGameObjects();
+            for (var i = 0; i < roots.Length; i++)
+            {
+                var root = roots[i];
+                AddSceneObjectSnapshot(result, root);
+                var components = root.GetComponentsInChildren<Component>(true);
+                for (var j = 0; j < components.Length; j++) if (components[j] != null) AddSceneObjectSnapshot(result, components[j]);
+                var children = root.GetComponentsInChildren<Transform>(true);
+                for (var j = 0; j < children.Length; j++) if (children[j] != null) AddSceneObjectSnapshot(result, children[j].gameObject);
+            }
+            return result.OrderBy(item => item.identity, StringComparer.Ordinal).ToArray();
+        }
+
+        private static void AddSceneObjectSnapshot(List<SceneObjectSnapshot> result, UnityEngine.Object target)
+        {
+            if (target == null) return;
+            var identity = target is Component component ? Identity(component.transform) + ":" + target.GetType().FullName :
+                target is GameObject gameObject ? Identity(gameObject.transform) + ":GameObject" : target.GetType().FullName;
+            if (result.Any(item => item.target == target)) return;
+            var digest = SerializedDigest(target);
+            if (string.IsNullOrEmpty(digest))
+                throw new InvalidOperationException("Fast preview cannot prove scene-object serialization: " + identity);
+            result.Add(new SceneObjectSnapshot
+            {
+                identity = identity,
+                target = target,
+                dirty = EditorUtility.IsDirty(target),
+                digest = digest
+            });
+        }
+
+        private static string SerializedDigest(UnityEngine.Object target)
+        {
+            if (target == null) return null;
+            try
+            {
+                var json = EditorJsonUtility.ToJson(target);
+                return string.IsNullOrEmpty(json) ? null : json;
+            }
+            catch { return null; }
+        }
+
+        private static bool DigestMatches(string expected, UnityEngine.Object target)
+        {
+            if (string.IsNullOrEmpty(expected)) return false;
+            var actual = SerializedDigest(target);
+            return !string.IsNullOrEmpty(actual) && string.Equals(actual, expected, StringComparison.Ordinal);
         }
 
         private static void Apply(Snapshot state)
         {
-            applying = true;
             QualitySettings.SetQualityLevel(FastQualityIndex, true);
             for (var i = 0; i < state.renderers.Length; i++)
             {
@@ -186,7 +380,17 @@ namespace RocketFooxball.Editor
             }
             for (var i = 0; i < state.volumes.Length; i++) if (state.volumes[i].volume != null) state.volumes[i].volume.enabled = false;
             for (var i = 0; i < state.probes.Length; i++) if (state.probes[i].probe != null) state.probes[i].probe.enabled = false;
-            applying = false;
+            for (var i = 0; i < state.cameras.Length; i++)
+            {
+                var item = state.cameras[i];
+                if (item.camera != null) item.camera.allowHDR = false;
+                if (item.additional != null) item.additional.renderPostProcessing = false;
+            }
+            for (var i = 0; i < state.rendererFeatures.Length; i++)
+            {
+                var item = state.rendererFeatures[i];
+                if (item.feature != null) item.feature.SetActive(false);
+            }
         }
 
         private static void ApplyDirectionalShadowState()
@@ -242,19 +446,131 @@ namespace RocketFooxball.Editor
                 item.probe.boxProjection = item.boxProjection;
                 item.probe.intensity = item.intensity;
             }
+            for (var i = 0; i < state.cameras.Length; i++)
+            {
+                var item = state.cameras[i];
+                if (item.camera != null) item.camera.allowHDR = item.allowHdr;
+                if (item.additional != null) item.additional.renderPostProcessing = item.renderPostProcessing;
+            }
+            for (var i = 0; i < state.rendererFeatures.Length; i++)
+            {
+                var item = state.rendererFeatures[i];
+                if (item.feature == null) continue;
+                item.feature.SetActive(item.active);
+            }
             RenderSettings.ambientMode = state.ambientMode;
             RenderSettings.ambientSkyColor = state.ambientSky;
             RenderSettings.ambientEquatorColor = state.ambientEquator;
             RenderSettings.ambientGroundColor = state.ambientGround;
             RenderSettings.ambientIntensity = state.ambientIntensity;
             RenderSettings.sun = state.sun;
+            RenderSettings.skybox = state.skybox;
+            RenderSettings.fog = state.fog;
+            RenderSettings.fogColor = state.fogColor;
+            RenderSettings.fogMode = state.fogMode;
+            RenderSettings.fogStartDistance = state.fogStartDistance;
+            RenderSettings.fogEndDistance = state.fogEndDistance;
+            RenderSettings.fogDensity = state.fogDensity;
+            RenderSettings.customReflection = state.customReflection;
+            RenderSettings.subtractiveShadowColor = state.subtractiveShadowColor;
+            RenderSettings.haloStrength = state.haloStrength;
+            RenderSettings.flareStrength = state.flareStrength;
+            RenderSettings.flareFadeSpeed = state.flareFadeSpeed;
             RenderSettings.defaultReflectionMode = state.defaultReflectionMode;
             RenderSettings.defaultReflectionResolution = state.defaultReflectionResolution;
             RenderSettings.reflectionBounces = state.reflectionBounces;
             RenderSettings.reflectionIntensity = state.reflectionIntensity;
             QualitySettings.SetQualityLevel(state.qualityIndex, true);
-            if (!state.sceneDirty) ClearSceneDirtiness(state.scene);
-            applying = false;
+            RestorePersistedAssetDirtyState(state);
+            RestoreSceneDirtyState(state);
+        }
+
+        private static void RestoreSceneDirtyState(Snapshot state)
+        {
+            var exact = true;
+            for (var i = 0; i < state.sceneObjects.Length; i++)
+            {
+                var item = state.sceneObjects[i];
+                if (item.target == null) { exact = false; continue; }
+                var digestMatches = DigestMatches(item.digest, item.target);
+                if (!digestMatches) exact = false;
+            }
+            for (var i = 0; i < state.rendererFeatures.Length; i++)
+            {
+                var item = state.rendererFeatures[i];
+                if (item.feature == null) { exact = false; continue; }
+                var digestMatches = DigestMatches(item.digest, item.feature);
+                if (!digestMatches) { exact = false; continue; }
+            }
+
+            // Do not partially clear dirty flags.  Any digest mismatch means a
+            // user/editor edit is not provably preview-only, so leave all dirty
+            // state untouched and fail closed in AssertRestored below.
+            if (!exact) return;
+            for (var i = 0; i < state.sceneObjects.Length; i++)
+            {
+                var item = state.sceneObjects[i];
+                if (item.dirty) EditorUtility.SetDirty(item.target); else EditorUtility.ClearDirty(item.target);
+            }
+            for (var i = 0; i < state.rendererFeatures.Length; i++)
+            {
+                var item = state.rendererFeatures[i];
+                if (item.dirty) EditorUtility.SetDirty(item.feature); else EditorUtility.ClearDirty(item.feature);
+            }
+
+            // Never clear a user's dirty scene.  A clean baseline may be reset
+            // only when every captured object returned byte-for-byte exactly.
+            if (!state.sceneDirty && exact) ClearSceneDirtiness(state.scene);
+        }
+
+        private static void EnsurePreviewStateIntact(Snapshot state)
+        {
+            if (state == null || !state.scene.IsValid() || !string.Equals(state.scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
+                throw new InvalidOperationException("Fast preview restoration refused: MovementLab scene is no longer loaded.");
+            var currentObjects = CaptureSceneObjects(state.scene);
+            if (currentObjects.Length != state.sceneObjects.Length || currentObjects.Any(item => state.sceneObjects.All(old => old.target != item.target)))
+                throw new InvalidOperationException("Fast preview restoration refused: scene hierarchy changed during preview.");
+            if (QualitySettings.GetQualityLevel() != FastQualityIndex)
+                throw new InvalidOperationException("Fast preview restoration refused: quality changed while preview was active.");
+            if (state.renderers.Any(item => item.renderer != null &&
+                (item.renderer.lightmapIndex != -1 || item.renderer.realtimeLightmapIndex != -1 ||
+                 item.renderer.lightmapScaleOffset != item.lightmapScaleOffset ||
+                 item.renderer.realtimeLightmapScaleOffset != item.realtimeLightmapScaleOffset)))
+                throw new InvalidOperationException("Fast preview restoration refused: renderer lightmap binding was changed during preview.");
+            if (state.lights.Any(item => item.light != null &&
+                (item.light.lightmapBakeType != LightmapBakeType.Realtime ||
+                 item.light.shadows != (directionalHardShadows ? LightShadows.Hard : LightShadows.None) ||
+                 !Mathf.Approximately(item.light.intensity, item.intensity) ||
+                 !Mathf.Approximately(item.light.shadowStrength, item.shadowStrength) ||
+                 !Mathf.Approximately(item.light.shadowBias, item.shadowBias) ||
+                 !Mathf.Approximately(item.light.shadowNormalBias, item.shadowNormalBias))))
+                throw new InvalidOperationException("Fast preview restoration refused: light preview state was changed during preview.");
+            if (state.volumes.Any(item => item.volume != null &&
+                (item.volume.enabled || !Mathf.Approximately(item.volume.weight, item.weight) ||
+                 !Mathf.Approximately(item.volume.priority, item.priority) || item.volume.sharedProfile != item.sharedProfile)) ||
+                state.probes.Any(item => item.probe != null &&
+                (item.probe.enabled || item.probe.mode != item.mode || item.probe.refreshMode != item.refreshMode ||
+                 item.probe.timeSlicingMode != item.timeSlicingMode || item.probe.resolution != item.resolution ||
+                 item.probe.hdr != item.hdr || item.probe.boxProjection != item.boxProjection ||
+                 !Mathf.Approximately(item.probe.intensity, item.intensity))))
+                throw new InvalidOperationException("Fast preview restoration refused: post/reflection preview state was changed during preview.");
+            if (state.cameras.Any(item => item.camera != null && item.camera.allowHDR) || state.cameras.Any(item => item.additional != null && item.additional.renderPostProcessing))
+                throw new InvalidOperationException("Fast preview restoration refused: camera HDR/post state was changed during preview.");
+            if (state.rendererFeatures.Any(item => item.feature != null && item.feature.isActive))
+                throw new InvalidOperationException("Fast preview restoration refused: SSAO feature was changed during preview.");
+            if (RenderSettings.sun != state.sun || RenderSettings.ambientMode != AmbientMode.Trilight ||
+                RenderSettings.ambientSkyColor != FastAmbientSky || RenderSettings.ambientEquatorColor != FastAmbientEquator ||
+                RenderSettings.ambientGroundColor != FastAmbientGround || Mathf.Abs(RenderSettings.ambientIntensity - 1.6f) > 0.0001f ||
+                RenderSettings.defaultReflectionMode != DefaultReflectionMode.Skybox || RenderSettings.defaultReflectionResolution != 64 ||
+                RenderSettings.reflectionBounces != 0 || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
+                throw new InvalidOperationException("Fast preview restoration refused: RenderSettings changed during preview.");
+            if (RenderSettings.skybox != state.skybox || RenderSettings.fog != state.fog || RenderSettings.fogColor != state.fogColor ||
+                RenderSettings.fogMode != state.fogMode || !Mathf.Approximately(RenderSettings.fogStartDistance, state.fogStartDistance) ||
+                !Mathf.Approximately(RenderSettings.fogEndDistance, state.fogEndDistance) || !Mathf.Approximately(RenderSettings.fogDensity, state.fogDensity) ||
+                RenderSettings.customReflection != state.customReflection || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
+                !Mathf.Approximately(RenderSettings.haloStrength, state.haloStrength) || !Mathf.Approximately(RenderSettings.flareStrength, state.flareStrength) ||
+                !Mathf.Approximately(RenderSettings.flareFadeSpeed, state.flareFadeSpeed))
+                throw new InvalidOperationException("Fast preview restoration refused: unrelated RenderSettings changed during preview.");
         }
 
         private static void AssertApplied(Snapshot state)
@@ -268,6 +584,9 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Fast preview directional shadow contract was not applied.");
             if (state.volumes.Any(item => item.volume != null && item.volume.enabled)) throw new InvalidOperationException("Fast preview post volume remained enabled.");
             if (state.probes.Any(item => item.probe != null && item.probe.enabled)) throw new InvalidOperationException("Fast preview reflection probe remained enabled.");
+            if (state.cameras.Any(item => item.camera != null && item.camera.allowHDR) || state.cameras.Any(item => item.additional != null && item.additional.renderPostProcessing))
+                throw new InvalidOperationException("Fast preview HDR/post processing remained enabled.");
+            if (state.rendererFeatures.Any(item => item.feature != null && item.feature.isActive)) throw new InvalidOperationException("Fast preview SSAO remained enabled.");
         }
 
         private static void AssertRestored(Snapshot state)
@@ -277,6 +596,12 @@ namespace RocketFooxball.Editor
             if (RenderSettings.ambientMode != state.ambientMode || RenderSettings.ambientSkyColor != state.ambientSky ||
                 RenderSettings.ambientEquatorColor != state.ambientEquator || RenderSettings.ambientGroundColor != state.ambientGround ||
                 Mathf.Abs(RenderSettings.ambientIntensity - state.ambientIntensity) > 0.0001f || RenderSettings.sun != state.sun ||
+                RenderSettings.skybox != state.skybox || RenderSettings.fog != state.fog || RenderSettings.fogColor != state.fogColor ||
+                RenderSettings.fogMode != state.fogMode || !Mathf.Approximately(RenderSettings.fogStartDistance, state.fogStartDistance) ||
+                !Mathf.Approximately(RenderSettings.fogEndDistance, state.fogEndDistance) || !Mathf.Approximately(RenderSettings.fogDensity, state.fogDensity) ||
+                RenderSettings.customReflection != state.customReflection || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
+                !Mathf.Approximately(RenderSettings.haloStrength, state.haloStrength) || !Mathf.Approximately(RenderSettings.flareStrength, state.flareStrength) ||
+                !Mathf.Approximately(RenderSettings.flareFadeSpeed, state.flareFadeSpeed) ||
                 RenderSettings.defaultReflectionMode != state.defaultReflectionMode || RenderSettings.defaultReflectionResolution != state.defaultReflectionResolution ||
                 RenderSettings.reflectionBounces != state.reflectionBounces || Mathf.Abs(RenderSettings.reflectionIntensity - state.reflectionIntensity) > 0.0001f)
                 throw new InvalidOperationException("Fast preview failed to restore exact RenderSettings snapshot.");
@@ -318,12 +643,40 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Fast preview failed to restore reflection decision fields: " + item.identity);
             }
             if (state.scene != null && state.scene.isDirty != state.sceneDirty) throw new InvalidOperationException("Fast preview changed scene dirty state.");
+            for (var i = 0; i < state.cameras.Length; i++)
+            {
+                var item = state.cameras[i];
+                if (item.camera != null && item.camera.allowHDR != item.allowHdr) throw new InvalidOperationException("Fast preview failed to restore camera HDR state: " + item.identity);
+                if (item.additional != null && item.additional.renderPostProcessing != item.renderPostProcessing) throw new InvalidOperationException("Fast preview failed to restore camera post state: " + item.identity);
+            }
+            for (var i = 0; i < state.rendererFeatures.Length; i++)
+            {
+                var item = state.rendererFeatures[i];
+                if (item.feature == null || item.feature.isActive != item.active || !DigestMatches(item.digest, item.feature))
+                    throw new InvalidOperationException("Fast preview failed to restore renderer feature state: " + item.identity);
+            }
+            for (var i = 0; i < state.sceneObjects.Length; i++)
+            {
+                var item = state.sceneObjects[i];
+                if (item.target == null || !DigestMatches(item.digest, item.target))
+                    throw new InvalidOperationException("Fast preview failed to restore scene object state: " + item.identity);
+            }
         }
 
         private static void OnPlayModeStateChanged(PlayModeStateChange state)
         {
             if (state != PlayModeStateChange.EnteredEditMode && state != PlayModeStateChange.ExitingEditMode) return;
             RestoreIfActive();
+        }
+
+        private static void OnSceneClosing(Scene scene, bool removingScene)
+        {
+            if (snapshot != null && snapshot.scene == scene) RestoreIfActive();
+        }
+
+        private static void OnSceneUnloaded(Scene scene)
+        {
+            if (snapshot != null && snapshot.scene == scene) RestoreIfActive();
         }
 
         private static string Identity(Transform transform)
@@ -345,8 +698,19 @@ namespace RocketFooxball.Editor
         {
             internal static string[] OnWillSaveAssets(string[] paths)
             {
-                RestoreIfActive();
-                return paths;
+                try
+                {
+                    RestoreIfActive();
+                    return paths;
+                }
+                catch (Exception exception)
+                {
+                    // Never permit an asset save while a preview snapshot
+                    // cannot be proven restored. Keep the snapshot for
+                    // diagnostics/retry and fail closed at the save boundary.
+                    Debug.LogError("Rocket Fooxball fast preview blocked save: " + exception.Message);
+                    return Array.Empty<string>();
+                }
             }
         }
 
@@ -361,6 +725,18 @@ namespace RocketFooxball.Editor
             internal Color ambientGround;
             internal float ambientIntensity;
             internal Light sun;
+            internal Material skybox;
+            internal bool fog;
+            internal Color fogColor;
+            internal FogMode fogMode;
+            internal float fogStartDistance;
+            internal float fogEndDistance;
+            internal float fogDensity;
+            internal Cubemap customReflection;
+            internal Color subtractiveShadowColor;
+            internal float haloStrength;
+            internal float flareStrength;
+            internal float flareFadeSpeed;
             internal DefaultReflectionMode defaultReflectionMode;
             internal int defaultReflectionResolution;
             internal int reflectionBounces;
@@ -369,6 +745,12 @@ namespace RocketFooxball.Editor
             internal LightSnapshot[] lights;
             internal VolumeSnapshot[] volumes;
             internal ReflectionSnapshot[] probes;
+            internal CameraSnapshot[] cameras;
+            internal RendererFeatureSnapshot[] rendererFeatures;
+            internal SceneObjectSnapshot[] sceneObjects;
+            internal Dictionary<string, string> persistedAssetHashes;
+            internal Dictionary<string, bool> persistedAssetDirty;
+            internal Dictionary<string, string> persistedAssetDigests;
         }
 
         private sealed class RendererSnapshot
@@ -415,6 +797,32 @@ namespace RocketFooxball.Editor
             internal bool hdr;
             internal bool boxProjection;
             internal float intensity;
+        }
+
+        private sealed class CameraSnapshot
+        {
+            internal string identity;
+            internal Camera camera;
+            internal UniversalAdditionalCameraData additional;
+            internal bool allowHdr;
+            internal bool renderPostProcessing;
+        }
+
+        private sealed class RendererFeatureSnapshot
+        {
+            internal string identity;
+            internal ScreenSpaceAmbientOcclusion feature;
+            internal bool active;
+            internal bool dirty;
+            internal string digest;
+        }
+
+        private sealed class SceneObjectSnapshot
+        {
+            internal string identity;
+            internal UnityEngine.Object target;
+            internal bool dirty;
+            internal string digest;
         }
     }
 }

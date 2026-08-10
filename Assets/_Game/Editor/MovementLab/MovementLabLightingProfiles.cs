@@ -201,7 +201,10 @@ namespace RocketFooxball.Editor
             var spec = Get(id);
             ValidatePreparedScene(id);
             var paths = MovementLabContractCatalog.GeneratedBakedLightingPaths
-                .Concat(new[] { MovementLabContract.LightingManifestPath })
+                // The manifest cannot hash its own bytes: before the first
+                // write they are missing, and after a write they are the
+                // previous payload. Keep self outside the output hash union.
+                .Where(path => !string.Equals(path, MovementLabContract.LightingManifestPath, StringComparison.Ordinal))
                 .Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
             var hashes = paths.Select(HashAsset).ToArray();
             var settings = Lightmapping.GetLightingSettingsForScene(SceneManager.GetActiveScene());
@@ -242,7 +245,34 @@ namespace RocketFooxball.Editor
             var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
             File.WriteAllText(temp, json, new UTF8Encoding(false));
             if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+            ValidateWrittenManifest(path, state);
             AssetDatabase.ImportAsset(MovementLabContract.LightingManifestPath, ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static void ValidateWrittenManifest(string path, MovementLabLightingManifestState expected)
+        {
+            MovementLabLightingManifestState actual;
+            try { actual = JsonUtility.FromJson<MovementLabLightingManifestState>(File.ReadAllText(path, Encoding.UTF8)); }
+            catch (Exception exception) { throw new InvalidOperationException("MovementLab lighting manifest could not be reloaded: " + exception.Message, exception); }
+            if (actual == null || expected == null || actual.schemaVersion != expected.schemaVersion ||
+                !string.Equals(actual.profileId, expected.profileId, StringComparison.Ordinal) ||
+                !string.Equals(actual.profileTag, expected.profileTag, StringComparison.Ordinal) ||
+                actual.outputPaths == null || actual.outputHashes == null ||
+                actual.outputPaths.Length != actual.outputHashes.Length ||
+                actual.outputPaths.Any(value => string.Equals(value, MovementLabContract.LightingManifestPath, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException("MovementLab lighting manifest output hash contract is invalid or self-referential.");
+            }
+            if (!actual.outputPaths.SequenceEqual(expected.outputPaths, StringComparer.Ordinal) ||
+                !actual.outputHashes.SequenceEqual(expected.outputHashes, StringComparer.Ordinal))
+            {
+                throw new InvalidOperationException("MovementLab lighting manifest changed during immediate reload validation.");
+            }
+            for (var i = 0; i < actual.outputPaths.Length; i++)
+            {
+                if (!string.Equals(HashAsset(actual.outputPaths[i]), actual.outputHashes[i], StringComparison.Ordinal))
+                    throw new InvalidOperationException("MovementLab lighting manifest output hash mismatch: " + actual.outputPaths[i]);
+            }
         }
 
         private static string HashAsset(string path)

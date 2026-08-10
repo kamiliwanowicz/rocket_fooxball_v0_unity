@@ -41,6 +41,20 @@ namespace RocketFooxball.Editor
             MovementLabArenaPipeline.Validate();
         }
         internal static void ValidatePreBakeSemantics() => ValidateMovementLabInternal(ComputeBuilderSignature(), false, false);
+
+        /// <summary>
+        /// Fast preview validation is persisted/read-only semantic coverage. It
+        /// deliberately excludes review markers, pass records, baked-output
+        /// proof, capture, and any writer/repair path.
+        /// </summary>
+        internal static void ValidateFastPersistedSemantics()
+        {
+            ValidateMovementLabInternal(ComputeBuilderSignature(), false, false);
+            MovementLabImportPipeline.ValidateTextureImporterContracts();
+            MovementLabAnimatorPipeline.Validate();
+            MovementLabPrefabPipeline.Validate();
+            MovementLabArenaPipeline.Validate();
+        }
     }
 
     internal static partial class MovementLabValidator

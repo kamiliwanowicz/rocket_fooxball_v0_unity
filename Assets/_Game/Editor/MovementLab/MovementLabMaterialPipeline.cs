@@ -65,6 +65,74 @@ namespace RocketFooxball.Editor
                     return baseline;
                 }
 
+                internal static Dictionary<string, bool> CaptureGeneratedMaterialDirtyState()
+                {
+                    var baseline = new Dictionary<string, bool>(StringComparer.Ordinal);
+                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+                    {
+                        var path = GeneratedYamlAssetPaths[i];
+                        if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
+                        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                        if (material != null) baseline[path] = EditorUtility.IsDirty(material);
+                    }
+                    return baseline;
+                }
+
+                internal static Dictionary<string, string> CaptureGeneratedMaterialHashes()
+                {
+                    var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+                    {
+                        var path = GeneratedYamlAssetPaths[i];
+                        if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
+                        var absolute = MovementLabManifestStore.ResolveProjectPath(path);
+                        hashes[path] = File.Exists(absolute) ? HashFile(absolute) : "missing";
+                    }
+                    return hashes;
+                }
+
+                internal static void AssertGeneratedMaterialHashesUnchanged(Dictionary<string, string> baseline)
+                {
+                    var current = CaptureGeneratedMaterialHashes();
+                    var paths = (baseline ?? new Dictionary<string, string>(StringComparer.Ordinal)).Keys
+                        .Union(current.Keys, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
+                    var changed = new List<string>();
+                    for (var i = 0; i < paths.Length; i++)
+                    {
+                        var before = string.Empty;
+                        var after = string.Empty;
+                        var hasBefore = baseline != null && baseline.TryGetValue(paths[i], out before);
+                        var hasAfter = current.TryGetValue(paths[i], out after);
+                        if (!hasBefore || !hasAfter || !string.Equals(before, after, StringComparison.Ordinal)) changed.Add(paths[i]);
+                    }
+                    if (changed.Count > 0) throw new InvalidOperationException("MovementLab bake changed generated material hashes: " + string.Join(", ", changed.ToArray()));
+                }
+
+                internal static void AssertGeneratedMaterialDirtyStateUnchanged(Dictionary<string, bool> baseline)
+                {
+                    var current = CaptureGeneratedMaterialDirtyState();
+                    var paths = (baseline ?? new Dictionary<string, bool>(StringComparer.Ordinal)).Keys
+                        .Union(current.Keys, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
+                    var changed = new List<string>();
+                    for (var i = 0; i < paths.Length; i++)
+                    {
+                        var before = false;
+                        var after = false;
+                        var hasBefore = baseline != null && baseline.TryGetValue(paths[i], out before);
+                        var hasAfter = current.TryGetValue(paths[i], out after);
+                        if (!hasBefore || !hasAfter || before != after)
+                            changed.Add(paths[i]);
+                    }
+                    if (changed.Count > 0) throw new InvalidOperationException("MovementLab bake changed generated material dirty state: " + string.Join(", ", changed.ToArray()));
+                }
+
+                private static string HashFile(string path)
+                {
+                    using (var sha = System.Security.Cryptography.SHA256.Create())
+                    using (var stream = File.OpenRead(path))
+                        return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
+                }
+
                 internal static void RestoreGeneratedLitMaterialKeywords(bool persist = true, Dictionary<string, bool> baselineDirtyState = null)
                 {
                     var guids = AssetDatabase.FindAssets("t:Material", new[] { MaterialsPath });
