@@ -98,16 +98,10 @@ function Get-HeadSha {
 }
 
 function Get-ScopedHashes {
-    $tracked = @(& git -C $ProjectPath ls-files --full-name -- $SourceScopeRoots)
-    if ($LASTEXITCODE -ne 0) { throw 'git ls-files tracked query failed.' }
-    $untracked = @(& git -C $ProjectPath ls-files --full-name --others --exclude-standard -- $SourceScopeRoots)
-    if ($LASTEXITCODE -ne 0) { throw 'git ls-files untracked query failed.' }
-    $paths = @($tracked + $untracked | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
     $map = [ordered]@{}
-    foreach ($relativePath in $paths) {
-        if ([string]::IsNullOrWhiteSpace($relativePath)) { continue }
+    foreach ($relativePath in $RequiredSourceFiles) {
         $absolutePath = Join-Path $ProjectPath $relativePath
-        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Scoped source file missing before/after capture: $relativePath" }
+        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Required source file missing before/after capture: $relativePath" }
         $map[$relativePath] = (Get-FileHash -LiteralPath $absolutePath -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     return $map
