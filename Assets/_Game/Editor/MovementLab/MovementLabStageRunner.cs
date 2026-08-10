@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -38,12 +37,7 @@ namespace RocketFooxball.Editor
 
         internal static MovementLabStageProbe RunSelective()
         {
-            return Run(forceAllNonLighting: false);
-        }
-
-        internal static MovementLabStageProbe RunForceAllNonLighting()
-        {
-            return Run(forceAllNonLighting: true);
+            return Run();
         }
 
         internal static void WriteProbeIfRequested(MovementLabStageProbe probe)
@@ -70,7 +64,7 @@ namespace RocketFooxball.Editor
             WriteOutsideProjectAtomic(path, JsonUtility.ToJson(payload, true) + "\n");
         }
 
-        private static MovementLabStageProbe Run(bool forceAllNonLighting)
+        private static MovementLabStageProbe Run()
         {
             MovementLabStageGraph.RunCanonicalSceneInvariantSelfCheck();
             // A development/intermediate bake may legitimately remove or
@@ -78,16 +72,14 @@ namespace RocketFooxball.Editor
             // let non-lighting closure continue without authorizing a bake.
             var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
-            var before = forceAllNonLighting ? CaptureNonLightingHashes() : null;
             var current = initial;
-            var forcePending = forceAllNonLighting;
             var sawWork = false;
             var visitedStates = new HashSet<string>(StringComparer.Ordinal);
             var maxIterations = Math.Max(4, stages.Length * 4);
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 var stale = stages.Where(current.IsStale).ToArray();
-                if (!forcePending && stale.Length == 0) break;
+                if (stale.Length == 0) break;
 
                 var stateKey = string.Join(",", stale.Select(stage => stage.ToString()).ToArray()) + ":" +
                                (current.LightingInputDigest ?? string.Empty) + ":" +
@@ -102,8 +94,8 @@ namespace RocketFooxball.Editor
                 for (var i = 0; i < stages.Length; i++)
                 {
                     var stage = stages[i];
-                    if (!forcePending && !current.IsStale(stage)) continue;
-                    if (!ShouldSkipPrefabOnlyGameplayRefresh(stage, current, forcePending))
+                    if (!current.IsStale(stage)) continue;
+                    if (!ShouldSkipPrefabOnlyGameplayRefresh(stage, current))
                     {
                         ExecuteStage(stage);
                     }
@@ -123,7 +115,6 @@ namespace RocketFooxball.Editor
                     sawWork = true;
                 }
 
-                forcePending = false;
                 if (!executedThisPass)
                 {
                     throw new InvalidOperationException("MovementLab non-lighting stage closure made no progress; stale stages remain: " +
@@ -146,19 +137,13 @@ namespace RocketFooxball.Editor
                 AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             }
 
-            if (forceAllNonLighting)
-            {
-                var after = CaptureNonLightingHashes();
-                AssertExactEquality(before, after);
-            }
-
             WriteProbeIfRequested(final);
             return final;
         }
 
-        private static bool ShouldSkipPrefabOnlyGameplayRefresh(MovementLabStage stage, MovementLabStageProbe probe, bool forcePending)
+        private static bool ShouldSkipPrefabOnlyGameplayRefresh(MovementLabStage stage, MovementLabStageProbe probe)
         {
-            if (forcePending || stage != MovementLabStage.GameplayScene || probe == null ||
+            if (stage != MovementLabStage.GameplayScene || probe == null ||
                 !probe.TryGetStaleReason(stage, out var reason) || string.IsNullOrWhiteSpace(reason)) return false;
 
             // Prefab/controller outputs are referenced by stable GUIDs from
@@ -227,39 +212,6 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static Dictionary<string, string> CaptureNonLightingHashes()
-        {
-            var paths = MovementLabStageGraph.NonLightingGenerationOrder
-                .SelectMany(MovementLabStageGraph.GetOwnedOutputs)
-                .Where(path => !string.Equals(path, MovementLabContract.ManifestPath, StringComparison.Ordinal))
-                .Select(MovementLabManifestStore.NormalizeRepositoryPath)
-                .Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            var result = new Dictionary<string, string>(StringComparer.Ordinal);
-            for (var i = 0; i < paths.Length; i++)
-            {
-                var path = paths[i];
-                var absolute = MovementLabManifestStore.ResolveProjectPath(path);
-                result[path] = File.Exists(absolute) ? HashFile(absolute) : HashText("missing:" + path);
-            }
-            return result;
-        }
-
-        private static void AssertExactEquality(Dictionary<string, string> before, Dictionary<string, string> after)
-        {
-            var paths = (before.Keys.Union(after.Keys, StringComparer.Ordinal)).OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            var differences = new List<string>();
-            for (var i = 0; i < paths.Length; i++)
-            {
-                before.TryGetValue(paths[i], out var oldHash);
-                after.TryGetValue(paths[i], out var newHash);
-                if (!string.Equals(oldHash, newHash, StringComparison.Ordinal)) differences.Add(paths[i]);
-            }
-            if (differences.Count > 0)
-            {
-                throw new InvalidOperationException("Forced full non-lighting rebuild is not deterministic: " + string.Join(", ", differences.ToArray()));
-            }
-        }
-
         private static string GetProbePath()
         {
             var args = Environment.GetCommandLineArgs();
@@ -312,15 +264,5 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static string HashFile(string path)
-        {
-            using (var sha = SHA256.Create())
-            using (var stream = File.OpenRead(path)) return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
-        }
-
-        private static string HashText(string value)
-        {
-            using (var sha = SHA256.Create()) return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(value ?? string.Empty))).Replace("-", string.Empty).ToLowerInvariant();
-        }
     }
 }

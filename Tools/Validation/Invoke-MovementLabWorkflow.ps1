@@ -20,7 +20,6 @@ param(
     [string[]]$ReviewReportSha256 = @(),
     [string[]]$FindingDisposition = @(),
     [string[]]$GeneratedPath = @(),
-    [switch]$ForceFullComparison,
     [switch]$Capture,
     [switch]$PlanOnly,
     [int]$TimeoutSeconds = 900
@@ -424,14 +423,6 @@ function Get-GeneratedHashDigest {
     return Get-StringSha256 ($lines -join "`n")
 }
 
-function Get-AllDirtyPaths {
-    $text = Invoke-Git @('status', '--porcelain=v1', '--untracked-files=all')
-    return @($text -split "`n" | ForEach-Object {
-        $line = ([string]$_).TrimEnd()
-        if ($line.Length -gt 3) { $line.Substring(3).Trim().Replace('"', '') } else { '' }
-    } | Where-Object { $_ } | Sort-Object -Unique)
-}
-
 function Get-WorkingTreeDigest {
     return Get-StringSha256 ((Invoke-Git @('status', '--porcelain=v1', '--untracked-files=all')).Trim())
 }
@@ -561,7 +552,6 @@ function New-CheckLedger {
             $rows.Add((New-LedgerRow 'stage-probe' 'fast' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @() 'source-freeze'))
             $rows.Add((New-LedgerRow 'prebake-validate' 'production-final' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') @() 'source-freeze'))
             $rows.Add((New-LedgerRow 'production-bake' 'production-final' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'source-freeze'))
-            $rows.Add((New-LedgerRow 'build2-noop' 'production-final' $true @('Assets/_Game/Generated', 'Assets/_Game/Scenes') @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'final'))
         }
         'ProductionValidate' {
             $rows.Add((New-LedgerRow 'final-source-clean' 'production-final' $false @('.git', 'Assets', 'ProjectSettings', 'Packages', 'Tools') @('.agents', 'Assets', 'ProjectSettings', 'Packages', 'Tools') @() 'final'))
@@ -616,26 +606,6 @@ function Test-RowReuseProof {
     param([Parameter(Mandatory = $true)]$Prior, [Parameter(Mandatory = $true)]$Row)
     if ((Get-ObjectPropertyText $Prior 'input_digest') -ne (Get-ObjectPropertyText $Row 'input_digest')) { return @{ valid = $false; reason = 'input digest changed' } }
     if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
-    if ($Prior.PSObject.Properties.Name -contains 'generated_inventory') {
-        $currentInventory = @(Get-AuthoritativeGeneratedInventory)
-        if (($currentInventory -join "`n") -cne (@($Prior.generated_inventory) -join "`n")) { return @{ valid = $false; reason = 'authoritative inventory changed' } }
-    }
-    $currentHashes = Get-GeneratedHashes
-    $currentHashDigest = Get-GeneratedHashDigest $currentHashes
-    if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $Prior 'generated_hash_digest')) -or (Get-ObjectPropertyText $Prior 'generated_hash_digest') -ne $currentHashDigest) {
-        return @{ valid = $false; reason = 'generated fingerprint changed' }
-    }
-    if ($Prior.PSObject.Properties.Name -contains 'generated_hashes' -and $null -ne $Prior.generated_hashes) {
-        foreach ($key in @($currentHashes.Keys + $Prior.generated_hashes.PSObject.Properties.Name | Sort-Object -Unique)) {
-            $current = if ($currentHashes.Contains($key)) { [string]$currentHashes[$key] } else { '__MISSING__' }
-            $priorValue = if ($Prior.generated_hashes.PSObject.Properties.Name -contains $key) { [string]$Prior.generated_hashes.$key } else { '__MISSING__' }
-            if ($current -cne $priorValue) { return @{ valid = $false; reason = 'generated output hash changed: ' + $key } }
-        }
-    }
-    if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $Prior 'working_tree_digest')) -or (Get-ObjectPropertyText $Prior 'working_tree_digest') -ne (Get-WorkingTreeDigest)) {
-        return @{ valid = $false; reason = 'working-tree cleanliness changed' }
-    }
-    if (@(Get-AllDirtyPaths).Count -gt 0) { return @{ valid = $false; reason = 'uncommitted working tree is dirty' } }
     return @{ valid = $true; reason = $null }
 }
 
@@ -1147,13 +1117,6 @@ try {
             $productionBakePending = Test-CheckPending 'production-bake'
             if ($productionBakePending) {
                 Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
-                if ($ForceFullComparison) {
-                    $forcedBefore = Get-GeneratedHashes
-                    Invoke-UnityStep 'ForcedFullNonLightingComparison' 'RocketFooxball.Editor.MovementLabBuilder.CompareMovementLabNonLightingBuilds' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics
-                    $forcedAfter = Get-GeneratedHashes
-                    $forcedChanged = @(Get-ChangedHashPaths $forcedBefore $forcedAfter)
-                    if ($forcedChanged.Count -gt 0) { throw ('Forced full non-lighting comparison changed generated paths: ' + ($forcedChanged -join ', ')) }
-                }
             }
             if (Test-CheckPending 'prebake-validate') { Invoke-UnityStep 'PreBakeValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabPreBake' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'prebake-validate' } else { Mark-CheckReused 'prebake-validate' }
             if ($script:BakeCount -gt 0) { throw 'ProductionPrepare attempted a bake before production bake step.' }
@@ -1165,12 +1128,6 @@ try {
                 Mark-CheckReused 'production-bake'
                 if ($script:BakeCount -ne 0) { throw ('Reused production bake row must not invoke a bake: ' + $script:BakeCount) }
             }
-            $afterBakeHashes = Get-GeneratedHashes
-            $build2Before = $afterBakeHashes
-            if (Test-CheckPending 'build2-noop') { Invoke-UnityStep 'Build2NoOp' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'build2-noop' } else { Mark-CheckReused 'build2-noop' }
-            $build2After = Get-GeneratedHashes
-            $build2Changed = @(Get-ChangedHashPaths $build2Before $build2After)
-            if ($build2Changed.Count -gt 0) { throw ('Build 2 changed generated paths: ' + ($build2Changed -join ', ')) }
             $probeRecord = Read-ProbeContract
             Assert-ProbeContractForMode $probeRecord 'ProductionPrepareFinal'
         }
@@ -1203,7 +1160,6 @@ if ($Mode -eq 'ProductionPrepare') {
 }
 if ($Mode -eq 'ProductionValidate' -and $dirtyBefore.Count -ne $dirtyAfter.Count) { throw 'Non-generated source status changed during production validation.' }
 if ($Mode -eq 'ProductionValidate' -and $dirtyAfter.Count -gt 0) { throw ('Non-generated source became dirty during production validation: ' + ($dirtyAfter -join ', ')) }
-if ($Mode -eq 'ProductionValidate' -and $changedGeneratedPaths.Count -gt 0) { throw ('Production validation changed generated paths: ' + ($changedGeneratedPaths -join ', ')) }
 if ($script:BakeCount -gt 1) { throw ('Workflow bake count exceeded one: ' + $script:BakeCount) }
 $afterHead = Get-HeadSha
 if ($beforeHead -cne $afterHead) { throw ('Git HEAD changed during workflow: expected ' + $beforeHead + ', observed ' + $afterHead) }

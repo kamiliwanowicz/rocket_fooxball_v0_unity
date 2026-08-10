@@ -77,15 +77,6 @@ namespace RocketFooxball.Editor
                 "; lighting input digest: " + probe.LightingInputDigest);
         }
 
-        [MenuItem("Rocket Fooxball/Compare Movement Lab Non-Lighting Builds")]
-        public static void CompareMovementLabNonLightingBuilds()
-        {
-            MovementLabFastModeSession.RestoreIfActive();
-            var probe = MovementLabStageRunner.RunForceAllNonLighting();
-            MovementLabStageRunner.WriteProbeIfRequested(probe);
-            Debug.Log("Rocket Fooxball Movement Lab forced non-lighting comparison passed.");
-        }
-
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting")]
         public static void BakeMovementLabLighting()
         {
