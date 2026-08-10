@@ -521,11 +521,18 @@ namespace RocketFooxball.Editor
                     {
                         violations.Add("identity:missing-meta:" + path);
                     }
-                    else if (!stableMissingPair &&
-                        IsStableMetaGuid(priorValue) && IsStableMetaGuid(currentValue) &&
-                        !string.Equals(priorValue.digest, currentValue.digest, StringComparison.Ordinal))
+                    else if (!stableMissingPair && priorValue != null && !priorValue.missing && !currentValue.missing)
                     {
-                        violations.Add("identity:changed-meta:" + path);
+                        var isLegacyToGuidMigration = IsHexDigest(priorValue, 64) && IsHexDigest(currentValue, 32);
+                        var isStableGuidPair = IsHexDigest(priorValue, 32) && IsHexDigest(currentValue, 32);
+                        if (isStableGuidPair && !string.Equals(priorValue.digest, currentValue.digest, StringComparison.Ordinal))
+                        {
+                            violations.Add("identity:changed-meta:" + path);
+                        }
+                        else if (!isLegacyToGuidMigration && !isStableGuidPair)
+                        {
+                            violations.Add("identity:invalid-meta-digest:" + path);
+                        }
                     }
 
                     var assetPath = path.Substring(0, path.Length - ".meta".Length);
@@ -571,9 +578,9 @@ namespace RocketFooxball.Editor
             return null;
         }
 
-        private static bool IsStableMetaGuid(MovementLabPathDigest value)
+        private static bool IsHexDigest(MovementLabPathDigest value, int length)
         {
-            if (value == null || value.missing || string.IsNullOrEmpty(value.digest) || value.digest.Length != 32) return false;
+            if (value == null || value.missing || string.IsNullOrEmpty(value.digest) || value.digest.Length != length) return false;
             for (var i = 0; i < value.digest.Length; i++)
             {
                 var character = value.digest[i];
