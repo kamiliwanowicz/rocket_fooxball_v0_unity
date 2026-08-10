@@ -197,6 +197,13 @@ Replace one global signature with dependency DAG:
 
 Use `AssetDatabase.GetAssetDependencyHash()` for imported asset dependency state where suitable. Schedule forced full-rebuild comparison to detect missing dependency edges.
 
+Scene digest rules:
+
+- GameplayScene -> canonical gameplay YAML: LF normalization, ordinal document ordering, exclude only `!u!157 LightmapSettings` document
+- BakedOutput -> raw scene + lighting data + lightmaps + probe cubemaps + paired metas
+- builder-created URP lights -> persist `UniversalAdditionalLightData` before GameplayScene digest
+- digest tests -> document reorder unchanged; LightmapSettings mutation unchanged; gameplay content or fileID mutation changed
+
 Expected invalidation matrix:
 
 - validator edit -> compile + validator
@@ -276,15 +283,27 @@ Production bake may start only when all conditions pass:
 - accepted Critical/High fixes applied
 - Unity compile passed
 - importers/materials/prefabs saved, reloaded, validated
-- scene saved, reopened, validated
+- scene saved/reopened twice; canonical gameplay + owned-output hashes stable
 - Volume uses expected persisted `sharedProfile`
 - Volume components exist as nonzero persistent subassets
-- material keywords/maps pass clean-process validation
+- emissive materials retain `BakedEmissive` + `_EMISSION` after clean-process reload
+- builder-created Sun + accent lights retain `UniversalAdditionalLightData`
 - geometry/render budgets pass
 - generated path + paired-meta coverage pass
 - lighting-input digest finalized
 
 Completion: gate emits one durable machine-readable pass record bound to exact SHA.
+
+## Cheap contract gates
+
+Run before generated writes or lighting:
+
+- static/editor checks -> validator asset paths, required serialized references, nonzero prefab fileIDs, prefab-source provenance
+- migration checks -> exact assembly/namespace plus `/` separator for nested `MovedFrom` source types
+- namespace checks -> qualify `UnityEngine.Physics` inside `RocketFooxball.Runtime.Physics` boundary
+- camera checks -> persisted HDR, URP post-processing, SMAA state
+- material checks -> emission map/color, `globalIlluminationFlags`, `_EMISSION` agree after reload
+- scene checks -> required URP companion components already serialized
 
 ## Expensive-proof ordering
 
@@ -302,6 +321,8 @@ Final builder proof remains:
 
 Build pair counts as one validation attempt.
 
+Inner loop may batch compile + targeted semantic checks into one Unity process. Final persisted proof keeps separate Build 2 and Validate processes.
+
 ## Orchestration limits
 
 - default autonomous budget: `60m`
@@ -317,6 +338,9 @@ Build pair counts as one validation attempt.
 - no durable progress for `20m`: stop, checkpoint, reassess
 - one follow-up correction maximum per worker
 - completed-but-unintegrated WIP cap: `2` tasks
+- shared-state worker dispatch -> predecessor committed; exact SHA frozen before child preflight
+- shared HEAD advances before child starts -> retire dispatch; issue fresh exact-SHA contract
+- parallel work -> read-only analysis or disjoint source paths only; Unity/generated-state mutation remains serial
 
 Status heartbeat every `15m` and on phase transition:
 
@@ -348,6 +372,13 @@ Release:
 - log archived
 - pre/post status + hashes archived
 
+Workspace hygiene:
+
+- atomic evidence write -> short same-directory `.tmp-<guid>`; never append temp suffix to full final path
+- generated worktree `.slnx` -> exclude before Unity launch
+- failed Unity run -> verify matching process absent before stale lock cleanup
+- command wrapper `finally` -> process check, lock check, IDE-churn cleanup, result write
+
 Compile-only -> `-batchmode -nographics -quit`.
 
 Lighting/reflection/capture -> `-batchmode`; graphics device initialized. `-nographics` produced RenderTexture warnings during prior headless bake and cannot prove rendered probe/capture quality.
@@ -374,6 +405,13 @@ Per checkpoint:
 - invalidation set
 - accepted, waived, blocked state per requirement
 - evidence-manifest SHA-256
+
+Hashing cost controls:
+
+- full owned/protected baseline -> capture once per checkpoint
+- intermediate command -> hash invalidation set + status-changed candidates
+- final proof -> one full owned/protected inventory
+- evidence manifest -> write once after evidence set closes; exclude manifest/self-hash recursion
 
 ## Lighting experiments
 
@@ -428,7 +466,7 @@ Current validator restores URP Lit keywords, mutates in-memory materials, then c
 
 Target:
 
-- process A -> author/import/save materials
+- process A -> author/import/save materials; persist deterministic `globalIlluminationFlags` before keyword state
 - process B -> bake; no material save
 - process C -> clean-load public-state validation
 - validator changes zero asset/object state
