@@ -390,12 +390,28 @@ namespace RocketFooxball.Editor
             var changed = SplitLines(RunGit(projectRoot, "diff --name-only HEAD"))
                 .Concat(SplitLines(RunGit(projectRoot, "ls-files --others --exclude-standard")))
                 .Select(path => path.Replace('\\', '/'))
-                .Where(path => !IsGeneratedOutput(path))
+                .Where(path => !IsGeneratedOutput(path) && !IsUnityGeneratedSolutionArtifact(path, projectRoot))
                 .Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
             if (changed.Length > 0)
             {
                 throw new InvalidOperationException("MovementLab pre-bake source checkpoint is dirty relative to HEAD: " + string.Join(", ", changed));
             }
+        }
+
+        private static bool IsUnityGeneratedSolutionArtifact(string path, string projectRoot)
+        {
+            if (string.IsNullOrEmpty(path) || string.IsNullOrEmpty(projectRoot)) return false;
+
+            var normalizedProjectRoot = Path.GetFullPath(projectRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var projectName = Path.GetFileName(normalizedProjectRoot);
+            if (string.IsNullOrEmpty(projectName)) return false;
+
+            // Unity writes one solution file at the repository root. Git emits
+            // repository-relative paths, so directory-qualified or traversal
+            // variants must remain checkpoint failures.
+            var expectedPath = projectName + ".slnx";
+            var normalizedPath = path.Replace('\\', '/');
+            return string.Equals(normalizedPath, expectedPath, StringComparison.OrdinalIgnoreCase);
         }
 
         private static IEnumerable<string> SplitLines(string value)
