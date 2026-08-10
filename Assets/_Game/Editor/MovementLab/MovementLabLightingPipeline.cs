@@ -556,8 +556,8 @@ namespace RocketFooxball.Editor
                                 ? MovementLabLightingProfiles.Production : null;
                         if (manifestProfile == null)
                             throw new InvalidOperationException("MovementLab lighting manifest profile tag is invalid: " + manifest.profileTag);
-                        if (manifestProfile.Id != expectedProfile.Id)
-                            throw new InvalidOperationException("MovementLab lighting manifest profile tag does not match the prepared scene profile: manifest=" + manifestProfile.Tag + ", scene=" + expectedProfile.Tag + ".");
+                        if (!string.Equals(manifest.profileId, manifestProfile.Id.ToString(), StringComparison.Ordinal))
+                            throw new InvalidOperationException("MovementLab lighting manifest profile ID does not match its profile tag: id=" + manifest.profileId + ", tag=" + manifest.profileTag + ".");
                         ValidateManifestSpecification(manifest, manifestProfile);
                         return;
                     }
