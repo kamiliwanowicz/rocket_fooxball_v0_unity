@@ -60,7 +60,9 @@ namespace RocketFooxball.Editor
     {
         private const string ImporterContract = "importer-contract:2";
         private const string MaterialContract = "material-prefab-contract:3";
-        private const string GameplayContract = "gameplay-scene-contract:6";
+        // T6 canonicalizes the generated TagManager bytes.
+        private const string PreviousGameplayContract = "gameplay-scene-contract:6";
+        private const string GameplayContract = "gameplay-scene-contract:7";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string PreviousQualityContract = "quality-contract:2";
         private const string QualityContract = "quality-contract:3";
@@ -212,7 +214,13 @@ namespace RocketFooxball.Editor
                                 path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath ||
                                 path == "changed:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta" ||
                                 path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta");
-                        var ignoreDrift = qualityContractMigration || (allowBakedOutputDrift &&
+                        var gameplayContractMigration = definition.Stage == MovementLabStage.GameplayScene &&
+                            string.Equals(prior.contractVersion, PreviousGameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) &&
+                            string.Equals(current.contractVersion, GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) &&
+                            drift.All(path =>
+                                path == "changed:ProjectSettings/TagManager.asset" ||
+                                path == "missing:ProjectSettings/TagManager.asset");
+                        var ignoreDrift = qualityContractMigration || gameplayContractMigration || (allowBakedOutputDrift &&
                             (definition.Stage == MovementLabStage.BakedOutput ||
                              (definition.Stage == MovementLabStage.GameplayScene &&
                               drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath))));
