@@ -69,6 +69,12 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
+- `read_paths`: [exact paths]
+- `validation_environment`: [bounded environment and lease]
+- `unity_mutation`: true | false
+- `expensive_proof_owner`: [identity or None]
+- `expensive_proof_run_point`: [boundary or None]
+- `proof_invalidation_paths`: [exact paths]
 - source artifact: [absolute path or None]
 - source artifact sha256: [lowercase digest or None]
 - source artifact bytes: [integer or None]
@@ -81,6 +87,7 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - merge wave/status: [wave + pending | merged | blocked]
 - accepted integration SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
+- ledger rows: [check_id list or None]
 - question: [one question or None]
 - blocker: [evidence + needed action/recheck or None]
 
@@ -98,6 +105,31 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - final SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
 - clean: true | false | unknown
+
+## Check Ledger
+
+One row per declared check. Keep rows compact; LP is sole writer.
+
+- check_id: [stable ID]
+- owner: [one worker/orchestrator identity]
+- tier: `fast | development | production-final`
+- status: `pending | executed | reused | deferred | invalidated`
+- run_point: [coding | checkpoint | fan-in | source-freeze | final]
+- `executed_sha`: [full SHA or None]
+- `validated_sha`: [full SHA or None]
+- `input_paths`: [exact paths]
+- `input_digest`: [digest or None]
+- `environment_fingerprint`: [digest/identity or None]
+- `mutates_project`: `true | false`
+- `invalidation_paths`: [exact paths]
+- subsumes: [check IDs or None]
+- `subsumed_checks`: [check IDs or None]
+- `evidence_path`: [durable path or None]
+- `evidence_digest`: [SHA-256 or None]
+- `evidence`: [path + SHA-256 object or None]
+- `invalidation_reason`: [changed path/condition or None]
+
+Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly; pure checks reattest only with descendant ancestry, matching input/environment digests, and empty diffs across every invalidation path; bake/capture/manual rows never reattest after render or lighting input changes. Resume and merge read rows mechanically.
 ```
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.

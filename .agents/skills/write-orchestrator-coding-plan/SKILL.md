@@ -104,7 +104,13 @@ Every plan contains:
 - review focus: Critical/High regression, safety, contract, evidence risks.
 - handoff: exact head requirement, changed paths, residual risks, integration/user-branch authority.
 
+Every candidate also binds `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`, and `proof_invalidation_paths`. Candidate may contain multiple workers only when paths and validation environments are disjoint; one owner must run each production-final proof after fan-in, review, and fixes.
+
 Each task names objective, done condition, dependency, owned/protected paths, focused reads, implementation instructions, validation, proof, and return evidence.
+
+### Check contract
+
+Planner checks use machine-readable rows. Required fields: `check_id`, `tier` (`fast|development|production-final`), `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`. Include `executed_sha`, `validated_sha`, `status`, and evidence path/digest in execution state. Require one owner for every production-final row after source fan-in and accepted fixes. A review never proves bake or capture rerun.
 
 Execution route:
 
@@ -165,10 +171,16 @@ Dependencies: [accepted full SHAs or None]
 - depends_on: [accepted SHA or None]
 - owns: `[exact paths]`
 - protected: `[exact paths/symbols]`
+- read_paths: `[exact paths/symbols]`
+- validation_environment: `[bounded environment and lease]`
+- unity_mutation: `true | false`
+- expensive_proof_owner: `[one identity or None]`
+- expensive_proof_run_point: `[checkpoint/final boundary or None]`
+- proof_invalidation_paths: `[paths that invalidate proof]`
 - focused_reads: `[exact paths/symbols and reason]`
 - implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
 - done when: [observable acceptance]
-- checks: [owner, command/workflow, result, evidence, invalidation]
+- checks: [owner, command/workflow, result, evidence, invalidation; include full check contract fields]
 - proof: [discriminatory evidence]
 - review_focus: [Critical/High risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]

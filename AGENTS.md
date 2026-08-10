@@ -54,6 +54,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
+- Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
 - Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
 - IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
@@ -65,9 +66,12 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
 - Builder-generated change: run build twice from same SHA. Build 2 must reuse existing outputs; compare hashes for owned scenes, prefabs, controllers, materials, and importer metadata. Any mismatch -> nondeterministic build bug.
 - Run `ValidateMovementLab()` in separate Unity process after build 2. Build success alone does not prove persisted references or bindings.
+- Bright-arena capture invokes `ValidateMovementLab()` in its clean process; capture evidence subsumes a separate validator row.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
+- Production bake/capture sequence starts only after final source diff, accepted Critical/High fixes, clean exact SHA, and review marker. Later source edits invalidate affected ledger rows.
+- Workflow probe schema is `schemaVersion: 1` with typed SHA/version/status/stale/digest/profile/path/hash fields; absent probe remains optional until T4 producer exists. Durable evidence and marker/report paths stay under Git-common destination and outside product worktree.
 - Report only checks run.
 - When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`
 

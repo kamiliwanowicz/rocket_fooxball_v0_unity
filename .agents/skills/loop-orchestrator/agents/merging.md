@@ -21,6 +21,8 @@ Dispatch binds:
 - owned/protected paths, dependencies, exact allowed Git operations;
 - integration checks/evidence locations and LP state path.
 
+Dispatch also carries check-ledger rows, their owners/tier/run points, input and environment digests, mutation flags, invalidation paths, and subsumption. Merging agent never broadens proof scope.
+
 Each accepted execution SHA must be clean, committed, scope-verified, and accepted by LP. Missing/mismatched input -> `blocked` before mutation.
 
 ## Procedure
@@ -33,6 +35,10 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
    - Otherwise merge exact candidate SHA only when dispatch permits merge commit.
 4. Conflict -> stop and report files/candidate SHAs. Resolve only dispatch-owned integration text. Product choice or protected-path change -> `blocked` before resolution.
 5. Run required boundary checks after declared merge boundaries and final integration. Merge/fix invalidates affected checks.
+   - Intermediate wave -> Git/scope/downstream-contract rows.
+   - Final wave -> union pending or invalidated production-final rows once.
+   - Unchanged one-plan fast-forward -> reuse exact valid plan evidence after cheap SHA/content attestation.
+   - Post-proof fix -> invalidate rows whose declared invalidation paths intersect changed paths; lighting/render changes reopen bake/capture.
 6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged one-plan head with still-valid checks and no integration edit. Report Critical/High findings only.
 7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, and do not re-review fix.
 8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, checks, and no active writer.
