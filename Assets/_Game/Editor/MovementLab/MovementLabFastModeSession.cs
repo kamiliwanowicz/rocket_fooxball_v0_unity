@@ -158,6 +158,14 @@ namespace RocketFooxball.Editor
             var persistedAssetDigests = CapturePersistedAssetDigests();
 
             var sceneDirty = scene.isDirty;
+            var defaultReflectionMode = RenderSettings.defaultReflectionMode;
+            Cubemap customReflection = null;
+            if (defaultReflectionMode == DefaultReflectionMode.Custom)
+            {
+                customReflection = RenderSettings.customReflection;
+                if (customReflection == null)
+                    throw new InvalidOperationException("Fast preview requires a valid custom reflection cubemap when default reflection mode is Custom.");
+            }
             return new Snapshot
             {
                 scene = scene,
@@ -176,12 +184,12 @@ namespace RocketFooxball.Editor
                 fogStartDistance = RenderSettings.fogStartDistance,
                 fogEndDistance = RenderSettings.fogEndDistance,
                 fogDensity = RenderSettings.fogDensity,
-                customReflection = RenderSettings.customReflection,
+                customReflection = customReflection,
                 subtractiveShadowColor = RenderSettings.subtractiveShadowColor,
                 haloStrength = RenderSettings.haloStrength,
                 flareStrength = RenderSettings.flareStrength,
                 flareFadeSpeed = RenderSettings.flareFadeSpeed,
-                defaultReflectionMode = RenderSettings.defaultReflectionMode,
+                defaultReflectionMode = defaultReflectionMode,
                 defaultReflectionResolution = RenderSettings.defaultReflectionResolution,
                 reflectionBounces = RenderSettings.reflectionBounces,
                 reflectionIntensity = RenderSettings.reflectionIntensity,
@@ -471,7 +479,7 @@ namespace RocketFooxball.Editor
             RenderSettings.fogStartDistance = state.fogStartDistance;
             RenderSettings.fogEndDistance = state.fogEndDistance;
             RenderSettings.fogDensity = state.fogDensity;
-            RenderSettings.customReflection = state.customReflection;
+            if (state.defaultReflectionMode == DefaultReflectionMode.Custom) RenderSettings.customReflection = state.customReflection;
             RenderSettings.subtractiveShadowColor = state.subtractiveShadowColor;
             RenderSettings.haloStrength = state.haloStrength;
             RenderSettings.flareStrength = state.flareStrength;
@@ -567,7 +575,8 @@ namespace RocketFooxball.Editor
             if (RenderSettings.skybox != state.skybox || RenderSettings.fog != state.fog || RenderSettings.fogColor != state.fogColor ||
                 RenderSettings.fogMode != state.fogMode || !Mathf.Approximately(RenderSettings.fogStartDistance, state.fogStartDistance) ||
                 !Mathf.Approximately(RenderSettings.fogEndDistance, state.fogEndDistance) || !Mathf.Approximately(RenderSettings.fogDensity, state.fogDensity) ||
-                RenderSettings.customReflection != state.customReflection || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
+                (state.defaultReflectionMode == DefaultReflectionMode.Custom && RenderSettings.defaultReflectionMode == DefaultReflectionMode.Custom &&
+                 RenderSettings.customReflection != state.customReflection) || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
                 !Mathf.Approximately(RenderSettings.haloStrength, state.haloStrength) || !Mathf.Approximately(RenderSettings.flareStrength, state.flareStrength) ||
                 !Mathf.Approximately(RenderSettings.flareFadeSpeed, state.flareFadeSpeed))
                 throw new InvalidOperationException("Fast preview restoration refused: unrelated RenderSettings changed during preview.");
@@ -599,7 +608,7 @@ namespace RocketFooxball.Editor
                 RenderSettings.skybox != state.skybox || RenderSettings.fog != state.fog || RenderSettings.fogColor != state.fogColor ||
                 RenderSettings.fogMode != state.fogMode || !Mathf.Approximately(RenderSettings.fogStartDistance, state.fogStartDistance) ||
                 !Mathf.Approximately(RenderSettings.fogEndDistance, state.fogEndDistance) || !Mathf.Approximately(RenderSettings.fogDensity, state.fogDensity) ||
-                RenderSettings.customReflection != state.customReflection || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
+                (state.defaultReflectionMode == DefaultReflectionMode.Custom && RenderSettings.customReflection != state.customReflection) || RenderSettings.subtractiveShadowColor != state.subtractiveShadowColor ||
                 !Mathf.Approximately(RenderSettings.haloStrength, state.haloStrength) || !Mathf.Approximately(RenderSettings.flareStrength, state.flareStrength) ||
                 !Mathf.Approximately(RenderSettings.flareFadeSpeed, state.flareFadeSpeed) ||
                 RenderSettings.defaultReflectionMode != state.defaultReflectionMode || RenderSettings.defaultReflectionResolution != state.defaultReflectionResolution ||
