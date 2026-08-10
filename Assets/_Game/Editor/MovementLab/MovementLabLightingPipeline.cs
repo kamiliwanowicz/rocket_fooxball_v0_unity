@@ -378,6 +378,15 @@ namespace RocketFooxball.Editor
                     // probe loop/EXRs intentionally no longer exist.
                 }
 
+                internal static void NormalizePostBakeYamlWhitespace()
+                {
+                    // Only bake-owned serialized YAML may be normalized after
+                    // Lightmapping.Bake. Material/prefab/controller outputs are
+                    // pre-bake inputs and remain byte/dirty-state protected.
+                    MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.ScenePath);
+                    MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.BakedLightingPath + "/LightingData.asset");
+                }
+
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
                 {
                     var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();

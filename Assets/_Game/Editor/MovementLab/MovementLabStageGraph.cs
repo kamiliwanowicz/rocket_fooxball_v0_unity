@@ -59,7 +59,8 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:2";
-        private const string MaterialContract = "material-prefab-contract:3";
+        private const string PreviousMaterialContract = "material-prefab-contract:3";
+        private const string MaterialContract = "material-prefab-contract:4";
         // T6 canonicalizes the generated TagManager bytes.
         private const string PreviousGameplayContract = "gameplay-scene-contract:6";
         private const string GameplayContract = "gameplay-scene-contract:7";
@@ -220,7 +221,9 @@ namespace RocketFooxball.Editor
                             drift.All(path =>
                                 path == "changed:ProjectSettings/TagManager.asset" ||
                                 path == "missing:ProjectSettings/TagManager.asset");
-                        var ignoreDrift = qualityContractMigration || gameplayContractMigration || (allowBakedOutputDrift &&
+                        var materialContractMigration = IsMaterialPrefabContractMigration(definition.Stage, prior.contractVersion,
+                            current.contractVersion, drift);
+                        var ignoreDrift = materialContractMigration || qualityContractMigration || gameplayContractMigration || (allowBakedOutputDrift &&
                             (definition.Stage == MovementLabStage.BakedOutput ||
                              (definition.Stage == MovementLabStage.GameplayScene &&
                               drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath))));
@@ -809,6 +812,34 @@ namespace RocketFooxball.Editor
                 else if (oldValue == null || oldValue.missing || !string.Equals(oldValue.digest, newValue.digest, StringComparison.Ordinal)) drift.Add("changed:" + path);
             }
             return drift;
+        }
+
+        private static bool IsMaterialPrefabContractMigration(MovementLabStage stage, string priorContract,
+            string currentContract, List<string> drift)
+        {
+            if (stage != MovementLabStage.MaterialPrefab ||
+                !string.Equals(priorContract, PreviousMaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) ||
+                !string.Equals(currentContract, MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) ||
+                drift == null || drift.Count == 0)
+            {
+                return false;
+            }
+
+            var owned = new HashSet<string>(WithMetas(MovementLabContract.MaterialPrefabOutputs), StringComparer.Ordinal);
+            for (var i = 0; i < drift.Count; i++)
+            {
+                var token = drift[i];
+                if (string.IsNullOrEmpty(token)) return false;
+
+                string path;
+                if (token.StartsWith("changed:", StringComparison.Ordinal)) path = token.Substring("changed:".Length);
+                else if (token.StartsWith("missing:", StringComparison.Ordinal)) path = token.Substring("missing:".Length);
+                else return false;
+
+                if (string.IsNullOrEmpty(path) || !owned.Contains(path)) return false;
+            }
+
+            return true;
         }
 
         private static string FormatOutputDrift(MovementLabStage stage, List<string> drift)
