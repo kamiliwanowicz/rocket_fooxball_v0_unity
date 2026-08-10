@@ -70,6 +70,19 @@ namespace RocketFooxball.Editor
         private const string LightingContract = "lighting-contract:3";
         private const string BakedContract = "baked-output-contract:4";
 
+        // Development can deterministically omit only lightmap variants 3/4;
+        // keep exact ownership paths (including .meta files) in fingerprints.
+        private static readonly HashSet<string> DevelopmentStableMissingBakedOutputPaths =
+            new HashSet<string>(WithMetas(new[]
+            {
+                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_dir.png",
+                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_light.exr",
+                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
+                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_dir.png",
+                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_light.exr",
+                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_shadowmask.png"
+            }), StringComparer.Ordinal);
+
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a
         // dynamic/prefab-only change cannot invalidate lighting by transitively
@@ -175,7 +188,7 @@ namespace RocketFooxball.Editor
                 }
                 else
                 {
-                    var drift = FindOutputDrift(prior.outputs, current.outputs);
+                    var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs);
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
                     if (definition.IncludeUnityVersion && !string.Equals(prior.unityVersion, current.unityVersion, StringComparison.Ordinal)) stageReasons.Add("unity-version-changed");
@@ -808,7 +821,8 @@ namespace RocketFooxball.Editor
             return result;
         }
 
-        private static List<string> FindOutputDrift(MovementLabPathDigest[] expected, MovementLabPathDigest[] actual)
+        private static List<string> FindOutputDrift(MovementLabStage stage, string priorProfile, string currentProfile,
+            MovementLabPathDigest[] expected, MovementLabPathDigest[] actual)
         {
             var drift = new List<string>();
             var expectedByPath = (expected ?? Array.Empty<MovementLabPathDigest>()).Where(item => item != null).ToDictionary(item => item.path, StringComparer.Ordinal);
@@ -817,10 +831,34 @@ namespace RocketFooxball.Editor
             {
                 expectedByPath.TryGetValue(path, out var oldValue);
                 actualByPath.TryGetValue(path, out var newValue);
-                if (newValue == null || newValue.missing) drift.Add("missing:" + path);
+                if (newValue == null || newValue.missing)
+                {
+                    if (IsStableDevelopmentMissingBakedOutput(stage, priorProfile, currentProfile, path, oldValue, newValue)) continue;
+                    drift.Add("missing:" + path);
+                }
                 else if (oldValue == null || oldValue.missing || !string.Equals(oldValue.digest, newValue.digest, StringComparison.Ordinal)) drift.Add("changed:" + path);
             }
             return drift;
+        }
+
+        // Truth table: stage=BakedOutput && prior/current profile=Development &&
+        // prior exists+missing && current exists+missing && allowlisted path ->
+        // suppress drift token. Any false condition -> existing drift handling.
+        private static bool IsStableDevelopmentMissingBakedOutput(MovementLabStage stage, string priorProfile,
+            string currentProfile, string path, MovementLabPathDigest prior, MovementLabPathDigest current)
+        {
+            var isBakedOutput = stage == MovementLabStage.BakedOutput;
+            var isDevelopmentProfile = IsDevelopmentProfile(priorProfile) && IsDevelopmentProfile(currentProfile);
+            var priorMissing = prior != null && prior.missing;
+            var currentMissing = current != null && current.missing;
+            var isAllowlistedPath = !string.IsNullOrEmpty(path) && DevelopmentStableMissingBakedOutputPaths.Contains(path);
+            return isBakedOutput && isDevelopmentProfile && priorMissing && currentMissing && isAllowlistedPath;
+        }
+
+        private static bool IsDevelopmentProfile(string profile)
+        {
+            return string.Equals(profile, MovementLabLightingProfiles.ProfileId.Development.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(profile, MovementLabLightingProfiles.Development.Tag, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsMaterialPrefabContractMigration(MovementLabStage stage, string priorContract,
