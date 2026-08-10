@@ -1133,10 +1133,10 @@ try {
                 Add-CommandRecord ([ordered]@{ label = 'CaptureManifestOutput'; tier = 'production-final'; method = $captureScript; arguments = @(); exitCode = 0; skipped = (-not $capturePending); mutatesProject = $false; logPath = $null; elapsedMs = 0; output = $captureOutput })
             } else {
                 if (Test-CheckPending 'capture-validator') { Invoke-UnityStep 'ProductionValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'capture-validator' } else { Mark-CheckReused 'capture-validator' }
+                $probeRecord = Read-ProbeContract
+                Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
             }
             Mark-CheckExecuted 'final-source-clean'
-            $probeRecord = Read-ProbeContract
-            Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
         }
     }
 } finally {
