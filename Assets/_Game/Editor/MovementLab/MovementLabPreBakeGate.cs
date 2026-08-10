@@ -291,19 +291,19 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("MovementLab material emission state is not persisted: " + path);
 
                     if (string.Equals(path, RocketHotMaterialPath, StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, RocketEmissionColor, RocketEmissionStrength, path);
+                        ValidateReloadedEmission(material, RocketEmissionColor, RocketEmissionStrength, true, path);
                     else if (string.Equals(path, MaterialsPath + "/ArenaGlow.mat", StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, new Color(0.10f, 0.95f, 0.88f, 1f), 2f, path);
+                        ValidateReloadedEmission(material, new Color(0.10f, 0.95f, 0.88f, 1f), 2f, false, path);
                     else if (string.Equals(path, MaterialsPath + "/WeaponAccent.mat", StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, path);
+                        ValidateReloadedEmission(material, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, true, path);
                 }
             }
         }
 
-        private static void ValidateReloadedEmission(Material material, Color baseColor, float strength, string path)
+        private static void ValidateReloadedEmission(Material material, Color baseColor, float strength, bool requireEmissionMap, string path)
         {
             if (material.globalIlluminationFlags != MaterialGlobalIlluminationFlags.BakedEmissive ||
-                !material.IsKeywordEnabled("_EMISSION") || material.GetTexture("_EmissionMap") == null ||
+                !material.IsKeywordEnabled("_EMISSION") || (requireEmissionMap && material.GetTexture("_EmissionMap") == null) ||
                 Vector4.Distance(material.GetColor("_EmissionColor"), baseColor * strength) > 0.01f ||
                 (material.HasProperty("_EmissionStrength") && Mathf.Abs(material.GetFloat("_EmissionStrength") - strength) > 0.001f))
             {

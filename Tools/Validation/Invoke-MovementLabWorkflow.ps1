@@ -222,7 +222,7 @@ function Get-AuthoritativeGeneratedInventory {
     }
     foreach ($contractPath in $script:BuilderOutputContract) {
         $full = Join-Path $script:ProjectRoot $contractPath
-        if (Test-Path -LiteralPath $full -PathType Leaf -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
+        if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
         elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
     }
     foreach ($probePath in @($script:ProbeInventoryPaths)) {
@@ -1092,7 +1092,7 @@ if ($Mode -eq 'ProductionPrepare') {
 }
 $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -in @('ProductionPrepare', 'ProductionValidate') -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
-Acquire-ProjectLease
+Acquire-ProjectLease | Out-Null
 try {
 Assert-NoProjectProcessOrLock
 
