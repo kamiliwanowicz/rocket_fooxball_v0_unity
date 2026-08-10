@@ -22,6 +22,7 @@ namespace RocketFooxball.Editor
     internal static class MovementLabFastModeSession
     {
         private const int FastQualityIndex = GraphicsQualityConfigurator.IterationQualityIndex;
+        private const int FastReflectionBounces = 1;
         private static readonly Color FastAmbientSky = new Color(0.62f, 0.70f, 0.78f, 1f);
         private static readonly Color FastAmbientEquator = new Color(0.48f, 0.52f, 0.56f, 1f);
         private static readonly Color FastAmbientGround = new Color(0.28f, 0.31f, 0.35f, 1f);
@@ -378,7 +379,7 @@ namespace RocketFooxball.Editor
             RenderSettings.ambientIntensity = 1.6f;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
             RenderSettings.defaultReflectionResolution = 64;
-            RenderSettings.reflectionBounces = 0;
+            RenderSettings.reflectionBounces = FastReflectionBounces;
             RenderSettings.reflectionIntensity = 1f;
 
             if (state.sun != null)
@@ -570,7 +571,7 @@ namespace RocketFooxball.Editor
                 RenderSettings.ambientSkyColor != FastAmbientSky || RenderSettings.ambientEquatorColor != FastAmbientEquator ||
                 RenderSettings.ambientGroundColor != FastAmbientGround || Mathf.Abs(RenderSettings.ambientIntensity - 1.6f) > 0.0001f ||
                 RenderSettings.defaultReflectionMode != DefaultReflectionMode.Skybox || RenderSettings.defaultReflectionResolution != 64 ||
-                RenderSettings.reflectionBounces != 0 || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
+                RenderSettings.reflectionBounces != FastReflectionBounces || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
                 throw new InvalidOperationException("Fast preview restoration refused: RenderSettings changed during preview.");
             if (RenderSettings.skybox != state.skybox || RenderSettings.fog != state.fog || RenderSettings.fogColor != state.fogColor ||
                 RenderSettings.fogMode != state.fogMode || !Mathf.Approximately(RenderSettings.fogStartDistance, state.fogStartDistance) ||
@@ -589,6 +590,9 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Fast preview failed to detach a renderer lightmap binding.");
             if (RenderSettings.ambientMode != AmbientMode.Trilight || RenderSettings.ambientIntensity != 1.6f)
                 throw new InvalidOperationException("Fast preview ambient contract was not applied.");
+            if (RenderSettings.defaultReflectionMode != DefaultReflectionMode.Skybox || RenderSettings.defaultReflectionResolution != 64 ||
+                RenderSettings.reflectionBounces != FastReflectionBounces || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
+                throw new InvalidOperationException("Fast preview reflection contract was not applied.");
             if (state.sun != null && state.sun.shadows != (directionalHardShadows ? LightShadows.Hard : LightShadows.None))
                 throw new InvalidOperationException("Fast preview directional shadow contract was not applied.");
             if (state.volumes.Any(item => item.volume != null && item.volume.enabled)) throw new InvalidOperationException("Fast preview post volume remained enabled.");
