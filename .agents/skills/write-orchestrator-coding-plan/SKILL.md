@@ -70,8 +70,12 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
-- Tasks use smallest coherent implementation units: one algorithm, state machine, API contract, asset-wiring cluster, or tightly coupled combination.
-- Split task when parts require separate design reasoning, can compile/prove at distinct barriers, or contain distinct failure domains. Order shared-path tasks serially.
+- Task is worker-review slice, not edit checklist item. One task -> one implementation worker -> one review checkpoint by default. Keep ordered substeps inside task.
+- Size slice by reasoning and proof load, never line or file count. Balanced slice has one dominant behavior or invariant, cohesive execution path, bounded failure domain, and one review risk model. Worker can implement it without context overload; reviewer can judge diff and proof without reconstructing unrelated mechanisms.
+- Fold incidental edits into nearest behavior task when they lack independent done condition or proof and share dependencies, lifecycle, paths, or validation. Preserve separate task when small edit carries distinct material risk or independent acceptance.
+- Split slice at stable contract, state-ownership, failure-domain, or validation barrier when it contains independently reasoned mechanisms, unrelated edge-case policy, distinct proof workflows, or reviewer risk-model switches. Each resulting slice must remain meaningful and independently reviewable.
+- Rebalance after design detail is known: merge thin slices; split overloaded slices. Inseparable candidate still exceeding one worker-review slice capacity -> decomposition mismatch.
+- Order shared-path tasks serially.
 - Parallel tasks require same launch head, disjoint paths, stable inputs, independent acceptance, and explicit fan-in. Cross-lane dependency or shared validation environment -> serial edge.
 - Shared files, contracts, generated/serialized assets, migrations, and product decisions stay serialized.
 - Default review boundary: one unique checkpoint after each expected implementation worker. Group multiple workers only when joined chunk is more meaningful to review than partial worker states; name covered tasks, join condition, and technical rationale. Reviewer-call reduction is insufficient rationale.
@@ -84,6 +88,8 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 Before writing artifact, ask what worker would still need to figure out. Resolve choices affecting behavior, contracts, state ownership, other files, or edge cases. Detail stays proportional: direct edit may need one precise line; complex mechanic needs concrete symbols, logic, ordering, math, integration, and lifecycle behavior relevant to that mechanic. Avoid empty checklist fields.
 
 Ready task lets worker follow recorded design using only local coding judgment. Product/architecture choice missing from repository -> `needs_user`. Repository evidence gap -> LP `blocked`. Excess design surface -> decomposition mismatch.
+
+Run worker-review sizing gate after design gate. For each task, state dominant outcome, coupled edits kept inside boundary, independent work kept outside, and one proof boundary. If worker or reviewer must hold unrelated mechanisms in context -> split. If task has no meaningful independent acceptance -> fold into adjacent task.
 
 Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan explains concrete contact state, projection/order, ramp-exit handling, and separation from wall handling.
 
@@ -160,6 +166,7 @@ Dependencies: [accepted full SHAs or None]
 ## Tasks
 ### T1: [coherent result]
 - objective: [single bounded implementation outcome]
+- slice_boundary: [dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
 - depends_on: [accepted SHA or None]
@@ -175,7 +182,7 @@ Dependencies: [accepted full SHAs or None]
 - return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
 ## Execution Assignments
-- workers: [task ID -> worker identity; parallel lane when any]
+- workers: [task ID -> worker identity -> bounded outcome; parallel lane when any]
 - review_checkpoints: [checkpoint ID -> covered tasks/workers -> trigger/join condition -> dependency gate -> grouped rationale or per-worker default]
 
 ## Final Verification
@@ -192,6 +199,7 @@ Dependencies: [accepted full SHAs or None]
 ## Done Criteria
 - every covered requirement maps to task, owner, check, and proof;
 - every task passes implementation design gate;
+- every task passes worker-review sizing gate: one meaningful outcome, cohesive reasoning, bounded failure domain, one proof boundary, and no incidental standalone slice;
 - Execution Graph includes every task and review checkpoint exactly once and makes every sequential dependency, parallel lane, and join gate explicit;
 - every implementation worker maps to one review checkpoint; grouped checkpoints include stronger-boundary rationale;
 - exact baseline and dependencies are factual;
@@ -227,6 +235,7 @@ Needed LP Action or Recheck: [one action/fact or None]
 
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
+- Run worker-review sizing audit after design detail: fold tasks lacking independent acceptance; split tasks spanning unrelated reasoning, failure, or proof boundaries; return decomposition mismatch when no stable internal split exists.
 - Verify `## Execution Graph` matches dependencies, launches fan-out siblings together, and never parallelizes overlapping paths, unstable inputs, or shared validation environments.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
