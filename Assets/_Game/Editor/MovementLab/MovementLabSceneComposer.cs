@@ -580,7 +580,10 @@ namespace RocketFooxball.Editor
                 {
                     if (!File.Exists(path)) return;
                     var source = File.ReadAllText(path);
-                    var normalized = Regex.Replace(source, @"[ \t]+(?=\r?$)", string.Empty, RegexOptions.Multiline);
+                    // Empty YAML sequence entries are serialized as an indented
+                    // `- ` line. Keep that marker (and its indentation) intact;
+                    // trimming it makes Unity's YAML parser reject the document.
+                    var normalized = Regex.Replace(source, @"^(?![ \t]*-[ \t]*\r?$)(.*?)[ \t]+(?=\r?$)", match => match.Groups[1].Value, RegexOptions.Multiline);
                     if (!string.Equals(source, normalized, StringComparison.Ordinal))
                     {
                         File.WriteAllText(path, normalized, new System.Text.UTF8Encoding(false));
