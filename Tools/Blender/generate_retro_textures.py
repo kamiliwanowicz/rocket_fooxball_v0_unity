@@ -1,19 +1,31 @@
 """Deterministic PBR texture source for the Rocket Fooxball graphics pass.
 
-The generator is intentionally dependency free.  It can run from Blender's
-background Python (the normal invocation) or from CPython for fast auditing.
+The generator requires NumPy and can run from Blender's background Python (the
+normal invocation) or from CPython for fast auditing.
 PNG encoding is done locally instead of through a Blender image datablock so
 the source, channel layout, and compressed bytes stay identical between runs.
 """
 
 from __future__ import annotations
 
+import argparse
+import ctypes
 import hashlib
 import json
 import math
 import os
+import platform
 import struct
+import time
 import zlib
+
+try:
+    import numpy as np
+except ImportError as exc:  # pragma: no cover - exercised by Blender installs without NumPy
+    raise RuntimeError(
+        "Retro texture generation requires NumPy. Install NumPy in the active "
+        "CPython/Blender Python environment (for example: python -m pip install numpy)."
+    ) from exc
 
 
 REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -53,22 +65,108 @@ def u8(value: float) -> int:
     return int(round(clamp01(value) * 255.0))
 
 
-def rgba_fill(width: int, height: int, colour=(0, 0, 0, 255)) -> bytearray:
-    return bytearray(bytes(colour) * (width * height))
+def _u8_array(values):
+    """Apply scalar ``u8`` round/clamp semantics to a float64 array."""
+    values = np.asarray(values, dtype=np.float64)
+    return np.rint(np.clip(values, 0.0, 1.0) * 255.0).astype(np.uint8)
+
+
+def _smoothstep_array(edge0: float, edge1: float, values):
+    values = np.asarray(values, dtype=np.float64)
+    edge0 = np.asarray(edge0, dtype=np.float64)
+    edge1 = np.asarray(edge1, dtype=np.float64)
+    equal = edge0 == edge1
+    with np.errstate(divide="ignore", invalid="ignore"):
+        t = np.clip((values - edge0) / (edge1 - edge0), 0.0, 1.0)
+    stepped = t * t * (3.0 - 2.0 * t)
+    return np.where(equal, np.where(values >= edge1, 1.0, 0.0), stepped)
+
+
+def _periodic_noise_array(kind: str, u, v):
+    """Vectorized periodic noise; phase/summation order matches ``periodic_noise``."""
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    value = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
+    weight = 0.0
+    for fx, fy, phase, amplitude in SURFACE_PHASES[kind]:
+        value += np.sin(np.float64(math.tau) * (np.float64(fx) * u + np.float64(fy) * v) + np.float64(phase)) * np.float64(amplitude)
+        weight += amplitude
+    return value / np.float64(weight) if weight else value
+
+
+def _rgba_array(width: int, height: int, fill=(0, 0, 0, 255)):
+    """Allocate the canonical C-order uint8 RGBA storage used by every kernel."""
+    array = np.empty((height, width, 4), dtype=np.uint8, order="C")
+    array[:, :, :] = np.asarray(fill, dtype=np.uint8)
+    return array
+
+
+def _rgba_view(buffer, width=None, height=None):
+    """Return a C-order ``(height,width,4)`` view without changing channel bytes."""
+    if isinstance(buffer, np.ndarray):
+        if buffer.dtype != np.uint8:
+            raise TypeError(f"RGBA array must use uint8 storage, got {buffer.dtype}")
+        array = buffer
+    else:
+        array = np.frombuffer(buffer, dtype=np.uint8)
+    if array.ndim == 3:
+        if array.shape[2] != 4:
+            raise ValueError("RGBA array must have four channels")
+        if width is not None and height is not None and array.shape != (height, width, 4):
+            raise ValueError(f"RGBA array shape {array.shape} does not match {(height, width, 4)}")
+        return array if array.flags.c_contiguous else np.ascontiguousarray(array)
+    if width is None or height is None:
+        raise ValueError("width and height are required for flat RGBA buffers")
+    expected = width * height * 4
+    if array.size != expected:
+        raise ValueError(f"RGBA buffer length {array.size} does not match {expected}")
+    return array.reshape((height, width, 4), order="C")
+
+
+def _rgba_bytes(buffer, width=None, height=None) -> bytes:
+    """Pack RGBA storage once in row-major order for PNG encoding/hash/write."""
+    if isinstance(buffer, np.ndarray):
+        array = _rgba_view(buffer, width, height)
+        return array.tobytes(order="C")
+    return bytes(buffer)
+
+
+def _rgba_flat(buffer, width=None, height=None):
+    if isinstance(buffer, np.ndarray):
+        return _rgba_view(buffer, width, height).reshape(-1, 4, order="C")
+    return np.frombuffer(buffer, dtype=np.uint8).reshape((-1, 4), order="C")
+
+
+def rgba_fill(width: int, height: int, colour=(0, 0, 0, 255)):
+    return _rgba_array(width, height, colour)
 
 
 def rgba_set(buffer: bytearray, index: int, colour) -> None:
+    if isinstance(buffer, np.ndarray):
+        if buffer.ndim == 3:
+            buffer.reshape(-1, 4, order="C")[index, :] = np.asarray(colour, dtype=np.uint8)
+        else:
+            buffer.reshape(-1, 4, order="C")[index, :] = np.asarray(colour, dtype=np.uint8)
+        return
     offset = index * 4
     buffer[offset : offset + 4] = bytes(colour)
 
 
 def rgba_get(buffer: bytearray, index: int):
+    if isinstance(buffer, np.ndarray):
+        value = buffer.reshape(-1, 4, order="C")[index]
+        return int(value[0]), int(value[1]), int(value[2]), int(value[3])
     offset = index * 4
     return buffer[offset], buffer[offset + 1], buffer[offset + 2], buffer[offset + 3]
 
 
 def close_repeat_edges(buffer: bytearray, width: int, height: int) -> None:
     """Duplicate opposite edges for textures sampled with Repeat wrapping."""
+    if isinstance(buffer, np.ndarray):
+        array = _rgba_view(buffer, width, height)
+        array[:, -1, :] = array[:, 0, :]
+        array[-1, :, :] = array[0, :, :]
+        return
     row_bytes = width * 4
     for y in range(height):
         row = y * row_bytes
@@ -81,28 +179,110 @@ def _png_chunk(kind: bytes, payload: bytes) -> bytes:
     return struct.pack(">I", len(payload)) + kind + payload + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
 
 
-def encode_png(width: int, height: int, rgba: bytearray) -> bytes:
-    if len(rgba) != width * height * 4:
+_SYSTEM_ZLIB = None
+_SYSTEM_ZLIB_ATTEMPTED = False
+
+
+def _load_system_zlib():
+    """Load a classic zlib compressor when the host Python uses zlib-ng.
+
+    Accepted texture bytes were authored with the reference zlib stream.  Some
+    newer Python builds link zlib-ng, whose match finder emits different but
+    valid DEFLATE bytes.  Prefer a classic zlib DLL when available and retain
+    the Python module as a portable fallback (Blender's bundled zlib is classic
+    on supported authoring machines).
+    """
+    global _SYSTEM_ZLIB, _SYSTEM_ZLIB_ATTEMPTED
+    if _SYSTEM_ZLIB_ATTEMPTED:
+        return _SYSTEM_ZLIB
+    _SYSTEM_ZLIB_ATTEMPTED = True
+    candidates = []
+    override = os.environ.get("ROCKET_FOOXBALL_ZLIB_DLL")
+    if override:
+        candidates.append(override)
+    if os.name == "nt":
+        program_files = os.environ.get("ProgramW6432") or os.environ.get("ProgramFiles") or r"C:\Program Files"
+        candidates.extend(
+            (
+                os.path.join(program_files, "Git", "mingw64", "bin", "zlib1.dll"),
+                os.path.join(program_files, "Git", "usr", "bin", "zlib1.dll"),
+                "zlib1.dll",
+            )
+        )
+    else:
+        candidates.extend(("libz.so.1", "libz.so"))
+    for candidate in candidates:
+        try:
+            library = ctypes.CDLL(candidate)
+            version_fn = library.zlibVersion
+            version_fn.restype = ctypes.c_char_p
+            version = version_fn() or b""
+            if b"zlib-ng" in version.lower():
+                continue
+            compress_bound = library.compressBound
+            compress_bound.argtypes = [ctypes.c_ulong]
+            compress_bound.restype = ctypes.c_ulong
+            compress2 = library.compress2
+            compress2.argtypes = [
+                ctypes.c_void_p,
+                ctypes.POINTER(ctypes.c_ulong),
+                ctypes.c_void_p,
+                ctypes.c_ulong,
+                ctypes.c_int,
+            ]
+            compress2.restype = ctypes.c_int
+            _SYSTEM_ZLIB = (library, version.decode("ascii", errors="replace"), compress_bound, compress2)
+            return _SYSTEM_ZLIB
+        except (AttributeError, OSError, UnicodeError):
+            continue
+    return None
+
+
+def _compress_png_payload(payload: bytes) -> bytes:
+    """Compress one scanline stream at level 9 with canonical zlib bytes."""
+    system_zlib = _load_system_zlib()
+    if system_zlib is None:
+        return zlib.compress(payload, level=9)
+    _library, _version, compress_bound, compress2 = system_zlib
+    source = ctypes.create_string_buffer(payload)
+    capacity = int(compress_bound(len(payload)))
+    destination = ctypes.create_string_buffer(capacity)
+    output_length = ctypes.c_ulong(capacity)
+    status = compress2(destination, ctypes.byref(output_length), source, len(payload), 9)
+    if status != 0:
+        raise RuntimeError(f"zlib compression failed with status {status}")
+    return destination.raw[: output_length.value]
+
+
+def encode_png(width: int, height: int, rgba) -> bytes:
+    if np.asarray(rgba, dtype=np.uint8).size != width * height * 4:
         raise ValueError("RGBA buffer length does not match dimensions")
     # A fixed filter byte (None) keeps output independent of image-library heuristics.
     scanlines = bytearray()
     row_bytes = width * 4
+    packed = _rgba_bytes(rgba, width, height)
     for y in range(height):
         scanlines.append(0)
         start = y * row_bytes
-        scanlines.extend(rgba[start : start + row_bytes])
-    compressed = zlib.compress(bytes(scanlines), level=9)
+        scanlines.extend(packed[start : start + row_bytes])
+    compressed = _compress_png_payload(bytes(scanlines))
     signature = b"\x89PNG\r\n\x1a\n"
     header = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
     return signature + _png_chunk(b"IHDR", header) + _png_chunk(b"IDAT", compressed) + _png_chunk(b"IEND", b"")
 
 
-def save_png(name: str, width: int, height: int, rgba: bytearray) -> str:
+def save_png(name: str, width: int, height: int, rgba, encoded: bytes | None = None) -> str:
     path = os.path.join(TEXTURE_DIRECTORY if name.startswith("Retro") else PREVIEW_DIRECTORY, name + ".png")
     if os.path.dirname(path):
         os.makedirs(os.path.dirname(path), exist_ok=True)
+    encoded = encode_png(width, height, rgba) if encoded is None else encoded
+    # Avoid touching timestamps when a targeted run reproduces accepted bytes.
+    if os.path.isfile(path):
+        with open(path, "rb") as handle:
+            if handle.read() == encoded:
+                return path
     with open(path, "wb") as handle:
-        handle.write(encode_png(width, height, rgba))
+        handle.write(encoded)
     if not os.path.isfile(path) or os.path.getsize(path) <= 0:
         raise RuntimeError(f"PNG write failed: {path}")
     return path
@@ -213,28 +393,95 @@ def _surface_normal(kind: str, u: float, v: float):
     return clamp01(0.5 - dx * strength), clamp01(0.5 - dy * strength), clamp01(1.0 - 0.45 * (abs(dx) + abs(dy)))
 
 
+def _surface_fields_array(kind: str, u, v):
+    """Vectorized surface fields for one bounded row chunk."""
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    n = _periodic_noise_array(kind, u, v)
+    n01 = np.clip(0.5 + n * 0.50, 0.0, 1.0)
+    shape = np.broadcast_shapes(u.shape, v.shape)
+    zero = np.zeros(shape, dtype=np.float64)
+    if kind == "grass":
+        stripe = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 8.0))
+        panel = np.logical_or(np.mod(u * 8.0, 1.0) < 0.035, np.mod(v * 8.0, 1.0) < 0.035).astype(np.float64)
+        base = np.stack((0.018 + (0.055 - 0.018) * n01, 0.20 + (0.43 - 0.20) * n01, 0.20 + (0.36 - 0.20) * n01), axis=-1)
+        base += stripe[..., None] * 0.16 * np.array((0.10, 0.10, 0.10), dtype=np.float64)
+        height = 0.47 + n * 0.06 - panel * 0.08
+        return base, height, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
+    if kind == "wall":
+        seam = np.logical_or(np.mod(u * 16.0, 1.0) < 0.028, np.mod(v * 16.0, 1.0) < 0.028).astype(np.float64)
+        base = np.stack((0.46 + (0.76 - 0.46) * n01, 0.53 + (0.80 - 0.53) * n01, 0.51 + (0.72 - 0.51) * n01), axis=-1)
+        base = base * (1.0 - seam[..., None] * 0.62) + np.array((0.06, 0.40, 0.47), dtype=np.float64) * (seam[..., None] * 0.62)
+        height = 0.50 + n * 0.07 - seam * 0.10
+        return base, height, zero, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+    if kind == "trim":
+        stripe = np.mod(u * 12.0 + v * 12.0, 1.0)
+        edge = (stripe < 0.12).astype(np.float64)
+        base = np.stack((0.20 + (0.56 - 0.20) * n01, 0.12 + (0.35 - 0.12) * n01, 0.045 + (0.17 - 0.045) * n01), axis=-1)
+        base = base * (1.0 - edge[..., None] * 0.38) + np.array((0.74, 0.48, 0.18), dtype=np.float64) * (edge[..., None] * 0.38)
+        height = 0.50 + n * 0.08 + edge * 0.06
+        return base, height, 0.73 + edge * 0.15, 0.55 + n01 * 0.30, 0.86 - edge * 0.10
+    if kind == "hazard":
+        diagonal = np.mod(u * 10.0 + v * 10.0, 1.0)
+        yellow = (diagonal < 0.50).astype(np.float64)
+        dark = np.array((0.045, 0.065, 0.073), dtype=np.float64)
+        bright = np.array((0.95, 0.68, 0.08), dtype=np.float64)
+        base = dark + (bright - dark) * yellow[..., None]
+        base = np.clip(base * (0.90 + n01[..., None] * 0.14), 0.0, 1.0)
+        height = 0.49 + n * 0.035 + np.where(yellow > 0.0, 0.07, -0.015)
+        return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - yellow * 0.10
+    palettes = {
+        "metal": ((0.12, 0.085, 0.055), (0.40, 0.29, 0.16), (0.70, 0.51, 0.27)),
+        "dark": ((0.014, 0.020, 0.028), (0.065, 0.075, 0.086), (0.16, 0.17, 0.17)),
+        "accent": ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028)),
+    }
+    shadow, base_colour, highlight = (np.array(values, dtype=np.float64) for values in palettes[kind])
+    value = np.rint(n01 * 8.0) / 8.0
+    base = shadow + (base_colour - shadow) * value[..., None]
+    # Scalar code shadows ``value`` with each channel's interpolated value in
+    # the highlight pass; retain that per-channel amount here.
+    highlight_amount = np.clip((base - 0.58) / 0.42, 0.0, 1.0)
+    base = base + (highlight - base) * highlight_amount
+    grid = np.logical_or(np.mod(u * 16.0, 1.0) < 0.025, np.mod(v * 16.0, 1.0) < 0.025).astype(np.float64)
+    base = base * (1.0 - grid[..., None] * 0.45) + shadow * (grid[..., None] * 0.45)
+    height = 0.50 + n * 0.09 + grid * 0.035
+    metallic = {"metal": 0.82, "dark": 0.64, "accent": 0.52}[kind]
+    return base, height, np.full_like(n, metallic), 0.64 + n01 * 0.25, 0.88 - grid * 0.16
+
+
 def generate_surface_maps(kind: str, width: int, height: int):
     # Author at 1024? then deterministic nearest-upsample weapon maps to 2048?.
     # This preserves the approved source resolution while keeping background
     # Blender generation practical on laptops.
     source_width = min(width, 1024)
     source_height = min(height, 1024)
-    total = source_width * source_height
-    base = bytearray(total * 4)
-    normal = bytearray(total * 4)
-    metallic = bytearray(total * 4)
-    occlusion = bytearray(total * 4)
-    for y in range(source_height):
-        v = y / float(source_height - 1)
-        for x in range(source_width):
-            u = x / float(source_width - 1)
-            colour, _height, metal, smooth, ao = _surface_fields(kind, u, v)
-            nx, ny, nz = _surface_normal(kind, u, v)
-            index = y * source_width + x
-            rgba_set(base, index, (u8(colour[0]), u8(colour[1]), u8(colour[2]), 255))
-            rgba_set(normal, index, (u8(nx), u8(ny), u8(nz), 255))
-            rgba_set(metallic, index, (u8(metal), 0, 0, u8(smooth)))
-            rgba_set(occlusion, index, (u8(ao), u8(ao), u8(ao), 255))
+    base = _rgba_array(source_width, source_height)
+    normal = _rgba_array(source_width, source_height)
+    metallic = _rgba_array(source_width, source_height)
+    occlusion = _rgba_array(source_width, source_height)
+    x_values = np.arange(source_width, dtype=np.float64) / float(source_width - 1)
+    chunk_rows = max(1, min(source_height, 64))
+    frequency = {"grass": 8.0, "wall": 16.0, "trim": 12.0, "hazard": 10.0, "metal": 16.0, "dark": 16.0, "accent": 16.0}[kind]
+    strength = 1.15 if kind in ("grass", "wall") else 0.85
+    for start in range(0, source_height, chunk_rows):
+        stop = min(source_height, start + chunk_rows)
+        y_values = np.arange(start, stop, dtype=np.float64) / float(source_height - 1)
+        u = x_values[None, :]
+        v = y_values[:, None]
+        colour, _height, metal, smooth, ao = _surface_fields_array(kind, u, v)
+        dx = 0.055 * np.cos(np.float64(math.tau) * frequency * u + 0.37) + 0.022 * np.sin(np.float64(math.tau) * (frequency * 0.5 * v + u))
+        dy = 0.055 * np.sin(np.float64(math.tau) * frequency * v + 0.93) + 0.022 * np.cos(np.float64(math.tau) * (frequency * 0.5 * u - v))
+        if kind == "hazard":
+            dx *= 0.70
+            dy *= 0.70
+        nx = np.clip(0.5 - dx * strength, 0.0, 1.0)
+        ny = np.clip(0.5 - dy * strength, 0.0, 1.0)
+        nz = np.clip(1.0 - 0.45 * (np.abs(dx) + np.abs(dy)), 0.0, 1.0)
+        base[start:stop, :, :3] = _u8_array(colour)
+        normal[start:stop, :, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))
+        metallic[start:stop, :, 0] = _u8_array(metal)
+        metallic[start:stop, :, 3] = _u8_array(smooth)
+        occlusion[start:stop, :, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))
     for buffer in (base, normal, metallic, occlusion):
         close_repeat_edges(buffer, source_width, source_height)
     if (source_width, source_height) != (width, height):
@@ -243,14 +490,16 @@ def generate_surface_maps(kind: str, width: int, height: int):
 
 
 def generate_detail_normal(width=512, height=512):
-    buffer = bytearray(width * height * 4)
-    for y in range(height):
-        v = y / float(height - 1)
-        for x in range(width):
-            u = x / float(width - 1)
-            dx = 0.035 * math.cos(math.tau * (u * 33.0 + v * 7.0))
-            dy = 0.035 * math.sin(math.tau * (v * 29.0 - u * 5.0))
-            rgba_set(buffer, y * width + x, (u8(0.5 - dx), u8(0.5 - dy), u8(1.0 - abs(dx) - abs(dy)), 255))
+    buffer = _rgba_array(width, height)
+    x_values = np.arange(width, dtype=np.float64) / float(width - 1)
+    chunk_rows = max(1, min(height, 128))
+    for start in range(0, height, chunk_rows):
+        stop = min(height, start + chunk_rows)
+        u = x_values[None, :]
+        v = (np.arange(start, stop, dtype=np.float64) / float(height - 1))[:, None]
+        dx = 0.035 * np.cos(np.float64(math.tau) * (u * 33.0 + v * 7.0))
+        dy = 0.035 * np.sin(np.float64(math.tau) * (v * 29.0 - u * 5.0))
+        buffer[start:stop, :, :3] = _u8_array(np.stack((0.5 - dx, 0.5 - dy, 1.0 - np.abs(dx) - np.abs(dy)), axis=-1))
     close_repeat_edges(buffer, width, height)
     return buffer
 
@@ -361,37 +610,105 @@ def ball_sample(point, frames):
     return base, normal, 0.0, smooth, ao, panel
 
 
+def _ball_frames_arrays(frames):
+    centres = np.asarray([frame[0] for frame in frames], dtype=np.float64)
+    tangent_u = np.asarray([frame[1] for frame in frames], dtype=np.float64)
+    tangent_v = np.asarray([frame[2] for frame in frames], dtype=np.float64)
+    return centres, tangent_u, tangent_v
+
+
+def _normalise_array(vector):
+    vector = np.asarray(vector, dtype=np.float64)
+    length = np.sqrt(np.sum(vector * vector, axis=-1))
+    return vector / length[..., None]
+
+
+def _ball_surface_fields_array(points, frames):
+    """Vectorized football field sampling for bounded point chunks."""
+    centres, tangent_us, tangent_vs = _ball_frames_arrays(frames)
+    dots = (
+        points[..., None, 0] * centres[None, None, :, 0]
+        + points[..., None, 1] * centres[None, None, :, 1]
+        + points[..., None, 2] * centres[None, None, :, 2]
+    )
+    nearest = np.argmax(dots, axis=-1)
+    centre = centres[nearest]
+    tangent_u = tangent_us[nearest]
+    tangent_v = tangent_vs[nearest]
+    cosine = np.clip(points[..., 0] * centre[..., 0] + points[..., 1] * centre[..., 1] + points[..., 2] * centre[..., 2], -1.0, 1.0)
+    angular = np.arccos(cosine)
+    local_angle = np.arctan2(
+        points[..., 0] * tangent_v[..., 0] + points[..., 1] * tangent_v[..., 1] + points[..., 2] * tangent_v[..., 2],
+        points[..., 0] * tangent_u[..., 0] + points[..., 1] * tangent_u[..., 1] + points[..., 2] * tangent_u[..., 2],
+    )
+    sector = np.float64(math.tau / 5.0)
+    offset = np.mod(local_angle + sector * 0.5, sector) - sector * 0.5
+    panel_radius = np.float64(BALL_PANEL_RADIUS) * np.cos(np.float64(math.pi / 5.0)) / np.maximum(0.20, np.cos(offset))
+    seam = (panel_radius < angular) & (angular <= panel_radius + BALL_SEAM_WIDTH)
+    panel = angular <= panel_radius
+    grain = 0.5 + 0.5 * (0.60 * np.sin(points[..., 0] * 31.0 + points[..., 2] * 17.0) + 0.40 * np.sin(points[..., 1] * 47.0 - points[..., 2] * 13.0))
+    panel_blend = 1.0 - _smoothstep_array(panel_radius - 0.014, panel_radius + 0.014, angular)
+    seam_blend = _smoothstep_array(panel_radius + 0.006, panel_radius + 0.014, angular)
+    seam_blend *= 1.0 - _smoothstep_array(panel_radius + BALL_SEAM_WIDTH - 0.010, panel_radius + BALL_SEAM_WIDTH + 0.010, angular)
+    leather_height = 0.50 + grain * 0.015
+    height = leather_height + (0.39 - leather_height) * panel_blend + 0.045 * seam_blend
+    panel_base = np.stack((0.008 + grain * 0.005, 0.010 + grain * 0.006, 0.014 + grain * 0.008), axis=-1)
+    seam_base = np.broadcast_to(np.array((0.10, 0.105, 0.11), dtype=np.float64), panel_base.shape)
+    leather_base = np.stack((0.86 + grain * 0.08, 0.87 + grain * 0.075, 0.83 + grain * 0.07), axis=-1)
+    base = np.where(panel[..., None], panel_base, np.where(seam[..., None], seam_base, leather_base))
+    smooth = np.where(panel, 0.29, np.where(seam, 0.34, 0.42 + grain * 0.16))
+    ao = np.where(panel, 0.60, np.where(seam, 0.53, 0.89))
+    return base, height, smooth, ao, panel, tangent_u, tangent_v
+
+
+def _ball_sample_array(points, frames):
+    base, height, smooth, ao, panel, tangent_u, tangent_v = _ball_surface_fields_array(points, frames)
+    epsilon = np.float64(0.003)
+    plus_u = _normalise_array(points + tangent_u * epsilon)
+    minus_u = _normalise_array(points - tangent_u * epsilon)
+    plus_v = _normalise_array(points + tangent_v * epsilon)
+    minus_v = _normalise_array(points - tangent_v * epsilon)
+    height_u = (_ball_surface_fields_array(plus_u, frames)[1] - _ball_surface_fields_array(minus_u, frames)[1]) / (2.0 * epsilon)
+    height_v = (_ball_surface_fields_array(plus_v, frames)[1] - _ball_surface_fields_array(minus_v, frames)[1]) / (2.0 * epsilon)
+    tangent_normal = _normalise_array(np.stack((-height_u * BALL_NORMAL_SCALE, -height_v * BALL_NORMAL_SCALE, np.ones_like(height_u)), axis=-1))
+    normal = 0.5 + tangent_normal * 0.5
+    return base, normal, np.zeros_like(smooth), smooth, ao, panel
+
+
 def sphere_point(latitude, longitude):
     cos_lat = math.cos(latitude)
     return (cos_lat * math.cos(longitude), math.sin(latitude), cos_lat * math.sin(longitude))
 
 
 def generate_ball_maps(width=1024, height=512):
-    total = width * height
-    base = bytearray(total * 4)
-    normal = bytearray(total * 4)
-    metallic = bytearray(total * 4)
-    occlusion = bytearray(total * 4)
+    base = _rgba_array(width, height)
+    normal = _rgba_array(width, height)
+    metallic = _rgba_array(width, height)
+    occlusion = _rgba_array(width, height)
     frames = ball_centers()
-    for y in range(height):
-        latitude = -math.pi / 2.0 + math.pi * y / float(height - 1)
-        for x in range(width):
-            longitude = -math.pi + math.tau * x / float(width - 1)
-            point = sphere_point(latitude, longitude)
-            colour, normal_value, metal, smooth, ao, _panel = ball_sample(point, frames)
-            index = y * width + x
-            rgba_set(base, index, (u8(colour[0]), u8(colour[1]), u8(colour[2]), 255))
-            rgba_set(normal, index, (u8(normal_value[0]), u8(normal_value[1]), u8(normal_value[2]), 255))
-            rgba_set(metallic, index, (u8(metal), 0, 0, u8(smooth)))
-            rgba_set(occlusion, index, (u8(ao), u8(ao), u8(ao), 255))
+    longitudes = -math.pi + math.tau * np.arange(width, dtype=np.float64) / float(width - 1)
+    chunk_rows = max(1, min(height, 16))
+    for start in range(0, height, chunk_rows):
+        stop = min(height, start + chunk_rows)
+        latitudes = -math.pi / 2.0 + math.pi * np.arange(start, stop, dtype=np.float64) / float(height - 1)
+        cos_lat = np.cos(latitudes)[:, None]
+        sin_lat = np.broadcast_to(np.sin(latitudes)[:, None], (stop - start, width))
+        points = np.stack((cos_lat * np.cos(longitudes)[None, :], sin_lat, cos_lat * np.sin(longitudes)[None, :]), axis=-1)
+        colour, normal_value, metal, smooth, ao, _panel = _ball_sample_array(points, frames)
+        base[start:stop, :, :3] = _u8_array(colour)
+        normal[start:stop, :, :3] = _u8_array(normal_value)
+        metallic[start:stop, :, 0] = _u8_array(metal)
+        metallic[start:stop, :, 3] = _u8_array(smooth)
+        occlusion[start:stop, :, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))
+        base[start:stop, :, 3] = 255
+        normal[start:stop, :, 3] = 255
+        metallic[start:stop, :, 1:3] = 0
+        occlusion[start:stop, :, 3] = 255
     # Endpoint duplication and uniform pole rows are explicit, not an emergent float result.
     for buffer in (base, normal, metallic, occlusion):
         close_repeat_edges(buffer, width, height)
         for y in (0, height - 1):
-            row = y * width * 4
-            first = bytes(buffer[row : row + 4])
-            for x in range(1, width):
-                buffer[row + x * 4 : row + x * 4 + 4] = first
+            buffer[y, :, :] = buffer[y, 0, :]
     return base, normal, metallic, occlusion, frames
 
 
@@ -456,144 +773,190 @@ def _rocket_fields(region, u, v):
     return base, 0.42 + grain * 0.06, 0.91, 0.72, emission
 
 
+def _rocket_fields_array(region: str, u, v):
+    """Vectorized rocket atlas fields for one region mask."""
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    grain = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 7.0 + v * 11.0))
+    panel = np.logical_or(np.mod(u * 8.0, 1.0) < 0.055, np.mod(v * 10.0, 1.0) < 0.045).astype(np.float64)
+    if region == "body":
+        body = np.stack((0.29 + grain * 0.12, 0.22 + grain * 0.09, 0.13 + grain * 0.055), axis=-1)
+        charcoal = np.array((0.055, 0.062, 0.066), dtype=np.float64)
+        base = body * (1.0 - panel[..., None] * 0.72) + charcoal * (panel[..., None] * 0.72)
+        return base, 0.50 + grain * 0.08 - panel * 0.08, np.full_like(grain, 0.78) - panel * 0.22, np.full_like(grain, 0.78) - panel * 0.10, np.zeros((*grain.shape, 3), dtype=np.float64)
+    if region == "hot":
+        radial = np.sqrt((u - 0.5) ** 2 + (v - 0.5) ** 2)
+        red = np.stack((0.55 + grain * 0.18, 0.035 + grain * 0.025, np.full_like(grain, 0.012)), axis=-1)
+        orange = np.array((1.0, 0.70, 0.035), dtype=np.float64)
+        amount = _smoothstep_array(0.58, 0.12, radial)
+        base = red + (orange - red) * amount[..., None]
+        emission = np.stack((np.ones_like(grain), 0.20 + 0.55 * _smoothstep_array(0.48, 0.0, radial), np.full_like(grain, 0.02)), axis=-1)
+        return base, 0.48 + grain * 0.06, np.full_like(grain, 0.32), np.full_like(grain, 0.62), emission
+    if region == "fins":
+        base = np.stack((0.38 + grain * 0.25, 0.018 + grain * 0.035, 0.012 + grain * 0.016), axis=-1)
+        return base, 0.46 + grain * 0.04, np.full_like(grain, 0.58), np.full_like(grain, 0.58), np.zeros((*grain.shape, 3), dtype=np.float64)
+    radial = np.sqrt((u - 0.5) ** 2 + (v - 0.5) ** 2)
+    base = np.stack((0.025 + grain * 0.025, 0.030 + grain * 0.028, 0.032 + grain * 0.030), axis=-1)
+    throat = _smoothstep_array(0.24, 0.03, radial)
+    base = base + (np.array((0.18, 0.08, 0.018), dtype=np.float64) - base) * throat[..., None]
+    emission = np.stack((np.ones_like(grain), 0.28 + 0.55 * throat, 0.02 + 0.08 * throat), axis=-1)
+    return base, 0.42 + grain * 0.06, np.full_like(grain, 0.91), np.full_like(grain, 0.72), emission
+
+
 def generate_rocket_maps(width=1024, height=1024):
-    total = width * height
-    outputs = {key: bytearray(total * 4) for key in ("base", "normal", "metallic", "occlusion", "emission")}
+    outputs = {key: _rgba_array(width, height) for key in ("base", "normal", "metallic", "occlusion", "emission")}
     rectangles = rocket_region_rectangles(width, height)
-    for y in range(height):
-        for x in range(width):
-            region = _rocket_region(x, y, width, height, rectangles)
-            u, v = _rocket_region_uv(region, x, y, rectangles)
-            colour, _height, metal, smooth, emission = _rocket_fields(region, u, v)
-            nx = clamp01(0.5 + 0.035 * math.sin(math.tau * (u * 5.0 + v)))
-            ny = clamp01(0.5 + 0.035 * math.cos(math.tau * (v * 6.0 - u)))
-            nz = 0.985
-            ao = 0.76 if region in ("fins", "nozzle") else 0.85
-            index = y * width + x
-            rgba_set(outputs["base"], index, (u8(colour[0]), u8(colour[1]), u8(colour[2]), 255))
-            rgba_set(outputs["normal"], index, (u8(nx), u8(ny), u8(nz), 255))
-            rgba_set(outputs["metallic"], index, (u8(metal), 0, 0, u8(smooth)))
-            rgba_set(outputs["occlusion"], index, (u8(ao), u8(ao), u8(ao), 255))
-            rgba_set(outputs["emission"], index, (u8(emission[0]), u8(emission[1]), u8(emission[2]), 255))
+    chunk_rows = max(1, min(height, 64))
+    x_grid = np.arange(width, dtype=np.int64)[None, :]
+    for start in range(0, height, chunk_rows):
+        stop = min(height, start + chunk_rows)
+        y_grid = np.arange(start, stop, dtype=np.int64)[:, None]
+        chunk_shape = (stop - start, width)
+        base_chunk = np.zeros((*chunk_shape, 4), dtype=np.uint8)
+        normal_chunk = np.zeros((*chunk_shape, 4), dtype=np.uint8)
+        metallic_chunk = np.zeros((*chunk_shape, 4), dtype=np.uint8)
+        occlusion_chunk = np.zeros((*chunk_shape, 4), dtype=np.uint8)
+        emission_chunk = np.zeros((*chunk_shape, 4), dtype=np.uint8)
+        for region, entry in rectangles.items():
+            left, bottom, right, top = entry["outer"]
+            inner_left, inner_bottom, inner_right, inner_top = entry["inner"]
+            mask = (x_grid >= left) & (x_grid < right) & (y_grid >= bottom) & (y_grid < top)
+            cx = np.clip(x_grid, inner_left, inner_right - 1)
+            cy = np.clip(y_grid, inner_bottom, inner_top - 1)
+            u = (cx - inner_left) / float(max(1, inner_right - inner_left - 1))
+            v = (cy - inner_bottom) / float(max(1, inner_top - inner_bottom - 1))
+            colour, _height, metal, smooth, emission = _rocket_fields_array(region, u, v)
+            nx = np.clip(0.5 + 0.035 * np.sin(np.float64(math.tau) * (u * 5.0 + v)), 0.0, 1.0)
+            ny = np.clip(0.5 + 0.035 * np.cos(np.float64(math.tau) * (v * 6.0 - u)), 0.0, 1.0)
+            nz = np.full_like(nx, 0.985)
+            ao = np.full_like(nx, 0.76 if region in ("fins", "nozzle") else 0.85)
+            base_chunk[mask, :3] = _u8_array(colour)[mask]
+            base_chunk[mask, 3] = 255
+            normal_chunk[mask, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))[mask]
+            normal_chunk[mask, 3] = 255
+            metallic_chunk[mask, 0] = _u8_array(metal)[mask]
+            metallic_chunk[mask, 3] = _u8_array(smooth)[mask]
+            occlusion_chunk[mask, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))[mask]
+            occlusion_chunk[mask, 3] = 255
+            emission_chunk[mask, :3] = _u8_array(emission)[mask]
+            emission_chunk[mask, 3] = 255
+        outputs["base"][start:stop] = base_chunk
+        outputs["normal"][start:stop] = normal_chunk
+        outputs["metallic"][start:stop] = metallic_chunk
+        outputs["occlusion"][start:stop] = occlusion_chunk
+        outputs["emission"][start:stop] = emission_chunk
     return outputs
 
 
 def generate_shield(width=128, height=128):
-    buffer = bytearray(width * height * 4)
-    for y in range(height):
-        for x in range(width):
-            u = (x + 0.5) / 16.0
-            v = (y + 0.5) / 16.0
-            fu = u - math.floor(u)
-            fv_a = (v + u * 0.58) - math.floor(v + u * 0.58)
-            fv_b = (v - u * 0.58) - math.floor(v - u * 0.58)
-            line_distance = min(min(fu, 1.0 - fu), min(fv_a, 1.0 - fv_a), min(fv_b, 1.0 - fv_b))
-            line = 1.0 - smoothstep(0.015, 0.105, line_distance)
-            pulse = 0.5 + 0.5 * math.sin(math.tau * (u * 0.13 + v * 0.17))
-            alpha = clamp01(0.035 + line * (0.76 + 0.18 * pulse))
-            colour = (clamp01(0.44 + 0.18 * pulse + 0.22 * line), clamp01(0.82 + 0.12 * pulse), clamp01(0.92 + 0.08 * line), alpha)
-            rgba_set(buffer, y * width + x, tuple(u8(component) for component in colour[:3]) + (u8(alpha),))
+    buffer = _rgba_array(width, height)
+    x = (np.arange(width, dtype=np.float64) + 0.5) / 16.0
+    y = (np.arange(height, dtype=np.float64) + 0.5)[:, None] / 16.0
+    u = x[None, :]
+    v = y
+    fu = u - np.floor(u)
+    fv_a = (v + u * 0.58) - np.floor(v + u * 0.58)
+    fv_b = (v - u * 0.58) - np.floor(v - u * 0.58)
+    line_distance = np.minimum.reduce(np.broadcast_arrays(fu, 1.0 - fu, fv_a, 1.0 - fv_a, fv_b, 1.0 - fv_b))
+    line = 1.0 - _smoothstep_array(0.015, 0.105, line_distance)
+    pulse = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 0.13 + v * 0.17))
+    alpha = np.clip(0.035 + line * (0.76 + 0.18 * pulse), 0.0, 1.0)
+    colour = np.stack(
+        (
+            np.clip(0.44 + 0.18 * pulse + 0.22 * line, 0.0, 1.0),
+            np.clip(0.82 + 0.12 * pulse, 0.0, 1.0),
+            np.clip(0.92 + 0.08 * line, 0.0, 1.0),
+            alpha,
+        ),
+        axis=-1,
+    )
+    buffer[:, :, :] = _u8_array(colour)
     return buffer
 
 
 def generate_glow(width=128, height=128):
-    buffer = bytearray(width * height * 4)
-    for y in range(height):
-        for x in range(width):
-            nx = (x + 0.5 - width / 2.0) / (width / 2.0)
-            ny = (y + 0.5 - height / 2.0) / (height / 2.0)
-            radius = math.sqrt(nx * nx + ny * ny)
-            core = 1.0 - smoothstep(0.0, 0.27, radius)
-            ring = smoothstep(0.18, 0.30, radius) * (1.0 - smoothstep(0.30, 0.60, radius))
-            halo = 1.0 - smoothstep(0.36, 0.98, radius)
-            alpha = clamp01(core * 0.96 + ring * 0.72 + halo * 0.22)
-            colour = (1.0, clamp01(core * 0.96 + ring * 0.80 + halo * 0.22), clamp01(core * 0.82 + ring * 0.18), alpha)
-            rgba_set(buffer, y * width + x, (u8(colour[0]), u8(colour[1]), u8(colour[2]), u8(alpha)))
+    buffer = _rgba_array(width, height)
+    nx = (np.arange(width, dtype=np.float64) + 0.5 - width / 2.0) / (width / 2.0)
+    ny = (np.arange(height, dtype=np.float64) + 0.5 - height / 2.0)[:, None] / (height / 2.0)
+    radius = np.sqrt(nx[None, :] * nx[None, :] + ny * ny)
+    core = 1.0 - _smoothstep_array(0.0, 0.27, radius)
+    ring = _smoothstep_array(0.18, 0.30, radius) * (1.0 - _smoothstep_array(0.30, 0.60, radius))
+    halo = 1.0 - _smoothstep_array(0.36, 0.98, radius)
+    alpha = np.clip(core * 0.96 + ring * 0.72 + halo * 0.22, 0.0, 1.0)
+    colour = np.stack((np.ones_like(alpha), np.clip(core * 0.96 + ring * 0.80 + halo * 0.22, 0.0, 1.0), np.clip(core * 0.82 + ring * 0.18, 0.0, 1.0), alpha), axis=-1)
+    buffer[:, :, :] = _u8_array(colour)
     return buffer
 
 
 def generate_sprite_sheet(kind: str, width=128, height=128):
-    buffer = bytearray(width * height * 4)
+    buffer = _rgba_array(width, height)
     for cell_y in range(4):
         for cell_x in range(4):
             variant = cell_y * 4 + cell_x
             phase = (0.61 if kind == "explosion" else 1.73) + variant * 0.79
             edge_base = (0.79 if kind == "explosion" else 0.84) + 0.025 * math.sin(variant * 1.9)
-            for py in range(32):
-                for px in range(32):
-                    nx = (px + 0.5 - 16.0) / 16.0
-                    ny = (py + 0.5 - 16.0) / 16.0
-                    radius = math.sqrt(nx * nx + ny * ny)
-                    angle = math.atan2(ny, nx)
-                    irregular = 0.055 * math.sin(5.0 * angle + phase) + 0.030 * math.sin(9.0 * angle - phase * 1.7)
-                    edge = edge_base + irregular
-                    if kind == "explosion":
-                        alpha = 1.0 - smoothstep(edge - 0.20, edge, radius)
-                        core = smoothstep(0.37, 0.0, radius)
-                        body = smoothstep(0.67, 0.10, radius)
-                        edge_mix = smoothstep(edge, 0.48, radius)
-                        # Near-white/yellow contiguous body. Orange edge stays
-                        # subdued but remains yellow-classified while alpha is
-                        # high, preventing red-dominant high-alpha pixels.
-                        green = clamp01(0.99 * core + 0.88 * body + 0.68 * edge_mix)
-                        if alpha >= 0.50:
-                            green = max(green, 0.72)
-                        colour = (
-                            1.0,
-                            green,
-                            clamp01(0.82 * core + 0.22 * body + 0.035 * edge_mix),
-                        )
-                    else:
-                        puff = 0.5 + 0.5 * (0.62 * math.sin(5.0 * angle + phase) + 0.38 * math.sin(9.0 * angle - phase * 1.6))
-                        edge += 0.07 * (puff - 0.5)
-                        alpha = 1.0 - smoothstep(0.12, edge, radius)
-                        density = clamp01(1.0 - radius / max(0.25, edge))
-                        colour = (
-                            mix(0.055, 0.40, density),
-                            mix(0.062, 0.39, density),
-                            mix(0.070, 0.37, density),
-                        )
-                    index = (cell_y * 32 + py) * width + cell_x * 32 + px
-                    rgba_set(buffer, index, (u8(colour[0]), u8(colour[1]), u8(colour[2]), u8(alpha)))
+            px = np.arange(32, dtype=np.float64)
+            py = np.arange(32, dtype=np.float64)[:, None]
+            nx = (px + 0.5 - 16.0) / 16.0
+            ny = (py + 0.5 - 16.0) / 16.0
+            radius = np.sqrt(nx[None, :] * nx[None, :] + ny * ny)
+            angle = np.arctan2(ny, nx[None, :])
+            irregular = 0.055 * np.sin(5.0 * angle + phase) + 0.030 * np.sin(9.0 * angle - phase * 1.7)
+            edge = edge_base + irregular
+            if kind == "explosion":
+                alpha = 1.0 - _smoothstep_array(edge - 0.20, edge, radius)
+                core = _smoothstep_array(0.37, 0.0, radius)
+                body = _smoothstep_array(0.67, 0.10, radius)
+                edge_mix = _smoothstep_array(edge, 0.48, radius)
+                green = np.clip(0.99 * core + 0.88 * body + 0.68 * edge_mix, 0.0, 1.0)
+                green = np.where(alpha >= 0.50, np.maximum(green, 0.72), green)
+                colour = np.stack((np.ones_like(alpha), green, np.clip(0.82 * core + 0.22 * body + 0.035 * edge_mix, 0.0, 1.0), alpha), axis=-1)
+            else:
+                puff = 0.5 + 0.5 * (0.62 * np.sin(5.0 * angle + phase) + 0.38 * np.sin(9.0 * angle - phase * 1.6))
+                edge = edge + 0.07 * (puff - 0.5)
+                alpha = 1.0 - _smoothstep_array(0.12, edge, radius)
+                density = np.clip(1.0 - radius / np.maximum(0.25, edge), 0.0, 1.0)
+                colour = np.stack((0.055 + (0.40 - 0.055) * density, 0.062 + (0.39 - 0.062) * density, 0.070 + (0.37 - 0.070) * density, alpha), axis=-1)
+            buffer[cell_y * 32 : cell_y * 32 + 32, cell_x * 32 : cell_x * 32 + 32, :] = _u8_array(colour)
     return buffer
 
 
 def generate_sky(width=2048, height=1024):
-    buffer = bytearray(width * height * 4)
+    buffer = _rgba_array(width, height)
     cloud_centres = ((0.16, 0.68, 0.095, 0.060), (0.34, 0.76, 0.120, 0.055), (0.58, 0.64, 0.085, 0.065), (0.79, 0.78, 0.115, 0.050), (0.91, 0.60, 0.070, 0.050))
-    for y in range(height):
-        v = y / float(height - 1)
-        sky_t = smoothstep(0.0, 1.0, v)
-        sky = (mix(0.73, 0.30, sky_t), mix(0.86, 0.58, sky_t), mix(0.95, 0.86, sky_t))
-        for x in range(width):
-            u = x / float(width - 1)
-            coverage = 0.0
-            for cx, cy, sx, sy in cloud_centres:
-                du = abs(u - cx)
-                du = min(du, 1.0 - du)
-                coverage = max(coverage, math.exp(-((du / sx) ** 2 + ((v - cy) / sy) ** 2) * 1.7))
-            coverage *= 0.22
-            colour = tuple(mix(sky[i], (0.96, 0.95, 0.89)[i], smoothstep(0.02, 0.20, coverage)) for i in range(3))
-            rgba_set(buffer, y * width + x, (u8(colour[0]), u8(colour[1]), u8(colour[2]), 255))
+    x = np.arange(width, dtype=np.float64) / float(width - 1)
+    chunk_rows = max(1, min(height, 64))
+    for start in range(0, height, chunk_rows):
+        stop = min(height, start + chunk_rows)
+        u = x[None, :]
+        v = (np.arange(start, stop, dtype=np.float64) / float(height - 1))[:, None]
+        sky_t = _smoothstep_array(0.0, 1.0, v)
+        sky = np.stack((0.73 + (0.30 - 0.73) * sky_t, 0.86 + (0.58 - 0.86) * sky_t, 0.95 + (0.86 - 0.95) * sky_t), axis=-1)
+        coverage = np.zeros((stop - start, width), dtype=np.float64)
+        for cx, cy, sx, sy in cloud_centres:
+            du = np.abs(u - cx)
+            du = np.minimum(du, 1.0 - du)
+            coverage = np.maximum(coverage, np.exp(-((du / sx) ** 2 + ((v - cy) / sy) ** 2) * 1.7))
+        coverage *= 0.22
+        cloud_mix = _smoothstep_array(0.02, 0.20, coverage)
+        colour = sky * (1.0 - cloud_mix[..., None]) + np.array((0.96, 0.95, 0.89), dtype=np.float64) * cloud_mix[..., None]
+        buffer[start:stop, :, :3] = _u8_array(colour)
     # U-repeat only; horizon and zenith remain distinct.
-    for y in range(height):
-        row = y * width * 4
-        buffer[row + (width - 1) * 4 : row + width * 4] = buffer[row : row + 4]
+    buffer[:, -1, :] = buffer[:, 0, :]
     return buffer
 
 
 def resize_nearest(source: bytearray, source_width: int, source_height: int, width: int, height: int) -> bytearray:
-    output = bytearray(width * height * 4)
-    for y in range(height):
-        sy = min(source_height - 1, int(y * source_height / float(height)))
-        for x in range(width):
-            sx = min(source_width - 1, int(x * source_width / float(width)))
-            rgba_set(output, y * width + x, rgba_get(source, sy * source_width + sx))
-    return output
+    source_array = _rgba_view(source, source_width, source_height)
+    # Keep the scalar float64 multiply/divide ordering before flooring; this
+    # avoids rounding drift for non-divisible preview dimensions.
+    source_y = np.minimum(source_height - 1, np.floor(np.arange(height, dtype=np.float64) * np.float64(source_height) / np.float64(height)).astype(np.int64))
+    source_x = np.minimum(source_width - 1, np.floor(np.arange(width, dtype=np.float64) * np.float64(source_width) / np.float64(width)).astype(np.int64))
+    return np.ascontiguousarray(source_array[np.ix_(source_y, source_x)], dtype=np.uint8)
 
 
 def checker(width, height, cell=12):
-    output = bytearray(width * height * 4)
+    output = _rgba_array(width, height)
     for y in range(height):
         for x in range(width):
             value = (0.10, 0.13, 0.18, 1.0) if ((x // cell + y // cell) % 2) else (0.42, 0.48, 0.54, 1.0)
@@ -635,7 +998,7 @@ def render_pbr_sphere(base, normal, metallic, occlusion, source_width, source_he
 
 def ball_cardinals(base, width=1024, height=512):
     size = 192
-    output = bytearray(size * 3 * size * 2 * 4)
+    output = _rgba_array(size * 3, size * 2)
     views = ((0.0, 0.0), (math.pi, 0.0), (math.pi / 2.0, 0.0), (-math.pi / 2.0, 0.0), (0.0, math.pi / 2.0), (0.0, -math.pi / 2.0))
     for view_index, (yaw, pitch) in enumerate(views):
         tile_x = (view_index % 3) * size
@@ -679,31 +1042,21 @@ def alpha_overlay(source: bytearray, width: int, height: int, scale=3):
 
 
 def audit_texture(name, width, height, rgba, expected, seam_u=False, seam_v=False, poles=False, alpha_range=None, map_type="base"):
-    if (width, height) != expected or len(rgba) != width * height * 4:
+    if (width, height) != expected or np.asarray(rgba, dtype=np.uint8).size != width * height * 4:
         raise RuntimeError(f"{name}: dimensions/channel mismatch")
-    channels = [[rgba[index * 4 + channel] for index in range(width * height)] for channel in range(4)]
-    channel_ranges = [(min(values), max(values)) for values in channels]
+    channels = _rgba_flat(rgba, width, height)
+    channel_ranges = [(int(np.min(channels[:, channel])), int(np.max(channels[:, channel]))) for channel in range(4)]
     if any(not (0 <= minimum <= maximum <= 255) for minimum, maximum in channel_ranges):
         raise RuntimeError(f"{name}: invalid channel range")
     if map_type not in ("metallic", "ao", "normal") and max(channel_ranges[0][1], channel_ranges[1][1], channel_ranges[2][1]) - min(channel_ranges[0][0], channel_ranges[1][0], channel_ranges[2][0]) < 8:
         raise RuntimeError(f"{name}: flat colour range")
-    seam_u_error = 0
-    seam_v_error = 0
-    pole_error = 0
-    if seam_u:
-        seam_u_error = max(abs(rgba_get(rgba, y * width)[channel] - rgba_get(rgba, y * width + width - 1)[channel]) for y in range(height) for channel in range(4))
-        if seam_u_error:
-            raise RuntimeError(f"{name}: U seam mismatch {seam_u_error}")
-    if seam_v:
-        seam_v_error = max(abs(rgba_get(rgba, x)[channel] - rgba_get(rgba, (height - 1) * width + x)[channel]) for x in range(width) for channel in range(4))
-        if seam_v_error:
-            raise RuntimeError(f"{name}: V seam mismatch {seam_v_error}")
-    if poles:
-        for row in (0, height - 1):
-            reference = rgba_get(rgba, row * width)
-            pole_error = max(pole_error, max(abs(rgba_get(rgba, row * width + x)[channel] - reference[channel]) for x in range(width) for channel in range(4)))
-        if pole_error:
-            raise RuntimeError(f"{name}: pole mismatch {pole_error}")
+    seam_u_error, seam_v_error, pole_error = _seam_errors(rgba, width, height, seam_v, poles)
+    if seam_u and seam_u_error:
+        raise RuntimeError(f"{name}: U seam mismatch {seam_u_error}")
+    if seam_v and seam_v_error:
+        raise RuntimeError(f"{name}: V seam mismatch {seam_v_error}")
+    if poles and pole_error:
+        raise RuntimeError(f"{name}: pole mismatch {pole_error}")
     if alpha_range is not None:
         minimum, maximum = alpha_range
         if channel_ranges[3][0] > minimum or channel_ranges[3][1] < maximum:
@@ -713,32 +1066,23 @@ def audit_texture(name, width, height, rgba, expected, seam_u=False, seam_v=Fals
 
 
 def _seam_errors(rgba, width, height, check_v=False, check_poles=False):
-    seam_u = max(abs(rgba_get(rgba, y * width)[channel] - rgba_get(rgba, y * width + width - 1)[channel]) for y in range(height) for channel in range(4))
-    seam_v = 0
-    if check_v:
-        seam_v = max(abs(rgba_get(rgba, x)[channel] - rgba_get(rgba, (height - 1) * width + x)[channel]) for x in range(width) for channel in range(4))
+    array = _rgba_view(rgba, width, height)
+    seam_u = int(np.max(np.abs(array[:, 0, :].astype(np.int16) - array[:, -1, :].astype(np.int16))))
+    seam_v = int(np.max(np.abs(array[0, :, :].astype(np.int16) - array[-1, :, :].astype(np.int16)))) if check_v else 0
     poles = 0
     if check_poles:
-        for row in (0, height - 1):
-            reference = rgba_get(rgba, row * width)
-            poles = max(poles, max(abs(rgba_get(rgba, row * width + x)[channel] - reference[channel]) for x in range(width) for channel in range(4)))
+        poles = int(max(np.max(np.abs(array[row, :, :].astype(np.int16) - array[row, 0, :].astype(np.int16))) for row in (0, height - 1)))
     return seam_u, seam_v, poles
 
 
 def _normal_map_audit(rgba, width, height):
-    minimum = float("inf")
-    maximum = 0.0
-    invalid = 0
-    for index in range(width * height):
-        red, green, blue, alpha = rgba_get(rgba, index)
-        nx = red / 127.5 - 1.0
-        ny = green / 127.5 - 1.0
-        nz = blue / 127.5 - 1.0
-        length = math.sqrt(nx * nx + ny * ny + nz * nz)
-        minimum = min(minimum, length)
-        maximum = max(maximum, length)
-        if not all(math.isfinite(component) for component in (nx, ny, nz, length)) or nz <= 0.0 or length < 0.70 or length > 1.30 or alpha != 255:
-            invalid += 1
+    pixels = _rgba_flat(rgba, width, height).astype(np.float64)
+    vectors = pixels[:, :3] / 127.5 - 1.0
+    lengths = np.sqrt(np.sum(vectors * vectors, axis=1))
+    minimum = float(np.min(lengths)) if lengths.size else float("inf")
+    maximum = float(np.max(lengths)) if lengths.size else 0.0
+    finite = np.isfinite(vectors).all(axis=1) & np.isfinite(lengths)
+    invalid = int(np.count_nonzero(~finite | (vectors[:, 2] <= 0.0) | (lengths < 0.70) | (lengths > 1.30) | (pixels[:, 3] != 255)))
     return {
         "valid": invalid == 0,
         "invalid_pixels": invalid,
@@ -768,6 +1112,7 @@ def audit_ball_layout(base, normal, metallic, occlusion, frames, width=1024, hei
 
     centre_dark = True
     centre_samples = []
+    base_array = _rgba_view(base, width, height)
     for centre in centres:
         longitude = math.atan2(centre[2], centre[0])
         latitude = math.asin(max(-1.0, min(1.0, centre[1])))
@@ -775,13 +1120,10 @@ def audit_ball_layout(base, normal, metallic, occlusion, frames, width=1024, hei
         y = int(round((latitude + math.pi / 2.0) / math.pi * (height - 1)))
         x = max(0, min(width - 1, x))
         y = max(0, min(height - 1, y))
-        sample = rgba_get(base, y * width + x)
+        sample = tuple(int(value) for value in base_array[y, x])
         centre_samples.append({"xy": [x, y], "rgb": list(sample[:3])})
         centre_dark &= max(sample[:3]) <= 80
-    dark_pixels = 0
-    for index in range(width * height):
-        red, green, blue, _alpha = rgba_get(base, index)
-        dark_pixels += int(red <= 80 and green <= 80 and blue <= 90)
+    dark_pixels = int(np.count_nonzero((base_array[:, :, 0] <= 80) & (base_array[:, :, 1] <= 80) & (base_array[:, :, 2] <= 90)))
     dark_ratio = dark_pixels / float(width * height)
     dark_area_ok = 0.08 <= dark_ratio <= 0.42
     seam_u, seam_v, poles = _seam_errors(base, width, height, False, True)
@@ -791,11 +1133,10 @@ def audit_ball_layout(base, normal, metallic, occlusion, frames, width=1024, hei
         seam_v = max(seam_v, map_v)
         poles = max(poles, map_poles)
     normal_audit = _normal_map_audit(normal, width, height)
-    normal_xy_max = 0.0
-    for index in range(width * height):
-        red, green, _blue, _alpha = rgba_get(normal, index)
-        normal_xy_max = max(normal_xy_max, math.sqrt((red / 127.5 - 1.0) ** 2 + (green / 127.5 - 1.0) ** 2))
-    metallic_r_max = max(metallic[index * 4] for index in range(width * height))
+    normal_array = _rgba_view(normal, width, height).astype(np.float64)
+    normal_xy = np.sqrt((normal_array[:, :, 0] / 127.5 - 1.0) ** 2 + (normal_array[:, :, 1] / 127.5 - 1.0) ** 2)
+    normal_xy_max = float(np.max(normal_xy))
+    metallic_r_max = int(np.max(_rgba_view(metallic, width, height)[:, :, 0]))
     nonmetal = metallic_r_max == 0
     gates = {
         "finite_unique_unit_centres": finite and unique and unit_error <= 1e-6,
@@ -836,27 +1177,24 @@ def audit_ball_layout(base, normal, metallic, occlusion, frames, width=1024, hei
     }
 
 
-def _region_stats(rgba, rectangle):
+def _region_stats(rgba, rectangle, width=1024, height=None):
+    """Compute atlas statistics for any width, not only the canonical 1024px atlas."""
     left, bottom, right, top = rectangle
     count = max(1, (right - left) * (top - bottom))
-    luminance_sum = 0.0
-    luminance_min = 1.0
-    luminance_max = 0.0
-    channel_max = [0, 0, 0]
-    channel_min = [255, 255, 255]
-    red_dominant = 0
-    for y in range(bottom, top):
-        for x in range(left, right):
-            red, green, blue, _alpha = rgba_get(rgba, y * 1024 + x)
-            colour = (red / 255.0, green / 255.0, blue / 255.0)
-            luminance = 0.2126 * colour[0] + 0.7152 * colour[1] + 0.0722 * colour[2]
-            luminance_sum += luminance
-            luminance_min = min(luminance_min, luminance)
-            luminance_max = max(luminance_max, luminance)
-            for channel, value in enumerate((red, green, blue)):
-                channel_min[channel] = min(channel_min[channel], value)
-                channel_max[channel] = max(channel_max[channel], value)
-            red_dominant += int(red > green * 1.45 and red > blue * 1.65)
+    if height is None:
+        height = int(np.asarray(rgba, dtype=np.uint8).size // (max(1, width) * 4))
+    array = _rgba_view(rgba, width, height)
+    pixels = array[bottom:top, left:right, :3].reshape(-1, 3).astype(np.float64)
+    colour = pixels / 255.0
+    luminance = colour[:, 0] * 0.2126 + colour[:, 1] * 0.7152 + colour[:, 2] * 0.0722
+    # ``cumsum`` preserves the scalar row-major accumulation order used by the
+    # pre-NumPy audit; a tree reduction changes only trailing float digits.
+    luminance_sum = float(np.cumsum(luminance, dtype=np.float64)[-1]) if luminance.size else 0.0
+    luminance_min = float(np.min(luminance)) if luminance.size else 1.0
+    luminance_max = float(np.max(luminance)) if luminance.size else 0.0
+    channel_min = [int(value) for value in np.min(pixels, axis=0)] if pixels.size else [255, 255, 255]
+    channel_max = [int(value) for value in np.max(pixels, axis=0)] if pixels.size else [0, 0, 0]
+    red_dominant = int(np.count_nonzero((pixels[:, 0] > pixels[:, 1] * 1.45) & (pixels[:, 0] > pixels[:, 2] * 1.65)))
     return {
         "count": count,
         "mean_luminance": luminance_sum / count,
@@ -879,23 +1217,23 @@ def audit_rocket_atlas(maps, width=1024, height=1024):
 
     gutter_errors = {}
     for map_name, rgba in maps.items():
+        array = _rgba_view(rgba, width, height)
         errors = 0
         for entry in entries:
             left, bottom, right, top = entry["outer"]
             inner_left, inner_bottom, inner_right, inner_top = entry["inner"]
-            for y in range(bottom, top):
-                for x in range(left, right):
-                    if inner_left <= x < inner_right and inner_bottom <= y < inner_top:
-                        continue
-                    cx = min(max(x, inner_left), inner_right - 1)
-                    cy = min(max(y, inner_bottom), inner_top - 1)
-                    if rgba_get(rgba, y * width + x) != rgba_get(rgba, cy * width + cx):
-                        errors += 1
+            x = np.arange(left, right, dtype=np.int64)[None, :]
+            y = np.arange(bottom, top, dtype=np.int64)[:, None]
+            outside = np.logical_not((x >= inner_left) & (x < inner_right) & (y >= inner_bottom) & (y < inner_top))
+            cx = np.clip(x, inner_left, inner_right - 1)
+            cy = np.clip(y, inner_bottom, inner_top - 1)
+            expected = array[cy, cx]
+            errors += int(np.count_nonzero(np.any(array[bottom:top, left:right] != expected, axis=-1) & outside))
         gutter_errors[map_name] = errors
 
     region_stats = {}
     for name, entry in rectangles.items():
-        region_stats[name] = _region_stats(maps["base"], entry["inner"])
+        region_stats[name] = _region_stats(maps["base"], entry["inner"], width, height)
     body = region_stats["body"]
     fins = region_stats["fins"]
     hot = region_stats["hot"]
@@ -910,20 +1248,20 @@ def audit_rocket_atlas(maps, width=1024, height=1024):
     }
 
     emission = maps["emission"]
+    emission_array = _rgba_view(emission, width, height)
     body_fin_emission = 0
     hot_nozzle_emission = 0
     for name, entry in rectangles.items():
         left, bottom, right, top = entry["outer"]
-        for y in range(bottom, top):
-            for x in range(left, right):
-                red, green, blue, alpha = rgba_get(emission, y * width + x)
-                bright = red > 0 or green > 0 or blue > 0
-                if name in ("body", "fins"):
-                    body_fin_emission += int(bright)
-                else:
-                    hot_nozzle_emission += int(bright)
-                if alpha != 255:
-                    body_fin_emission += 1
+        region_pixels = emission_array[bottom:top, left:right]
+        bright = np.any(region_pixels[:, :, :3] > 0, axis=-1)
+        count = int(np.count_nonzero(bright))
+        if name in ("body", "fins"):
+            body_fin_emission += count
+        else:
+            hot_nozzle_emission += count
+        if np.any(region_pixels[:, :, 3] != 255):
+            body_fin_emission += int(np.count_nonzero(region_pixels[:, :, 3] != 255))
     emission_gates = {
         "body_fins_zero": body_fin_emission == 0,
         "hot_nozzle_isolated": hot_nozzle_emission > 0,
@@ -950,6 +1288,10 @@ def audit_rocket_atlas(maps, width=1024, height=1024):
 
 def audit_explosion_semantics(rgba, width=128, height=128):
     """Check contiguous yellow fireballs and high-alpha yellow:red ratio."""
+    array = _rgba_view(rgba, width, height)
+    local_x = (np.arange(32, dtype=np.float64) + 0.5 - 16.0) / 16.0
+    local_y = (np.arange(32, dtype=np.float64) + 0.5 - 16.0)[:, None] / 16.0
+    radius_grid = np.sqrt(local_x[None, :] * local_x[None, :] + local_y * local_y)
     high_yellow = 0
     high_red = 0
     high_pixels = 0
@@ -960,23 +1302,19 @@ def audit_explosion_semantics(rgba, width=128, height=128):
         for cell_x in range(4):
             visited = set()
             high = set()
-            for py in range(32):
-                for px in range(32):
-                    x = cell_x * 32 + px
-                    y = cell_y * 32 + py
-                    red, green, blue, alpha = rgba_get(rgba, y * width + x)
-                    if alpha >= 128:
-                        high.add((px, py))
-                        high_pixels += 1
-                        if green >= red * 0.60 and blue >= red * 0.025:
-                            high_yellow += 1
-                        elif red >= 120 and green < red * 0.60:
-                            high_red += 1
-                    radius = math.sqrt(((px + 0.5 - 16.0) / 16.0) ** 2 + ((py + 0.5 - 16.0) / 16.0) ** 2)
-                    if radius <= 0.34 and alpha >= 128 and red >= 240 and green >= 220:
-                        core_near_white += 1
-                    if alpha >= 32 and radius >= 0.60:
-                        edge_green_ratios.append(green / float(max(1, red)))
+            cell = array[cell_y * 32 : cell_y * 32 + 32, cell_x * 32 : cell_x * 32 + 32]
+            red = cell[:, :, 0].astype(np.float64)
+            green = cell[:, :, 1].astype(np.float64)
+            blue = cell[:, :, 2].astype(np.float64)
+            alpha = cell[:, :, 3]
+            high_mask = alpha >= 128
+            high_pixels += int(np.count_nonzero(high_mask))
+            high_yellow += int(np.count_nonzero(high_mask & (green >= red * 0.60) & (blue >= red * 0.025)))
+            high_red += int(np.count_nonzero(high_mask & (green < red * 0.60) & (red >= 120)))
+            core_near_white += int(np.count_nonzero((radius_grid <= 0.34) & high_mask & (red >= 240) & (green >= 220)))
+            edge_mask = (alpha >= 32) & (radius_grid >= 0.60)
+            edge_green_ratios.extend((green / np.maximum(1.0, red))[edge_mask].tolist())
+            high = {(int(px), int(py)) for py, px in np.argwhere(high_mask)}
             component_count = 0
             largest = 0
             for start in high:
@@ -1017,35 +1355,45 @@ def audit_explosion_semantics(rgba, width=128, height=128):
     }
 
 
-def run_semantic_audits(generated, frames):
-    ball = audit_ball_layout(
-        generated["RetroBall"]["buffer"], generated["RetroBall_Normal"]["buffer"], generated["RetroBall_MetallicSmoothness"]["buffer"], generated["RetroBall_Occlusion"]["buffer"], frames
-    )
-    rocket = audit_rocket_atlas(
-        {
-            "base": generated["RetroRocket"]["buffer"],
-            "normal": generated["RetroRocket_Normal"]["buffer"],
-            "metallic": generated["RetroRocket_MetallicSmoothness"]["buffer"],
-            "occlusion": generated["RetroRocket_Occlusion"]["buffer"],
-            "emission": generated["RetroRocket_Emission"]["buffer"],
+def run_semantic_audits(generated, frames=None, selected_families=None):
+    """Run only semantic checks whose family buffers were selected/generated."""
+    selected = set(selected_families or FAMILY_IDS)
+    checks = {}
+    if "ball" in selected and "RetroBall" in generated and frames is not None:
+        checks["ball"] = audit_ball_layout(
+            generated["RetroBall"]["buffer"], generated["RetroBall_Normal"]["buffer"], generated["RetroBall_MetallicSmoothness"]["buffer"], generated["RetroBall_Occlusion"]["buffer"], frames
+        )
+    if "rocket" in selected and "RetroRocket" in generated:
+        checks["rocket"] = audit_rocket_atlas(
+            {
+                "base": generated["RetroRocket"]["buffer"],
+                "normal": generated["RetroRocket_Normal"]["buffer"],
+                "metallic": generated["RetroRocket_MetallicSmoothness"]["buffer"],
+                "occlusion": generated["RetroRocket_Occlusion"]["buffer"],
+                "emission": generated["RetroRocket_Emission"]["buffer"],
+            }
+        )
+    if "explosion" in selected and "RetroExplosion" in generated:
+        checks["explosion"] = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
+    if "wall" in selected and "RetroWall_MetallicSmoothness" in generated:
+        wall_metallic = generated["RetroWall_MetallicSmoothness"]["buffer"]
+        wall_width, wall_height = generated["RetroWall_MetallicSmoothness"]["dimensions"]
+        wall_metallic_r_max = int(np.max(_rgba_view(wall_metallic, wall_width, wall_height)[:, :, 0]))
+        checks["wall"] = {
+            "pass": wall_metallic_r_max == 0,
+            "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
+            "metallic_r_max": wall_metallic_r_max,
         }
-    )
-    explosion = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
-    wall_metallic = generated["RetroWall_MetallicSmoothness"]["buffer"]
-    wall_metallic_r_max = max(wall_metallic[index * 4] for index in range(1024 * 1024))
-    wall = {
-        "pass": wall_metallic_r_max == 0,
-        "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
-        "metallic_r_max": wall_metallic_r_max,
-    }
     normal_maps = {}
     for name, entry in generated.items():
         if entry["map_type"] == "normal":
             width, height = entry["dimensions"]
             normal_maps[name] = _normal_map_audit(entry["buffer"], width, height)
     normal_pass = all(result["valid"] for result in normal_maps.values())
-    pbr = {"pass": normal_pass and ball["gates"]["nonmetallic"] and wall["gates"]["concrete_nonmetallic"], "normal_maps": normal_maps, "nonmetallic_ball": ball["gates"]["nonmetallic"], "nonmetallic_concrete": wall["gates"]["concrete_nonmetallic"]}
-    checks = {"ball": ball, "pbr_channels": pbr, "wall": wall, "rocket": rocket, "explosion": explosion}
+    ball_nonmetallic = checks.get("ball", {}).get("gates", {}).get("nonmetallic", True)
+    wall_nonmetallic = checks.get("wall", {}).get("gates", {}).get("concrete_nonmetallic", True)
+    pbr = {"pass": normal_pass and ball_nonmetallic and wall_nonmetallic, "normal_maps": normal_maps, "nonmetallic_ball": ball_nonmetallic, "nonmetallic_concrete": wall_nonmetallic}
+    checks["pbr_channels"] = pbr
     failed = []
     for name, result in checks.items():
         if not result["pass"]:
@@ -1067,112 +1415,268 @@ def estimate_compressed_memory(outputs):
     return total / MIB
 
 
-def make_previews(outputs):
+def make_previews(outputs, selected_families=None):
+    """Create only previews owned by selected families.
+
+    ``outputs`` is intentionally a generated-buffer mapping, so targeted runs
+    cannot accidentally dereference or write an unselected family.
+    """
+    selected = set(selected_families or FAMILY_IDS)
     previews = {}
 
     def add(name, width, height, rgba):
-        path = save_png(name, width, height, rgba)
-        previews[name + ".png"] = {"path": path, "dimensions": [width, height], "sha256": hashlib.sha256(encode_png(width, height, rgba)).hexdigest()}
+        encoded = encode_png(width, height, rgba)
+        path = save_png(name, width, height, rgba, encoded)
+        previews[name + ".png"] = {
+            "path": path,
+            "dimensions": [width, height],
+            "sha256": hashlib.sha256(encoded).hexdigest(),
+        }
 
-    for index, family in enumerate(("RetroGrass", "RetroWall", "RetroTrim", "RetroHazard"), 1):
+    for index, (family_id, family) in enumerate(
+        (("grass", "RetroGrass"), ("wall", "RetroWall"), ("trim", "RetroTrim"), ("hazard", "RetroHazard")), 1
+    ):
+        if family_id not in selected or family not in outputs:
+            continue
         base = outputs[family]["buffer"]
         add(f"{index:02d}_{family.lower()}_tile", 256, 256, resize_nearest(base, outputs[family]["dimensions"][0], outputs[family]["dimensions"][1], 256, 256))
         pbr = render_pbr_sphere(base, outputs[family + "_Normal"]["buffer"], outputs[family + "_MetallicSmoothness"]["buffer"], outputs[family + "_Occlusion"]["buffer"], outputs[family]["dimensions"][0], outputs[family]["dimensions"][1], 256, index * 0.57)
         add(f"{index:02d}_{family.lower()}_pbr_ball", 256, 256, pbr)
-    add("05_detail_normal", 256, 256, resize_nearest(outputs["RetroDetailNormal"]["buffer"], 512, 512, 256, 256))
+    if "detail-normal" in selected and "RetroDetailNormal" in outputs:
+        add("05_detail_normal", 256, 256, resize_nearest(outputs["RetroDetailNormal"]["buffer"], 512, 512, 256, 256))
 
-    ball = outputs["RetroBall"]
-    pbr_ball = render_pbr_sphere(ball["buffer"], outputs["RetroBall_Normal"]["buffer"], outputs["RetroBall_MetallicSmoothness"]["buffer"], outputs["RetroBall_Occlusion"]["buffer"], 1024, 512, 256, 0.24)
-    add("06_ball_pbr", 256, 256, pbr_ball)
-    card_w, card_h, card = ball_cardinals(ball["buffer"])
-    add("07_ball_cardinals", card_w, card_h, card)
+    if "ball" in selected and "RetroBall" in outputs:
+        ball = outputs["RetroBall"]
+        pbr_ball = render_pbr_sphere(ball["buffer"], outputs["RetroBall_Normal"]["buffer"], outputs["RetroBall_MetallicSmoothness"]["buffer"], outputs["RetroBall_Occlusion"]["buffer"], 1024, 512, 256, 0.24)
+        add("06_ball_pbr", 256, 256, pbr_ball)
+        card_w, card_h, card = ball_cardinals(ball["buffer"])
+        add("07_ball_cardinals", card_w, card_h, card)
 
-    rocket = outputs["RetroRocket"]
-    add("08_rocket_atlas", 512, 512, resize_nearest(rocket["buffer"], 1024, 1024, 512, 512))
-    add("09_rocket_pbr_ball", 256, 256, render_pbr_sphere(rocket["buffer"], outputs["RetroRocket_Normal"]["buffer"], outputs["RetroRocket_MetallicSmoothness"]["buffer"], outputs["RetroRocket_Occlusion"]["buffer"], 1024, 1024, 256, 0.71))
-    add("10_rocket_emission", 512, 512, resize_nearest(outputs["RetroRocket_Emission"]["buffer"], 1024, 1024, 512, 512))
-    for index, family in enumerate(("RetroWeaponMetal", "RetroWeaponDark", "RetroWeaponAccent"), 11):
+    if "rocket" in selected and "RetroRocket" in outputs:
+        rocket = outputs["RetroRocket"]
+        add("08_rocket_atlas", 512, 512, resize_nearest(rocket["buffer"], 1024, 1024, 512, 512))
+        add("09_rocket_pbr_ball", 256, 256, render_pbr_sphere(rocket["buffer"], outputs["RetroRocket_Normal"]["buffer"], outputs["RetroRocket_MetallicSmoothness"]["buffer"], outputs["RetroRocket_Occlusion"]["buffer"], 1024, 1024, 256, 0.71))
+        add("10_rocket_emission", 512, 512, resize_nearest(outputs["RetroRocket_Emission"]["buffer"], 1024, 1024, 512, 512))
+    for index, (family_id, family) in enumerate((("weapon-metal", "RetroWeaponMetal"), ("weapon-dark", "RetroWeaponDark"), ("weapon-accent", "RetroWeaponAccent")), 11):
+        if family_id not in selected or family not in outputs:
+            continue
         add(f"{index:02d}_{family.lower()}_tile", 256, 256, resize_nearest(outputs[family]["buffer"], 2048, 2048, 256, 256))
         add(f"{index:02d}_{family.lower()}_pbr_ball", 256, 256, render_pbr_sphere(outputs[family]["buffer"], outputs[family + "_Normal"]["buffer"], outputs[family + "_MetallicSmoothness"]["buffer"], outputs[family + "_Occlusion"]["buffer"], 2048, 2048, 256, index * 0.22))
 
-    glow_w, glow_h, glow_preview = alpha_overlay(outputs["RetroRocketGlow"]["buffer"], 128, 128, 3)
-    add("17_rocket_glow_alpha", glow_w, glow_h, glow_preview)
-    exp_w, exp_h, exp_preview = alpha_overlay(outputs["RetroExplosion"]["buffer"], 128, 128, 2)
-    add("18_explosion_sheet_alpha", exp_w, exp_h, exp_preview)
-    smoke_w, smoke_h, smoke_preview = alpha_overlay(outputs["RetroSmoke"]["buffer"], 128, 128, 2)
-    add("19_smoke_sheet_alpha", smoke_w, smoke_h, smoke_preview)
-    add("20_shield_alpha", 256, 256, alpha_overlay(outputs["RetroShield"]["buffer"], 128, 128, 2)[2])
-    add("21_sunny_sky_panorama", 512, 256, resize_nearest(outputs["RetroSunnySky"]["buffer"], 2048, 1024, 512, 256))
+    if "rocket-glow" in selected and "RetroRocketGlow" in outputs:
+        glow_w, glow_h, glow_preview = alpha_overlay(outputs["RetroRocketGlow"]["buffer"], 128, 128, 3)
+        add("17_rocket_glow_alpha", glow_w, glow_h, glow_preview)
+    if "explosion" in selected and "RetroExplosion" in outputs:
+        exp_w, exp_h, exp_preview = alpha_overlay(outputs["RetroExplosion"]["buffer"], 128, 128, 2)
+        add("18_explosion_sheet_alpha", exp_w, exp_h, exp_preview)
+    if "smoke" in selected and "RetroSmoke" in outputs:
+        smoke_w, smoke_h, smoke_preview = alpha_overlay(outputs["RetroSmoke"]["buffer"], 128, 128, 2)
+        add("19_smoke_sheet_alpha", smoke_w, smoke_h, smoke_preview)
+    if "shield" in selected and "RetroShield" in outputs:
+        add("20_shield_alpha", 256, 256, alpha_overlay(outputs["RetroShield"]["buffer"], 128, 128, 2)[2])
+    if "sky" in selected and "RetroSunnySky" in outputs:
+        add("21_sunny_sky_panorama", 512, 256, resize_nearest(outputs["RetroSunnySky"]["buffer"], 2048, 1024, 512, 256))
     return previews
 
 
-def main():
+FAMILY_REGISTRY = {
+    "grass": {"outputs": ("RetroGrass", "RetroGrass_Normal", "RetroGrass_MetallicSmoothness", "RetroGrass_Occlusion"), "previews": ("01_retrograss_tile.png", "01_retrograss_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "wall": {"outputs": ("RetroWall", "RetroWall_Normal", "RetroWall_MetallicSmoothness", "RetroWall_Occlusion"), "previews": ("02_retrowall_tile.png", "02_retrowall_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "trim": {"outputs": ("RetroTrim", "RetroTrim_Normal", "RetroTrim_MetallicSmoothness", "RetroTrim_Occlusion"), "previews": ("03_retrotrim_tile.png", "03_retrotrim_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "hazard": {"outputs": ("RetroHazard", "RetroHazard_Normal", "RetroHazard_MetallicSmoothness", "RetroHazard_Occlusion"), "previews": ("04_retrohazard_tile.png", "04_retrohazard_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "detail-normal": {"outputs": ("RetroDetailNormal",), "previews": ("05_detail_normal.png",), "expected_outputs": 1, "expected_previews": 1},
+    "weapon-metal": {"outputs": ("RetroWeaponMetal", "RetroWeaponMetal_Normal", "RetroWeaponMetal_MetallicSmoothness", "RetroWeaponMetal_Occlusion"), "previews": ("11_retroweaponmetal_tile.png", "11_retroweaponmetal_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "weapon-dark": {"outputs": ("RetroWeaponDark", "RetroWeaponDark_Normal", "RetroWeaponDark_MetallicSmoothness", "RetroWeaponDark_Occlusion"), "previews": ("12_retroweapondark_tile.png", "12_retroweapondark_pbr_ball.png"), "expected_outputs": 4, "expected_previews": 2},
+    "weapon-accent": {"outputs": ("RetroWeaponAccent", "RetroWeaponAccent_Normal", "RetroWeaponAccent_MetallicSmoothness", "RetroWeaponAccent_Occlusion", "RetroWeaponAccent_Emission"), "previews": ("13_retroweaponaccent_tile.png", "13_retroweaponaccent_pbr_ball.png"), "expected_outputs": 5, "expected_previews": 2},
+    "ball": {"outputs": ("RetroBall", "RetroBall_Normal", "RetroBall_MetallicSmoothness", "RetroBall_Occlusion"), "previews": ("06_ball_pbr.png", "07_ball_cardinals.png"), "expected_outputs": 4, "expected_previews": 2},
+    "rocket": {"outputs": ("RetroRocket", "RetroRocket_Normal", "RetroRocket_MetallicSmoothness", "RetroRocket_Occlusion", "RetroRocket_Emission"), "previews": ("08_rocket_atlas.png", "09_rocket_pbr_ball.png", "10_rocket_emission.png"), "expected_outputs": 5, "expected_previews": 3},
+    "rocket-glow": {"outputs": ("RetroRocketGlow",), "previews": ("17_rocket_glow_alpha.png",), "expected_outputs": 1, "expected_previews": 1},
+    "smoke": {"outputs": ("RetroSmoke",), "previews": ("19_smoke_sheet_alpha.png",), "expected_outputs": 1, "expected_previews": 1},
+    "explosion": {"outputs": ("RetroExplosion",), "previews": ("18_explosion_sheet_alpha.png",), "expected_outputs": 1, "expected_previews": 1},
+    "shield": {"outputs": ("RetroShield",), "previews": ("20_shield_alpha.png",), "expected_outputs": 1, "expected_previews": 1},
+    "sky": {"outputs": ("RetroSunnySky",), "previews": ("21_sunny_sky_panorama.png",), "expected_outputs": 1, "expected_previews": 1},
+}
+for _family_entry in FAMILY_REGISTRY.values():
+    _family_entry["generator"] = "_family_buffers"
+    _family_entry["preview"] = "make_previews"
+    _family_entry["semantic_audit"] = "run_semantic_audits"
+FAMILY_IDS = tuple(FAMILY_REGISTRY)
+FULL_OUTPUT_COUNT = sum(entry["expected_outputs"] for entry in FAMILY_REGISTRY.values())
+FULL_PREVIEW_COUNT = sum(entry["expected_previews"] for entry in FAMILY_REGISTRY.values())
+
+
+def resolve_families(values=None):
+    """Resolve repeatable ``--family`` values to a stable registry order."""
+    if not values or "all" in values:
+        if values and any(value != "all" for value in values):
+            raise ValueError("--family all cannot be combined with another family")
+        return FAMILY_IDS
+    unknown = [value for value in values if value not in FAMILY_REGISTRY]
+    if unknown:
+        raise ValueError(f"Unknown texture family: {', '.join(unknown)}")
+    selected = set(values)
+    return tuple(family_id for family_id in FAMILY_IDS if family_id in selected)
+
+
+def _family_buffers(family_id):
+    """Generate one registry family as ``(name,width,height,buffer,kind,flags...)`` records."""
+    records = []
+    frames = None
+
+    def record(name, width, height, buffer, map_type="base", seam_u=False, seam_v=False, poles=False, alpha_range=None):
+        records.append((name, width, height, buffer, map_type, seam_u, seam_v, poles, alpha_range))
+
+    if family_id in ("grass", "wall", "trim", "hazard"):
+        kind = family_id
+        base, normal, metallic, ao = generate_surface_maps(kind, 1024, 1024)
+        prefix = "Retro" + family_id.capitalize()
+        record(prefix, 1024, 1024, base, "base", True, True)
+        record(prefix + "_Normal", 1024, 1024, normal, "normal", True, True)
+        record(prefix + "_MetallicSmoothness", 1024, 1024, metallic, "metallic", True, True)
+        record(prefix + "_Occlusion", 1024, 1024, ao, "ao", True, True)
+    elif family_id == "detail-normal":
+        record("RetroDetailNormal", 512, 512, generate_detail_normal(), "normal", True, True)
+    elif family_id in ("weapon-metal", "weapon-dark", "weapon-accent"):
+        kind = family_id.removeprefix("weapon-")
+        prefix = "RetroWeapon" + kind.capitalize()
+        base, normal, metallic, ao = generate_surface_maps(kind, 2048, 2048)
+        record(prefix, 2048, 2048, base, "base", True, True)
+        record(prefix + "_Normal", 2048, 2048, normal, "normal", True, True)
+        record(prefix + "_MetallicSmoothness", 2048, 2048, metallic, "metallic", True, True)
+        record(prefix + "_Occlusion", 2048, 2048, ao, "ao", True, True)
+        if family_id == "weapon-accent":
+            base_array = _rgba_view(base, 2048, 2048)
+            emission = _rgba_array(2048, 2048, (0, 0, 0, 255))
+            bright = ((np.arange(2048, dtype=np.int64) % 96) >= 48) & ((np.arange(2048, dtype=np.int64) % 96) < 56)
+            emission[:, :, :3] = np.where(bright[None, :, None], base_array[:, :, :3], 0)
+            close_repeat_edges(emission, 2048, 2048)
+            record(prefix + "_Emission", 2048, 2048, emission, "emission", True, True)
+    elif family_id == "ball":
+        ball_base, ball_normal, ball_metallic, ball_ao, frames = generate_ball_maps()
+        record("RetroBall", 1024, 512, ball_base, "base", True, False, True)
+        record("RetroBall_Normal", 1024, 512, ball_normal, "normal", True, False, True)
+        record("RetroBall_MetallicSmoothness", 1024, 512, ball_metallic, "metallic", True, False, True)
+        record("RetroBall_Occlusion", 1024, 512, ball_ao, "ao", True, False, True)
+    elif family_id == "rocket":
+        rocket_maps = generate_rocket_maps()
+        record("RetroRocket", 1024, 1024, rocket_maps["base"])
+        record("RetroRocket_Normal", 1024, 1024, rocket_maps["normal"], "normal")
+        record("RetroRocket_MetallicSmoothness", 1024, 1024, rocket_maps["metallic"], "metallic")
+        record("RetroRocket_Occlusion", 1024, 1024, rocket_maps["occlusion"], "ao")
+        record("RetroRocket_Emission", 1024, 1024, rocket_maps["emission"], "emission")
+    elif family_id == "rocket-glow":
+        record("RetroRocketGlow", 128, 128, generate_glow(), "vfx", alpha_range=(0, 128))
+    elif family_id == "smoke":
+        record("RetroSmoke", 128, 128, generate_sprite_sheet("smoke"), "vfx", alpha_range=(0, 128))
+    elif family_id == "explosion":
+        record("RetroExplosion", 128, 128, generate_sprite_sheet("explosion"), "vfx", alpha_range=(0, 128))
+    elif family_id == "shield":
+        record("RetroShield", 128, 128, generate_shield(), "vfx", alpha_range=(16, 220))
+    elif family_id == "sky":
+        record("RetroSunnySky", 2048, 1024, generate_sky(), "sky", True, False)
+    else:
+        raise ValueError(f"Unknown texture family: {family_id}")
+    return records, frames
+
+
+def _relative_path(path):
+    return os.path.relpath(path, REPOSITORY_ROOT).replace(os.sep, "/")
+
+
+def _source_sha256():
+    with open(__file__, "rb") as handle:
+        return hashlib.sha256(handle.read()).hexdigest()
+
+
+def _manifest_versions():
+    system_zlib = _load_system_zlib()
+    return {
+        "python": platform.python_version(),
+        "numpy": np.__version__,
+        "zlib": getattr(zlib, "ZLIB_VERSION", "unknown"),
+        "zlib_runtime": getattr(zlib, "ZLIB_RUNTIME_VERSION", getattr(zlib, "ZLIB_VERSION", "unknown")),
+        "png_compressor": system_zlib[1] if system_zlib else getattr(zlib, "ZLIB_VERSION", "unknown"),
+    }
+
+
+def _write_json_if_changed(path, value):
+    encoded = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True).encode("utf-8") + b"\n"
+    if os.path.isfile(path):
+        with open(path, "rb") as handle:
+            if handle.read() == encoded:
+                return False
+    with open(path, "wb") as handle:
+        handle.write(encoded)
+    return True
+
+
+def _build_generated(selected_families):
+    generated = {}
+    frames = None
+    for family_id in selected_families:
+        records, family_frames = _family_buffers(family_id)
+        for name, width, height, buffer, map_type, seam_u, seam_v, poles, alpha_range in records:
+            audit = audit_texture(name, width, height, buffer, (width, height), seam_u, seam_v, poles, alpha_range, map_type)
+            encoded = encode_png(width, height, buffer)
+            path = save_png(name, width, height, buffer, encoded)
+            generated[name] = {
+                "path": path,
+                "dimensions": [width, height],
+                "channels": "RGBA8",
+                "buffer": buffer,
+                "map_type": map_type,
+                "sha256": hashlib.sha256(encoded).hexdigest(),
+                "audit": audit,
+            }
+        if family_id == "ball":
+            frames = family_frames
+    # Avoid a second ball generation while retaining the frame set used by its audit.
+    if "ball" in selected_families and frames is None:
+        frames = ball_centers()
+    return generated, frames
+
+
+def _serializable_outputs(generated):
+    outputs = {}
+    for name, entry in generated.items():
+        outputs[name] = {key: value for key, value in entry.items() if key != "buffer"}
+        outputs[name]["path"] = _relative_path(outputs[name]["path"])
+    return outputs
+
+
+def _serializable_previews(previews):
+    serializable = {}
+    for name, entry in previews.items():
+        serializable[name] = dict(entry)
+        serializable[name]["path"] = _relative_path(serializable[name]["path"])
+    return serializable
+
+
+def _run_once(selected_families, write_manifest=True):
     os.makedirs(TEXTURE_DIRECTORY, exist_ok=True)
     os.makedirs(PREVIEW_DIRECTORY, exist_ok=True)
-    generated = {}
-
-    def add(name, width, height, buffer, map_type="base", seam_u=False, seam_v=False, poles=False, alpha_range=None):
-        audit = audit_texture(name, width, height, buffer, (width, height), seam_u, seam_v, poles, alpha_range, map_type)
-        path = save_png(name, width, height, buffer)
-        generated[name] = {"path": path, "dimensions": [width, height], "channels": "RGBA8", "buffer": buffer, "map_type": map_type, "sha256": hashlib.sha256(encode_png(width, height, buffer)).hexdigest(), "audit": audit}
-
-    arena_specs = (("RetroGrass", "grass"), ("RetroWall", "wall"), ("RetroTrim", "trim"), ("RetroHazard", "hazard"))
-    for name, kind in arena_specs:
-        base, normal, metallic, ao = generate_surface_maps(kind, 1024, 1024)
-        add(name, 1024, 1024, base, "base", True, True)
-        add(name + "_Normal", 1024, 1024, normal, "normal", True, True)
-        add(name + "_MetallicSmoothness", 1024, 1024, metallic, "metallic", True, True)
-        add(name + "_Occlusion", 1024, 1024, ao, "ao", True, True)
-    add("RetroDetailNormal", 512, 512, generate_detail_normal(), "normal", True, True)
-
-    for name, kind in (("RetroWeaponMetal", "metal"), ("RetroWeaponDark", "dark"), ("RetroWeaponAccent", "accent")):
-        base, normal, metallic, ao = generate_surface_maps(kind, 2048, 2048)
-        add(name, 2048, 2048, base, "base", True, True)
-        add(name + "_Normal", 2048, 2048, normal, "normal", True, True)
-        add(name + "_MetallicSmoothness", 2048, 2048, metallic, "metallic", True, True)
-        add(name + "_Occlusion", 2048, 2048, ao, "ao", True, True)
-        if kind == "accent":
-            emission = bytearray(2048 * 2048 * 4)
-            for index in range(2048 * 2048):
-                r, g, b, _ = rgba_get(base, index)
-                bright = 1.0 if (index % 2048) % 96 in range(48, 56) else 0.0
-                rgba_set(emission, index, (r if bright else 0, g if bright else 0, b if bright else 0, 255))
-            close_repeat_edges(emission, 2048, 2048)
-            add(name + "_Emission", 2048, 2048, emission, "emission", True, True)
-
-    ball_base, ball_normal, ball_metallic, ball_ao, frames = generate_ball_maps()
-    add("RetroBall", 1024, 512, ball_base, "base", True, False, True)
-    add("RetroBall_Normal", 1024, 512, ball_normal, "normal", True, False, True)
-    add("RetroBall_MetallicSmoothness", 1024, 512, ball_metallic, "metallic", True, False, True)
-    add("RetroBall_Occlusion", 1024, 512, ball_ao, "ao", True, False, True)
-
-    rocket_maps = generate_rocket_maps()
-    add("RetroRocket", 1024, 1024, rocket_maps["base"], "base")
-    add("RetroRocket_Normal", 1024, 1024, rocket_maps["normal"], "normal")
-    add("RetroRocket_MetallicSmoothness", 1024, 1024, rocket_maps["metallic"], "metallic")
-    add("RetroRocket_Occlusion", 1024, 1024, rocket_maps["occlusion"], "ao")
-    add("RetroRocket_Emission", 1024, 1024, rocket_maps["emission"], "emission")
-
-    add("RetroRocketGlow", 128, 128, generate_glow(), "vfx", alpha_range=(0, 128))
-    add("RetroSmoke", 128, 128, generate_sprite_sheet("smoke"), "vfx", alpha_range=(0, 128))
-    add("RetroExplosion", 128, 128, generate_sprite_sheet("explosion"), "vfx", alpha_range=(0, 128))
-    add("RetroShield", 128, 128, generate_shield(), "vfx", alpha_range=(16, 220))
-    add("RetroSunnySky", 2048, 1024, generate_sky(), "sky", True, False)
-
-    previews = make_previews(generated)
-    outputs = {
-        name: {key: value for key, value in entry.items() if key != "buffer"}
-        for name, entry in generated.items()
-    }
+    started = time.perf_counter()
+    generated, frames = _build_generated(selected_families)
+    previews = make_previews(generated, selected_families)
+    outputs = _serializable_outputs(generated)
+    previews_manifest = _serializable_previews(previews)
     memory_mib = estimate_compressed_memory(outputs)
-    semantic_audit = run_semantic_audits(generated, frames)
+    semantic_audit = run_semantic_audits(generated, frames, selected_families)
+    full = tuple(selected_families) == FAMILY_IDS
+    expected_outputs = sum(FAMILY_REGISTRY[family_id]["expected_outputs"] for family_id in selected_families)
+    expected_previews = sum(FAMILY_REGISTRY[family_id]["expected_previews"] for family_id in selected_families)
     memory_pass = memory_mib <= 96.0
-    overall_pass = semantic_audit["pass"] and memory_pass and len(generated) == 44
+    contract_pass = (len(generated) == FULL_OUTPUT_COUNT and len(previews) == FULL_PREVIEW_COUNT and memory_pass) if full else True
+    overall_pass = semantic_audit["pass"] and len(generated) == expected_outputs and len(previews) == expected_previews and contract_pass
     manifest = {
         "generator": "Tools/Blender/generate_retro_textures.py",
         "seed": SEED,
+        "source_sha256": _source_sha256(),
+        "versions": _manifest_versions(),
+        "selected_families": list(selected_families),
+        "family_registry": {family_id: {key: value for key, value in FAMILY_REGISTRY[family_id].items()} for family_id in FAMILY_IDS},
         "outputs": outputs,
-        "previews": previews,
+        "previews": previews_manifest,
         "counts": {"outputs": len(outputs), "previews": len(previews)},
         "semantic_audit": semantic_audit,
         "memory_forecast": {
@@ -1180,19 +1684,71 @@ def main():
             "compressed_mib": round(memory_mib, 3),
             "budget_mib": 96.0,
             "within_budget": memory_pass,
+            "asserted": full,
         },
-        "ball": {"centers": [list(frame[0]) for frame in frames], "center_count": len(frames), "unit_tolerance": 1e-6, "u_wrap": True, "v_wrap": False},
+        "contract": {
+            "full_run": full,
+            "full_output_count": FULL_OUTPUT_COUNT if full else None,
+            "full_preview_count": FULL_PREVIEW_COUNT if full else None,
+            "selected_expected_outputs": expected_outputs,
+            "selected_expected_previews": expected_previews,
+            "canonical_manifest": full,
+        },
+        "ball": {"centers": [list(frame[0]) for frame in frames], "center_count": len(frames), "unit_tolerance": 1e-6, "u_wrap": True, "v_wrap": False} if frames else None,
+        "elapsed_seconds": round(time.perf_counter() - started, 6),
         "status": "PASS" if overall_pass else "FAIL",
     }
-    manifest_path = os.path.join(PREVIEW_DIRECTORY, "retro_texture_manifest.json")
-    with open(manifest_path, "w", encoding="utf-8", newline="\n") as handle:
-        json.dump(manifest, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-    print(f"MEMORY RetroTextures: compressed forecast {memory_mib:.3f} MiB / 96.000 MiB")
+    if write_manifest:
+        manifest_name = "retro_texture_manifest.json" if full else "retro_texture_manifest_targeted.json"
+        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, manifest_name), manifest)
     if not overall_pass:
-        print(f"AUDIT RetroTextures: FAIL semantic={semantic_audit['failed']} memory={memory_pass} outputs={len(generated)}")
-        raise RuntimeError("RetroTextures semantic audit failed; inspect retro_texture_manifest.json")
-    print(f"AUDIT RetroTextures: PASS ({len(generated)} outputs, {len(previews)} previews, deterministic seed {SEED})")
+        raise RuntimeError(f"RetroTextures semantic/audit contract failed: {semantic_audit['failed']}")
+    return {"generated": generated, "previews": previews, "manifest": manifest}
+
+
+def _hash_map(entries):
+    if isinstance(entries, dict):
+        return {name: (value.get("sha256") if isinstance(value, dict) else value) for name, value in entries.items()}
+    return dict(entries)
+
+
+def compare_hash_maps(first, second, category="texture"):
+    """Compare sorted named hashes and fail on the first deterministic mismatch."""
+    left, right = _hash_map(first), _hash_map(second)
+    for name in sorted(set(left) | set(right)):
+        if left.get(name) != right.get(name):
+            raise RuntimeError(f"{category} hash mismatch: {name} ({left.get(name)} != {right.get(name)})")
+    return True
+
+
+def compare_generation_runs(first, second):
+    compare_hash_maps(first["manifest"]["outputs"], second["manifest"]["outputs"], "output")
+    compare_hash_maps(first["manifest"]["previews"], second["manifest"]["previews"], "preview")
+    return True
+
+
+def build_argument_parser():
+    parser = argparse.ArgumentParser(description="Generate deterministic Rocket Fooxball PBR textures.")
+    parser.add_argument("--family", action="append", choices=("all",) + FAMILY_IDS, help="Generate one family; repeatable. Default/all selects the full registry.")
+    parser.add_argument("--proof-two-run", action="store_true", help="Run the full selection twice and compare all named hashes.")
+    return parser
+
+
+def main(argv=None):
+    args = build_argument_parser().parse_args(argv)
+    selected = resolve_families(args.family)
+    if args.proof_two_run and tuple(selected) != FAMILY_IDS:
+        raise SystemExit("--proof-two-run requires full selection (omit --family or use --family all)")
+    result = _run_once(selected, write_manifest=not args.proof_two_run)
+    if args.proof_two_run:
+        second = _run_once(selected, write_manifest=False)
+        compare_generation_runs(result, second)
+        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, "retro_texture_manifest.json"), second["manifest"])
+        result = second
+        print(f"PROOF RetroTextures: PASS ({FULL_OUTPUT_COUNT} output hashes, {FULL_PREVIEW_COUNT} preview hashes)")
+    print(f"MEMORY RetroTextures: compressed forecast {result['manifest']['memory_forecast']['compressed_mib']:.3f} MiB / 96.000 MiB")
+    print(f"AUDIT RetroTextures: PASS ({result['manifest']['counts']['outputs']} outputs, {result['manifest']['counts']['previews']} previews, families={','.join(selected)}, seed {SEED})")
+    return result
 
 
 if __name__ == "__main__":
