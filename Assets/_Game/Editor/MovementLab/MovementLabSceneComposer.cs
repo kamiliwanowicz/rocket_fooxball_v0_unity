@@ -554,8 +554,8 @@ namespace RocketFooxball.Editor
 
                     // Validation is inspection-only. Generation persists High/Low assets;
                     // camera state is checked without changing quality or runtime state.
-                    var cameraData = camera.GetUniversalAdditionalCameraData();
-                    if (!camera.allowHDR || !cameraData.renderPostProcessing ||
+                    if (camera == null || !camera.TryGetComponent<UniversalAdditionalCameraData>(out var cameraData) ||
+                        !camera.allowHDR || !cameraData.renderPostProcessing ||
                         cameraData.antialiasing != AntialiasingMode.SubpixelMorphologicalAntiAliasing)
                     {
                         throw new InvalidOperationException("High quality camera state contract invalid.");

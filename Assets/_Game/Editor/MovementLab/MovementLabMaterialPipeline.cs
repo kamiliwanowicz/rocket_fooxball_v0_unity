@@ -51,143 +51,6 @@ namespace RocketFooxball.Editor
 
     internal static partial class MovementLabMaterialPipeline
     {
-                internal static Dictionary<string, bool> CaptureGeneratedLitMaterialDirtyState()
-                {
-                    var baseline = new Dictionary<string, bool>(StringComparer.Ordinal);
-                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
-                    {
-                        var path = GeneratedYamlAssetPaths[i];
-                        if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
-                        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-                        if (material == null || material.shader == null || material.shader.name != LitShaderName) continue;
-                        baseline[path] = EditorUtility.IsDirty(material);
-                    }
-                    return baseline;
-                }
-
-                internal static Dictionary<string, bool> CaptureGeneratedMaterialDirtyState()
-                {
-                    var baseline = new Dictionary<string, bool>(StringComparer.Ordinal);
-                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
-                    {
-                        var path = GeneratedYamlAssetPaths[i];
-                        if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
-                        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-                        if (material != null) baseline[path] = EditorUtility.IsDirty(material);
-                    }
-                    return baseline;
-                }
-
-                internal static Dictionary<string, string> CaptureGeneratedMaterialHashes()
-                {
-                    var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
-                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
-                    {
-                        var path = GeneratedYamlAssetPaths[i];
-                        if (!path.EndsWith(".mat", StringComparison.OrdinalIgnoreCase)) continue;
-                        var absolute = MovementLabManifestStore.ResolveProjectPath(path);
-                        hashes[path] = File.Exists(absolute) ? HashFile(absolute) : "missing";
-                    }
-                    return hashes;
-                }
-
-                internal static void AssertGeneratedMaterialHashesUnchanged(Dictionary<string, string> baseline)
-                {
-                    var current = CaptureGeneratedMaterialHashes();
-                    var paths = (baseline ?? new Dictionary<string, string>(StringComparer.Ordinal)).Keys
-                        .Union(current.Keys, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
-                    var changed = new List<string>();
-                    for (var i = 0; i < paths.Length; i++)
-                    {
-                        var before = string.Empty;
-                        var after = string.Empty;
-                        var hasBefore = baseline != null && baseline.TryGetValue(paths[i], out before);
-                        var hasAfter = current.TryGetValue(paths[i], out after);
-                        if (!hasBefore || !hasAfter || !string.Equals(before, after, StringComparison.Ordinal)) changed.Add(paths[i]);
-                    }
-                    if (changed.Count > 0) throw new InvalidOperationException("MovementLab bake changed generated material hashes: " + string.Join(", ", changed.ToArray()));
-                }
-
-                internal static void AssertGeneratedMaterialDirtyStateUnchanged(Dictionary<string, bool> baseline)
-                {
-                    var current = CaptureGeneratedMaterialDirtyState();
-                    var paths = (baseline ?? new Dictionary<string, bool>(StringComparer.Ordinal)).Keys
-                        .Union(current.Keys, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal).ToArray();
-                    var changed = new List<string>();
-                    for (var i = 0; i < paths.Length; i++)
-                    {
-                        var before = false;
-                        var after = false;
-                        var hasBefore = baseline != null && baseline.TryGetValue(paths[i], out before);
-                        var hasAfter = current.TryGetValue(paths[i], out after);
-                        if (!hasBefore || !hasAfter || before != after)
-                            changed.Add(paths[i]);
-                    }
-                    if (changed.Count > 0) throw new InvalidOperationException("MovementLab bake changed generated material dirty state: " + string.Join(", ", changed.ToArray()));
-                }
-
-                private static string HashFile(string path)
-                {
-                    using (var sha = System.Security.Cryptography.SHA256.Create())
-                    using (var stream = File.OpenRead(path))
-                        return BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", string.Empty).ToLowerInvariant();
-                }
-
-                internal static void RestoreGeneratedLitMaterialKeywords(bool persist = true, Dictionary<string, bool> baselineDirtyState = null)
-                {
-                    var guids = AssetDatabase.FindAssets("t:Material", new[] { MaterialsPath });
-                    for (var i = 0; i < guids.Length; i++)
-                    {
-                        var path = AssetDatabase.GUIDToAssetPath(guids[i]);
-                        var material = AssetDatabase.LoadAssetAtPath<Material>(path);
-                        if (material == null || material.shader == null || material.shader.name != LitShaderName) continue;
-                        var wasDirty = GetBaselineDirtyState(path, material, baselineDirtyState);
-
-                        SetMaterialKeyword(material, "_NORMALMAP", material.GetTexture("_BumpMap") != null);
-                        SetMaterialKeyword(material, "_METALLICSPECGLOSSMAP", material.GetTexture("_MetallicGlossMap") != null);
-                        SetMaterialKeyword(material, "_OCCLUSIONMAP", material.GetTexture("_OcclusionMap") != null);
-                        var hasEmission = material.name == "WeaponAccent" || material.name == "RocketHot" || material.name == "ArenaGlow" ||
-                            material.GetTexture("_EmissionMap") != null ||
-                            (material.HasProperty("_EmissionColor") && material.GetColor("_EmissionColor").maxColorComponent > 0.001f);
-                        material.globalIlluminationFlags = hasEmission
-                            ? MaterialGlobalIlluminationFlags.BakedEmissive
-                            : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
-                        SetMaterialKeyword(material, "_EMISSION", hasEmission);
-                        SetDetailNormalKeyword(material, material.GetTexture("_DetailNormalMap") != null);
-                        if (persist || wasDirty) EditorUtility.SetDirty(material);
-                        else EditorUtility.ClearDirty(material);
-                    }
-
-                    // Bake systems may invalidate the in-memory material search
-                    // results; force known authored emissive assets by stable path.
-                    var emissivePaths = new[]
-                    {
-                        MaterialsPath + "/WeaponAccent.mat",
-                        MaterialsPath + "/RocketHot.mat",
-                        MaterialsPath + "/ArenaGlow.mat"
-                    };
-                    for (var i = 0; i < emissivePaths.Length; i++)
-                    {
-                        var material = AssetDatabase.LoadAssetAtPath<Material>(emissivePaths[i]);
-                        if (material == null) throw new InvalidOperationException("Missing authored emissive material: " + emissivePaths[i]);
-                        var wasDirty = GetBaselineDirtyState(emissivePaths[i], material, baselineDirtyState);
-                        material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.BakedEmissive;
-                        material.EnableKeyword("_EMISSION");
-                        if (persist || wasDirty) EditorUtility.SetDirty(material);
-                        else EditorUtility.ClearDirty(material);
-                    }
-                }
-
-                internal static bool GetBaselineDirtyState(string path, Material material, Dictionary<string, bool> baselineDirtyState)
-                {
-                    if (baselineDirtyState != null && baselineDirtyState.TryGetValue(path, out var wasDirty))
-                    {
-                        return wasDirty;
-                    }
-
-                    return EditorUtility.IsDirty(material);
-                }
-
                 internal static void SetMaterialKeyword(Material material, string keyword, bool enabled)
                 {
                     if (enabled) material.EnableKeyword(keyword);
@@ -208,7 +71,6 @@ namespace RocketFooxball.Editor
                         AssetDatabase.ImportAsset(materialPaths[i], ImportAssetOptions.ForceSynchronousImport);
                     }
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-                    RestoreGeneratedLitMaterialKeywords();
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 }
@@ -257,13 +119,13 @@ namespace RocketFooxball.Editor
                     material.SetTexture("_DetailNormalMap", specification.DetailNormalMap);
                     material.SetFloat("_DetailNormalMapScale", 1f);
                     material.SetTextureScale("_BaseMap", specification.TextureScale);
-                    if (specification.NormalMap != null) material.EnableKeyword("_NORMALMAP"); else material.DisableKeyword("_NORMALMAP");
-                    if (specification.MetallicGlossMap != null) material.EnableKeyword("_METALLICSPECGLOSSMAP"); else material.DisableKeyword("_METALLICSPECGLOSSMAP");
-                    if (specification.OcclusionMap != null) material.EnableKeyword("_OCCLUSIONMAP"); else material.DisableKeyword("_OCCLUSIONMAP");
                     var hasEmission = specification.EmissionMap != null || specification.EmissionStrength > 0.001f;
                     material.globalIlluminationFlags = hasEmission
                         ? MaterialGlobalIlluminationFlags.BakedEmissive
                         : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    if (specification.NormalMap != null) material.EnableKeyword("_NORMALMAP"); else material.DisableKeyword("_NORMALMAP");
+                    if (specification.MetallicGlossMap != null) material.EnableKeyword("_METALLICSPECGLOSSMAP"); else material.DisableKeyword("_METALLICSPECGLOSSMAP");
+                    if (specification.OcclusionMap != null) material.EnableKeyword("_OCCLUSIONMAP"); else material.DisableKeyword("_OCCLUSIONMAP");
                     if (hasEmission) material.EnableKeyword("_EMISSION"); else material.DisableKeyword("_EMISSION");
                     SetDetailNormalKeyword(material, specification.DetailNormalMap != null);
                     material.SetFloat("_SmoothnessTextureChannel", 0f);
@@ -429,7 +291,10 @@ namespace RocketFooxball.Editor
                 internal static void ValidateEmission(Material material, Color baseColor, float strength, string label)
                 {
                     var expected = strength > 0.001f ? baseColor * strength : Color.clear;
-                    if (material == null || Vector4.Distance(material.GetColor("_EmissionColor"), expected) > 0.01f)
+                    var emissive = strength > 0.001f;
+                    var expectedFlags = emissive ? MaterialGlobalIlluminationFlags.BakedEmissive : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    if (material == null || Vector4.Distance(material.GetColor("_EmissionColor"), expected) > 0.01f ||
+                        material.globalIlluminationFlags != expectedFlags || material.IsKeywordEnabled("_EMISSION") != emissive)
                     {
                         throw new InvalidOperationException(label + " emission contract mismatch.");
                     }
@@ -437,52 +302,7 @@ namespace RocketFooxball.Editor
 
                 internal static bool HasSerializedKeyword(Material material, string keyword)
                 {
-                    if (material == null || string.IsNullOrEmpty(keyword)) return false;
-                    var assetPath = AssetDatabase.GetAssetPath(material);
-                    if (!string.IsNullOrEmpty(assetPath) && assetPath.StartsWith("Assets/", StringComparison.Ordinal) && assetPath.EndsWith(".mat", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Saved project materials are authoritative on disk. Native
-                        // lighting jobs may leave stale in-memory local-keyword arrays.
-                        return HasPersistedMaterialKeyword(material, keyword);
-                    }
-                    var serialized = new SerializedObject(material);
-                    var valid = serialized.FindProperty("m_ValidKeywords");
-                    if (valid != null && valid.isArray)
-                    {
-                        for (var i = 0; i < valid.arraySize; i++)
-                        {
-                            if (string.Equals(valid.GetArrayElementAtIndex(i).stringValue, keyword, StringComparison.Ordinal)) return true;
-                        }
-                        return HasPersistedMaterialKeyword(material, keyword);
-                    }
-                    var keywords = material.shaderKeywords;
-                    for (var i = 0; i < keywords.Length; i++)
-                    {
-                        if (string.Equals(keywords[i], keyword, StringComparison.Ordinal)) return true;
-                    }
-                    return false;
-                }
-
-                internal static bool HasPersistedMaterialKeyword(Material material, string keyword)
-                {
-                    var path = AssetDatabase.GetAssetPath(material);
-                    if (string.IsNullOrEmpty(path)) return false;
-                    var absolutePath = GetAbsoluteProjectPath(ResolveProjectRoot(), path);
-                    if (!File.Exists(absolutePath)) return false;
-                    var yaml = File.ReadAllText(absolutePath);
-                    var start = yaml.IndexOf("m_ValidKeywords:", StringComparison.Ordinal);
-                    if (start < 0) return false;
-                    var end = yaml.IndexOf("\n  m_InvalidKeywords:", start, StringComparison.Ordinal);
-                    if (end < 0) end = yaml.IndexOf("\n  m_LightmapFlags:", start, StringComparison.Ordinal);
-                    if (end < 0) end = yaml.Length;
-                    var section = yaml.Substring(start, end - start);
-                    var lines = section.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-                    var expectedLine = "- " + keyword;
-                    for (var i = 0; i < lines.Length; i++)
-                    {
-                        if (string.Equals(lines[i].Trim(), expectedLine, StringComparison.Ordinal)) return true;
-                    }
-                    return false;
+                    return material != null && !string.IsNullOrEmpty(keyword) && material.IsKeywordEnabled(keyword);
                 }
 
                 internal static void ValidateBallMaterial(Material material)

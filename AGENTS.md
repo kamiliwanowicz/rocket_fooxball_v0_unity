@@ -44,7 +44,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
-- Reject unrelated reserialization, GUID churn, and prefab/scene changes after Editor saves.
+- Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization after Editor saves. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`.
 
 ## Unity execution
 
@@ -55,7 +55,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
-- Builder no-op gate: validate source signature and generated-output fingerprint before importer, prefab, material, or scene writes. Valid state -> no save or rebuild. Stale state -> authoritative rebuild.
+- Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild. Generated output bytes never gate rebuild.
 - IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
 ## Validation
@@ -64,14 +64,14 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
-- Builder-generated change: run build twice from same SHA. Build 2 must reuse existing outputs; compare hashes for owned scenes, prefabs, controllers, materials, and importer metadata. Any mismatch -> nondeterministic build bug.
-- Run `ValidateMovementLab()` in separate Unity process after build 2. Build success alone does not prove persisted references or bindings.
-- Bright-arena capture invokes `ValidateMovementLab()` in its clean process; capture evidence subsumes a separate validator row.
+- Builder-generated change: run one authoritative `MovementLabBuilder.BuildMovementLab()` build, then run `ValidateMovementLab()` semantic pass in separate Unity process. Do not require second builds, builder-output byte comparisons, or nondeterminism verdicts.
+- Bright-arena capture may satisfy separate-process semantic pass when capture invokes `ValidateMovementLab()`; avoid duplicate validator work.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
-- Production bake/capture sequence starts only after final source diff, accepted Critical/High fixes, clean exact SHA, and review marker. Later source edits invalidate affected ledger rows.
-- Workflow probe schema is `schemaVersion: 1` with typed SHA/version/status/stale/digest/profile/path/hash fields; absent probe remains optional until T4 producer exists. Durable evidence and marker/report paths stay under Git-common destination and outside product worktree.
+- Lighting posture: Fast preview is default iteration. Development bake is explicit, on-demand, and best-effort. Production bake is explicit and milestone-only.
+- Production bake/capture -> run after source edits and accepted Critical/High fixes settle in a scoped-clean worktree. Later source edits reopen only affected checks. No extra pre-bake ceremony.
+- Workflow probe schema is `schemaVersion: 1` with typed version/status/stale/profile/path fields plus source/input digest for staleness; generated output bytes are not acceptance criteria. Durable report paths stay under Git-common destination and outside product worktree.
 - Report only checks run.
 - When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`
 

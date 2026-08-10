@@ -106,6 +106,7 @@ namespace RocketFooxball.Editor
                     EnsureAssetExists(AdditiveParticleShaderPath);
                     EnsureAssetExists(PowerGridShaderPath);
                     EnsureAssetExists(ShieldShaderPath);
+                    ValidatePowerGridShader();
                     EnsureAssetExists(WallTexturePath);
                     EnsureAssetExists(TrimTexturePath);
                     EnsureAssetExists(HazardTexturePath);
@@ -383,6 +384,33 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Missing generated asset: " + path);
                     }
+                }
+
+                private static void ValidatePowerGridShader()
+                {
+                    var shader = AssetDatabase.LoadAssetAtPath<Shader>(PowerGridShaderPath);
+                    if (shader == null || !shader.isSupported)
+                        throw new InvalidOperationException("RetroPowerGrid shader is unsupported; bake/capture blocked.");
+
+                    var messages = ShaderUtil.GetShaderMessages(shader);
+                    if (messages == null) return;
+                    var errors = new List<string>();
+                    for (var i = 0; i < messages.Length; i++)
+                    {
+                        var severityField = messages[i].GetType().GetField("severity");
+                        var severity = severityField?.GetValue(messages[i]);
+                        if (severity == null)
+                        {
+                            var severityProperty = messages[i].GetType().GetProperty("severity");
+                            severity = severityProperty?.GetValue(messages[i], null);
+                        }
+                        if (severity != null && severity.ToString().IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            errors.Add(messages[i].ToString());
+                        }
+                    }
+                    if (errors.Count > 0)
+                        throw new InvalidOperationException("RetroPowerGrid shader compiler errors block bake/capture: " + string.Join(" | ", errors.ToArray()));
                 }
 
     }

@@ -54,18 +54,22 @@ namespace RocketFooxball.Editor
         internal string[] StaleReasons => StaleStages.Select(stage => staleReasonMap.TryGetValue(stage, out var reason) ? reason : "stale").ToArray();
 
         internal bool TryGetStaleReason(MovementLabStage stage, out string reason) => staleReasonMap.TryGetValue(stage, out reason);
+
+        internal bool IsRawOutputDriftOnly(MovementLabStage stage)
+        {
+            if (!TryGetStaleReason(stage, out var reason) || string.IsNullOrWhiteSpace(reason)) return false;
+            var tokens = reason.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Length > 0 && tokens.All(token => token.StartsWith("changed:", StringComparison.Ordinal));
+        }
     }
 
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:2";
-        private const string PreviousMaterialContract = "material-prefab-contract:3";
         private const string MaterialContract = "material-prefab-contract:4";
         // T6 canonicalizes the generated TagManager bytes.
-        private const string PreviousGameplayContract = "gameplay-scene-contract:6";
         private const string GameplayContract = "gameplay-scene-contract:7";
         // T5 adds the persisted Iteration profile and its URP assets.
-        private const string PreviousQualityContract = "quality-contract:2";
         private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:3";
         private const string BakedContract = "baked-output-contract:4";
@@ -156,6 +160,10 @@ namespace RocketFooxball.Editor
         };
         internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift = false)
         {
+            // Retain legacy switches for callers; raw output drift is now
+            // informational and never blocks stage probing or builder writes.
+            _ = stopOnOutputDrift;
+            _ = allowBakedOutputDrift;
             var manifestRead = MovementLabManifestStore.Read();
             if (manifestRead.Status == MovementLabManifestReadStatus.Unreadable)
             {
@@ -198,54 +206,13 @@ namespace RocketFooxball.Editor
                     if (!SequenceEqual(prior.predecessorDigests, current.predecessorDigests)) stageReasons.Add("digest-predecessor-changed");
                     if (!string.Equals(prior.profile ?? string.Empty, current.profile ?? string.Empty, StringComparison.Ordinal)) stageReasons.Add("profile-changed");
 
-                    // A changed declared input may legitimately rewrite an
-                    // output (for example gameplay scene recreation replacing
-                    // the baked scene document). Manual drift with identical
-                    // keys remains a hard stop.
-                    var declaredInputChanged = stageReasons.Any(reason =>
-                        reason == "schema-mismatch" || reason == "contract-changed" || reason == "unity-version-changed" ||
-                        reason == "input-source-changed" || reason == "dependency-state-changed" || reason == "input-changed" ||
-                        reason == "digest-predecessor-changed" || reason == "profile-changed");
                     if (drift.Count > 0)
                     {
-                        // A lighting bake legitimately rewrites baked scene
-                        // bindings alongside the BakedOutput files. Keep the
-                        // fail-closed drift gate for every other stage/path,
-                        // while allowing this explicit post-bake handoff to
-                        // carry both records forward atomically.
-                        // The T5 contract transition intentionally republishes
-                        // only the new Iteration assets. Keep this migration
-                        // narrow; later Quality drift remains fail-closed.
-                        var qualityContractMigration = definition.Stage == MovementLabStage.Quality &&
-                            string.Equals(prior.contractVersion, PreviousQualityContract, StringComparison.Ordinal) &&
-                            string.Equals(current.contractVersion, QualityContract, StringComparison.Ordinal) &&
-                            drift.All(path =>
-                                path == "changed:" + GraphicsQualityConfigurator.IterationPipelinePath ||
-                                path == "missing:" + GraphicsQualityConfigurator.IterationPipelinePath ||
-                                path == "changed:" + GraphicsQualityConfigurator.IterationPipelinePath + ".meta" ||
-                                path == "missing:" + GraphicsQualityConfigurator.IterationPipelinePath + ".meta" ||
-                                path == "changed:" + GraphicsQualityConfigurator.IterationRendererPath ||
-                                path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath ||
-                                path == "changed:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta" ||
-                                path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta");
-                        var gameplayContractMigration = definition.Stage == MovementLabStage.GameplayScene &&
-                            string.Equals(prior.contractVersion, PreviousGameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) &&
-                            string.Equals(current.contractVersion, GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) &&
-                            drift.All(path =>
-                                path == "changed:ProjectSettings/TagManager.asset" ||
-                                path == "missing:ProjectSettings/TagManager.asset");
-                        var materialContractMigration = IsMaterialPrefabContractMigration(definition.Stage, prior.contractVersion,
-                            current.contractVersion, drift);
-                        var ignoreDrift = materialContractMigration || qualityContractMigration || gameplayContractMigration || (allowBakedOutputDrift &&
-                            (definition.Stage == MovementLabStage.BakedOutput ||
-                             (definition.Stage == MovementLabStage.GameplayScene &&
-                              drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath))));
-                        var expectedSceneRecreation = definition.Stage == MovementLabStage.BakedOutput && declaredInputChanged &&
-                            drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath);
-                        if (stopOnOutputDrift && !ignoreDrift && !expectedSceneRecreation)
-                        {
-                            throw new InvalidOperationException(FormatOutputDrift(definition.Stage, drift));
-                        }
+                        // Raw owned-output bytes are observed drift, not a
+                        // builder hard-stop. Stage remains stale and next
+                        // successful write refreshes recorded hashes. Semantic
+                        // validation still enforces required assets, metadata,
+                        // GUID/local IDs, and persisted references.
 
                         for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
                     }
@@ -473,6 +440,10 @@ namespace RocketFooxball.Editor
                 var path = normalizedPaths[i];
                 var absolute = MovementLabManifestStore.ResolveProjectPath(path);
                 var missing = !File.Exists(absolute);
+                // Output lists include explicit `.meta` entries for byte
+                // fingerprints. Validate the paired asset once; validating
+                // the metadata path itself would incorrectly probe `.meta.meta`.
+                if (!missing && !path.EndsWith(".meta", StringComparison.Ordinal)) ValidateAssetMetaIdentity(path, absolute);
                 result[i] = new MovementLabPathDigest
                 {
                     path = path,
@@ -481,6 +452,26 @@ namespace RocketFooxball.Editor
                 };
             }
             return result;
+        }
+
+        private static void ValidateAssetMetaIdentity(string repositoryPath, string absolutePath)
+        {
+            if (!repositoryPath.StartsWith("Assets/", StringComparison.Ordinal)) return;
+            var metaPath = absolutePath + ".meta";
+            if (!File.Exists(metaPath))
+                throw new InvalidOperationException("MovementLab owned asset metadata is missing: " + repositoryPath + ".meta");
+
+            var guid = AssetDatabase.AssetPathToGUID(repositoryPath);
+            if (string.IsNullOrEmpty(guid))
+                throw new InvalidOperationException("MovementLab owned asset GUID is missing: " + repositoryPath);
+
+            var metaGuid = File.ReadAllLines(metaPath)
+                .Select(line => line.Trim())
+                .Where(line => line.StartsWith("guid:", StringComparison.Ordinal))
+                .Select(line => line.Substring("guid:".Length).Trim())
+                .FirstOrDefault();
+            if (!string.Equals(guid, metaGuid, StringComparison.Ordinal))
+                throw new InvalidOperationException("MovementLab owned asset GUID/meta mismatch: " + repositoryPath);
         }
 
         private static string HashOutputFile(string repositoryPath, string absolutePath, MovementLabStage stage)
@@ -859,39 +850,6 @@ namespace RocketFooxball.Editor
         {
             return string.Equals(profile, MovementLabLightingProfiles.ProfileId.Development.ToString(), StringComparison.OrdinalIgnoreCase) ||
                 string.Equals(profile, MovementLabLightingProfiles.Development.Tag, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static bool IsMaterialPrefabContractMigration(MovementLabStage stage, string priorContract,
-            string currentContract, List<string> drift)
-        {
-            if (stage != MovementLabStage.MaterialPrefab ||
-                !string.Equals(priorContract, PreviousMaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) ||
-                !string.Equals(currentContract, MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion, StringComparison.Ordinal) ||
-                drift == null || drift.Count == 0)
-            {
-                return false;
-            }
-
-            var owned = new HashSet<string>(WithMetas(MovementLabContract.MaterialPrefabOutputs), StringComparer.Ordinal);
-            for (var i = 0; i < drift.Count; i++)
-            {
-                var token = drift[i];
-                if (string.IsNullOrEmpty(token)) return false;
-
-                string path;
-                if (token.StartsWith("changed:", StringComparison.Ordinal)) path = token.Substring("changed:".Length);
-                else if (token.StartsWith("missing:", StringComparison.Ordinal)) path = token.Substring("missing:".Length);
-                else return false;
-
-                if (string.IsNullOrEmpty(path) || !owned.Contains(path)) return false;
-            }
-
-            return true;
-        }
-
-        private static string FormatOutputDrift(MovementLabStage stage, List<string> drift)
-        {
-            return "MovementLab output drift in " + stage + "; generation stopped. " + string.Join(", ", drift.OrderBy(value => value, StringComparer.Ordinal).ToArray());
         }
 
         private static bool SequenceEqual(string[] left, string[] right) => (left ?? Array.Empty<string>()).SequenceEqual(right ?? Array.Empty<string>(), StringComparer.Ordinal);

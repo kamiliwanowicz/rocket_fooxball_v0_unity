@@ -20,6 +20,7 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException(label + " reference is broken.");
             }
+            ValidatePersistentIdentity(expected, label);
         }
 
         internal static void ValidateSerializedFloat(UnityEngine.Object target, string propertyName, float expected, string label)
@@ -65,6 +66,14 @@ namespace RocketFooxball.Editor
                 sourcePath = source != null ? AssetDatabase.GetAssetPath(source) : string.Empty;
             }
             if (sourcePath != prefabPath) throw new InvalidOperationException(label + " prefab provenance mismatch: " + sourcePath);
+            ValidatePersistentIdentity(property.objectReferenceValue, label);
+            if (component != null)
+            {
+                var sourceComponent = PrefabUtility.GetCorrespondingObjectFromSource(component);
+                if (sourceComponent == null || !string.Equals(AssetDatabase.GetAssetPath(sourceComponent), prefabPath, StringComparison.Ordinal))
+                    throw new InvalidOperationException(label + " prefab component provenance is not persisted: " + prefabPath);
+                ValidatePersistentIdentity(sourceComponent, label + " source component");
+            }
         }
 
         internal static T GetSerializablePrefabComponent<T>(GameObject prefabAsset, out GameObject instance) where T : Component
@@ -89,6 +98,32 @@ namespace RocketFooxball.Editor
             if (!((a == first && b == second) || (a == second && b == first)))
             {
                 throw new InvalidOperationException(label + " does not contain both goal shields.");
+            }
+            ValidatePersistentIdentity(a, label + "[0]");
+            ValidatePersistentIdentity(b, label + "[1]");
+        }
+
+        internal static void ValidatePersistentIdentity(UnityEngine.Object value, string label)
+        {
+            if (value == null) throw new InvalidOperationException(label + " persistent identity is null.");
+            if ((value is Component || value is GameObject) && !EditorUtility.IsPersistent(value))
+            {
+                try
+                {
+                    var global = GlobalObjectId.GetGlobalObjectIdSlow(value);
+                    if (global.identifierType == 0) throw new InvalidOperationException(label + " scene object GlobalObjectId is zero.");
+                }
+                catch (Exception exception) when (!(exception is InvalidOperationException))
+                {
+                    throw new InvalidOperationException(label + " scene object GlobalObjectId is unavailable.", exception);
+                }
+                return;
+            }
+
+            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(value, out var guid, out long localId) ||
+                string.IsNullOrEmpty(guid) || localId == 0)
+            {
+                throw new InvalidOperationException(label + " asset GUID/local file ID is zero.");
             }
         }
 

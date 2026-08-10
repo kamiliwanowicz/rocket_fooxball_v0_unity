@@ -10,6 +10,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.SceneManagement;
+using static RocketFooxball.Editor.MovementLabContractCatalog;
 
 namespace RocketFooxball.Editor
 {
@@ -186,6 +187,7 @@ namespace RocketFooxball.Editor
 
             var stale = RequiredPreBakeStages
                 .Where(stage => probe.IsStale(stage) &&
+                    !IsRawOutputDriftOnly(probe, stage) &&
                     !(stage == MovementLabStage.GameplayScene && IsPreparedSceneHandoff(probe)))
                 .Select(stage => stage.ToString())
                 .ToArray();
@@ -195,6 +197,13 @@ namespace RocketFooxball.Editor
             }
 
             return probe;
+        }
+
+        private static bool IsRawOutputDriftOnly(MovementLabStageProbe probe, MovementLabStage stage)
+        {
+            if (probe == null || !probe.TryGetStaleReason(stage, out var reason) || string.IsNullOrWhiteSpace(reason)) return false;
+            var tokens = reason.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            return tokens.Length > 0 && tokens.All(token => token.StartsWith("changed:", StringComparison.Ordinal));
         }
 
         private static bool IsPreparedSceneHandoff(MovementLabStageProbe probe)
@@ -227,6 +236,7 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab pre-bake output meta is missing: " + path + ".meta");
                 }
+                if (path.StartsWith("Assets/", StringComparison.Ordinal)) ValidateAssetMetaGuid(path);
             }
 
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
@@ -246,7 +256,16 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab Volume must use a persisted sharedProfile.");
                 }
+                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(volume.sharedProfile, out var profileGuid, out long profileLocalId) ||
+                    string.IsNullOrEmpty(profileGuid) || profileLocalId == 0)
+                {
+                    throw new InvalidOperationException("MovementLab Volume sharedProfile has no persistent GUID/local file ID.");
+                }
                 var components = volume.sharedProfile.components;
+                var requiredTypes = new[] { typeof(UnityEngine.Rendering.Universal.Tonemapping),
+                    typeof(UnityEngine.Rendering.Universal.Bloom), typeof(UnityEngine.Rendering.Universal.ColorAdjustments) };
+                if (components == null || components.Count != requiredTypes.Length)
+                    throw new InvalidOperationException("MovementLab VolumeProfile required component set is incomplete or has unexpected entries.");
                 for (var componentIndex = 0; componentIndex < components.Count; componentIndex++)
                 {
                     var component = components[componentIndex];
@@ -255,7 +274,12 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("MovementLab VolumeProfile component is not a persistent subasset.");
                     }
+                    if (!requiredTypes.Contains(component.GetType()))
+                        throw new InvalidOperationException("MovementLab VolumeProfile contains unexpected component: " + component.GetType().Name);
                 }
+                for (var typeIndex = 0; typeIndex < requiredTypes.Length; typeIndex++)
+                    if (components.Count(component => component != null && component.GetType() == requiredTypes[typeIndex]) != 1)
+                        throw new InvalidOperationException("MovementLab VolumeProfile required component is missing or duplicated: " + requiredTypes[typeIndex].Name);
             }
             if (persistedVolumeCount == 0) throw new InvalidOperationException("MovementLab persisted shared VolumeProfile is missing.");
 
@@ -272,7 +296,24 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
                 }
+                ValidateAssetMetaGuid(path);
             }
+        }
+
+        private static void ValidateAssetMetaGuid(string path)
+        {
+            var guid = AssetDatabase.AssetPathToGUID(path);
+            if (string.IsNullOrEmpty(guid))
+                throw new InvalidOperationException("MovementLab pre-bake asset GUID is missing: " + path);
+
+            var metaPath = MovementLabManifestStore.ResolveProjectPath(path + ".meta");
+            var metaGuid = File.ReadAllLines(metaPath)
+                .Select(line => line.Trim())
+                .Where(line => line.StartsWith("guid:", StringComparison.Ordinal))
+                .Select(line => line.Substring("guid:".Length).Trim())
+                .FirstOrDefault();
+            if (!string.Equals(guid, metaGuid, StringComparison.Ordinal))
+                throw new InvalidOperationException("MovementLab pre-bake asset GUID/meta mismatch: " + path);
         }
 
         private static void ValidateLitMaterialPersistence()
@@ -290,6 +331,32 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab material metallic-map keyword mismatch: " + path);
                 }
+                if (material.shader != null && material.shader.name == LitShaderName)
+                {
+                    var hasEmission = material.GetTexture("_EmissionMap") != null ||
+                        (material.HasProperty("_EmissionColor") && material.GetColor("_EmissionColor").maxColorComponent > 0.001f);
+                    var expectedFlags = hasEmission ? MaterialGlobalIlluminationFlags.BakedEmissive : MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    if (material.globalIlluminationFlags != expectedFlags || material.IsKeywordEnabled("_EMISSION") != hasEmission)
+                        throw new InvalidOperationException("MovementLab material emission state is not persisted: " + path);
+
+                    if (string.Equals(path, RocketHotMaterialPath, StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, RocketEmissionColor, RocketEmissionStrength, path);
+                    else if (string.Equals(path, MaterialsPath + "/ArenaGlow.mat", StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, new Color(0.10f, 0.95f, 0.88f, 1f), 2f, path);
+                    else if (string.Equals(path, MaterialsPath + "/WeaponAccent.mat", StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, path);
+                }
+            }
+        }
+
+        private static void ValidateReloadedEmission(Material material, Color baseColor, float strength, string path)
+        {
+            if (material.globalIlluminationFlags != MaterialGlobalIlluminationFlags.BakedEmissive ||
+                !material.IsKeywordEnabled("_EMISSION") || material.GetTexture("_EmissionMap") == null ||
+                Vector4.Distance(material.GetColor("_EmissionColor"), baseColor * strength) > 0.01f ||
+                (material.HasProperty("_EmissionStrength") && Mathf.Abs(material.GetFloat("_EmissionStrength") - strength) > 0.001f))
+            {
+                throw new InvalidOperationException("MovementLab emissive material failed clean-reload public-state validation: " + path);
             }
         }
 
