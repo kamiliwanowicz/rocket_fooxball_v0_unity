@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
@@ -120,7 +121,7 @@ namespace RocketFooxball.Editor
                     var shieldRedMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ShieldRed.mat");
                     var rocketPrefab = LoadRequiredAsset<GameObject>(RocketPrefabPath);
                     var ballPrefab = LoadRequiredAsset<GameObject>(BallPrefabPath);
-                    var playerPrefab = LoadRequiredAsset<GameObject>(PlayerPrefabPath);
+                    var playerPrefab = LoadRequiredAsset<GameObject>(PrefabPath);
                     var explosionRootAsset = LoadRequiredAsset<GameObject>(ExplosionPrefabPath);
                     var explosionPrefab = GetSerializablePrefabComponent<ExplosionVfx>(explosionRootAsset, out var explosionPrefabProbe);
                     try

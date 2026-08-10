@@ -95,7 +95,7 @@ namespace RocketFooxball.Editor
                  {
                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs"
-                 }),
+                 }, Array.Empty<string>()),
                 new[]
                 {
                     MovementLabContract.PlayerPrefabPath, MovementLabContract.BallPrefabPath,
