@@ -1599,8 +1599,59 @@ def _manifest_versions():
     }
 
 
+def _canonical_manifest_bytes(manifest):
+    """Serialize manifest data with the exact bytes persisted by the generator."""
+    return json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=True).encode("utf-8") + b"\n"
+
+
+def _first_manifest_difference(left, right, path=""):
+    """Return the first deterministic field/path whose canonical values differ."""
+    if isinstance(left, dict) and isinstance(right, dict):
+        for key in sorted(set(left) | set(right), key=str):
+            child_path = f"{path}.{key}" if path else str(key)
+            if key not in left:
+                return child_path, None, right[key]
+            if key not in right:
+                return child_path, left[key], None
+            difference = _first_manifest_difference(left[key], right[key], child_path)
+            if difference is not None:
+                return difference
+        return None
+    if isinstance(left, list) and isinstance(right, list):
+        for index in range(max(len(left), len(right))):
+            child_path = f"{path}[{index}]"
+            if index >= len(left):
+                return child_path, None, right[index]
+            if index >= len(right):
+                return child_path, left[index], None
+            difference = _first_manifest_difference(left[index], right[index], child_path)
+            if difference is not None:
+                return difference
+        return None
+    if left != right or type(left) is not type(right):
+        return path or "<root>", left, right
+    return None
+
+
+def compare_manifest_content(first, second):
+    """Compare canonical manifest bytes and report the first differing field/path."""
+    first_bytes = _canonical_manifest_bytes(first)
+    second_bytes = _canonical_manifest_bytes(second)
+    if first_bytes == second_bytes:
+        return True
+    # Normalize through JSON so the reported path matches the canonical bytes
+    # even when a caller supplied equivalent tuple/list values in memory.
+    first_value = json.loads(first_bytes.decode("utf-8"))
+    second_value = json.loads(second_bytes.decode("utf-8"))
+    difference = _first_manifest_difference(first_value, second_value)
+    if difference is None:  # pragma: no cover - defensive; bytes differ implies a value difference.
+        raise RuntimeError("manifest mismatch: canonical bytes differ")
+    path, left, right = difference
+    raise RuntimeError(f"manifest mismatch: {path} ({left!r} != {right!r})")
+
+
 def _write_json_if_changed(path, value):
-    encoded = json.dumps(value, indent=2, sort_keys=True, ensure_ascii=True).encode("utf-8") + b"\n"
+    encoded = _canonical_manifest_bytes(value)
     if os.path.isfile(path):
         with open(path, "rb") as handle:
             if handle.read() == encoded:
@@ -1695,15 +1746,17 @@ def _run_once(selected_families, write_manifest=True):
             "canonical_manifest": full,
         },
         "ball": {"centers": [list(frame[0]) for frame in frames], "center_count": len(frames), "unit_tolerance": 1e-6, "u_wrap": True, "v_wrap": False} if frames else None,
-        "elapsed_seconds": round(time.perf_counter() - started, 6),
         "status": "PASS" if overall_pass else "FAIL",
     }
+    elapsed_seconds = round(time.perf_counter() - started, 6)
     if write_manifest:
         manifest_name = "retro_texture_manifest.json" if full else "retro_texture_manifest_targeted.json"
         _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, manifest_name), manifest)
     if not overall_pass:
         raise RuntimeError(f"RetroTextures semantic/audit contract failed: {semantic_audit['failed']}")
-    return {"generated": generated, "previews": previews, "manifest": manifest}
+    # Timing is useful evidence for callers, but intentionally remains outside
+    # the persisted/canonical manifest so proof bytes stay stable across runs.
+    return {"generated": generated, "previews": previews, "manifest": manifest, "elapsed_seconds": elapsed_seconds}
 
 
 def _hash_map(entries):
@@ -1724,6 +1777,7 @@ def compare_hash_maps(first, second, category="texture"):
 def compare_generation_runs(first, second):
     compare_hash_maps(first["manifest"]["outputs"], second["manifest"]["outputs"], "output")
     compare_hash_maps(first["manifest"]["previews"], second["manifest"]["previews"], "preview")
+    compare_manifest_content(first["manifest"], second["manifest"])
     return True
 
 
