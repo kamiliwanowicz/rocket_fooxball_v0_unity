@@ -514,11 +514,18 @@ namespace RocketFooxball.Editor
 
                 if (path.EndsWith(".meta", StringComparison.Ordinal))
                 {
-                    if (!IsStableDevelopmentMissingPair(definition.Stage, prior.profile, current.profile, path, priorValue, currentValue) &&
-                        priorValue != null && !priorValue.missing && (currentValue.missing ||
-                            !string.Equals(priorValue.digest, currentValue.digest, StringComparison.Ordinal)))
+                    var stableMissingPair = IsStableDevelopmentMissingPair(definition.Stage, prior.profile, current.profile, path, priorValue, currentValue);
+                    // Legacy byte digests migrate once; stable GUID identities remain protected.
+                    if (!stableMissingPair &&
+                        priorValue != null && !priorValue.missing && currentValue.missing)
                     {
-                        violations.Add((currentValue.missing ? "identity:missing-meta:" : "identity:changed-meta:") + path);
+                        violations.Add("identity:missing-meta:" + path);
+                    }
+                    else if (!stableMissingPair &&
+                        IsStableMetaGuid(priorValue) && IsStableMetaGuid(currentValue) &&
+                        !string.Equals(priorValue.digest, currentValue.digest, StringComparison.Ordinal))
+                    {
+                        violations.Add("identity:changed-meta:" + path);
                     }
 
                     var assetPath = path.Substring(0, path.Length - ".meta".Length);
@@ -564,6 +571,18 @@ namespace RocketFooxball.Editor
             return null;
         }
 
+        private static bool IsStableMetaGuid(MovementLabPathDigest value)
+        {
+            if (value == null || value.missing || string.IsNullOrEmpty(value.digest) || value.digest.Length != 32) return false;
+            for (var i = 0; i < value.digest.Length; i++)
+            {
+                var character = value.digest[i];
+                if (!((character >= '0' && character <= '9') || (character >= 'a' && character <= 'f') ||
+                    (character >= 'A' && character <= 'F'))) return false;
+            }
+            return true;
+        }
+
         private static string ReadMetaGuid(string metaPath)
         {
             if (!File.Exists(metaPath)) return string.Empty;
@@ -588,6 +607,11 @@ namespace RocketFooxball.Editor
 
         private static string HashOutputFile(string repositoryPath, string absolutePath, MovementLabStage stage)
         {
+            if (repositoryPath.EndsWith(".meta", StringComparison.Ordinal))
+            {
+                return ReadMetaGuid(absolutePath);
+            }
+
             // Gameplay owns scene content except bake-owned LightmapSettings;
             // BakedOutput owns the raw post-bake scene and LightingData.
             if (stage == MovementLabStage.GameplayScene && string.Equals(repositoryPath, MovementLabContract.ScenePath, StringComparison.Ordinal))
