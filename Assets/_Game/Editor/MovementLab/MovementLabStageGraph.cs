@@ -61,7 +61,9 @@ namespace RocketFooxball.Editor
         private const string ImporterContract = "importer-contract:2";
         private const string MaterialContract = "material-prefab-contract:3";
         private const string GameplayContract = "gameplay-scene-contract:6";
-        private const string QualityContract = "quality-contract:2";
+        // T5 adds the persisted Iteration profile and its URP assets.
+        private const string PreviousQualityContract = "quality-contract:2";
+        private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:3";
         private const string BakedContract = "baked-output-contract:4";
 
@@ -195,10 +197,25 @@ namespace RocketFooxball.Editor
                         // fail-closed drift gate for every other stage/path,
                         // while allowing this explicit post-bake handoff to
                         // carry both records forward atomically.
-                        var ignoreDrift = allowBakedOutputDrift &&
+                        // The T5 contract transition intentionally republishes
+                        // only the new Iteration assets. Keep this migration
+                        // narrow; later Quality drift remains fail-closed.
+                        var qualityContractMigration = definition.Stage == MovementLabStage.Quality &&
+                            string.Equals(prior.contractVersion, PreviousQualityContract, StringComparison.Ordinal) &&
+                            string.Equals(current.contractVersion, QualityContract, StringComparison.Ordinal) &&
+                            drift.All(path =>
+                                path == "changed:" + GraphicsQualityConfigurator.IterationPipelinePath ||
+                                path == "missing:" + GraphicsQualityConfigurator.IterationPipelinePath ||
+                                path == "changed:" + GraphicsQualityConfigurator.IterationPipelinePath + ".meta" ||
+                                path == "missing:" + GraphicsQualityConfigurator.IterationPipelinePath + ".meta" ||
+                                path == "changed:" + GraphicsQualityConfigurator.IterationRendererPath ||
+                                path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath ||
+                                path == "changed:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta" ||
+                                path == "missing:" + GraphicsQualityConfigurator.IterationRendererPath + ".meta");
+                        var ignoreDrift = qualityContractMigration || (allowBakedOutputDrift &&
                             (definition.Stage == MovementLabStage.BakedOutput ||
                              (definition.Stage == MovementLabStage.GameplayScene &&
-                              drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath)));
+                              drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath))));
                         var expectedSceneRecreation = definition.Stage == MovementLabStage.BakedOutput && declaredInputChanged &&
                             drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath);
                         if (stopOnOutputDrift && !ignoreDrift && !expectedSceneRecreation)
