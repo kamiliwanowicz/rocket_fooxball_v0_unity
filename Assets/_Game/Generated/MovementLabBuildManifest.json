@@ -1,7 +1,7 @@
 {
-    "schemaVersion": 4,
-    "sourceSignature": "fd35ed9684b52abcce03b9911e50931433ea4b65cb5fcaf8c8545b8d18ba878c",
-    "generatedOutputFingerprint": "25081b18f091d0da288315efcc74ed67eaf3c905d191c9b578f35447c72b000b",
+    "schemaVersion": 6,
+    "sourceSignature": "4417ddda9148d24b949da0825a615a53ae03cee00badfa3b2c7535b949e40850",
+    "generatedOutputFingerprint": "0625e11db341211e223c0b30d549a555026741c9de4b1319ef545adb525ae994",
     "unityVersion": "6000.5.6f1",
     "fingerprintPaths": [
         "Assets/Settings/PC_Low_RPAsset.asset",
@@ -246,6 +246,1314 @@
         "ProjectSettings/EditorBuildSettings.asset",
         "ProjectSettings/ProjectSettings.asset",
         "ProjectSettings/QualitySettings.asset",
+        "ProjectSettings/TagManager.asset",
         "ProjectSettings/TimeManager.asset"
+    ],
+    "stages": [
+        {
+            "stage": "Importer",
+            "schemaVersion": 6,
+            "contractVersion": "importer-contract:1",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "b0979245088629e5361b08d778b525b61b026ee347fe6f49625d71c025272590",
+            "outputDigest": "438843894191ae50c67f8bd25c615427f9465ebab94628a64beda695efa2acfe",
+            "predecessorDigests": [],
+            "outputs": [
+                {
+                    "path": "Assets/_Game/Models/ArenaKit.fbx",
+                    "digest": "b596393f7a0490c80f4af880aa96fb18",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/ArenaKit.fbx.meta",
+                    "digest": "b71b96df2c454f6e5a85b9d4eef8e06022a2dd5beb15480dd376e6d956609711",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/FpsKickRig.fbx",
+                    "digest": "21a204bb7f6db54fe44cd92883c2d702",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/FpsKickRig.fbx.meta",
+                    "digest": "cc99c5d79d16d27d8d4ffbeb0a2a6eb90d860426cdc16987eef1a925f7797266",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/FpsRocketLauncher.fbx",
+                    "digest": "2fd411b3ba946f2ab1c962d36e6316c9",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/FpsRocketLauncher.fbx.meta",
+                    "digest": "b11c3efd58d124446013ef5c80132b29105fcdfc8a1fad823e77a137446a631a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/LowPolyCharacter.fbx",
+                    "digest": "626bd92c6cdf0bb4cc44e85c49cdb36d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/LowPolyCharacter.fbx.meta",
+                    "digest": "d3e9c81c7faa8fccec8ef53e20c8a73c16d98dd5980817810e69046cac150955",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/LowPolyRocket.fbx",
+                    "digest": "9e3738bb17929197d4c5210b267263c1",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/LowPolyRocket.fbx.meta",
+                    "digest": "cc5878fb88c5b33a0ede9f39fb6987ba9a2c14bbdb680c42fee590184a731ecc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall.png",
+                    "digest": "2052664dbdfd5331aba8c456a53162d8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall.png.meta",
+                    "digest": "976289f3c70a1f14485c195b7d7d0a73eaa3fb28ef5bcc54903a931661a47a73",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_MetallicSmoothness.png",
+                    "digest": "e6dd73988aab6e7cfe89f6e4cac11a14",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_MetallicSmoothness.png.meta",
+                    "digest": "e5df4c03b2b9f4df222701f6abe9ec75c08de98901f0d9e43b47ecf5b577121c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_Normal.png",
+                    "digest": "5a37cdf46b29789c78e39669a32d5014",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_Normal.png.meta",
+                    "digest": "140f9a2cc6bf303f7645c6124d86e2e338eeba8e588506a69c39a3fd33edc7ca",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_Occlusion.png",
+                    "digest": "34d9a03fa415ea69b29d9f94905a73a7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroBall_Occlusion.png.meta",
+                    "digest": "4fe233fc9e828251dbdc237038bc8cd01fa5b47f11fbdcfc6b2432138c14d8e3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroDetailNormal.png",
+                    "digest": "2b13a065e1bc6709646a1d73f538a8af",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroDetailNormal.png.meta",
+                    "digest": "9e776188138cc30681d85949c525bb7b92e7a704be6042d1544700e7efce6fae",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroExplosion.png",
+                    "digest": "1fdfc1b6e647fa410fc92e5d9cf489c1",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroExplosion.png.meta",
+                    "digest": "141033a0a7a02e7a7d90ceda98a3eea379ed8d1887cc7ae5ad501ed7bb459191",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass.png",
+                    "digest": "1000e3ac0c925027a5405874c5236214",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass.png.meta",
+                    "digest": "f45aa153a6960cd37c530903138ed1ae2e711deae43332f1e626b97a9e150f90",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png",
+                    "digest": "7773a1e1f296b83c4535fb495a64536e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png.meta",
+                    "digest": "d7a96147bf3580e47d9c8969fd82c923688463a296e1393a4028da41b7d9b104",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_Normal.png",
+                    "digest": "1147cb7c54ae0fa25fe967341d31646a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_Normal.png.meta",
+                    "digest": "63546be4a928f510b8dadc88d70037d25a81acee47f7417d3260a6803819d81a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_Occlusion.png",
+                    "digest": "08e444ee4654e88a6b8b0a5da772ef00",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroGrass_Occlusion.png.meta",
+                    "digest": "b19003acde4d1e4c3cf5d851429acbb478c64ddedb509874a9bd72874a9b106c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard.png",
+                    "digest": "c86b3394a9896c8adb4d1b7cd4c7cbf0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard.png.meta",
+                    "digest": "0aa1f5ff183eb096c24165320ef93ef83d631a4729ed45251a5bf0ec79c4afe7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_MetallicSmoothness.png",
+                    "digest": "d42a5bed69701c021b0c59f3e042c9b3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_MetallicSmoothness.png.meta",
+                    "digest": "6fd8c26cc984f7c4d9ed4cc7b1441e78128e99ea903199e86ab6674a5d8cc3c0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_Normal.png",
+                    "digest": "eea219bfce565a74ce91b797e4b6a899",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_Normal.png.meta",
+                    "digest": "4e856f6c78a0818f0ad477271dc74ae155984fd53ddbb1c45cbab2d1901ec994",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_Occlusion.png",
+                    "digest": "ea43a1a8c1496f1da8c844b4ff2056c3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroHazard_Occlusion.png.meta",
+                    "digest": "3b40f801837f6db6f93239074fc14a464ece44eb7f7acc63f1d292a82b376727",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket.png",
+                    "digest": "03d08d1031db7ee79e84a14a9f52e0f7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket.png.meta",
+                    "digest": "c07143be9f494ed16a8b7e6d701b6eefbad864e013835d83f138421ea1ea96c5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocketGlow.png",
+                    "digest": "ed8eca9a32809ed6dd9fab23ba37115a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocketGlow.png.meta",
+                    "digest": "d149f9879ec469daead43fa05cbb71ba6832bcf83f876b154b3c15b1630ad888",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Emission.png",
+                    "digest": "b7e5995423133fff16943c07178e32b4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Emission.png.meta",
+                    "digest": "526dac88a7658084b1b9ede99fb861b94659abf24af3f4c4266ca65dca4366d5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_MetallicSmoothness.png",
+                    "digest": "f7f7f9924b5380f48639c1e97fafe82d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_MetallicSmoothness.png.meta",
+                    "digest": "56b5df5b327c200df046e0227084d151aea6eb100843de215668e619b71633f0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Normal.png",
+                    "digest": "5cb02820390ff99f67a8f6ff13065e47",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Normal.png.meta",
+                    "digest": "f690952d6a0bc1222e2e2f97cb6ea1884eb4f28ab0ea4628c12c60d5c235a4d8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Occlusion.png",
+                    "digest": "97e0ffc57f8bbc8881440dfb4d28c604",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroRocket_Occlusion.png.meta",
+                    "digest": "b621fb506c1893ace5f80bc857776a760c8ee0361beb4af92e4d0ce21d4c5d9a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroShield.png",
+                    "digest": "78ba3a78e4c9a315d0514dbf3c657c9b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroShield.png.meta",
+                    "digest": "f273694a920669eeacba532e7ac55e0911fe21117896f86a928070835e01e981",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroSmoke.png",
+                    "digest": "8b3029f732c494e219102f800c0dc5b0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroSmoke.png.meta",
+                    "digest": "26a38f4d29655425409c530fcc48676ab734f103827354890bcf70d5e4a53976",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroSunnySky.png",
+                    "digest": "74ef0a44bc586df8193be50631abe22a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroSunnySky.png.meta",
+                    "digest": "2f73c0b281b082bab043a6a64de30258b47069702e0e9fd38a16dd4e8f028370",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim.png",
+                    "digest": "e3d1a285d8ead46a7bd3bd63fed49032",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim.png.meta",
+                    "digest": "1a66f2013190301c48c381b476a143442a244a8bb901209b534a525139fff8f9",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_MetallicSmoothness.png",
+                    "digest": "1e9ab4d4079ba576e6e2794c156ca95e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_MetallicSmoothness.png.meta",
+                    "digest": "5a6027b2b2022f55a6771f243ab22b678d478869059825911b1e3f4d4ecd9d28",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_Normal.png",
+                    "digest": "cf3cd9528d4b30b04ee0d4e1047f2fee",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_Normal.png.meta",
+                    "digest": "d15c62365a3c058dab86cbe1541439dddbf9613681aa17a7c07e66a605e24cb7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_Occlusion.png",
+                    "digest": "c8fc4ad775d2706b66407982aec72bf3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroTrim_Occlusion.png.meta",
+                    "digest": "d84d4ebf51a5ded4025b72bc3f4fc851a806c242e8c9798767df025397569b2f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall.png",
+                    "digest": "b47ee2c92f06accd5107119846d24389",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall.png.meta",
+                    "digest": "9962a3de2b2ca8e026e21647661f2c544ba1d78b6cc49b264ad8e397b6594e5e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_MetallicSmoothness.png",
+                    "digest": "3d292bce036328b76cb13a27afa303e2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_MetallicSmoothness.png.meta",
+                    "digest": "3ca7b9cb98e30be860e77b39c60c2872c8330fa05feb902f2181973ebae6201e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_Normal.png",
+                    "digest": "6ab3d4dea7014ac08b8543648ddff273",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_Normal.png.meta",
+                    "digest": "e0ca8ca9319b0d858c5b28f6c7bdf1f9945f95dc7ca751a4d717328671bc42db",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_Occlusion.png",
+                    "digest": "6696d9318010985de92fb6359da677d3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWall_Occlusion.png.meta",
+                    "digest": "2f7c58aeab4af22f4bf50fe44d6f4f9c114a58b4f2885a3c4541102638deed77",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent.png",
+                    "digest": "0577e0a723fb11a64f2097dec88d917c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent.png.meta",
+                    "digest": "da847790a4bedcb3b0a99e20192dfaf2bd85fde350ff16d77de026efe536017a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Emission.png",
+                    "digest": "bdc885d7f6b013c485a8eabacf35fdb0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Emission.png.meta",
+                    "digest": "f45e9885299164af5676b43cfa2b8723b961979e4f668f605a46fb817cd39841",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_MetallicSmoothness.png",
+                    "digest": "56268e621094bdc67313cba93ada24dc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_MetallicSmoothness.png.meta",
+                    "digest": "f24ed7b4212a4471bc2031bbc060673a7499b5e04b52f30e3e59f59b383f61ef",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Normal.png",
+                    "digest": "08107bf85f8a85ae8b01c4a7ce6f6faf",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Normal.png.meta",
+                    "digest": "30cc2a4385a9976566d16ab71b539c39efe7b0110f6edb48360f8ce0d07454eb",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Occlusion.png",
+                    "digest": "f19e90e5fcb8bbed0cb99c9c3ac00158",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponAccent_Occlusion.png.meta",
+                    "digest": "6af3253e547223477754805d6c4bd410b313e52ff11692c220e42d3b164c767e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark.png",
+                    "digest": "87bd230a05626395ea80ee15ad2f8ada",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark.png.meta",
+                    "digest": "f1a20b8ff329186b263ad7befc251ca8331d6044a99ac05bca679a3a00662b61",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_MetallicSmoothness.png",
+                    "digest": "8405b4e1d1ece912a3fec96436388eb5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_MetallicSmoothness.png.meta",
+                    "digest": "b4f3beb76af120d00bc6d65243b3b1cb7b9bbde6a8fbac91c8aeea92fc86c75f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_Normal.png",
+                    "digest": "43281ca6fdc682ddbf653e4ee75a84ca",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_Normal.png.meta",
+                    "digest": "befa10990499004e2e92da73d6c74426c6bb67724049b5f36d85b11a91d1c0a5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_Occlusion.png",
+                    "digest": "cab262556b94e67710d563d8b2cdd33c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponDark_Occlusion.png.meta",
+                    "digest": "00bee2fb6d7a1db9966f20d1a124874161caaa7d53af9e3c5ee60376cb008035",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal.png",
+                    "digest": "a434f511cc8e02aeb2b5a2006e58f1c8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal.png.meta",
+                    "digest": "8b08f0dfcc6db4db19be01cc1c6af921ec3a88d20e7de006c675da610bed306c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_MetallicSmoothness.png",
+                    "digest": "a2f014cec3efb2a687800158b4694467",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_MetallicSmoothness.png.meta",
+                    "digest": "e18be12414052502b9a1ebb18432a7fb0f90213f615446e499dd260d27b661f9",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_Normal.png",
+                    "digest": "fdddd56a8391011230ce7750db7d38bc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_Normal.png.meta",
+                    "digest": "068231f9aaeba6ba4f6f2ea7b50b3ee979770ed075aba9528d4a4da53662e4eb",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_Occlusion.png",
+                    "digest": "ce7bdb3c7bb95f5eb1b39615c1d7527d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/RetroWeaponMetal_Occlusion.png.meta",
+                    "digest": "ec22a782fb4f1e42fc6ecdea536cbac2a70ffc81bf730d7640e98802a34f54d7",
+                    "missing": false
+                }
+            ]
+        },
+        {
+            "stage": "MaterialPrefab",
+            "schemaVersion": 6,
+            "contractVersion": "material-prefab-contract:1;serialized:1",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "74d4d04f94cdfab29ebb591624710aea04061190bce333a90f97d60c622e17e5",
+            "outputDigest": "ad9d82a070fc6faf7530dd58de2bcf479061f05c8d1f1a6242267d3a2549e7d0",
+            "predecessorDigests": [
+                "Importer:438843894191ae50c67f8bd25c615427f9465ebab94628a64beda695efa2acfe"
+            ],
+            "outputs": [
+                {
+                    "path": "Assets/_Game/Animations/FpsKick.controller",
+                    "digest": "bf0be86e5293d6566e90ca91ddd790e0fd877ee30d40d56825592bc2a34c6db3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Animations/FpsKick.controller.meta",
+                    "digest": "94705a2e1a171e6f5b61dbd12b13996fdb39492f219e089fa5648d74687ecd44",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Animations/WorldCharacter.controller",
+                    "digest": "b1bb8c8e1f3a45be77a6b074391e83d70e0a67b7bf798fde6246326427bd18b4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Animations/WorldCharacter.controller.meta",
+                    "digest": "54c8cd9278fc9ce32b8dd8ba281930b9a846b667a7941d826aabd4eecc9450bc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabLightingSettings.asset",
+                    "digest": "0b9f5938b1632a12ad3e9ccdffe00546af178af586fd9cbbbd7026b84e1fca5e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta",
+                    "digest": "1c66b68d387d7eb538448245ccf06eaeadf4a7329ea76798cd787eade44cee2e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabVolumeProfile.asset",
+                    "digest": "eacf1c8be6632a1ee8b9c883da0dd26ee16081e381ffe7c43eff399ff5f8319c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta",
+                    "digest": "e80cf78c5ad1efc2cf982954f245cf249e31a4cab2836e9b46e345ff7b9e037a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaGlow.mat",
+                    "digest": "4965f5835dbc69ab674fde221e863b35c42872458c79351facb4462ab902e12e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaGlow.mat.meta",
+                    "digest": "372eb16de631d2e8fc3b5182f4939ac834df239c95121ec1513df666e5e89b19",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaHazard.mat",
+                    "digest": "debadd02cc3af2cb0e15fbd0e05bf973ce8851c66e58b1b568ab03fedcf8f109",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaHazard.mat.meta",
+                    "digest": "3e4f51803bafd7eb4ba7906767d74472c89f01c77bbb27197743f640a34cb160",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaPrimary.mat",
+                    "digest": "32252ad53b62253cffe9fba7bdd65e872cc69adc619bfab2024fecac4f09ae42",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaPrimary.mat.meta",
+                    "digest": "d303a95adf8b3c7467c934753438cfbe857afabc791bdabdc6823bd1c1febff7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaTrim.mat",
+                    "digest": "67b1c7907e9a09f4c530a4ab2b221658c735faeb3a86a82707a7494d61c5ab58",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ArenaTrim.mat.meta",
+                    "digest": "f2426ab549096b8c7d0d8f80eb921a475a333c553d146a56b049629209a5dece",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Ball.mat",
+                    "digest": "fea58b3d87d4b38947e0caf1b2a83b1031ffca0f7d4fa1759a6eb1f2112ed55b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Ball.mat.meta",
+                    "digest": "f2bb50b709cc896bedc9fc8934d37f0e1936a2d5b98309a785181ef1e66015f0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/BallSurface.physicMaterial",
+                    "digest": "df79a4dcb848176114714b86ff150d71f55a044c06608343e0d87353b7669746",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/BallSurface.physicMaterial.meta",
+                    "digest": "2a06fc42e921582b83d8107f2ea9c94ff3d72f2f4f35003848b543474da4728a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterBlack.mat",
+                    "digest": "058159f1340ad72af045ea137adb3deadcd3e218bcfed94d6c0945ef42ae1116",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterBlack.mat.meta",
+                    "digest": "894638bae9db5009723ac7cb3a05efa169384bee9c5e463c49beb969aec445c4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterCream.mat",
+                    "digest": "33d58384a6afef7abf8b87e6018e0e380531fabfd71c87eec0a58b5cc57a714e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterCream.mat.meta",
+                    "digest": "2f390d9b1f749898ec581945b0e4f815e00018fd2b36e163c250809637404f5b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterEye.mat",
+                    "digest": "c87e0905e592ba3a16202be76166f74ed12b1d401692e8e682148fc3a0a615f3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterEye.mat.meta",
+                    "digest": "a171824dc0b2baf019d4e082c617874a2ed1b771708f71fc8648f8d3cd924904",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterRed.mat",
+                    "digest": "0919f53f51b2405cf8c7a2c1fb81bffe2b659db6ab2395d8d436eb69eb5cff06",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/CharacterRed.mat.meta",
+                    "digest": "d543e2b1ff2bdb4852b286a30a7b97ad01f910751f307af3fc3a28046f7ad077",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridCeiling.mat",
+                    "digest": "a69600a7f056d67f36755662d8bc0536c4463fd0eecacf79a7b674f44e4f35a8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridCeiling.mat.meta",
+                    "digest": "cdd3f312fbd2143a28098e76cde0400489d3fba9a9669903acdf738a466df5f1",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridEndWall.mat",
+                    "digest": "1d29e7b1dd24be28cbdc25d48b73e50ba27382e3f5290d6368aef20ceee1b1b8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridEndWall.mat.meta",
+                    "digest": "1221d350cb60387b17d976ff42f48efbf6689fac9aa8f38ae3c66fecd9fcd237",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridLongWall.mat",
+                    "digest": "5b2592300e3a38f994931aa1994a95403521bb7a231a2b1e5c7e0de3cde6d5a1",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ContainmentGridLongWall.mat.meta",
+                    "digest": "0947b5f4ae924a99cd352113775202595249781eaac51af09c3d5de37a9409d7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Explosion.mat",
+                    "digest": "545e9986e81dbd8a343bd9d0bc699d58bde249de9c2183ce9270e40967fd7bbb",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Explosion.mat.meta",
+                    "digest": "afbb4ea903d457471e2e1aa878e9d3aba2c51d8de1af361f1b179b55f64f9916",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ExplosionAdditive.mat",
+                    "digest": "3f2dd7141c441f857cdcb45fa55096869567e037da729364bee3b0508d799f0e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ExplosionAdditive.mat.meta",
+                    "digest": "462eb5b1e1ed6061c983a91e354c9d0df6c34627cd5acff8cbc147ec0972edfd",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ExplosionSparks.mat",
+                    "digest": "9ecb92d9f79cb380afd3ba7a72888563db09e551f21d346cd261cc67f3b95a55",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ExplosionSparks.mat.meta",
+                    "digest": "701545a4604ddb8458c7b167f4f11f0c7a8c427f9691fb86c4f6e05699e71734",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Floor.mat",
+                    "digest": "405ea06112bce3f764cdf83ed9605075d736ba10331ddb77b9e712e8fddbc126",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Floor.mat.meta",
+                    "digest": "07ffd9b4f3574024d1fe288aeea2811d6cf6bde66d734d0d6727d55507ddb8d2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/GoalFrame.mat",
+                    "digest": "b1331bc80ceb40c14bcba76c2ae4c86a5d12d825c12351d1626721142c9d7330",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/GoalFrame.mat.meta",
+                    "digest": "62aba460c4a9becf28de3545a278e46af68dbcca44689530bdb8e5ff3706319d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Hazard.mat",
+                    "digest": "5991cc7a10893925605858302df96833ec955995d4968e069fd63329a9bdc077",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Hazard.mat.meta",
+                    "digest": "95504101e997da96e564f58b85f711da0a300d5a8974924309dfa59d79633ddc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Marking.mat",
+                    "digest": "2b83ceeafdac1a127185f0056252ede8e4106840f0c0af82544dc90e0e88c4ce",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Marking.mat.meta",
+                    "digest": "6e8f9c8148a1208f9daef69fdae8b70561665487d1796fcc8ab574481e4734ef",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ProjectileGlow.mat",
+                    "digest": "fb77aaa2ebd103e1180356fa5c27b016461bcbbe7d261cb4907987c35662b998",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ProjectileGlow.mat.meta",
+                    "digest": "654fcb539fb6204790ce19e9dfb077f780a35f25332ea4274bb992793a260501",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/RetroSunnySky.mat",
+                    "digest": "3bfb62edc74893963da070df0bb2de0a108b2e135e38d076e6d10da1e9fd2e94",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/RetroSunnySky.mat.meta",
+                    "digest": "2ac2579bb50a61deeeae5fe9454fdc2b59e9760a2bfcf30b05b73bf416894aaf",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Rocket.mat",
+                    "digest": "f039f18390a18948aab037a76a30d684838af531b9453db2530de93c155bda91",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Rocket.mat.meta",
+                    "digest": "cde35ab78981c9a63514ec4eaffb268a03a54d099b0cbec87a9a2a203474c979",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/RocketHot.mat",
+                    "digest": "b83d37d9e3819bef0a907d40d7c67a7b7a1afb90be89917f03cf452618835fad",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/RocketHot.mat.meta",
+                    "digest": "083d7a4e881a2004237a19a534baf5c6e17f9a6f4879819ab2834ddb5b02e057",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Shield.mat",
+                    "digest": "40fdd8a23262eb749079adb06f777a73cd50e39dd98c005e4071475489506c31",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Shield.mat.meta",
+                    "digest": "8a2a4daf8e911e2ff3f2499f8a5fe3f2021f53bf781a7dfe84fe51876c121825",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShieldBlue.mat",
+                    "digest": "0647ec611d9992b7e0c545465431ddb1a882053c61b052835245677cb98caa21",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShieldBlue.mat.meta",
+                    "digest": "33e3dc00c3093c84e4f1ab55fb26ebcc34dfa72e3e30fa0a45d9d3b740d2c623",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShieldRed.mat",
+                    "digest": "2cdd525200fa665f6467e56b9ccdd9246afa6a0e3f5815c411d9254e44f49e5b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShieldRed.mat.meta",
+                    "digest": "760fb2fd5b2b2b3efc80ddfdbc0f8f1e186b83987dbb6b33003f5849a8cebc16",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Smoke.mat",
+                    "digest": "3aba6fceca7e29a90ffd86c63caf86cef9cb2980c482186fd09b41d064086c0d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Smoke.mat.meta",
+                    "digest": "c1c7a27511db60268a82481349f6b5e70765b545836d5cce9c10ec515354706a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Trim.mat",
+                    "digest": "d4ce3012e07655aab87b7d7ef4acb59ec92dbc448c9acdcb7a8e5813500566b2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Trim.mat.meta",
+                    "digest": "83e4b53487da4ed3d02bdac944a8dca4baddc4ccca97423f6d967ba5cd1838e3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Wall.mat",
+                    "digest": "66d7ab2f346b088d7343cafc941be62cfa86c24de979c002587714d0f9cdbc45",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/Wall.mat.meta",
+                    "digest": "9013e720d92c1639653580dc2055365215f60ecf0f70526e05a33481a8c1ac3b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponAccent.mat",
+                    "digest": "0973e9475a3ae3ce543cc4afb60ea6b1628f651abd81ca02b94dbc98ae673aa9",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponAccent.mat.meta",
+                    "digest": "58d8ed7e7e09ab36f9677c8e89bbf0353b4115ca25fc3d44403d3f37f99e5947",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponDark.mat",
+                    "digest": "07407bef37fc1f039dbb433788a24e96398cbd76686949d4277445d20d028ea2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponDark.mat.meta",
+                    "digest": "77ad3dbb6bd2a68097c941297c7f5c3914dc52a9dff129f5ccd4b6b1f8216f84",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponMetal.mat",
+                    "digest": "d375e32d94852bccc71f73a09c1376830ce57fa5c9828f598562f381c4c46ea8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/WeaponMetal.mat.meta",
+                    "digest": "50e1858f8f0325ba403a06113388873b6b749ab59718254157c4cad6161f6cef",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Ball.prefab",
+                    "digest": "5389b821818717647cc3ae54348926dadddcfbad5660499635e98bb6f2dcfcc4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Ball.prefab.meta",
+                    "digest": "90916f8fec8430b5c0b0c79defa62142065a4499a95858e49f501844c3ede067",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/ExplosionVfx.prefab",
+                    "digest": "ff3bb0b405d34703ba93269f09456aab4444ac347a918c42ca47754dddf58ceb",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/ExplosionVfx.prefab.meta",
+                    "digest": "47ad27187bb07a8b06610244df24c3dc6184cd9700244f0348234fa800d26541",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Player.prefab",
+                    "digest": "5b9c5434a556623f6d0e384e479529c606e2c03917c5bce867e070d140634dbe",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Player.prefab.meta",
+                    "digest": "867a0f25af01fd19cd927cf964828e44c4a2966d85922a77e41593cb340789c1",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Rocket.prefab",
+                    "digest": "e07cc1f794886b11ebb0fabdddf955a6d8e1c0027303b2f7df4276798df6b86a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/Rocket.prefab.meta",
+                    "digest": "b10498c3c7a1e1cf7a1609baa42a0df1b482126ba6193bf5e8230682fb34e238",
+                    "missing": false
+                }
+            ]
+        },
+        {
+            "stage": "GameplayScene",
+            "schemaVersion": 6,
+            "contractVersion": "gameplay-scene-contract:4;serialized:1",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "42ca05065a81d7685ef05fedb379bb60b94c54e7736a0f0c95e110e9fa268f38",
+            "outputDigest": "2e19f636aab7f02dcf891a1c0ea4f867f921e02bb0373ca806fddde66f31e89a",
+            "predecessorDigests": [
+                "MaterialPrefab:ad9d82a070fc6faf7530dd58de2bcf479061f05c8d1f1a6242267d3a2549e7d0"
+            ],
+            "outputs": [
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab.unity",
+                    "digest": "9180bf5906fd3cca153a9381a72086ec61b7306589f91e730ce08214350aa223",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab.unity.meta",
+                    "digest": "696bae408cabf17d8fd3dbda4d1070a15f397aaeb52032472bf4ff5fb0aa7f5d",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/DynamicsManager.asset",
+                    "digest": "d75fd945eb70d73ae0cff2aa02bbbfaa02325daf64e54816227aa967ace5a11b",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/EditorBuildSettings.asset",
+                    "digest": "9b1a184225163714f429d2d5fd84903c7078e4eeaa653315f1936c8c9ee53506",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/TagManager.asset",
+                    "digest": "309d71e5059d3377e7d5146eca99b65003017ba2be0db76e9b53738e1e31c843",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/TimeManager.asset",
+                    "digest": "7c1b55ebf274ce6e7045ec134f8f64ebc3d4533e0798d0fdad7d3a180cabb7a0",
+                    "missing": false
+                }
+            ]
+        },
+        {
+            "stage": "Quality",
+            "schemaVersion": 6,
+            "contractVersion": "quality-contract:1",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "84ee8a79386a9f06b9998b4a0f9ce62f2f4c5de8cfb076862c5ddb19b19d2dd9",
+            "outputDigest": "d95a78a60b8d3113ae881d4d6b5ec2b7daff695e34054b6ce199e2faf3a1aecc",
+            "predecessorDigests": [],
+            "outputs": [
+                {
+                    "path": "Assets/Settings/PC_Low_RPAsset.asset",
+                    "digest": "e8390ca59ab7b90cc9e5d3e42dece8c3c8d99439a27ea810fc391b68747d28c6",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_Low_RPAsset.asset.meta",
+                    "digest": "b27fc39d4356e0806d0da494e1b8324f2c0500ec5427a81b203c9afeb4040fd7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_Low_Renderer.asset",
+                    "digest": "bc3072751b4f07313bdd585b2aa6c837cd360d5ef6927128040da2b7f2c8ffb2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_Low_Renderer.asset.meta",
+                    "digest": "071e340a2212ecda2bf1f0cd071b581fabfb71d297fded03e188373e9a7a6af5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_RPAsset.asset",
+                    "digest": "78ea8b6bacd09ea267054f578f316ec5468645438d7dce961f7c609ddaf6fb03",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_RPAsset.asset.meta",
+                    "digest": "bb469b9b6f318e9e9bed29c3b2e73e79371c04743c6f95dd6603941f1cd3e53e",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_Renderer.asset",
+                    "digest": "5c32532003d5d56c9afecc4d7405072a2caa5fc06c21083553c5747297c80496",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/Settings/PC_Renderer.asset.meta",
+                    "digest": "b5df8ddb2708c6ed4c133a5ff9ee95a75cc20e4ee3ed6181366a61aedbaf31ec",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/ProjectSettings.asset",
+                    "digest": "41ceac85410c51b38aa50c2fce922dc6f9e952cf05eb4f003477e6c917a6d4b5",
+                    "missing": false
+                },
+                {
+                    "path": "ProjectSettings/QualitySettings.asset",
+                    "digest": "ae30167282b31d0f5d4da3cf8d5b44a59f32e00a62cc419d892d368579514163",
+                    "missing": false
+                }
+            ]
+        },
+        {
+            "stage": "Lighting",
+            "schemaVersion": 6,
+            "contractVersion": "lighting-contract:1",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "68255de7b42e780ef0f4a63b6eb67f22316c1aa7bb7fb3c3ba1d43029eac60d8",
+            "outputDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+            "predecessorDigests": [
+                "MaterialPrefab:ad9d82a070fc6faf7530dd58de2bcf479061f05c8d1f1a6242267d3a2549e7d0",
+                "GameplayScene:2e19f636aab7f02dcf891a1c0ea4f867f921e02bb0373ca806fddde66f31e89a",
+                "Quality:d95a78a60b8d3113ae881d4d6b5ec2b7daff695e34054b6ce199e2faf3a1aecc"
+            ],
+            "outputs": []
+        },
+        {
+            "stage": "BakedOutput",
+            "schemaVersion": 6,
+            "contractVersion": "baked-output-contract:2",
+            "unityVersion": "6000.5.6f1",
+            "inputDigest": "82c3a2e43db99a3637ec0a31b444d9c36c6b936c79f6dda09e9ba08b245aa5c1",
+            "outputDigest": "33145570d8f189a9942369199237475ea9403136fd740a1844d7b690bd84240e",
+            "predecessorDigests": [
+                "Lighting:01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+            ],
+            "outputs": [
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabLightingManifest.json",
+                    "digest": "07a3fc4967d16eba53a0e6835238581961f2c3143ecde8907fc65eff03b67c21",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/MovementLabLightingManifest.json.meta",
+                    "digest": "5336c6af2a3c38652ccee5b11e909aa67cd147ab6541ca16bd41cef64880d038",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_Center.exr",
+                    "digest": "aef45f01d5db30d181ee6f816463b996b0bc03a9c8144a22220b67f91281ca4f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_Center.exr.meta",
+                    "digest": "e422c0c20c870fe005b97141f8e5c6104e61c9a0dc0a34c80a7fe0883ccf22ca",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_EastGoal.exr",
+                    "digest": "e4cb540915c066de02ce20d458252968e1c6d07cefb3f04c59b42a02f4cba257",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_EastGoal.exr.meta",
+                    "digest": "0015a10c4c5906f6290280f753ffa877c19ab38dfb3c3ed318a3b30a4f7c8434",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_WestGoal.exr",
+                    "digest": "b3b79472305b4f12e2c386ccc8926b331aff63389a68214ed36f993959d5d573",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Lighting/ReflectionProbe_WestGoal.exr.meta",
+                    "digest": "70e1cdb9af44b9417bce497958ea8c92a02f734214038bb75de9bfcaa05bc59f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab.unity",
+                    "digest": "0a151821805a41127b746dbe97067c1b4f9112237fac7c498c75c01881b56f91",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab.unity.meta",
+                    "digest": "696bae408cabf17d8fd3dbda4d1070a15f397aaeb52032472bf4ff5fb0aa7f5d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/LightingData.asset",
+                    "digest": "bff87272d685dff6c034b1f3ecd9cda2904975f6e909c9d89a500fa291f23f56",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/LightingData.asset.meta",
+                    "digest": "902a66e5de32e013cab9fd878fb3264a53c89a781899052010bf2f044a150fde",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png",
+                    "digest": "965dcd6894499b0f4a56960811b9a7a62ad01ce92aa0226727314eaba93292c4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png.meta",
+                    "digest": "4f6a0b5a7da022de53ba917e9c1f60ed50815c6a6c827cd734f98bfb10d6970b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr",
+                    "digest": "af2c4f3a607ad8ad7f908f490e8819ebfd13e7f97f05d49e2b5cdf8616cf290d",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr.meta",
+                    "digest": "f1685b7cea7b82e576e8af284d8dd3501b14cf8bb8b5336290775eb099f159e0",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png",
+                    "digest": "22ee708d103fd65d06052781e3e40ba1342188a9584ffb48dfc3e000ccda8831",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png.meta",
+                    "digest": "8c90685de31037b12a36ebd606eae20fcdd46a4e1ae84cec85b380f06cc46395",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png",
+                    "digest": "36fbd86092a8681b82524121ac80dddd009a01a5913891e2c2286b32efe760a2",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png.meta",
+                    "digest": "cff468df7e83bed9d0e3a845a37f76f4aa26d223636a68a3f31dc52077ef6c27",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr",
+                    "digest": "ebeaa72d6806b20b6fbfc49bb89726f8380eba63710dae3e54bf9ec764cc5b17",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr.meta",
+                    "digest": "7e729ba2c189e517fdf14b619861e92642f1a08cded6e5356f228abba9b9daaa",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png",
+                    "digest": "139e4e9b565b7835cb3576a38fddf0e58754f2bed4c06595a10c5d598835311f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png.meta",
+                    "digest": "834c7b5fc5c16c77e056dbabec68da10c0698daba476cb8e85f04f7360305664",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png",
+                    "digest": "5771c404446671eed77541d23fb91be717cd2364ce47236fd48add4bffd741bf",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png.meta",
+                    "digest": "6da36d895217ba4b059dc821d621c7fb8b23a51c6a4e48c99034c7dbcabcec27",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr",
+                    "digest": "22081cee17f3d0e758086d149a86a8cac59f74114265e15d041cfc524763ecad",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr.meta",
+                    "digest": "b82e7b86649d653ae0dbf4ddfdaed0f22efe691c7865ed834d7cae63450e9e37",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png",
+                    "digest": "eeea5304a1a5056a7ff544ebee2cb8d3a96d641f2dcbf7e8f254e01eb7979b40",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png.meta",
+                    "digest": "8b2ecf9a28f16a3f2e279f8c7e4d0cf5c8f3d6be1c627a8e312e44fe05c8a770",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png",
+                    "digest": "cefd5b65b849de4947e02cc9586f4208cb02f59a98048f13eba19155fb05b936",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png.meta",
+                    "digest": "8f171df27599904ec00c0e5101c4725c01f3250c443074a842ec16fd258a90e3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr",
+                    "digest": "7b9a62ae3437dfa470143ac9c3293016f23c7c3c0d110f2e75c077d1804a3150",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr.meta",
+                    "digest": "0b3e6bb6849cc674a19fe4c2befe41c025aa31deefc327491a96eb71c2a9ff03",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png",
+                    "digest": "8634c2c05df00666bdf0546ace2eae6d71690039571d6f3854ba01b32ebd8886",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png.meta",
+                    "digest": "45775c144831588acdada995e9d7cd09e8af8b821e02a8124f22de9267e4e8ce",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png",
+                    "digest": "0b64e51d5ee70085075dc4349f467a477e56046f125b2852becea561fbf08813",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png.meta",
+                    "digest": "6769650e1ad222d2a61deb0c926f9a92f516ecd89b6c891c6a7d010cbd9d931f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr",
+                    "digest": "77920df6783ea5a44d955eda0178eff0334146ae0467639559a26315eb980a67",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr.meta",
+                    "digest": "15a4ffc54d0cf4f0c7ae1059da3aed8bf93e91ff3e065f0d342c3b281b10fe7a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png",
+                    "digest": "84a0f1589591d3a6835027bed55aa139391e6cde04c7e9603fd8a4a8764d8c83",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png.meta",
+                    "digest": "871a3fadc4400b51696a3ed480359db6000ad7d9c06369398853836f04e4723f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr",
+                    "digest": "5d9dd6380bdb0ee60557d4fe38cf9c4cffa43937e308a93e41edc44991bf24aa",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr.meta",
+                    "digest": "4b8ba2fe43bd5af43ca5799c5653e91e21d3d202fc4dbfd2cb12a8800781bf14",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr",
+                    "digest": "9f523a05c06be0ae26c494cea573114889283eeb9c8a7f78dfa94c871da7833b",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr.meta",
+                    "digest": "7496c9133d288e2522ee5760f06c16d240a3d00e4064670139ec285a61141aa5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr",
+                    "digest": "4078446feb080cbbb8c0230327f126a8ef2a248013c5215bddab6eadcf867a42",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr.meta",
+                    "digest": "389b0d3cf6c32316cf979e42d9b57b088d44f109fcdd8f367fcc3fe6f1abaf03",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr",
+                    "digest": "edd872fc7ef0ff123988605c461fcce608f8e0135811535c8e6f3fe672e1fb97",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr.meta",
+                    "digest": "43ff9a2f30027a77264cde4dbd003b824adbbb085c847da4f063012c4dcbb56c",
+                    "missing": false
+                }
+            ]
+        }
     ]
 }

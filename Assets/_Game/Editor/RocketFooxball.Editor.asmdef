@@ -3,6 +3,7 @@
   "rootNamespace": "RocketFooxball.Editor",
   "references": [
     "RocketFooxball.Runtime",
+    "RocketFooxball.Rendering",
     "Unity.InputSystem",
     "Unity.RenderPipelines.Core.Runtime",
     "UnityEngine.UI",

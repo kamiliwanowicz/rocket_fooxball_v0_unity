@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using RocketFooxball;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -49,15 +48,6 @@ namespace RocketFooxball.Editor
             "Assets/_Game/Editor/BrightArenaVisualCapture.cs",
             "Tools/Validation/Capture-BrightArenaVisuals.ps1"
         };
-
-        private sealed class BuildManifestDto
-        {
-            public int schemaVersion;
-            public string sourceSignature;
-            public string generatedOutputFingerprint;
-            public string unityVersion;
-            public string[] fingerprintPaths;
-        }
 
         [Serializable]
         private sealed class ManifestDto
@@ -429,14 +419,14 @@ namespace RocketFooxball.Editor
             return directory;
         }
 
-        private static BuildManifestDto ReadBuildManifest(string projectRoot)
+        private static MovementLabGeneratedState ReadBuildManifest(string projectRoot)
         {
             var absolute = Path.Combine(projectRoot, BuildManifestPath.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(absolute))
             {
                 throw new InvalidOperationException("Build manifest is missing: " + BuildManifestPath);
             }
-            var manifest = JsonUtility.FromJson<BuildManifestDto>(File.ReadAllText(absolute));
+            var manifest = JsonUtility.FromJson<MovementLabGeneratedState>(File.ReadAllText(absolute));
             if (manifest == null || manifest.schemaVersion <= 0 || string.IsNullOrEmpty(manifest.sourceSignature) || string.IsNullOrEmpty(manifest.generatedOutputFingerprint))
             {
                 throw new InvalidOperationException("Build manifest is stale or incomplete: " + BuildManifestPath);
