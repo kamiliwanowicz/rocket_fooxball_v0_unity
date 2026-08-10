@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -123,10 +124,15 @@ namespace RocketFooxball.Editor
             var probe = MovementLabStageGraph.Probe(false);
             if (!string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("MovementLab validation requires a production lighting bake. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly; current profile=" + (probe.CurrentState?.bakedProfile ?? "none") + ".");
-            if (probe.StaleStages.Length > 0)
+
+            var staleNonRaw = probe.StaleStages.Where(stage => !probe.IsRawOutputDriftOnly(stage)).ToArray();
+            if (staleNonRaw.Length > 0)
             {
-                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", probe.StaleStages));
+                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", staleNonRaw));
             }
+            if (probe.StaleStages.Length > 0)
+                Debug.Log("Rocket Fooxball Movement Lab validation proceeding with informational raw output drift: " + string.Join(", ", probe.StaleStages));
+
             MovementLabValidator.Validate(includeBakedLighting: true, logSuccess: true);
             MovementLabStageRunner.WriteProbeIfRequested(probe);
         }

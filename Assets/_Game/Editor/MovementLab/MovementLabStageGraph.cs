@@ -196,7 +196,8 @@ namespace RocketFooxball.Editor
                 }
                 else
                 {
-                    var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs);
+                    var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs, definition.Outputs);
+                    var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
                     if (definition.IncludeUnityVersion && !string.Equals(prior.unityVersion, current.unityVersion, StringComparison.Ordinal)) stageReasons.Add("unity-version-changed");
@@ -215,6 +216,15 @@ namespace RocketFooxball.Editor
                         // GUID/local IDs, and persisted references.
 
                         for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
+                    }
+
+                    for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)
+                        stageReasons.Add(identityViolations[identityIndex]);
+
+                    if (stopOnOutputDrift && IsBlockingOutputDrift(drift, identityViolations))
+                    {
+                        throw new InvalidOperationException("MovementLab trusted output identity violation; refusing to run stage writers: " +
+                            string.Join(";", drift.Concat(identityViolations).Distinct(StringComparer.Ordinal).ToArray()));
                     }
                 }
 
@@ -239,7 +249,31 @@ namespace RocketFooxball.Editor
 
         internal static MovementLabGeneratedState CaptureBakedState()
         {
-            return CaptureStateThrough(MovementLabStage.BakedOutput);
+            var state = CaptureStateThrough(MovementLabStage.BakedOutput);
+            EnsureTrustedOutputIdentityBeforeManifestRefresh();
+            return state;
+        }
+
+        private static void EnsureTrustedOutputIdentityBeforeManifestRefresh()
+        {
+            var manifestRead = MovementLabManifestStore.Read();
+            if (manifestRead.Status != MovementLabManifestReadStatus.Current ||
+                !MovementLabManifestStore.IsCurrentAndReadable(manifestRead.State)) return;
+
+            var live = CaptureLiveRecords();
+            for (var i = 0; i < Definitions.Length; i++)
+            {
+                var definition = Definitions[i];
+                var prior = manifestRead.State.Find(definition.Stage.ToString());
+                if (prior == null || !live.TryGetValue(definition.Stage, out var current)) continue;
+                var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs, definition.Outputs);
+                var identityViolations = FindOutputIdentityViolations(definition, prior, current);
+                if (IsBlockingOutputDrift(drift, identityViolations))
+                {
+                    throw new InvalidOperationException("MovementLab trusted output identity violation; refusing to refresh manifest: " +
+                        string.Join(";", drift.Concat(identityViolations).Distinct(StringComparer.Ordinal).ToArray()));
+                }
+            }
         }
 
         internal static MovementLabGeneratedState MergeStageRecord(MovementLabStage stage)
@@ -440,10 +474,6 @@ namespace RocketFooxball.Editor
                 var path = normalizedPaths[i];
                 var absolute = MovementLabManifestStore.ResolveProjectPath(path);
                 var missing = !File.Exists(absolute);
-                // Output lists include explicit `.meta` entries for byte
-                // fingerprints. Validate the paired asset once; validating
-                // the metadata path itself would incorrectly probe `.meta.meta`.
-                if (!missing && !path.EndsWith(".meta", StringComparison.Ordinal)) ValidateAssetMetaIdentity(path, absolute);
                 result[i] = new MovementLabPathDigest
                 {
                     path = path,
@@ -454,24 +484,106 @@ namespace RocketFooxball.Editor
             return result;
         }
 
-        private static void ValidateAssetMetaIdentity(string repositoryPath, string absolutePath)
+        private static List<string> FindOutputIdentityViolations(StageDefinition definition,
+            MovementLabStageRecord prior, MovementLabStageRecord current)
         {
-            if (!repositoryPath.StartsWith("Assets/", StringComparison.Ordinal)) return;
-            var metaPath = absolutePath + ".meta";
-            if (!File.Exists(metaPath))
-                throw new InvalidOperationException("MovementLab owned asset metadata is missing: " + repositoryPath + ".meta");
+            var violations = new List<string>();
+            if (definition == null || prior == null) return violations;
 
-            var guid = AssetDatabase.AssetPathToGUID(repositoryPath);
-            if (string.IsNullOrEmpty(guid))
-                throw new InvalidOperationException("MovementLab owned asset GUID is missing: " + repositoryPath);
+            var contractPaths = new HashSet<string>(definition.Outputs ?? Array.Empty<string>(), StringComparer.Ordinal);
+            var priorByPath = (prior.outputs ?? Array.Empty<MovementLabPathDigest>())
+                .Where(item => item != null && !string.IsNullOrEmpty(item.path))
+                .ToDictionary(item => item.path, StringComparer.Ordinal);
+            var currentByPath = (current?.outputs ?? Array.Empty<MovementLabPathDigest>())
+                .Where(item => item != null && !string.IsNullOrEmpty(item.path))
+                .ToDictionary(item => item.path, StringComparer.Ordinal);
+            var checkedPairs = new HashSet<string>(StringComparer.Ordinal);
 
-            var metaGuid = File.ReadAllLines(metaPath)
+            foreach (var path in priorByPath.Keys.OrderBy(value => value, StringComparer.Ordinal))
+            {
+                // Prior paths removed by current contract are authorized output-set changes.
+                if (!contractPaths.Contains(path)) continue;
+                priorByPath.TryGetValue(path, out var priorValue);
+                currentByPath.TryGetValue(path, out var currentValue);
+
+                if (currentValue == null)
+                {
+                    violations.Add("identity:missing-output:" + path);
+                    continue;
+                }
+
+                if (path.EndsWith(".meta", StringComparison.Ordinal))
+                {
+                    if (!IsStableDevelopmentMissingPair(definition.Stage, prior.profile, current.profile, path, priorValue, currentValue) &&
+                        priorValue != null && !priorValue.missing && (currentValue.missing ||
+                            !string.Equals(priorValue.digest, currentValue.digest, StringComparison.Ordinal)))
+                    {
+                        violations.Add((currentValue.missing ? "identity:missing-meta:" : "identity:changed-meta:") + path);
+                    }
+
+                    var assetPath = path.Substring(0, path.Length - ".meta".Length);
+                    if (checkedPairs.Add(assetPath))
+                    {
+                        var pairViolation = FindAssetMetaPairViolation(assetPath, definition.Stage, current.profile);
+                        if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
+                    }
+                }
+                else if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
+                    contractPaths.Contains(path + ".meta") && checkedPairs.Add(path))
+                {
+                    var pairViolation = FindAssetMetaPairViolation(path, definition.Stage, current.profile);
+                    if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
+                }
+            }
+
+            return violations.Distinct(StringComparer.Ordinal).ToList();
+        }
+
+        private static string FindAssetMetaPairViolation(string assetPath, MovementLabStage stage, string currentProfile)
+        {
+            if (string.IsNullOrEmpty(assetPath) || !assetPath.StartsWith("Assets/", StringComparison.Ordinal)) return null;
+            var assetAbsolute = MovementLabManifestStore.ResolveProjectPath(assetPath);
+            var metaPath = assetPath + ".meta";
+            var metaAbsolute = MovementLabManifestStore.ResolveProjectPath(metaPath);
+            var currentMeta = File.Exists(metaAbsolute);
+            var currentAssetExists = File.Exists(assetAbsolute);
+
+            if (stage == MovementLabStage.BakedOutput && IsDevelopmentProfile(currentProfile) &&
+                !currentAssetExists && !currentMeta &&
+                DevelopmentStableMissingBakedOutputPaths.Contains(assetPath) &&
+                DevelopmentStableMissingBakedOutputPaths.Contains(metaPath)) return null;
+
+            if (!currentAssetExists || !currentMeta)
+                return "identity:broken-pair:" + assetPath;
+
+            var guid = AssetDatabase.AssetPathToGUID(assetPath);
+            var metaGuid = ReadMetaGuid(metaAbsolute);
+            if (string.IsNullOrEmpty(guid) || string.IsNullOrEmpty(metaGuid) || !string.Equals(guid, metaGuid, StringComparison.Ordinal))
+                return "identity:guid-meta-mismatch:" + assetPath;
+
+            return null;
+        }
+
+        private static string ReadMetaGuid(string metaPath)
+        {
+            if (!File.Exists(metaPath)) return string.Empty;
+            return File.ReadLines(metaPath)
                 .Select(line => line.Trim())
                 .Where(line => line.StartsWith("guid:", StringComparison.Ordinal))
                 .Select(line => line.Substring("guid:".Length).Trim())
-                .FirstOrDefault();
-            if (!string.Equals(guid, metaGuid, StringComparison.Ordinal))
-                throw new InvalidOperationException("MovementLab owned asset GUID/meta mismatch: " + repositoryPath);
+                .FirstOrDefault() ?? string.Empty;
+        }
+
+        private static bool IsStableDevelopmentMissingPair(MovementLabStage stage, string priorProfile,
+            string currentProfile, string path, MovementLabPathDigest prior, MovementLabPathDigest current)
+        {
+            return IsStableDevelopmentMissingBakedOutput(stage, priorProfile, currentProfile, path, prior, current);
+        }
+
+        private static bool IsBlockingOutputDrift(IEnumerable<string> drift, IEnumerable<string> identityViolations)
+        {
+            return (drift ?? Array.Empty<string>()).Any(token => token.StartsWith("missing:", StringComparison.Ordinal)) ||
+                (identityViolations ?? Array.Empty<string>()).Any();
         }
 
         private static string HashOutputFile(string repositoryPath, string absolutePath, MovementLabStage stage)
@@ -813,15 +925,18 @@ namespace RocketFooxball.Editor
         }
 
         private static List<string> FindOutputDrift(MovementLabStage stage, string priorProfile, string currentProfile,
-            MovementLabPathDigest[] expected, MovementLabPathDigest[] actual)
+            MovementLabPathDigest[] expected, MovementLabPathDigest[] actual, string[] contractOutputs)
         {
             var drift = new List<string>();
             var expectedByPath = (expected ?? Array.Empty<MovementLabPathDigest>()).Where(item => item != null).ToDictionary(item => item.path, StringComparer.Ordinal);
             var actualByPath = (actual ?? Array.Empty<MovementLabPathDigest>()).Where(item => item != null).ToDictionary(item => item.path, StringComparer.Ordinal);
+            var contractPathSet = new HashSet<string>(contractOutputs ?? Array.Empty<string>(), StringComparer.Ordinal);
             foreach (var path in expectedByPath.Keys.Union(actualByPath.Keys, StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal))
             {
+                if (expectedByPath.ContainsKey(path) && !contractPathSet.Contains(path)) continue;
                 expectedByPath.TryGetValue(path, out var oldValue);
                 actualByPath.TryGetValue(path, out var newValue);
+                if (oldValue == null) continue; // Contract-authorized new output path; stage contract/input staleness drives writer.
                 if (newValue == null || newValue.missing)
                 {
                     if (IsStableDevelopmentMissingBakedOutput(stage, priorProfile, currentProfile, path, oldValue, newValue)) continue;
@@ -832,18 +947,18 @@ namespace RocketFooxball.Editor
             return drift;
         }
 
-        // Truth table: stage=BakedOutput && prior/current profile=Development &&
-        // prior exists+missing && current exists+missing && allowlisted path ->
-        // suppress drift token. Any false condition -> existing drift handling.
+        // Development profile intentionally omits allowlisted lightmap variants.
+        // Suppress only current-profile Development + current missing + known
+        // owned path; all other missing output states remain blocking.
         private static bool IsStableDevelopmentMissingBakedOutput(MovementLabStage stage, string priorProfile,
             string currentProfile, string path, MovementLabPathDigest prior, MovementLabPathDigest current)
         {
             var isBakedOutput = stage == MovementLabStage.BakedOutput;
-            var isDevelopmentProfile = IsDevelopmentProfile(priorProfile) && IsDevelopmentProfile(currentProfile);
-            var priorMissing = prior != null && prior.missing;
+            var isDevelopmentProfile = IsDevelopmentProfile(currentProfile);
+            var priorKnown = prior != null;
             var currentMissing = current != null && current.missing;
             var isAllowlistedPath = !string.IsNullOrEmpty(path) && DevelopmentStableMissingBakedOutputPaths.Contains(path);
-            return isBakedOutput && isDevelopmentProfile && priorMissing && currentMissing && isAllowlistedPath;
+            return isBakedOutput && isDevelopmentProfile && priorKnown && currentMissing && isAllowlistedPath;
         }
 
         private static bool IsDevelopmentProfile(string profile)

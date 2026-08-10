@@ -59,6 +59,16 @@ namespace RocketFooxball.Editor
 
     internal static partial class MovementLabValidator
     {
+        private static readonly string[] RequiredCustomShaderPaths =
+        {
+            ToonShaderPath,
+            ParticleShaderPath,
+            AdditiveParticleShaderPath,
+            PowerGridShaderPath,
+            ShieldShaderPath,
+            SkyShaderPath
+        };
+
                 internal static void ValidateMovementLabInternal(string builderSignature, bool includeBakedLighting, bool logSuccess)
                 {
                     EnsureAssetExists(PrefabPath);
@@ -101,12 +111,12 @@ namespace RocketFooxball.Editor
                     EnsureAssetExists(SkyTexturePath);
                     EnsureAssetExists(SkyShaderPath);
                     EnsureAssetExists(DetailNormalTexturePath);
-                    EnsureAssetExists(ToonShaderPath);
-                    EnsureAssetExists(ParticleShaderPath);
-                    EnsureAssetExists(AdditiveParticleShaderPath);
-                    EnsureAssetExists(PowerGridShaderPath);
-                    EnsureAssetExists(ShieldShaderPath);
-                    ValidatePowerGridShader();
+                     EnsureAssetExists(ToonShaderPath);
+                     EnsureAssetExists(ParticleShaderPath);
+                     EnsureAssetExists(AdditiveParticleShaderPath);
+                     EnsureAssetExists(PowerGridShaderPath);
+                     EnsureAssetExists(ShieldShaderPath);
+                     ValidateCustomShaders();
                     EnsureAssetExists(WallTexturePath);
                     EnsureAssetExists(TrimTexturePath);
                     EnsureAssetExists(HazardTexturePath);
@@ -386,31 +396,36 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                private static void ValidatePowerGridShader()
+                private static void ValidateCustomShaders()
                 {
-                    var shader = AssetDatabase.LoadAssetAtPath<Shader>(PowerGridShaderPath);
-                    if (shader == null || !shader.isSupported)
-                        throw new InvalidOperationException("RetroPowerGrid shader is unsupported; bake/capture blocked.");
-
-                    var messages = ShaderUtil.GetShaderMessages(shader);
-                    if (messages == null) return;
-                    var errors = new List<string>();
-                    for (var i = 0; i < messages.Length; i++)
+                    for (var shaderIndex = 0; shaderIndex < RequiredCustomShaderPaths.Length; shaderIndex++)
                     {
-                        var severityField = messages[i].GetType().GetField("severity");
-                        var severity = severityField?.GetValue(messages[i]);
-                        if (severity == null)
+                        var path = RequiredCustomShaderPaths[shaderIndex];
+                        var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+                        if (shader == null)
+                            throw new InvalidOperationException("MovementLab custom shader is missing; bake/capture blocked: " + path);
+                        if (!shader.isSupported)
+                            throw new InvalidOperationException("MovementLab custom shader is unsupported; bake/capture blocked: " + path);
+
+                        var messages = ShaderUtil.GetShaderMessages(shader);
+                        if (messages == null) continue;
+                        var errors = new List<string>();
+                        for (var messageIndex = 0; messageIndex < messages.Length; messageIndex++)
                         {
-                            var severityProperty = messages[i].GetType().GetProperty("severity");
-                            severity = severityProperty?.GetValue(messages[i], null);
+                            var message = messages[messageIndex];
+                            var severityField = message.GetType().GetField("severity");
+                            var severity = severityField?.GetValue(message);
+                            if (severity == null)
+                            {
+                                var severityProperty = message.GetType().GetProperty("severity");
+                                severity = severityProperty?.GetValue(message, null);
+                            }
+                            if (severity != null && severity.ToString().IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0)
+                                errors.Add(message.ToString());
                         }
-                        if (severity != null && severity.ToString().IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            errors.Add(messages[i].ToString());
-                        }
+                        if (errors.Count > 0)
+                            throw new InvalidOperationException("MovementLab custom shader compiler errors block bake/capture: " + path + ": " + string.Join(" | ", errors.ToArray()));
                     }
-                    if (errors.Count > 0)
-                        throw new InvalidOperationException("RetroPowerGrid shader compiler errors block bake/capture: " + string.Join(" | ", errors.ToArray()));
                 }
 
     }
