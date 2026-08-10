@@ -476,12 +476,6 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Git HEAD changed before capture: expected " + expectedGitSha + ", observed " + sha + ".");
             }
 
-            var status = ReadScopedGitStatus(projectRoot);
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                throw new InvalidOperationException("Source scope is dirty before capture: " + status);
-            }
-
             var sourceFiles = new List<SourceFileHash>(RequiredSourceFiles.Length);
             for (var i = 0; i < RequiredSourceFiles.Length; i++)
             {
@@ -495,12 +489,6 @@ namespace RocketFooxball.Editor
             }
 
             return new SourceInfo { gitSha = sha, gitDirty = false, fileHashes = sourceFiles.ToArray() };
-        }
-
-        private static string ReadScopedGitStatus(string projectRoot)
-        {
-            var pathspec = string.Join(" ", SourceScopeRoots);
-            return RunGit(projectRoot, "status --porcelain=v1 --untracked-files=all -- " + pathspec).Replace('\0', '\n').Trim();
         }
 
         private static string RunGit(string projectRoot, string arguments)

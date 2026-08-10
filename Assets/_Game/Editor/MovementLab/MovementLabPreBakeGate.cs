@@ -369,7 +369,7 @@ namespace RocketFooxball.Editor
             }
             var directory = Path.GetDirectoryName(fullPath) ?? throw new InvalidOperationException("Unable to resolve pre-bake evidence directory.");
             Directory.CreateDirectory(directory);
-            var temporaryPath = Path.Combine(directory, ".tmp-" + Guid.NewGuid().ToString("N"));
+            var temporaryPath = Path.Combine(directory, ".tmp" + Guid.NewGuid().ToString("N").Substring(0, 8));
             try
             {
                 var bytes = new System.Text.UTF8Encoding(false).GetBytes(content);

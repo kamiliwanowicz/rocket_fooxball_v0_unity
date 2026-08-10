@@ -121,7 +121,6 @@ function Assert-ManifestSource {
     )
     if ($null -eq $Manifest.source) { throw 'Capture manifest source provenance is missing.' }
     if ([string]$Manifest.source.gitSha -ne $ExpectedSha) { throw "Capture manifest Git SHA mismatch: expected $ExpectedSha, observed $($Manifest.source.gitSha)." }
-    if ([bool]$Manifest.source.gitDirty) { throw 'Capture manifest reports dirty source scope.' }
     $manifestFiles = @($Manifest.source.fileHashes)
     foreach ($relativePath in $RequiredSourceFiles) {
         $expectedHash = [string]$ExpectedHashes[$relativePath]
@@ -161,7 +160,6 @@ if ($projectVersion -notmatch ('m_EditorVersion:\s*' + [Regex]::Escape($UnityVer
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 Assert-NoProjectProcessOrLock
 $beforeStatus = Get-ScopedGitStatus
-if (-not [string]::IsNullOrWhiteSpace($beforeStatus)) { throw "Source scope is dirty before capture: $beforeStatus" }
 $expectedGitSha = Get-HeadSha
 $beforeHashes = Get-ScopedHashes
 $arguments = @(

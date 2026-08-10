@@ -246,7 +246,7 @@ namespace RocketFooxball.Editor
             var directory = Path.GetDirectoryName(path);
             if (string.IsNullOrEmpty(directory)) throw new InvalidOperationException("MovementLab probe directory is unavailable.");
             Directory.CreateDirectory(directory);
-            var temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            var temporary = path + ".tmp" + Guid.NewGuid().ToString("N").Substring(0, 8);
             try
             {
                 var bytes = new UTF8Encoding(false).GetBytes(content);

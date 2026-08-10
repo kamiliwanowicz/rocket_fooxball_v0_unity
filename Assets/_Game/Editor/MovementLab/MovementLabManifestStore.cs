@@ -406,7 +406,7 @@ namespace RocketFooxball.Editor
             var directory = Path.GetDirectoryName(path);
             if (string.IsNullOrEmpty(directory)) throw new InvalidOperationException("Unable to resolve MovementLab manifest authorization directory.");
             Directory.CreateDirectory(directory);
-            var temporaryPath = path + ".tmp-" + Guid.NewGuid().ToString("N");
+            var temporaryPath = path + ".tmp" + Guid.NewGuid().ToString("N").Substring(0, 8);
             try
             {
                 var bytes = new UTF8Encoding(false).GetBytes(content);
