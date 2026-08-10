@@ -12,12 +12,14 @@ param(
     [string]$SourceSha,
     [string]$ReviewedSha,
     [string]$Reviewer,
+    [string]$ExecutionId,
     [string]$Checkpoint = 'CP1',
     [Alias('ReportPath', 'ReviewReportPaths')]
     [string[]]$ReviewReportPath = @(),
     [Alias('ReportSha256', 'ReviewReportSha256s')]
     [string[]]$ReviewReportSha256 = @(),
     [string[]]$FindingDisposition = @(),
+    [string[]]$GeneratedPath = @(),
     [switch]$ForceFullComparison,
     [switch]$Capture,
     [switch]$PlanOnly,
@@ -31,9 +33,19 @@ $script:UnityVersion = '6000.5.6f1'
 $script:UnityPath = 'C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Unity.exe'
 if ([string]::IsNullOrWhiteSpace($ProjectPath) -or $ProjectPath.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw 'ProjectPath must be non-empty and one line.' }
 $script:ProjectRoot = [System.IO.Path]::GetFullPath($ProjectPath)
+$script:ProjectInputRoot = $script:ProjectRoot
 $script:GitCommonRoot = $null
+$script:CanonicalProjectRoot = $null
 $script:EvidenceDirectory = $null
 $script:ProbeOutputPath = $null
+$script:LeasePath = $null
+$script:LeaseToken = $null
+$script:LeaseReleaseProofPath = $null
+$script:InvocationId = $null
+$script:PriorLedgerHistory = New-Object System.Collections.Generic.List[object]
+$script:PriorManifestHistory = New-Object System.Collections.Generic.List[object]
+$script:ProbeInventoryPaths = @()
+$script:RequestedInventoryPaths = @()
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
@@ -41,12 +53,50 @@ $script:BakeCount = 0
 $script:ReleaseProof = New-Object System.Collections.Generic.List[object]
 $script:GeneratedRoots = @(
     'Assets/_Game/Generated',
+    'Assets/_Game/Prefabs',
+    'Assets/_Game/Materials',
+    'Assets/_Game/Animations',
     'Assets/_Game/Lighting',
     'Assets/_Game/Scenes/MovementLab.unity',
     'Assets/_Game/Scenes/MovementLab.unity.meta',
     'Assets/_Game/Scenes/MovementLab',
     'Assets/_Game/Scenes/MovementLab/LightingData.asset',
-    'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta'
+    'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
+    'Assets/Settings',
+    'ProjectSettings'
+)
+$script:AuthoritativeInventory = @(
+    'Assets/_Game/Generated',
+    'Assets/_Game/Prefabs',
+    'Assets/_Game/Materials',
+    'Assets/_Game/Animations',
+    'Assets/_Game/Scenes/MovementLab.unity',
+    'Assets/_Game/Scenes/MovementLab.unity.meta',
+    'Assets/_Game/Scenes/MovementLab',
+    'Assets/_Game/Lighting',
+    'Assets/Settings',
+    'ProjectSettings'
+)
+$script:BuilderOutputContract = @(
+    'Assets/_Game/Generated/MovementLabBuildManifest.json',
+    'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab',
+    'Assets/_Game/Animations/WorldCharacter.controller', 'Assets/_Game/Animations/FpsKick.controller',
+    'Assets/_Game/Scenes/MovementLab.unity', 'Assets/_Game/Scenes/MovementLab/LightingData.asset',
+    'Assets/_Game/Lighting/MovementLabVolumeProfile.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings.asset', 'Assets/_Game/Lighting/MovementLabLightingManifest.json',
+    'Assets/_Game/Lighting/ReflectionProbe_Center.exr', 'Assets/_Game/Lighting/ReflectionProbe_WestGoal.exr', 'Assets/_Game/Lighting/ReflectionProbe_EastGoal.exr',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png',
+    'Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr',
+    'Assets/Settings/PC_Iteration_RPAsset.asset', 'Assets/Settings/PC_Iteration_Renderer.asset',
+    'ProjectSettings/QualitySettings.asset', 'ProjectSettings/GraphicsSettings.asset', 'ProjectSettings/ProjectSettings.asset',
+    'Assets/_Game/Generated/MovementLabBuildManifest.json.meta',
+    'Assets/_Game/Prefabs/Player.prefab.meta', 'Assets/_Game/Prefabs/Ball.prefab.meta', 'Assets/_Game/Prefabs/Rocket.prefab.meta', 'Assets/_Game/Prefabs/ExplosionVfx.prefab.meta',
+    'Assets/_Game/Animations/WorldCharacter.controller.meta', 'Assets/_Game/Animations/FpsKick.controller.meta',
+    'Assets/_Game/Scenes/MovementLab.unity.meta', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
+    'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset.meta'
 )
 
 function Get-FullPath {
@@ -55,6 +105,28 @@ function Get-FullPath {
         throw 'Path values must be non-empty and single-line.'
     }
     return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Get-CanonicalPath {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $full = Get-FullPath $Path
+    $item = Get-Item -LiteralPath $full -Force -ErrorAction Stop
+    $resolved = (Resolve-Path -LiteralPath $item.FullName -ErrorAction Stop).Path
+    if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        $targetProperty = $item.PSObject.Properties['Target']
+        $target = if ($null -ne $targetProperty) { [string]$targetProperty.Value } else { '' }
+        if ([string]::IsNullOrWhiteSpace($target)) { throw ('Unable to resolve project junction/reparse target: ' + $full) }
+        if (-not [IO.Path]::IsPathRooted($target)) { $target = Join-Path (Split-Path -Parent $full) $target }
+        $resolved = (Resolve-Path -LiteralPath $target -ErrorAction Stop).Path
+    }
+    return ([IO.Path]::GetFullPath($resolved)).TrimEnd('\')
+}
+
+function Get-StringSha256 {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    $bytes = [Text.Encoding]::UTF8.GetBytes($Value)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
 function Assert-OutsideProject {
@@ -89,6 +161,53 @@ function Assert-OneLineValue {
         throw ($Name + ' must be non-empty and one line.')
     }
     return $Value.Trim()
+}
+
+function Test-InventoryMember {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $normalized = $Path.Replace('\', '/').TrimStart('/')
+    foreach ($root in $script:AuthoritativeInventory) {
+        $candidate = $root.Replace('\', '/').TrimStart('/')
+        if ($normalized.Equals($candidate, [StringComparison]::OrdinalIgnoreCase) -or
+            $normalized.StartsWith($candidate.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+function Get-AuthoritativeGeneratedInventory {
+    $paths = New-Object System.Collections.Generic.List[string]
+    $requestedSelection = New-Object System.Collections.Generic.List[string]
+    foreach ($root in $script:AuthoritativeInventory) {
+        $full = Join-Path $script:ProjectRoot $root
+        if (Test-Path -LiteralPath $full -PathType Leaf) {
+            $paths.Add($root.Replace('\', '/'))
+        } elseif (Test-Path -LiteralPath $full -PathType Container) {
+            foreach ($file in @(Get-ChildItem -LiteralPath $full -File -Recurse -Force | Sort-Object FullName)) {
+                $relative = $file.FullName.Substring($script:ProjectRoot.Length).TrimStart('\', '/').Replace('\', '/')
+                $paths.Add($relative)
+            }
+            if (@(Get-ChildItem -LiteralPath $full -File -Recurse -Force).Count -eq 0) { $paths.Add($root.Replace('\', '/') + '=__EMPTY__') }
+        } else {
+            $paths.Add($root.Replace('\', '/') + '=__MISSING__')
+        }
+    }
+    foreach ($contractPath in $script:BuilderOutputContract) {
+        $full = Join-Path $script:ProjectRoot $contractPath
+        if (Test-Path -LiteralPath $full -PathType Leaf -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
+        elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
+    }
+    foreach ($probePath in @($script:ProbeInventoryPaths)) {
+        $normalizedProbePath = ([string]$probePath).Replace('\', '/').TrimStart('/')
+        if (-not (Test-InventoryMember $normalizedProbePath)) { throw ('Probe inventory path expands closed inventory: ' + $normalizedProbePath) }
+        if (-not $paths.Contains($normalizedProbePath)) { $paths.Add($normalizedProbePath) }
+    }
+    foreach ($requested in @($GeneratedPath)) {
+        $value = Assert-OneLineValue 'GeneratedPath' ([string]$requested)
+        if ([IO.Path]::IsPathRooted($value) -or -not (Test-InventoryMember $value)) { throw ('GeneratedPath is outside authoritative inventory: ' + $value) }
+        if (-not $requestedSelection.Contains($value.Replace('\', '/').TrimStart('/'))) { $requestedSelection.Add($value.Replace('\', '/').TrimStart('/')) }
+    }
+    $script:RequestedInventoryPaths = @($requestedSelection.ToArray())
+    return @($paths.ToArray() | Sort-Object -Unique)
 }
 
 function Invoke-Git {
@@ -135,11 +254,11 @@ function Get-NonGeneratedDirtyPaths {
 }
 
 function Get-ProjectUnityProcesses {
-    $normalized = $script:ProjectRoot.TrimEnd('\').ToLowerInvariant()
+    $normalized = @($script:ProjectRoot.TrimEnd('\').ToLowerInvariant(), $script:ProjectInputRoot.TrimEnd('\').ToLowerInvariant()) | Sort-Object -Unique
     $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'")
     return @($all | Where-Object {
         $commandLine = [string]$_.CommandLine
-        -not [string]::IsNullOrWhiteSpace($commandLine) -and $commandLine.ToLowerInvariant().Contains($normalized)
+        -not [string]::IsNullOrWhiteSpace($commandLine) -and (@($normalized | Where-Object { $commandLine.ToLowerInvariant().Contains($_) }).Count -gt 0)
     })
 }
 
@@ -148,6 +267,87 @@ function Get-LockPaths {
         (Join-Path $script:ProjectRoot 'Temp\UnityLockfile'),
         (Join-Path $script:ProjectRoot 'Library\UnityLockfile')
     )
+}
+
+function Get-CurrentProcessStartUtc {
+    $process = Get-Process -Id $PID -ErrorAction Stop
+    return $process.StartTime.ToUniversalTime().ToString('O')
+}
+
+function Read-LeaseRecord {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try { return (Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json) } catch { throw ('Project lease is malformed; refusing stale recovery: ' + $Path) }
+}
+
+function Acquire-ProjectLease {
+    $canonical = Get-CanonicalPath $script:ProjectRoot
+    $script:CanonicalProjectRoot = $canonical
+    $leaseRoot = Join-Path $script:GitCommonRoot 'movement-lab-proof\leases'
+    [IO.Directory]::CreateDirectory($leaseRoot) | Out-Null
+    $leaseRootItem = Get-Item -LiteralPath $leaseRoot -Force -ErrorAction Stop
+    if (($leaseRootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Lease destination may not be a junction or alias: ' + $leaseRoot) }
+    $canonicalLeaseRoot = Get-CanonicalPath $leaseRoot
+    if (-not $canonicalLeaseRoot.StartsWith($script:GitCommonRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw ('Lease destination escaped canonical Git-common root: ' + $canonicalLeaseRoot) }
+    $leaseName = Get-StringSha256 $canonical
+    $script:LeasePath = Join-Path $leaseRoot ($leaseName + '.lease')
+    $script:LeaseToken = [Guid]::NewGuid().ToString('N')
+    $record = [ordered]@{
+        schemaVersion = 1
+        leaseToken = $script:LeaseToken
+        canonicalProjectRoot = $canonical
+        ownerPid = [int]$PID
+        ownerProcessStartUtc = Get-CurrentProcessStartUtc
+        acquiredUtc = [DateTime]::UtcNow.ToString('O')
+    }
+    $json = ($record | ConvertTo-Json -Depth 8) + "`n"
+    for ($attempt = 0; $attempt -lt 2; $attempt++) {
+        try {
+            $stream = New-Object IO.FileStream($script:LeasePath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try {
+                $bytes = [Text.Encoding]::UTF8.GetBytes($json)
+                $stream.Write($bytes, 0, $bytes.Length)
+                $stream.Flush($true)
+            } finally { $stream.Dispose() }
+            return $true
+        } catch [IO.IOException] {
+            if (-not (Test-Path -LiteralPath $script:LeasePath -PathType Leaf)) { throw }
+            $existing = Read-LeaseRecord $script:LeasePath
+            $validIdentity = $existing.schemaVersion -eq 1 -and [string]$existing.canonicalProjectRoot -eq $canonical -and
+                [string]$existing.leaseToken -match '^[A-Za-z0-9]{32}$' -and [int]$existing.ownerPid -gt 0 -and
+                [string]$existing.ownerProcessStartUtc -match '^\d{4}-\d{2}-\d{2}T.+Z$'
+            if (-not $validIdentity) { throw ('Project lease identity is invalid; refusing recovery: ' + $script:LeasePath) }
+            $owner = $null
+            try { $owner = Get-Process -Id ([int]$existing.ownerPid) -ErrorAction Stop }
+            catch {
+                if ($_.Exception.Message -notmatch '(?i)no process|cannot find') { throw ('Unable to prove lease owner is dead; refusing stale recovery: ' + $script:LeasePath) }
+            }
+            if ($null -ne $owner) {
+                $ownerStart = $owner.StartTime.ToUniversalTime().ToString('O')
+                if ($ownerStart -eq [string]$existing.ownerProcessStartUtc) { throw ('Project lease is held by live PID ' + $existing.ownerPid + ': ' + $canonical) }
+            }
+            Remove-Item -LiteralPath $script:LeasePath -Force -ErrorAction Stop
+        }
+    }
+    throw ('Unable to acquire canonical project lease: ' + $script:LeasePath)
+}
+
+function Release-ProjectLease {
+    if ([string]::IsNullOrWhiteSpace($script:LeasePath)) { return }
+    $proof = [ordered]@{ path = $script:LeasePath; leaseToken = $script:LeaseToken; canonicalProjectRoot = $script:CanonicalProjectRoot; releasedUtc = $null; verifiedAbsent = $false }
+    try {
+        if (-not $PlanOnly) { Wait-UnityRelease 'lease-release' | Out-Null } else { Assert-NoProjectProcessOrLock }
+        if (-not (Test-Path -LiteralPath $script:LeasePath -PathType Leaf)) { throw 'Project lease disappeared before release.' }
+        $record = Read-LeaseRecord $script:LeasePath
+        if ([string]$record.leaseToken -ne $script:LeaseToken -or [string]$record.canonicalProjectRoot -ne $script:CanonicalProjectRoot) { throw 'Project lease identity changed before release.' }
+        Remove-Item -LiteralPath $script:LeasePath -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $script:LeasePath) { throw 'Project lease remained after release.' }
+        $proof.releasedUtc = [DateTime]::UtcNow.ToString('O')
+        $proof.verifiedAbsent = $true
+        $script:ReleaseProof.Add($proof)
+    } catch {
+        $script:ReleaseProof.Add($proof)
+        throw
+    }
 }
 
 function Assert-NoProjectProcessOrLock {
@@ -175,18 +375,36 @@ function Wait-UnityRelease {
 }
 
 function Get-GeneratedHashes {
-    $trackedText = Invoke-Git @('ls-files', '--full-name', '--')
-    $untrackedText = Invoke-Git @('ls-files', '--full-name', '--others', '--exclude-standard', '--')
-    $tracked = @($trackedText -split "`n")
-    $untracked = @($untrackedText -split "`n")
+    $inventory = @(Get-AuthoritativeGeneratedInventory)
     $map = [ordered]@{}
-    foreach ($relative in @($tracked + $untracked | ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)) {
-        if ([string]::IsNullOrWhiteSpace($relative) -or -not (Test-GeneratedPath $relative)) { continue }
+    foreach ($relative in $inventory) {
+        $relative = ([string]$relative).Trim()
+        if ([string]::IsNullOrWhiteSpace($relative)) { continue }
+        if ($relative.EndsWith('=__EMPTY__', [StringComparison]::Ordinal)) { $map[$relative.Substring(0, $relative.IndexOf('=__EMPTY__', [StringComparison]::Ordinal))] = '__EMPTY__'; continue }
+        if ($relative.EndsWith('=__MISSING__', [StringComparison]::Ordinal)) { $map[$relative.Substring(0, $relative.IndexOf('=__MISSING__', [StringComparison]::Ordinal))] = '__MISSING__'; continue }
         $absolute = Join-Path $script:ProjectRoot $relative
         if (Test-Path -LiteralPath $absolute -PathType Leaf) { $map[$relative] = (Get-FileHash -LiteralPath $absolute -Algorithm SHA256).Hash.ToLowerInvariant() }
         else { $map[$relative] = '__MISSING__' }
     }
     return $map
+}
+
+function Get-GeneratedHashDigest {
+    param([Parameter(Mandatory = $true)]$Hashes)
+    $lines = @($Hashes.Keys | Sort-Object | ForEach-Object { [string]$_ + '=' + [string]$Hashes[$_] })
+    return Get-StringSha256 ($lines -join "`n")
+}
+
+function Get-AllDirtyPaths {
+    $text = Invoke-Git @('status', '--porcelain=v1', '--untracked-files=all')
+    return @($text -split "`n" | ForEach-Object {
+        $line = ([string]$_).TrimEnd()
+        if ($line.Length -gt 3) { $line.Substring(3).Trim().Replace('"', '') } else { '' }
+    } | Where-Object { $_ } | Sort-Object -Unique)
+}
+
+function Get-WorkingTreeDigest {
+    return Get-StringSha256 ((Invoke-Git @('status', '--porcelain=v1', '--untracked-files=all')).Trim())
 }
 
 function Get-ChangedHashPaths {
@@ -208,6 +426,8 @@ function Get-EnvironmentFingerprint {
         projectPath = $script:ProjectRoot
         libraryPath = Join-Path $script:ProjectRoot 'Library'
         powershell = $PSVersionTable.PSVersion.ToString()
+        os = [Environment]::OSVersion.VersionString
+        machine = [Environment]::MachineName
     } | ConvertTo-Json -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($value)
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -265,7 +485,9 @@ function New-LedgerRow {
         [string[]]$Subsumes = @(),
         [Parameter(Mandatory = $true)][string]$RunPoint
     )
+    $generatedHashes = Get-GeneratedHashes
     [ordered]@{
+        invocation_id = $script:InvocationId
         check_id = $CheckId
         owner = 'workflow-orchestrator'
         tier = $Tier
@@ -275,6 +497,11 @@ function New-LedgerRow {
         input_paths = @($InputPaths)
         input_digest = Get-InputDigest $InputPaths
         environment_fingerprint = Get-EnvironmentFingerprint
+        generated_inventory = @(Get-AuthoritativeGeneratedInventory)
+        requested_inventory = @($script:RequestedInventoryPaths)
+        generated_hashes = $generatedHashes
+        generated_hash_digest = Get-GeneratedHashDigest $generatedHashes
+        working_tree_digest = Get-WorkingTreeDigest
         invalidation_paths = @($InvalidationPaths)
         subsumes = @($Subsumes)
         executed_sha = $null
@@ -350,15 +577,56 @@ function Test-PathIntersects {
     return $false
 }
 
+function Get-ObjectPropertyText {
+    param([Parameter(Mandatory = $true)]$Object, [Parameter(Mandatory = $true)][string]$Name)
+    if ($null -eq $Object -or -not ($Object.PSObject.Properties.Name -contains $Name)) { return '' }
+    return [string]$Object.$Name
+}
+
+function Test-RowReuseProof {
+    param([Parameter(Mandatory = $true)]$Prior, [Parameter(Mandatory = $true)]$Row)
+    if ((Get-ObjectPropertyText $Prior 'input_digest') -ne (Get-ObjectPropertyText $Row 'input_digest')) { return @{ valid = $false; reason = 'input digest changed' } }
+    if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
+    if ($Prior.PSObject.Properties.Name -contains 'generated_inventory') {
+        $currentInventory = @(Get-AuthoritativeGeneratedInventory)
+        if (($currentInventory -join "`n") -cne (@($Prior.generated_inventory) -join "`n")) { return @{ valid = $false; reason = 'authoritative inventory changed' } }
+    }
+    $currentHashes = Get-GeneratedHashes
+    $currentHashDigest = Get-GeneratedHashDigest $currentHashes
+    if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $Prior 'generated_hash_digest')) -or (Get-ObjectPropertyText $Prior 'generated_hash_digest') -ne $currentHashDigest) {
+        return @{ valid = $false; reason = 'generated fingerprint changed' }
+    }
+    if ($Prior.PSObject.Properties.Name -contains 'generated_hashes' -and $null -ne $Prior.generated_hashes) {
+        foreach ($key in @($currentHashes.Keys + $Prior.generated_hashes.PSObject.Properties.Name | Sort-Object -Unique)) {
+            $current = if ($currentHashes.Contains($key)) { [string]$currentHashes[$key] } else { '__MISSING__' }
+            $priorValue = if ($Prior.generated_hashes.PSObject.Properties.Name -contains $key) { [string]$Prior.generated_hashes.$key } else { '__MISSING__' }
+            if ($current -cne $priorValue) { return @{ valid = $false; reason = 'generated output hash changed: ' + $key } }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $Prior 'working_tree_digest')) -or (Get-ObjectPropertyText $Prior 'working_tree_digest') -ne (Get-WorkingTreeDigest)) {
+        return @{ valid = $false; reason = 'working-tree cleanliness changed' }
+    }
+    if (@(Get-AllDirtyPaths).Count -gt 0) { return @{ valid = $false; reason = 'uncommitted working tree is dirty' } }
+    return @{ valid = $true; reason = $null }
+}
+
 function Merge-ExistingLedger {
     param([Parameter(Mandatory = $true)][object[]]$Rows, [Parameter(Mandatory = $true)][string]$CurrentSha)
     if ([string]::IsNullOrWhiteSpace($LedgerPath)) { return }
     $full = Assert-DurableEvidencePath $LedgerPath 'LedgerPath'
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw ('Ledger file missing: ' + $full) }
+    $priorManifestPath = Join-Path (Split-Path -Parent $full) 'evidence-manifest.json'
+    if (Test-Path -LiteralPath $priorManifestPath -PathType Leaf) {
+        try { $priorManifest = Get-Content -Raw -LiteralPath $priorManifestPath | ConvertFrom-Json; $script:PriorManifestHistory.Add($priorManifest) } catch { throw ('Prior evidence manifest is malformed: ' + $priorManifestPath) }
+    }
     $parsed = Get-Content -Raw -LiteralPath $full | ConvertFrom-Json
+    if ($parsed.PSObject.Properties.Name -contains 'history') {
+        foreach ($entry in @($parsed.history)) { $script:PriorLedgerHistory.Add($entry) }
+    }
     $hasCheckLedger = $null -ne $parsed -and $parsed.PSObject.Properties.Name -contains 'checkLedger'
     $hasRows = $null -ne $parsed -and $parsed.PSObject.Properties.Name -contains 'rows'
     $priorRows = if ($hasCheckLedger) { @($parsed.checkLedger) } elseif ($hasRows) { @($parsed.rows) } else { @() }
+    foreach ($entry in $priorRows) { $script:PriorLedgerHistory.Add($entry) }
     foreach ($row in $Rows) {
         $prior = $priorRows | Where-Object { [string]$_.check_id -eq [string]$row.check_id } | Select-Object -First 1
         if ($null -eq $prior -or [string]$prior.status -notin @('executed', 'reused')) { continue }
@@ -375,12 +643,18 @@ function Merge-ExistingLedger {
         $exact = $priorSha -eq $CurrentSha
         $pureReattest = (-not [bool]$row.mutates_project) -and $sameInputs -and $sameEnvironment -and $null -ne $changed -and -not (Test-PathIntersects @($changed) @($row.invalidation_paths))
         $manualProof = ([string]$row.check_id -match '(bake|capture|manual)') -or [string]$row.check_id -eq 'review-marker' -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
+        $reuseProof = Test-RowReuseProof $prior $row
         if ($exact) {
+            if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid) {
+                $row.status = 'invalidated'
+                $row.invalidation_reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } else { [string]$reuseProof.reason }
+                continue
+            }
             if ([string]$row.check_id -eq 'review-marker') {
                 if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) {
                     $row.status = 'invalidated'; $row.invalidation_reason = 'source/reviewed SHA missing for marker reuse'; continue
                 }
-                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha }
+                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha $ExecutionId $Checkpoint }
                 catch { $row.status = 'invalidated'; $row.invalidation_reason = 'review marker/report revalidation failed: ' + $_.Exception.Message; continue }
             }
             $row.status = 'reused'
@@ -394,7 +668,7 @@ function Merge-ExistingLedger {
                 if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) {
                     $row.status = 'invalidated'; $row.invalidation_reason = 'source/reviewed SHA missing for marker reuse'; continue
                 }
-                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha }
+                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha $ExecutionId $Checkpoint }
                 catch { $row.status = 'invalidated'; $row.invalidation_reason = 'review marker/report revalidation failed: ' + $_.Exception.Message; continue }
             }
             $row.status = 'reused'
@@ -403,9 +677,16 @@ function Merge-ExistingLedger {
             $row.evidence_path = $evidencePath
             $row.evidence_digest = $evidenceDigest
             $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
+        } elseif ($pureReattest -and $manualProof -and $reuseProof.valid) {
+            $row.status = 'reused'
+            $row.executed_sha = [string]$prior.executed_sha
+            $row.validated_sha = $CurrentSha
+            $row.evidence_path = $evidencePath
+            $row.evidence_digest = $evidenceDigest
+            $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
         } else {
             $row.status = 'invalidated'
-            $row.invalidation_reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } else { 'proof cannot reattest' }
+            $row.invalidation_reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
         }
     }
 }
@@ -499,7 +780,9 @@ function Copy-CaptureEvidence {
     if (-not (Test-Path -LiteralPath $captureDirectory -PathType Container)) { New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null }
     $sourceDirectory = Split-Path -Parent $manifestPath
     foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceDirectory -File -Force) {
-        Copy-Item -LiteralPath $sourceFile.FullName -Destination (Join-Path $captureDirectory $sourceFile.Name) -Force
+        $destination = Join-Path $captureDirectory $sourceFile.Name
+        if (Test-Path -LiteralPath $destination) { throw ('Capture evidence destination already exists: ' + $destination) }
+        Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination
     }
     $durableManifest = Join-Path $captureDirectory (Split-Path -Leaf $manifestPath)
     if (-not (Test-Path -LiteralPath $durableManifest -PathType Leaf)) { throw ('Durable capture manifest copy missing: ' + $durableManifest) }
@@ -526,6 +809,7 @@ function Assert-ProbeStringArray {
 function Read-ProbeContract {
     $path = $script:ProbeOutputPath
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        $script:ProbeInventoryPaths = @()
         return [ordered]@{
             status = 'missing'
             path = $path
@@ -577,6 +861,7 @@ function Read-ProbeContract {
     $fingerprintPaths = @(Assert-ProbeStringArray 'fingerprintPaths' $probe.fingerprintPaths)
     $fingerprintHashes = @(Assert-ProbeStringArray 'fingerprintHashes' $probe.fingerprintHashes)
     if ($fingerprintPaths.Count -ne $fingerprintHashes.Count) { throw 'Stage probe fingerprintPaths and fingerprintHashes counts must match.' }
+    $script:ProbeInventoryPaths = @($fingerprintPaths)
     $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
     return [ordered]@{
         status = 'read'
@@ -598,48 +883,94 @@ function Read-ProbeContract {
     }
 }
 
+function Assert-ProbeContractForMode {
+    param([Parameter(Mandatory = $true)]$Probe, [Parameter(Mandatory = $true)][string]$WorkflowMode)
+    if ([string]$Probe.status -eq 'missing') {
+        if (-not $PlanOnly) { throw ('Stage probe is required for executing ' + $WorkflowMode + ' workflow; missing probe is allowed only for PlanOnly.') }
+        return
+    }
+    if ([string]$Probe.status -ne 'read' -or [int]$Probe.schemaVersion -ne 1) { throw 'Stage probe schemaVersion 1 is required before workflow execution.' }
+    if ([string]$Probe.gitSha -ne (Get-HeadSha) -or [string]$Probe.unityVersion -ne $script:UnityVersion) { throw 'Stage probe SHA/version binding failed.' }
+    if ([string]$Probe.manifestStatus -notin @('current', 'stale')) { throw ('Stage probe manifestStatus is invalid: ' + [string]$Probe.manifestStatus) }
+    if (@($Probe.staleStages).Count -ne @($Probe.staleReasons).Count) { throw 'Stage probe staleStages/staleReasons coverage mismatch.' }
+    if ([string]$Probe.manifestStatus -eq 'current' -and @($Probe.staleStages).Count -gt 0) { throw 'Stage probe current manifest cannot list stale stages.' }
+    if ([string]$Probe.manifestStatus -eq 'stale' -and @($Probe.staleStages).Count -eq 0) { throw 'Stage probe stale manifest must list stale stages and reasons.' }
+    foreach ($staleStage in @($Probe.staleStages)) { if ([string]::IsNullOrWhiteSpace([string]$staleStage)) { throw 'Stage probe staleStages cannot contain empty values.' } }
+    foreach ($staleReason in @($Probe.staleReasons)) { if ([string]::IsNullOrWhiteSpace([string]$staleReason)) { throw 'Stage probe staleReasons cannot contain empty values.' } }
+    if (@($Probe.fingerprintPaths).Count -eq 0 -or @($Probe.fingerprintPaths).Count -ne @($Probe.fingerprintHashes).Count) { throw 'Stage probe fingerprint coverage is incomplete.' }
+    $seen = @{}
+    foreach ($fingerprintPath in @($Probe.fingerprintPaths)) {
+        $normalized = ([string]$fingerprintPath).Replace('\', '/').TrimStart('/')
+        if (-not (Test-InventoryMember $normalized) -or $seen.ContainsKey($normalized)) { throw ('Stage probe fingerprint path is outside closed inventory or duplicated: ' + $normalized) }
+        $seen[$normalized] = $true
+    }
+    foreach ($fingerprintHash in @($Probe.fingerprintHashes)) { if ([string]$fingerprintHash -notmatch '^[0-9a-fA-F]{32,128}$') { throw 'Stage probe fingerprint hash is invalid.' } }
+    if ($WorkflowMode -in @('Development', 'ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.manifestStatus -ne 'current') { throw ($WorkflowMode + ' requires a current stage probe manifest.') }
+}
+
 function Read-ReviewMarker {
-    param([Parameter(Mandatory = $true)][string]$ProjectShaValue, [Parameter(Mandatory = $true)][string]$SourceShaValue, [Parameter(Mandatory = $true)][string]$ReviewedShaValue)
+    param(
+        [Parameter(Mandatory = $true)][string]$ProjectShaValue,
+        [Parameter(Mandatory = $true)][string]$SourceShaValue,
+        [Parameter(Mandatory = $true)][string]$ReviewedShaValue,
+        [string]$ExpectedExecutionId = '',
+        [string]$ExpectedCheckpoint = $Checkpoint
+    )
     $path = Assert-DurableEvidencePath (Join-Path $script:GitCommonRoot ('architecture-evidence\movement-lab-prebake\reviews\' + $ProjectShaValue + '.json')) 'Review marker'
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Review marker missing: ' + $path) }
     $marker = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
     if ($null -eq $marker) { throw ('Review marker is stale or incomplete: ' + $path) }
-    $required = @('schemaVersion', 'gitSha', 'projectSha', 'sourceSha', 'reviewedSha', 'sourceReviewCompleted', 'criticalHighFixesApplied', 'reviewer', 'checkpoint', 'completedUtc', 'reviewReportPaths', 'reviewReportSha256s')
+    $required = @('schemaVersion', 'gitSha', 'projectSha', 'sourceSha', 'reviewedSha', 'sourceReviewCompleted', 'criticalHighFixesApplied', 'reviewer', 'reviewerIdentity', 'executionId', 'reviewExecutionId', 'checkpoint', 'reviewCheckpoint', 'completedUtc', 'reviewReportPaths', 'reviewReportSha256s', 'findingDispositions')
     $markerProperties = @($marker.PSObject.Properties.Name)
-    foreach ($field in $required) {
-        if (-not $markerProperties.Contains($field)) { throw ('Review marker field is missing: ' + $field) }
-    }
-    if (($marker.schemaVersion -isnot [int16]) -and ($marker.schemaVersion -isnot [int32]) -and ($marker.schemaVersion -isnot [int64])) { throw 'Review marker schemaVersion must be an integer.' }
-    foreach ($boolField in @('sourceReviewCompleted', 'criticalHighFixesApplied')) {
-        if ($marker.$boolField -isnot [bool]) { throw ('Review marker ' + $boolField + ' must be boolean.') }
-    }
+    foreach ($field in $required) { if (-not $markerProperties.Contains($field)) { throw ('Review marker field is missing: ' + $field) } }
+    if ([int]$marker.schemaVersion -ne 1) { throw 'Review marker schemaVersion must equal 1.' }
+    foreach ($boolField in @('sourceReviewCompleted', 'criticalHighFixesApplied')) { if ($marker.$boolField -isnot [bool]) { throw ('Review marker ' + $boolField + ' must be boolean.') } }
     foreach ($shaField in @('gitSha', 'projectSha', 'sourceSha', 'reviewedSha')) {
         if ($marker.$shaField -isnot [string] -or [string]$marker.$shaField -notmatch '^[0-9a-fA-F]{40}$') { throw ('Review marker ' + $shaField + ' must be an exact SHA.') }
     }
-    $reportPaths = if ($marker.PSObject.Properties.Name -contains 'reviewReportPaths') { @($marker.reviewReportPaths) } else { @() }
-    $reportShas = if ($marker.PSObject.Properties.Name -contains 'reviewReportSha256s') { @($marker.reviewReportSha256s) } else { @() }
-    $findingDispositions = if ($marker.PSObject.Properties.Name -contains 'findingDispositions') { @($marker.findingDispositions) } else { @() }
-    if ([int]$marker.schemaVersion -ne 1 -or [string]$marker.gitSha -ne $ProjectShaValue -or [string]$marker.projectSha -ne $ProjectShaValue -or
-        [string]$marker.sourceSha -ne $SourceShaValue -or [string]$marker.reviewedSha -ne $ReviewedShaValue -or -not [bool]$marker.sourceReviewCompleted -or
-        -not [bool]$marker.criticalHighFixesApplied -or [string]::IsNullOrWhiteSpace([string]$marker.reviewer) -or [string]::IsNullOrWhiteSpace([string]$marker.checkpoint) -or
-        [string]::IsNullOrWhiteSpace([string]$marker.completedUtc) -or
-        $reportPaths.Count -eq 0 -or $reportPaths.Count -ne $reportShas.Count) {
-        throw ('Review marker is stale or incomplete: ' + $path)
+    if ([string]$marker.gitSha -ne $ProjectShaValue -or [string]$marker.projectSha -ne $ProjectShaValue -or [string]$marker.sourceSha -ne $SourceShaValue -or [string]$marker.reviewedSha -ne $ReviewedShaValue) { throw ('Review marker SHA binding mismatch: ' + $path) }
+    if (-not (Test-IsAncestor $SourceShaValue $ReviewedShaValue) -or -not (Test-IsAncestor $ReviewedShaValue $ProjectShaValue) -or -not (Test-IsAncestor $SourceShaValue $ProjectShaValue)) { throw ('Review marker SHA ancestry is invalid: ' + $path) }
+    if (-not [bool]$marker.sourceReviewCompleted -or -not [bool]$marker.criticalHighFixesApplied) { throw ('Review marker does not assert completed review/fixes: ' + $path) }
+    foreach ($field in @('reviewer', 'reviewerIdentity', 'executionId', 'reviewExecutionId', 'checkpoint', 'reviewCheckpoint', 'completedUtc')) {
+        if ($marker.$field -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$marker.$field) -or ([string]$marker.$field).IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw ('Review marker identity field is invalid: ' + $field) }
     }
-    foreach ($stringField in @('reviewer', 'checkpoint', 'completedUtc')) {
-        if ($marker.$stringField -isnot [string]) { throw ('Review marker ' + $stringField + ' must be a string.') }
+    if ([string]$marker.checkpoint -ne [string]$marker.reviewCheckpoint -or $marker.checkpoint -ne $ExpectedCheckpoint) { throw ('Review marker checkpoint binding mismatch: ' + $path) }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedExecutionId) -and [string]$marker.executionId -ne $ExpectedExecutionId) { throw ('Review marker execution identity mismatch: ' + $path) }
+    $reportPaths = @($marker.reviewReportPaths)
+    $reportShas = @($marker.reviewReportSha256s)
+    if ($reportPaths.Count -eq 0 -or $reportPaths.Count -ne $reportShas.Count) { throw ('Review marker reports are incomplete: ' + $path) }
+    $dispositions = @($marker.findingDispositions)
+    $dispositionMap = @{}
+    foreach ($disposition in $dispositions) {
+        $id = [string]$disposition.id
+        $value = [string]$disposition.disposition
+        if ($id -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $value.ToLowerInvariant() -notin @('fixed', 'resolved', 'closed', 'accepted', 'waived') -or $dispositionMap.ContainsKey($id)) { throw ('Review marker finding disposition is invalid: ' + $id) }
+        $dispositionMap[$id] = $value
     }
-    foreach ($identity in @([string]$marker.reviewer, [string]$marker.checkpoint, [string]$marker.completedUtc)) {
-        if ([string]::IsNullOrWhiteSpace($identity) -or $identity.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw ('Review marker identity/time must be one line: ' + $path) }
-    }
+    $findingIds = New-Object System.Collections.Generic.List[string]
     for ($index = 0; $index -lt $reportPaths.Count; $index++) {
         $reportPath = Assert-DurableEvidencePath ([string]$reportPaths[$index]) 'Review report'
         if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw ('Review report missing: ' + $reportPath) }
         if ([string]$reportShas[$index] -notmatch '^[0-9a-fA-F]{64}$') { throw ('Review report SHA-256 invalid: ' + $reportPath) }
         $actualReportSha = (Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actualReportSha -ne ([string]$reportShas[$index]).ToLowerInvariant()) { throw ('Review report SHA-256 mismatch: ' + $reportPath) }
+        $text = Get-Content -Raw -LiteralPath $reportPath
+        $report = $null
+        if ([IO.Path]::GetExtension($reportPath).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) { try { $report = $text | ConvertFrom-Json } catch { throw ('Review report JSON is invalid: ' + $reportPath) } }
+        $field = { param([string]$name) $m = [Regex]::Match($text, '(?m)^\s*' + [Regex]::Escape($name) + ':\s*(.+?)\s*$'); if ($m.Success) { $m.Groups[1].Value.Trim() } else { '' } }
+        $executionId = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'execution_id') { [string]$report.execution_id } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'executionId') { [string]$report.executionId } else { & $field 'execution_id' }
+        $checkpointId = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'checkpoint_id') { [string]$report.checkpoint_id } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'checkpointId') { [string]$report.checkpointId } else { & $field 'checkpoint_id' }
+        $reviewed = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewed_sha') { [string]$report.reviewed_sha } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewedSha') { [string]$report.reviewedSha } else { & $field 'reviewed_sha' }
+        $verdict = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'verdict') { [string]$report.verdict } else { & $field 'verdict' }
+        $identity = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'identity') { [string]$report.identity } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewer') { [string]$report.reviewer } else { & $field 'identity' }
+        $reportStatus = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'status') { [string]$report.status } else { & $field 'status' }
+        if ($executionId -ne [string]$marker.reviewExecutionId -or $checkpointId -ne [string]$marker.reviewCheckpoint -or $reviewed.ToLowerInvariant() -ne $ReviewedShaValue -or $identity -ne [string]$marker.reviewer -or $reportStatus -notin @('complete', 'accepted', 'findings') -or $verdict.ToLowerInvariant() -notin @('accepted', 'findings')) { throw ('Review report semantics mismatch: ' + $reportPath) }
+        if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'findings') { foreach ($finding in @($report.findings)) { if ($null -ne $finding -and -not $findingIds.Contains([string]$finding.id)) { $findingIds.Add([string]$finding.id) } } }
+        else { foreach ($line in ($text -split "`r?`n")) { $m = [Regex]::Match($line, '^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s+(Critical|High|Medium|Low)\s*:'); if ($m.Success -and -not $findingIds.Contains($m.Groups[1].Value)) { $findingIds.Add($m.Groups[1].Value) } } }
     }
-    return [ordered]@{ status = 'validated'; markerPath = $path; markerSha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); projectSha = $ProjectShaValue; sourceSha = $SourceShaValue; reviewedSha = $ReviewedShaValue; reviewer = [string]$marker.reviewer; checkpoint = [string]$marker.checkpoint; reviewReportPaths = $reportPaths; reviewReportSha256s = $reportShas; findingDispositions = $findingDispositions; gitMutation = $false }
+    foreach ($findingId in $findingIds) { if (-not $dispositionMap.ContainsKey($findingId)) { throw ('Review marker missing finding disposition: ' + $findingId) } }
+    foreach ($dispositionId in @($dispositionMap.Keys)) { if (-not $findingIds.Contains([string]$dispositionId)) { throw ('Review marker has disposition for unknown finding: ' + $dispositionId) } }
+    return [ordered]@{ status = 'validated'; markerPath = $path; markerSha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); projectSha = $ProjectShaValue; sourceSha = $SourceShaValue; reviewedSha = $ReviewedShaValue; reviewer = [string]$marker.reviewer; reviewerIdentity = [string]$marker.reviewerIdentity; executionId = [string]$marker.executionId; reviewExecutionId = [string]$marker.reviewExecutionId; checkpoint = [string]$marker.checkpoint; reviewReportPaths = $reportPaths; reviewReportSha256s = $reportShas; findingDispositions = $dispositions; gitMutation = $false }
 }
 
 function Write-AtomicJson {
@@ -647,24 +978,19 @@ function Write-AtomicJson {
     $directory = Split-Path -Parent $Path
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
     $temporary = Join-Path $directory ('.movement-lab-workflow-' + [Guid]::NewGuid().ToString('N') + '.tmp')
-    $backup = $null
     $json = ($Value | ConvertTo-Json -Depth 14) + "`n"
     try {
         [System.IO.File]::WriteAllText($temporary, $json, (New-Object System.Text.UTF8Encoding($false)))
-        if (Test-Path -LiteralPath $Path -PathType Leaf) {
-            $backup = $Path + '.backup-' + [Guid]::NewGuid().ToString('N')
-            [System.IO.File]::Replace($temporary, $Path, $backup)
-            if (Test-Path -LiteralPath $backup) { [System.IO.File]::Delete($backup) }
-        } else {
-            [System.IO.File]::Move($temporary, $Path)
-        }
+        if (Test-Path -LiteralPath $Path) { throw ('Immutable evidence path already exists: ' + $Path) }
+        [System.IO.File]::Move($temporary, $Path)
     } finally {
         if (Test-Path -LiteralPath $temporary) { [System.IO.File]::Delete($temporary) }
-        if ($null -ne $backup -and (Test-Path -LiteralPath $backup)) { [System.IO.File]::Delete($backup) }
     }
 }
 
 if (-not (Test-Path -LiteralPath $script:ProjectRoot -PathType Container)) { throw ('Project path not found: ' + $script:ProjectRoot) }
+$script:ProjectRoot = Get-CanonicalPath $script:ProjectRoot
+$script:CanonicalProjectRoot = $script:ProjectRoot
 if ($script:ProjectRoot.Length -gt 80) { throw 'Project path must be short (80 characters or fewer).' }
 if (-not [System.IO.Path]::IsPathRooted($ProjectPath)) { throw 'ProjectPath must be absolute.' }
 if (-not $PlanOnly -and -not (Test-Path -LiteralPath $script:UnityPath -PathType Leaf)) { throw ('Unity ' + $script:UnityVersion + ' not found: ' + $script:UnityPath) }
@@ -680,7 +1006,8 @@ if (-not $PlanOnly) {
 
 $commonRaw = Invoke-Git @('rev-parse', '--git-common-dir')
 $commonGit = if ([System.IO.Path]::IsPathRooted($commonRaw)) { Get-FullPath $commonRaw } else { Get-FullPath (Join-Path $script:ProjectRoot $commonRaw) }
-$script:GitCommonRoot = $commonGit
+$script:GitCommonRoot = Get-CanonicalPath $commonGit
+$commonGit = $script:GitCommonRoot
 $projectRoot = $script:ProjectRoot.TrimEnd('\')
 if ($commonGit.Equals($projectRoot, [StringComparison]::OrdinalIgnoreCase) -or
     $commonGit.StartsWith($projectRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
@@ -688,12 +1015,23 @@ if ($commonGit.Equals($projectRoot, [StringComparison]::OrdinalIgnoreCase) -or
 }
 $attemptValue = if ([string]::IsNullOrWhiteSpace($AttemptId)) { [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') } else { $AttemptId }
 if ($attemptValue -notmatch '^[A-Za-z0-9._-]+$') { throw 'AttemptId must contain only letters, digits, dot, underscore, or hyphen.' }
-$defaultEvidence = Join-Path $commonGit ('movement-lab-proof\' + $attemptValue)
-$script:EvidenceDirectory = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) { Assert-DurableEvidencePath (Get-FullPath $defaultEvidence) 'EvidenceRoot' } else { Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot' }
-if (-not (Test-Path -LiteralPath $script:EvidenceDirectory -PathType Container)) { New-Item -ItemType Directory -Force -Path $script:EvidenceDirectory | Out-Null }
+if ($attemptValue.Length -gt 80) { throw 'AttemptId must be 80 characters or fewer.' }
+$script:InvocationId = $attemptValue + '-' + [Guid]::NewGuid().ToString('N')
+$evidenceBase = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+    Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptValue))) 'EvidenceRoot'
+} else { Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot' }
+$script:EvidenceDirectory = Assert-DurableEvidencePath (Join-Path $evidenceBase ('invocation-' + $script:InvocationId)) 'InvocationEvidenceRoot'
+if (Test-Path -LiteralPath $script:EvidenceDirectory) { throw ('Evidence invocation path already exists; refusing overwrite: ' + $script:EvidenceDirectory) }
+New-Item -ItemType Directory -Force -Path $script:EvidenceDirectory | Out-Null
+$evidenceItem = Get-Item -LiteralPath $script:EvidenceDirectory -Force
+if (($evidenceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Evidence invocation path may not be a junction or alias: ' + $script:EvidenceDirectory) }
+$canonicalEvidenceParent = Get-CanonicalPath (Split-Path -Parent $script:EvidenceDirectory)
+if ($canonicalEvidenceParent.Equals($script:CanonicalProjectRoot, [StringComparison]::OrdinalIgnoreCase) -or $canonicalEvidenceParent.StartsWith($script:CanonicalProjectRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence destination resolves inside project.' }
+$script:LeaseReleaseProofPath = Join-Path $script:EvidenceDirectory 'lease-release-proof.json'
 $logs = Join-Path $script:EvidenceDirectory 'logs'
 if (-not (Test-Path -LiteralPath $logs -PathType Container)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }
 $script:ProbeOutputPath = if ([string]::IsNullOrWhiteSpace($ProbePath)) { Join-Path $script:EvidenceDirectory 'movement-lab-stage-probe.json' } else { Assert-DurableEvidencePath $ProbePath 'ProbePath' }
+if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
 
 $beforeHead = Get-HeadSha
 $SourceSha = if ([string]::IsNullOrWhiteSpace($SourceSha)) { '' } else { Assert-OneLineValue 'SourceSha' $SourceSha }
@@ -706,6 +1044,7 @@ foreach ($shaField in @(@('SourceSha', $SourceSha), @('ReviewedSha', $ReviewedSh
 $SourceSha = $SourceSha.ToLowerInvariant()
 $ReviewedSha = $ReviewedSha.ToLowerInvariant()
 if (-not [string]::IsNullOrWhiteSpace($Reviewer)) { $Reviewer = Assert-OneLineValue 'Reviewer' $Reviewer }
+$ExecutionId = if ([string]::IsNullOrWhiteSpace($ExecutionId)) { '' } else { Assert-OneLineValue 'ExecutionId' $ExecutionId }
 $Checkpoint = Assert-OneLineValue 'Checkpoint' $Checkpoint
 $ReviewReportPath = @($ReviewReportPath)
 $ReviewReportSha256 = @($ReviewReportSha256)
@@ -718,10 +1057,14 @@ for ($reportIndex = 0; $reportIndex -lt $ReviewReportPath.Count; $reportIndex++)
 foreach ($finding in $FindingDisposition) {
     if (-not [string]::IsNullOrWhiteSpace([string]$finding)) { Assert-OneLineValue 'FindingDisposition' ([string]$finding) | Out-Null }
 }
-if ($Mode -eq 'ProductionPrepare' -and -not [string]::IsNullOrWhiteSpace($SourceSha) -and $SourceSha -ne $beforeHead) { throw 'ProductionPrepare SourceSha must match clean current HEAD.' }
-if ($Mode -eq 'ProductionPrepare' -and -not [string]::IsNullOrWhiteSpace($ReviewedSha) -and $ReviewedSha -ne $beforeHead) { throw 'ProductionPrepare ReviewedSha must match clean current HEAD.' }
+if ($Mode -eq 'ProductionPrepare') {
+    if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) { throw 'ProductionPrepare requires SourceSha and ReviewedSha.' }
+    if (-not (Test-IsAncestor $SourceSha $ReviewedSha) -or -not (Test-IsAncestor $ReviewedSha $beforeHead)) { throw 'ProductionPrepare requires SourceSha -> ReviewedSha -> project HEAD ancestry.' }
+}
 $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -in @('ProductionPrepare', 'ProductionValidate') -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
+Acquire-ProjectLease
+try {
 Assert-NoProjectProcessOrLock
 
 $beforeHashes = Get-GeneratedHashes
@@ -737,6 +1080,7 @@ try {
         'Fast' {
             if (Test-CheckPending 'compile') { Invoke-UnityStep 'CompileAndProbe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'compile' } else { Mark-CheckReused 'compile' }
             $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'Fast'
             if (Test-CheckPending 'stage-probe') { Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
             if (Test-CheckPending 'fast-build') { Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build' } else { Mark-CheckReused 'fast-build' }
         }
@@ -744,11 +1088,13 @@ try {
             if (Test-CheckPending 'fast-build') { Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build' } else { Mark-CheckReused 'fast-build' }
             if (Test-CheckPending 'development-bake') { Invoke-UnityStep 'DevelopmentBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLightingDevelopment' @('-movementLabProbePath', $script:ProbeOutputPath) $true; Mark-CheckExecuted 'development-bake' } else { Mark-CheckReused 'development-bake' }
             $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
-            if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha) -or [string]::IsNullOrWhiteSpace($Reviewer)) { throw 'ProductionPrepare requires SourceSha, ReviewedSha, and Reviewer.' }
+            if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha) -or [string]::IsNullOrWhiteSpace($Reviewer) -or $ReviewReportPath.Count -eq 0) { throw 'ProductionPrepare requires SourceSha, ReviewedSha, Reviewer, and durable review reports.' }
             $markerScript = Join-Path $PSScriptRoot 'Write-MovementLabPreBakeReviewMarker.ps1'
             $markerArgs = @('-ProjectPath', $script:ProjectRoot, '-ProjectSha', $beforeHead, '-SourceSha', $SourceSha, '-ReviewedSha', $ReviewedSha, '-Reviewer', $Reviewer, '-Checkpoint', $Checkpoint)
+            if (-not [string]::IsNullOrWhiteSpace($ExecutionId)) { $markerArgs += @('-ExecutionId', $ExecutionId) }
             if ($ReviewReportPath.Count -gt 0) { foreach ($path in $ReviewReportPath) { $markerArgs += @('-ReviewReportPath', $path) } }
             if ($ReviewReportSha256.Count -gt 0) { foreach ($sha in $ReviewReportSha256) { $markerArgs += @('-ReviewReportSha256', $sha) } }
             if ($FindingDisposition.Count -gt 0) { foreach ($finding in $FindingDisposition) { $markerArgs += @('-FindingDisposition', $finding) } }
@@ -764,10 +1110,11 @@ try {
             }
             $markerPathForRead = Assert-DurableEvidencePath (Join-Path $script:GitCommonRoot ('architecture-evidence\movement-lab-prebake\reviews\' + $beforeHead + '.json')) 'Review marker'
             if (-not $PlanOnly -or ($markerReused -and (Test-Path -LiteralPath $markerPathForRead -PathType Leaf))) {
-                $markerResult = Read-ReviewMarker $beforeHead $SourceSha $ReviewedSha
+                $markerResult = Read-ReviewMarker $beforeHead $SourceSha $ReviewedSha $ExecutionId $Checkpoint
             }
             if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
             $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
             $productionBakePending = Test-CheckPending 'production-bake'
             if ($productionBakePending) {
                 Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
@@ -795,6 +1142,8 @@ try {
             $build2After = Get-GeneratedHashes
             $build2Changed = @(Get-ChangedHashPaths $build2Before $build2After)
             if ($build2Changed.Count -gt 0) { throw ('Build 2 changed generated paths: ' + ($build2Changed -join ', ')) }
+            $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'ProductionPrepareFinal'
         }
         'ProductionValidate' {
             if ($Capture) {
@@ -807,6 +1156,7 @@ try {
             }
             Mark-CheckExecuted 'final-source-clean'
             $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
         }
     }
 } finally {
@@ -815,6 +1165,8 @@ try {
 
 $afterHashes = Get-GeneratedHashes
 $changedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
+$afterGeneratedHashDigest = Get-GeneratedHashDigest $afterHashes
+$afterWorkingTreeDigest = Get-WorkingTreeDigest
 $dirtyAfter = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -eq 'ProductionPrepare') {
     if ($dirtyAfter.Count -gt 0) { throw ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
@@ -835,6 +1187,10 @@ foreach ($row in $ledger) {
         $row.status = 'executed'
         $row.executed_sha = $beforeHead
         $row.validated_sha = $afterHead
+        $row.generated_hashes = $afterHashes
+        $row.generated_hash_digest = $afterGeneratedHashDigest
+        $row.working_tree_digest = $afterWorkingTreeDigest
+        $row.invocation_id = $script:InvocationId
         # Point rows at immutable payload before writing it. Final ledger then
         # records payload digest without self-referential hashing.
         $row.evidence_path = $ledgerPayloadPath
@@ -842,7 +1198,7 @@ foreach ($row in $ledger) {
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $null }
     }
 }
-Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; rows = @($ledger) })
+Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
 $ledgerEvidenceDigest = (Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
 foreach ($row in $ledger) {
     if ($row.status -eq 'executed') {
@@ -850,12 +1206,16 @@ foreach ($row in $ledger) {
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $ledgerEvidenceDigest }
     }
 }
-Write-AtomicJson $ledgerEvidencePath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; rows = @($ledger) })
+Write-AtomicJson $ledgerEvidencePath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
 $ledgerFinalDigest = (Get-FileHash -LiteralPath $ledgerEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ((Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledgerEvidenceDigest) { throw 'Ledger payload digest changed after final writes.' }
+if ((Get-FileHash -LiteralPath $ledgerEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledgerFinalDigest) { throw 'Ledger evidence digest changed after final writes.' }
 
+$manifestPath = Join-Path $script:EvidenceDirectory 'evidence-manifest.json'
+$resultPath = Join-Path $script:EvidenceDirectory 'workflow-result.json'
 $result = [ordered]@{
     schemaVersion = 1
-    status = 'planned' # replaced after manifest write
+    status = if ($PlanOnly) { 'planned' } else { 'complete' }
     mode = $Mode
     projectPath = $script:ProjectRoot
     unityVersion = $script:UnityVersion
@@ -879,19 +1239,25 @@ $result = [ordered]@{
     checkLedgerSha256 = $ledgerFinalDigest
     checkLedger = @($ledger)
     lockReleaseProof = @($script:ReleaseProof.ToArray())
-    evidenceManifestPath = $null
+    evidenceManifestPath = $manifestPath
     evidenceManifestSha256 = $null
+    outputManifestPath = $manifestPath
+    invocationId = $script:InvocationId
+    canonicalProjectRoot = $script:CanonicalProjectRoot
+    leasePath = $script:LeasePath
+    leaseReleaseProofPath = $script:LeaseReleaseProofPath
     gitMutation = $false
     noGitMutation = $true
 }
-$result.status = if ($PlanOnly) { 'planned' } else { 'complete' }
-$resultPath = Join-Path $script:EvidenceDirectory 'workflow-result.json'
-Write-AtomicJson $resultPath $result
 $manifest = [ordered]@{
     schemaVersion = 1
     workflow = 'MovementLab'
     mode = $Mode
     exactSha = $afterHead
+    invocationId = $script:InvocationId
+    canonicalProjectRoot = $script:CanonicalProjectRoot
+    leasePath = $script:LeasePath
+    leaseReleaseProofPath = $script:LeaseReleaseProofPath
     resultPath = $resultPath
     commands = @($script:CommandRecords.ToArray())
     elapsedMs = $result.elapsedMs
@@ -904,17 +1270,17 @@ $manifest = [ordered]@{
     checkLedgerPayloadSha256 = $ledgerEvidenceDigest
     checkLedgerSha256 = $ledgerFinalDigest
     checkLedger = @($ledger)
+    history = @($script:PriorManifestHistory.ToArray())
     lockReleaseProof = @($script:ReleaseProof.ToArray())
     gitMutation = $false
 }
-$manifestPath = Join-Path $script:EvidenceDirectory 'evidence-manifest.json'
 Write-AtomicJson $manifestPath $manifest
 $manifestDigest = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
-
-$result.outputManifestPath = $manifestPath
 $result.evidenceManifestSha256 = $manifestDigest
-$result.evidenceManifestPath = $manifestPath
 Write-AtomicJson $resultPath $result
+$resultDigest = (Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash.ToLowerInvariant()
+if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifestDigest) { throw 'Evidence manifest digest changed after final writes.' }
+if ((Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $resultDigest) { throw 'Workflow result digest changed after final writes.' }
 [ordered]@{
     schemaVersion = 1
     status = $result.status
@@ -926,3 +1292,10 @@ Write-AtomicJson $resultPath $result
     changedGeneratedPaths = $changedGeneratedPaths
     gitMutation = $false
 } | ConvertTo-Json -Depth 14
+} finally {
+    try { Release-ProjectLease } finally {
+        if ($script:ReleaseProof.Count -gt 0 -and -not (Test-Path -LiteralPath $script:LeaseReleaseProofPath)) {
+            Write-AtomicJson $script:LeaseReleaseProofPath ([ordered]@{ schemaVersion = 1; invocationId = $script:InvocationId; canonicalProjectRoot = $script:CanonicalProjectRoot; leasePath = $script:LeasePath; releaseProof = @($script:ReleaseProof.ToArray()) })
+        }
+    }
+}
