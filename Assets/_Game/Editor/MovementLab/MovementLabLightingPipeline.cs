@@ -368,11 +368,9 @@ namespace RocketFooxball.Editor
 
                 internal static void NormalizePostBakeYamlWhitespace()
                 {
-                    // Only bake-owned serialized YAML may be normalized after
-                    // Lightmapping.Bake. Material/prefab/controller outputs are
-                    // pre-bake inputs and remain byte/dirty-state protected.
+                    // The scene is text YAML. LightingData.asset is a native
+                    // binary asset and must never pass through text normalization.
                     MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.ScenePath);
-                    MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.BakedLightingPath + "/LightingData.asset");
                 }
 
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
