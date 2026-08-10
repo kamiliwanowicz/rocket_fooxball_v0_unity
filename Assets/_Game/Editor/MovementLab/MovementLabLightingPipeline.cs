@@ -440,11 +440,12 @@ namespace RocketFooxball.Editor
                     }
 
                     var probeGroup = GameObject.Find("Environment/LightProbes")?.GetComponent<LightProbeGroup>();
-                    if (probeGroup == null || probeGroup.probePositions == null || probeGroup.probePositions.Length < 100)
-                        throw new InvalidOperationException("Light probe lattice missing or too sparse.");
+                    if (probeGroup == null || probeGroup.probePositions == null)
+                        throw new InvalidOperationException("Light probe lattice is missing.");
                     var probes = GameObject.FindObjectsByType<ReflectionProbe>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
-                    var expectedReflectionResolution = ResolvePersistedValidationProfile(includeBakedLighting).ReflectionResolution;
                     if (probes.Length != ReflectionProbeContract.Length) throw new InvalidOperationException("Reflection probe count invalid.");
+                    var expectedLightingProfile = ResolveReadOnlyValidationProfile(includeBakedLighting, probeGroup.probePositions.Length, probes);
+                    var expectedReflectionResolution = expectedLightingProfile.ReflectionResolution;
                     for (var i = 0; i < ReflectionProbeContract.Length; i++)
                     {
                         var expected = ReflectionProbeContract[i];
@@ -499,19 +500,24 @@ namespace RocketFooxball.Editor
                     Debug.Log("Rocket Fooxball Movement Lab render budget: triangles=" + sceneTriangles + " MeshRenderers=" + meshRenderers + " opaqueDraws=" + opaqueDraws + " staticTransparent=" + transparentStatic);
                 }
 
-                private static MovementLabLightingProfiles.Specification ResolvePersistedValidationProfile(bool includeBakedLighting)
+                private static MovementLabLightingProfiles.Specification ResolveReadOnlyValidationProfile(bool includeBakedLighting, int probeCount, ReflectionProbe[] probes)
                 {
-                    if (includeBakedLighting) return MovementLabLightingProfiles.Production;
-                    var path = MovementLabManifestStore.ResolveProjectPath(MovementLabContract.LightingManifestPath);
-                    if (!File.Exists(path)) return MovementLabLightingProfiles.Production;
-                    try
+                    if (includeBakedLighting)
                     {
-                        var state = JsonUtility.FromJson<MovementLabLightingManifestState>(File.ReadAllText(path));
-                        if (state != null && string.Equals(state.profileId, MovementLabLightingProfiles.Development.Id.ToString(), StringComparison.Ordinal))
-                            return MovementLabLightingProfiles.Development;
+                        if (probeCount != MovementLabLightingProfiles.Production.ProbeCount ||
+                            probes.Any(probe => probe == null || probe.resolution != MovementLabLightingProfiles.Production.ReflectionResolution))
+                            throw new InvalidOperationException("MovementLab baked lighting requires the exact production probe profile.");
+                        return MovementLabLightingProfiles.Production;
                     }
-                    catch { /* typed profile gate reports malformed manifests elsewhere */ }
-                    return MovementLabLightingProfiles.Production;
+
+                    if (probeCount == MovementLabLightingProfiles.Development.ProbeCount &&
+                        probes.All(probe => probe != null && probe.resolution == MovementLabLightingProfiles.Development.ReflectionResolution))
+                        return MovementLabLightingProfiles.Development;
+                    if (probeCount == MovementLabLightingProfiles.Production.ProbeCount &&
+                        probes.All(probe => probe != null && probe.resolution == MovementLabLightingProfiles.Production.ReflectionResolution))
+                        return MovementLabLightingProfiles.Production;
+
+                    throw new InvalidOperationException("MovementLab scene probe profile must be exact development (80/64) or production (200/128).");
                 }
 
                 internal static void ValidatePersistedBakeOutputs(Scene scene)
