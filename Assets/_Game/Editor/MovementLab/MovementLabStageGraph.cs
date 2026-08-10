@@ -59,15 +59,19 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:2";
-        private const string MaterialContract = "material-prefab-contract:2";
-        private const string GameplayContract = "gameplay-scene-contract:5";
+        private const string MaterialContract = "material-prefab-contract:3";
+        private const string GameplayContract = "gameplay-scene-contract:6";
         private const string QualityContract = "quality-contract:2";
-        private const string LightingContract = "lighting-contract:2";
-        private const string BakedContract = "baked-output-contract:3";
+        private const string LightingContract = "lighting-contract:3";
+        private const string BakedContract = "baked-output-contract:4";
 
-        // Ordering predecessors gate writes. Digest predecessors are deliberately
-        // narrower: lighting waits for assembly, but does not inherit all gameplay
-        // or material output bytes, which permits lighting-neutral reuse.
+        // Ordering predecessors document writer sequencing. Staleness is driven
+        // only by each stage's explicit keys and digest predecessors so a
+        // dynamic/prefab-only change cannot invalidate lighting by transitively
+        // inheriting unrelated output bytes.
+        // Matrix: runtime behavior -> no stage; gameplay wiring -> GameplayScene;
+        // prefab/material/importer -> explicit upstream keys; static render/light/
+        // probe state -> Lighting/Baked; quality -> Quality only.
         private static readonly StageDefinition[] Definitions =
         {
             new StageDefinition(MovementLabStage.Importer, Array.Empty<MovementLabStage>(), Array.Empty<MovementLabStage>(), ImporterContract,
@@ -81,23 +85,17 @@ namespace RocketFooxball.Editor
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
                     MovementLabContract.ShadersPath + "/RetroAdditiveParticle.shader", MovementLabContract.ShadersPath + "/RetroPowerGrid.shader",
                     MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
-                    "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
-                    "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
-                    "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs"
+                     "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs"
                 }), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
                 GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
-                Concat(new[]
-                {
-                    MovementLabContract.InputActionsPath,
-                    "Assets/_Game/Scripts/Runtime"
-                }, Concat(GameplaySourceInputs(), new[]
-                {
-                    "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
-                    "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs",
-                    "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs"
-                })),
+                 Concat(new[]
+                 {
+                     "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs"
+                 }),
                 new[]
                 {
                     MovementLabContract.PlayerPrefabPath, MovementLabContract.BallPrefabPath,
@@ -122,9 +120,8 @@ namespace RocketFooxball.Editor
                 {
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
                     MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
-                    "Assets/_Game/Editor/GraphicsQualityConfigurator.cs",
-                    "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs"
-                }, Concat(MovementLabContract.MaterialPrefabOutputs, MovementLabContract.QualityOutputs),
+                     "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs"
+                 }, Array.Empty<string>(),
                 WithMetas(new[] { MovementLabContract.LightingSettingsPath, MovementLabContract.VolumeProfilePath }), includeUnityVersion: true),
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, new[] { MovementLabStage.Lighting }, BakedContract,
                 new[]
@@ -173,17 +170,6 @@ namespace RocketFooxball.Editor
                 else
                 {
                     var drift = FindOutputDrift(prior.outputs, current.outputs);
-                    if (drift.Count > 0)
-                    {
-                        var ignoreDrift = allowBakedOutputDrift && definition.Stage == MovementLabStage.BakedOutput;
-                        if (stopOnOutputDrift && !ignoreDrift)
-                        {
-                            throw new InvalidOperationException(FormatOutputDrift(definition.Stage, drift));
-                        }
-
-                        for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
-                    }
-
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
                     if (definition.IncludeUnityVersion && !string.Equals(prior.unityVersion, current.unityVersion, StringComparison.Ordinal)) stageReasons.Add("unity-version-changed");
@@ -192,13 +178,26 @@ namespace RocketFooxball.Editor
                     if (!string.Equals(prior.inputDigest, current.inputDigest, StringComparison.Ordinal)) stageReasons.Add("input-changed");
                     if (!SequenceEqual(prior.predecessorDigests, current.predecessorDigests)) stageReasons.Add("digest-predecessor-changed");
                     if (!string.Equals(prior.profile ?? string.Empty, current.profile ?? string.Empty, StringComparison.Ordinal)) stageReasons.Add("profile-changed");
-                }
 
-                for (var predecessorIndex = 0; predecessorIndex < definition.OrderingPredecessors.Length; predecessorIndex++)
-                {
-                    if (stale.Contains(definition.OrderingPredecessors[predecessorIndex]))
+                    // A changed declared input may legitimately rewrite an
+                    // output (for example gameplay scene recreation replacing
+                    // the baked scene document). Manual drift with identical
+                    // keys remains a hard stop.
+                    var declaredInputChanged = stageReasons.Any(reason =>
+                        reason == "schema-mismatch" || reason == "contract-changed" || reason == "unity-version-changed" ||
+                        reason == "input-source-changed" || reason == "dependency-state-changed" || reason == "input-changed" ||
+                        reason == "digest-predecessor-changed" || reason == "profile-changed");
+                    if (drift.Count > 0)
                     {
-                        stageReasons.Add("ordering-predecessor-stale:" + definition.OrderingPredecessors[predecessorIndex]);
+                        var ignoreDrift = allowBakedOutputDrift && definition.Stage == MovementLabStage.BakedOutput;
+                        var expectedSceneRecreation = definition.Stage == MovementLabStage.BakedOutput && declaredInputChanged &&
+                            drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath);
+                        if (stopOnOutputDrift && !ignoreDrift && !expectedSceneRecreation)
+                        {
+                            throw new InvalidOperationException(FormatOutputDrift(definition.Stage, drift));
+                        }
+
+                        for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
                     }
                 }
 
@@ -380,8 +379,8 @@ namespace RocketFooxball.Editor
         {
             var repositoryParts = new List<string> { "contract:" + definition.ContractVersion };
             AddRepositoryDigests(repositoryParts, definition.RepositoryInputs);
-            AddLiteralDigests(repositoryParts, definition.LiteralInputs);
             if (definition.Stage == MovementLabStage.Lighting) repositoryParts.AddRange(CaptureLightingSceneState());
+            if (definition.Stage == MovementLabStage.BakedOutput) repositoryParts.AddRange(CaptureLightingSceneState());
             if (definition.IncludeUnityVersion) repositoryParts.Add("unity:" + Application.unityVersion);
             var dependencyParts = new List<string>();
             AddDependencyDigests(dependencyParts, definition.ObservedDependencyInputs);
@@ -549,11 +548,6 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void AddLiteralDigests(List<string> parts, string[] values)
-        {
-            for (var i = 0; i < (values ?? Array.Empty<string>()).Length; i++) parts.Add("literal:" + values[i]);
-        }
-
         private static IEnumerable<string> CaptureLightingSceneState()
         {
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(MovementLabContract.ScenePath) == null)
@@ -575,12 +569,17 @@ namespace RocketFooxball.Editor
             {
                 var renderer = renderers[i];
                 var mesh = renderer is SkinnedMeshRenderer skinned ? skinned.sharedMesh : renderer.GetComponent<MeshFilter>()?.sharedMesh;
-                parts.Add("renderer:" + GetHierarchyPath(renderer.transform) + ":" + TransformDigest(renderer.transform) +
+                parts.Add("renderer:" + GetHierarchyPath(renderer.transform) + ":global=" + PersistentObjectIdentity(renderer.gameObject) +
+                    ":component=" + PersistentObjectIdentity(renderer) + ":prefab=" + PrefabSourceIdentity(renderer.gameObject) +
+                    ":" + TransformDigest(renderer.transform) +
                     ":static=" + (int)GameObjectUtility.GetStaticEditorFlags(renderer.gameObject) +
                     ":mesh=" + AssetDependencyIdentity(mesh) +
                     ":materials=" + string.Join(",", renderer.sharedMaterials.Select(AssetDependencyIdentity)) +
                     ":shadow=" + renderer.shadowCastingMode + ":receive=" + renderer.receiveShadows +
-                    ":lightProbe=" + renderer.lightProbeUsage + ":reflectionProbe=" + renderer.reflectionProbeUsage);
+                    ":lightProbe=" + renderer.lightProbeUsage + ":reflectionProbe=" + renderer.reflectionProbeUsage +
+                    ":lightmapIndex=" + renderer.lightmapIndex + ":realtimeLightmapIndex=" + renderer.realtimeLightmapIndex +
+                    ":lightmapScaleOffset=" + Vector4Digest(renderer.lightmapScaleOffset) +
+                    ":realtimeLightmapScaleOffset=" + Vector4Digest(renderer.realtimeLightmapScaleOffset));
             }
 
             var lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None)
@@ -589,7 +588,8 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < lights.Length; i++)
             {
                 var light = lights[i];
-                parts.Add("light:" + GetHierarchyPath(light.transform) + ":" + TransformDigest(light.transform) +
+                parts.Add("light:" + GetHierarchyPath(light.transform) + ":global=" + PersistentObjectIdentity(light.gameObject) +
+                    ":component=" + PersistentObjectIdentity(light) + ":prefab=" + PrefabSourceIdentity(light.gameObject) + ":" + TransformDigest(light.transform) +
                     ":type=" + light.type + ":color=" + ColorDigest(light.color) + ":intensity=" + F(light.intensity) +
                     ":range=" + F(light.range) + ":spot=" + F(light.spotAngle) + ":shadows=" + light.shadows +
                     ":shadowStrength=" + F(light.shadowStrength) + ":shadowBias=" + F(light.shadowBias) + ":shadowNormalBias=" + F(light.shadowNormalBias) +
@@ -603,7 +603,8 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < probes.Length; i++)
             {
                 var probe = probes[i];
-                parts.Add("reflection-probe:" + GetHierarchyPath(probe.transform) + ":" + TransformDigest(probe.transform) +
+                parts.Add("reflection-probe:" + GetHierarchyPath(probe.transform) + ":global=" + PersistentObjectIdentity(probe.gameObject) +
+                    ":component=" + PersistentObjectIdentity(probe) + ":prefab=" + PrefabSourceIdentity(probe.gameObject) + ":" + TransformDigest(probe.transform) +
                     ":center=" + VectorDigest(probe.center) + ":size=" + VectorDigest(probe.size) +
                     ":resolution=" + probe.resolution + ":mode=" + probe.mode + ":importance=" + probe.importance +
                     ":box=" + probe.boxProjection + ":blend=" + F(probe.blendDistance) + ":culling=" + probe.cullingMask +
@@ -616,7 +617,8 @@ namespace RocketFooxball.Editor
                 .OrderBy(group => GetHierarchyPath(group.transform), StringComparer.Ordinal).ToArray();
             for (var i = 0; i < probeGroups.Length; i++)
             {
-                parts.Add("light-probe-group:" + GetHierarchyPath(probeGroups[i].transform) + ":" + TransformDigest(probeGroups[i].transform) + ":" +
+                parts.Add("light-probe-group:" + GetHierarchyPath(probeGroups[i].transform) + ":global=" + PersistentObjectIdentity(probeGroups[i].gameObject) +
+                    ":component=" + PersistentObjectIdentity(probeGroups[i]) + ":prefab=" + PrefabSourceIdentity(probeGroups[i].gameObject) + ":" + TransformDigest(probeGroups[i].transform) + ":" +
                     string.Join(";", (probeGroups[i].probePositions ?? Array.Empty<Vector3>()).Select(VectorDigest)));
             }
 
@@ -629,12 +631,13 @@ namespace RocketFooxball.Editor
                 var profile = volume.sharedProfile;
                 var components = profile == null ? "missing" : string.Join(";", profile.components.Where(component => component != null)
                     .Select(component => component.GetType().FullName + ":" + AssetIdentity(component)));
-                parts.Add("volume:" + GetHierarchyPath(volume.transform) + ":" + TransformDigest(volume.transform) +
-                    ":global=" + volume.isGlobal + ":blend=" + F(volume.blendDistance) + ":weight=" + F(volume.weight) +
+                parts.Add("volume:" + GetHierarchyPath(volume.transform) + ":global=" + PersistentObjectIdentity(volume.gameObject) +
+                    ":component=" + PersistentObjectIdentity(volume) + ":prefab=" + PrefabSourceIdentity(volume.gameObject) + ":" + TransformDigest(volume.transform) +
+                    ":isGlobal=" + volume.isGlobal + ":blend=" + F(volume.blendDistance) + ":weight=" + F(volume.weight) +
                     ":priority=" + F(volume.priority) + ":profile=" + AssetIdentity(profile) + ":components=" + components);
             }
 
-            parts.Add("render-settings:sky=" + AssetDependencyIdentity(RenderSettings.skybox) + ":ambientMode=" + RenderSettings.ambientMode +
+            parts.Add("render-settings:sun=" + PersistentObjectIdentity(RenderSettings.sun) + ":sky=" + AssetDependencyIdentity(RenderSettings.skybox) + ":ambientMode=" + RenderSettings.ambientMode +
                 ":ambientIntensity=" + F(RenderSettings.ambientIntensity) + ":fog=" + RenderSettings.fog +
                 ":fogColor=" + ColorDigest(RenderSettings.fogColor) + ":fogStart=" + F(RenderSettings.fogStartDistance) +
                 ":fogEnd=" + F(RenderSettings.fogEndDistance) + ":reflectionMode=" + RenderSettings.defaultReflectionMode +
@@ -697,6 +700,37 @@ namespace RocketFooxball.Editor
             return asset.GetType().FullName + ":" + asset.name;
         }
 
+        private static string PersistentObjectIdentity(UnityEngine.Object value)
+        {
+            if (value == null) return "null";
+            try
+            {
+                var global = GlobalObjectId.GetGlobalObjectIdSlow(value);
+                if (global.identifierType != 0) return global.ToString();
+            }
+            catch
+            {
+                // Unsaved transient objects can lack a GlobalObjectId. The
+                // fallback still records a stable serialized asset identity.
+            }
+
+            return AssetIdentity(value);
+        }
+
+        private static string PrefabSourceIdentity(GameObject gameObject)
+        {
+            if (gameObject == null) return "null";
+            try
+            {
+                var source = PrefabUtility.GetCorrespondingObjectFromSource(gameObject);
+                return source == null ? "none" : AssetIdentity(source);
+            }
+            catch
+            {
+                return "unavailable";
+            }
+        }
+
         private static bool IsLightingStatic(GameObject gameObject)
         {
             var flags = GameObjectUtility.GetStaticEditorFlags(gameObject);
@@ -712,6 +746,7 @@ namespace RocketFooxball.Editor
 
         private static string TransformDigest(Transform transform) => VectorDigest(transform.localPosition) + ":" + QuaternionDigest(transform.localRotation) + ":" + VectorDigest(transform.localScale);
         private static string VectorDigest(Vector3 value) => F(value.x) + "," + F(value.y) + "," + F(value.z);
+        private static string Vector4Digest(Vector4 value) => F(value.x) + "," + F(value.y) + "," + F(value.z) + "," + F(value.w);
         private static string QuaternionDigest(Quaternion value) => F(value.x) + "," + F(value.y) + "," + F(value.z) + "," + F(value.w);
         private static string ColorDigest(Color value) => F(value.r) + "," + F(value.g) + "," + F(value.b) + "," + F(value.a);
         private static string F(float value) => value.ToString("R", CultureInfo.InvariantCulture);
@@ -819,16 +854,6 @@ namespace RocketFooxball.Editor
         private static string[] Concat(string[] first, string[] second)
         {
             return (first ?? Array.Empty<string>()).Concat(second ?? Array.Empty<string>()).ToArray();
-        }
-
-        private static string[] GameplaySourceInputs()
-        {
-            var root = MovementLabManifestStore.ResolveProjectPath("Assets/_Game/Scripts/Runtime");
-            if (!Directory.Exists(root)) return Array.Empty<string>();
-            return Directory.GetFiles(root, "*.cs", SearchOption.AllDirectories)
-                .Select(path => path.Replace('\\', '/'))
-                .Select(path => path.Substring(MovementLabContractCatalog.ResolveProjectRoot().FullName.Replace('\\', '/').TrimEnd('/').Length + 1))
-                .OrderBy(path => path, StringComparer.Ordinal).ToArray();
         }
 
         private sealed class StageDefinition

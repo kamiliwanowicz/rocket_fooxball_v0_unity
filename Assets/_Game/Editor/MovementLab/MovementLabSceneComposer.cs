@@ -97,9 +97,10 @@ namespace RocketFooxball.Editor
                 internal static void AssembleGameplaySceneStage()
                 {
                     EnsureFolders();
-                    // Rebuilding gameplay/wiring creates a fresh scene, but
-                    // accepted baked LightmapSettings belongs to the lighting
-                    // stage and must survive a lighting-neutral rebuild.
+                    // Rebuilding gameplay/wiring creates a fresh scene. Keep
+                    // the serialized bake document for continuity, while the
+                    // lighting key records object identities and renderer
+                    // bindings so recreation cannot falsely reuse a bake.
                     var preservedLightmapSettings = CaptureExistingLightmapSettingsDocument();
                     var builderSignature = ComputeBuilderSignature();
                     var ballSurface = LoadRequiredAsset<PhysicsMaterial>(BallSurfacePath);
@@ -202,11 +203,11 @@ namespace RocketFooxball.Editor
                         SetObjectReference(hudComponent, "kick", kick);
                         SetObjectReference(hudComponent, "match", match);
                         new GameObject(GetBuildMarkerName(builderSignature));
-                        ConfigureSceneEnvironment(scene, arena);
+                        BindSceneEnvironment(scene, arena);
                         EditorSceneManager.SaveScene(scene, ScenePath);
                         RestoreLightmapSettingsDocument(preservedLightmapSettings);
-                        AssetDatabase.SaveAssets();
-                        NormalizeGeneratedYamlWhitespace();
+                        SaveGameplayProjectSettings();
+                        NormalizeGameplayYamlWhitespace();
                     }
                     finally
                     {
@@ -274,6 +275,29 @@ namespace RocketFooxball.Editor
                     if (!replaced) output.Add(preservedDocument);
                     var restored = string.Join("\n", output) + (trailingNewline ? "\n" : string.Empty);
                     File.WriteAllText(path, restored, new UTF8Encoding(false));
+                }
+
+                private static void NormalizeGameplayYamlWhitespace()
+                {
+                    // Gameplay owns only the scene and its wiring-related
+                    // project settings. Do not normalize lighting/material
+                    // assets here: even byte-level cleanup would violate the
+                    // gameplay stage's read-only asset contract.
+                    for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
+                    {
+                        NormalizeYamlFile(MovementLabContract.GameplaySceneOutputs[i]);
+                    }
+                }
+
+                private static void SaveGameplayProjectSettings()
+                {
+                    for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
+                    {
+                        var path = MovementLabContract.GameplaySceneOutputs[i];
+                        if (!path.StartsWith("ProjectSettings/", StringComparison.Ordinal)) continue;
+                        var asset = AssetDatabase.LoadMainAssetAtPath(path);
+                        if (asset != null && EditorUtility.IsPersistent(asset)) AssetDatabase.SaveAssetIfDirty(asset);
+                    }
                 }
 
                 private static T LoadRequiredAsset<T>(string path) where T : UnityEngine.Object
@@ -429,7 +453,7 @@ namespace RocketFooxball.Editor
 
                     new GameObject(GetBuildMarkerName(builderSignature));
 
-                    ConfigureSceneEnvironment(scene, arena);
+                    BindSceneEnvironment(scene, arena);
                     EditorSceneManager.SaveScene(scene, ScenePath);
                     }
                     finally

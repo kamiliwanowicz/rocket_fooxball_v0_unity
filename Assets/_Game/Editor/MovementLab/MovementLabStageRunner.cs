@@ -75,30 +75,73 @@ namespace RocketFooxball.Editor
             MovementLabStageGraph.RunCanonicalSceneInvariantSelfCheck();
             var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
-            var shouldWrite = forceAllNonLighting || stages.Any(initial.IsStale);
-            if (!shouldWrite)
-            {
-                WriteProbeIfRequested(initial);
-                return initial;
-            }
-
             var before = forceAllNonLighting ? CaptureNonLightingHashes() : null;
-            MovementLabManifestStore.EnsureWriteAuthorization();
-            for (var i = 0; i < stages.Length; i++)
+            var current = initial;
+            var forcePending = forceAllNonLighting;
+            var sawWork = false;
+            var visitedStates = new HashSet<string>(StringComparer.Ordinal);
+            var maxIterations = Math.Max(4, stages.Length * 4);
+            for (var iteration = 0; iteration < maxIterations; iteration++)
             {
-                var stage = stages[i];
-                if (!forceAllNonLighting && !initial.IsStale(stage)) continue;
-                ExecuteStage(stage);
-                PersistAndReload(stage);
-                var merged = MovementLabStageGraph.MergeStageRecord(stage);
-                MovementLabManifestStore.WriteAtomic(merged);
-                AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+                var stale = stages.Where(current.IsStale).ToArray();
+                if (!forcePending && stale.Length == 0) break;
+
+                var stateKey = string.Join(",", stale.Select(stage => stage.ToString()).ToArray()) + ":" +
+                               (current.LightingInputDigest ?? string.Empty) + ":" +
+                               (current.CurrentState?.generatedOutputFingerprint ?? string.Empty);
+                if (!visitedStates.Add(stateKey))
+                {
+                    throw new InvalidOperationException("MovementLab non-lighting stage closure detected a cycle: " + stateKey);
+                }
+
+                var executedThisPass = false;
+                MovementLabManifestStore.EnsureWriteAuthorization();
+                for (var i = 0; i < stages.Length; i++)
+                {
+                    var stage = stages[i];
+                    if (!forcePending && !current.IsStale(stage)) continue;
+                    if (!ShouldSkipPrefabOnlyGameplayRefresh(stage, current, forcePending))
+                    {
+                        ExecuteStage(stage);
+                    }
+                    PersistAndReload(stage);
+                    var merged = MovementLabStageGraph.MergeStageRecord(stage);
+                    // Intermediate merges preserve atomic recovery state; the
+                    // externally returned/probed state is written only after
+                    // the closure below proves no non-lighting stage remains.
+                    MovementLabManifestStore.WriteAtomic(merged);
+                    AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+
+                    // Recompute immediately after every write. This closes
+                    // newly-stale downstream stages in topological order and
+                    // prevents returning a probe based only on the initial DAG.
+                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
+                    executedThisPass = true;
+                    sawWork = true;
+                }
+
+                forcePending = false;
+                if (!executedThisPass)
+                {
+                    throw new InvalidOperationException("MovementLab non-lighting stage closure made no progress; stale stages remain: " +
+                        string.Join(",", stale.Select(stage => stage.ToString()).ToArray()));
+                }
             }
 
             var final = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
+            var unresolved = stages.Where(final.IsStale).ToArray();
+            if (unresolved.Length > 0)
+            {
+                throw new InvalidOperationException("MovementLab non-lighting stage closure did not converge: " +
+                    string.Join(",", unresolved.Select(stage => stage.ToString()).ToArray()));
+            }
+
             var finalState = MovementLabStageGraph.MarkCurrent(final);
-            MovementLabManifestStore.WriteAtomic(finalState);
-            AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            if (sawWork)
+            {
+                MovementLabManifestStore.WriteAtomic(finalState);
+                AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            }
 
             if (forceAllNonLighting)
             {
@@ -108,6 +151,21 @@ namespace RocketFooxball.Editor
 
             WriteProbeIfRequested(final);
             return final;
+        }
+
+        private static bool ShouldSkipPrefabOnlyGameplayRefresh(MovementLabStage stage, MovementLabStageProbe probe, bool forcePending)
+        {
+            if (forcePending || stage != MovementLabStage.GameplayScene || probe == null ||
+                !probe.TryGetStaleReason(stage, out var reason) || string.IsNullOrWhiteSpace(reason)) return false;
+
+            // Prefab/controller outputs are referenced by stable GUIDs from
+            // the scene. Refreshing those assets does not require recreating
+            // scene objects (which would change baked object identities), so
+            // close this dependency-only stale record without touching scene
+            // bytes or lighting bindings. Any wiring/contract key still runs
+            // the full gameplay composer.
+            var reasons = reason.Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries);
+            return reasons.Length > 0 && reasons.All(value => value == "dependency-state-changed");
         }
 
         private static void ExecuteStage(MovementLabStage stage)
@@ -133,8 +191,8 @@ namespace RocketFooxball.Editor
 
         private static void PersistAndReload(MovementLabStage stage)
         {
-            AssetDatabase.SaveAssets();
             var owned = MovementLabStageGraph.GetOwnedOutputs(stage);
+            SaveOwnedAssets(owned);
             for (var i = 0; i < owned.Length; i++)
             {
                 var path = owned[i];
@@ -151,6 +209,18 @@ namespace RocketFooxball.Editor
                 var path = owned[i];
                 if (path.EndsWith(".meta", StringComparison.Ordinal) || !path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
                 AssetDatabase.LoadMainAssetAtPath(path);
+            }
+        }
+
+        private static void SaveOwnedAssets(string[] owned)
+        {
+            for (var i = 0; i < (owned ?? Array.Empty<string>()).Length; i++)
+            {
+                var path = owned[i];
+                if (path.EndsWith(".meta", StringComparison.Ordinal) || path.EndsWith(".unity", StringComparison.Ordinal) ||
+                    (!path.StartsWith("Assets/", StringComparison.Ordinal) && !path.StartsWith("ProjectSettings/", StringComparison.Ordinal))) continue;
+                var asset = AssetDatabase.LoadMainAssetAtPath(path);
+                if (asset != null && EditorUtility.IsPersistent(asset)) AssetDatabase.SaveAssetIfDirty(asset);
             }
         }
 

@@ -32,7 +32,11 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                internal static void ConfigureSceneEnvironment(Scene scene, ArenaBuild arena)
+                // Gameplay assembly owns scene objects and bindings only. The
+                // sky material, VolumeProfile subassets, and LightingSettings
+                // asset are authored by the lighting-owned pipeline methods
+                // below and are loaded here without mutation.
+                internal static void BindSceneEnvironment(Scene scene, ArenaBuild arena)
                 {
                     var environment = new GameObject("Environment");
                     var sun = UnityEngine.Object.FindFirstObjectByType<Light>();
@@ -55,7 +59,12 @@ namespace RocketFooxball.Editor
                     sun.shadowNormalBias = 0.4f;
                     sun.cullingMask = -1;
 
-                    var skyMaterial = GetOrCreateSkyMaterial(sun);
+                    var skyMaterial = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
+                    if (skyMaterial == null)
+                    {
+                        throw new InvalidOperationException("Lighting-owned sky material is missing: " + SkyMaterialPath);
+                    }
+
                     RenderSettings.skybox = skyMaterial;
                     RenderSettings.sun = sun;
                     RenderSettings.ambientMode = AmbientMode.Skybox;
@@ -71,11 +80,11 @@ namespace RocketFooxball.Editor
                     RenderSettings.reflectionIntensity = 1f;
 
                     ConfigureAccentLights(environment.transform);
-                    ConfigureGlobalVolume(environment.transform);
+                    BindExistingGlobalVolume(environment.transform);
                     ConfigureLightProbes(environment.transform);
                     ConfigureReflectionProbes(environment.transform);
                     MarkArenaStaticForLighting(arena.Root);
-                    ConfigureLightingSettings(scene);
+                    BindExistingLightingSettings(scene);
                 }
 
                 internal static Material GetOrCreateSkyMaterial(Light sun)
@@ -109,6 +118,35 @@ namespace RocketFooxball.Editor
                     material.SetFloat("_FogHorizonWidth", 0.28f);
                     EditorUtility.SetDirty(material);
                     return material;
+                }
+
+                private static void BindExistingGlobalVolume(Transform parent)
+                {
+                    var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+                    if (profile == null)
+                    {
+                        throw new InvalidOperationException("Lighting-owned VolumeProfile is missing: " + VolumeProfilePath);
+                    }
+
+                    var volumeObject = new GameObject("GlobalVolume");
+                    volumeObject.transform.SetParent(parent, false);
+                    var volume = volumeObject.AddComponent<Volume>();
+                    volume.isGlobal = true;
+                    volume.priority = 0f;
+                    volume.sharedProfile = profile;
+                }
+
+                private static void BindExistingLightingSettings(Scene scene)
+                {
+                    var settings = AssetDatabase.LoadAssetAtPath<LightingSettings>(LightingSettingsPath);
+                    if (settings == null)
+                    {
+                        throw new InvalidOperationException("Lighting-owned LightingSettings asset is missing: " + LightingSettingsPath);
+                    }
+
+                    // This updates the scene-owned LightmapSettings binding;
+                    // it never mutates or dirties the LightingSettings asset.
+                    Lightmapping.SetLightingSettingsForScene(scene, settings);
                 }
 
                 internal static void ConfigureAccentLights(Transform parent)

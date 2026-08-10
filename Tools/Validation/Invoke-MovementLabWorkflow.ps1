@@ -77,6 +77,23 @@ $script:AuthoritativeInventory = @(
     'Assets/Settings',
     'ProjectSettings'
 )
+# T1 deliberately keeps Models/Textures source binaries outside the closed
+# generated inventory. T4 probes still fingerprint these exact importer metas,
+# so compatibility is an explicit path set rather than a caller-expandable root.
+$script:ClosedImporterMetadataPaths = @(
+    'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta',
+    'Assets/_Game/Textures/RetroGrass.png.meta', 'Assets/_Game/Textures/RetroGrass_Normal.png.meta', 'Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroGrass_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroWall.png.meta', 'Assets/_Game/Textures/RetroWall_Normal.png.meta', 'Assets/_Game/Textures/RetroWall_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWall_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroTrim.png.meta', 'Assets/_Game/Textures/RetroTrim_Normal.png.meta', 'Assets/_Game/Textures/RetroTrim_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroTrim_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroHazard.png.meta', 'Assets/_Game/Textures/RetroHazard_Normal.png.meta', 'Assets/_Game/Textures/RetroHazard_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroHazard_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroDetailNormal.png.meta', 'Assets/_Game/Textures/RetroShield.png.meta',
+    'Assets/_Game/Textures/RetroBall.png.meta', 'Assets/_Game/Textures/RetroBall_Normal.png.meta', 'Assets/_Game/Textures/RetroBall_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroBall_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroWeaponMetal.png.meta', 'Assets/_Game/Textures/RetroWeaponMetal_Normal.png.meta', 'Assets/_Game/Textures/RetroWeaponMetal_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWeaponMetal_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroWeaponDark.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_Normal.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_Occlusion.png.meta',
+    'Assets/_Game/Textures/RetroWeaponAccent.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Normal.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Occlusion.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Emission.png.meta',
+    'Assets/_Game/Textures/RetroRocket.png.meta', 'Assets/_Game/Textures/RetroRocket_Normal.png.meta', 'Assets/_Game/Textures/RetroRocket_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroRocket_Occlusion.png.meta', 'Assets/_Game/Textures/RetroRocket_Emission.png.meta', 'Assets/_Game/Textures/RetroRocketGlow.png.meta',
+    'Assets/_Game/Textures/RetroExplosion.png.meta', 'Assets/_Game/Textures/RetroSmoke.png.meta', 'Assets/_Game/Textures/RetroSunnySky.png.meta'
+)
 $script:BuilderOutputContract = @(
     'Assets/_Game/Generated/MovementLabBuildManifest.json',
     'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab',
@@ -174,6 +191,18 @@ function Test-InventoryMember {
     return $false
 }
 
+function Test-ProbeInventoryMember {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $normalized = $Path.Replace('\', '/').TrimStart('/')
+    if (Test-InventoryMember $normalized) { return $true }
+    # Importer probes may contribute only the exact .meta paths owned by the
+    # T4 importer contract. Source binaries and arbitrary probe/caller paths
+    # remain outside the closed inventory.
+    return @($script:ClosedImporterMetadataPaths | Where-Object {
+        $_.Equals($normalized, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -eq 1
+}
+
 function Get-AuthoritativeGeneratedInventory {
     $paths = New-Object System.Collections.Generic.List[string]
     $requestedSelection = New-Object System.Collections.Generic.List[string]
@@ -198,7 +227,7 @@ function Get-AuthoritativeGeneratedInventory {
     }
     foreach ($probePath in @($script:ProbeInventoryPaths)) {
         $normalizedProbePath = ([string]$probePath).Replace('\', '/').TrimStart('/')
-        if (-not (Test-InventoryMember $normalizedProbePath)) { throw ('Probe inventory path expands closed inventory: ' + $normalizedProbePath) }
+        if (-not (Test-ProbeInventoryMember $normalizedProbePath)) { throw ('Probe inventory path expands closed inventory: ' + $normalizedProbePath) }
         if (-not $paths.Contains($normalizedProbePath)) { $paths.Add($normalizedProbePath) }
     }
     foreach ($requested in @($GeneratedPath)) {
@@ -901,7 +930,7 @@ function Assert-ProbeContractForMode {
     $seen = @{}
     foreach ($fingerprintPath in @($Probe.fingerprintPaths)) {
         $normalized = ([string]$fingerprintPath).Replace('\', '/').TrimStart('/')
-        if (-not (Test-InventoryMember $normalized) -or $seen.ContainsKey($normalized)) { throw ('Stage probe fingerprint path is outside closed inventory or duplicated: ' + $normalized) }
+        if (-not (Test-ProbeInventoryMember $normalized) -or $seen.ContainsKey($normalized)) { throw ('Stage probe fingerprint path is outside closed inventory or duplicated: ' + $normalized) }
         $seen[$normalized] = $true
     }
     foreach ($fingerprintHash in @($Probe.fingerprintHashes)) { if ([string]$fingerprintHash -notmatch '^[0-9a-fA-F]{32,128}$') { throw 'Stage probe fingerprint hash is invalid.' } }
