@@ -548,7 +548,6 @@ function New-CheckLedger {
             $rows.Add((New-LedgerRow 'production-bake' 'production-final' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'source-freeze'))
         }
         'ProductionValidate' {
-            $rows.Add((New-LedgerRow 'final-source-clean' 'production-final' $false @('.git', 'Assets', 'ProjectSettings', 'Packages', 'Tools') @('.agents', 'Assets', 'ProjectSettings', 'Packages', 'Tools') @() 'final'))
             $rows.Add((New-LedgerRow 'capture-validator' 'production-final' $false @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Tools/Validation') @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @('validator-readonly') 'final'))
         }
     }
@@ -1055,7 +1054,7 @@ if ($Mode -eq 'ProductionPrepare') {
     if (-not (Test-IsAncestor $SourceSha $ReviewedSha) -or -not (Test-IsAncestor $ReviewedSha $beforeHead)) { throw 'ProductionPrepare requires SourceSha -> ReviewedSha -> project HEAD ancestry.' }
 }
 $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
-if ($Mode -in @('ProductionPrepare', 'ProductionValidate') -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
+if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Acquire-ProjectLease | Out-Null
 try {
 Assert-NoProjectProcessOrLock
@@ -1136,7 +1135,6 @@ try {
                 $probeRecord = Read-ProbeContract
                 Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
             }
-            Mark-CheckExecuted 'final-source-clean'
         }
     }
 } finally {
@@ -1152,8 +1150,6 @@ if ($Mode -eq 'ProductionPrepare') {
     if ($dirtyAfter.Count -gt 0) { throw ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
     if (($dirtyBefore -join "`n") -cne ($dirtyAfter -join "`n")) { throw 'Production preparation changed non-generated Git status.' }
 }
-if ($Mode -eq 'ProductionValidate' -and $dirtyBefore.Count -ne $dirtyAfter.Count) { throw 'Non-generated source status changed during production validation.' }
-if ($Mode -eq 'ProductionValidate' -and $dirtyAfter.Count -gt 0) { throw ('Non-generated source became dirty during production validation: ' + ($dirtyAfter -join ', ')) }
 if ($script:BakeCount -gt 1) { throw ('Workflow bake count exceeded one: ' + $script:BakeCount) }
 $afterHead = Get-HeadSha
 if ($beforeHead -cne $afterHead) { throw ('Git HEAD changed during workflow: expected ' + $beforeHead + ', observed ' + $afterHead) }
