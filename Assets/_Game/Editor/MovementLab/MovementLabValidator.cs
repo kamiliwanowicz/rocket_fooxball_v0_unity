@@ -112,9 +112,6 @@ namespace RocketFooxball.Editor
                     EnsureAssetExists(VolumeProfilePath);
                     EnsureAssetExists(LightingSettingsPath);
                     EnsureAssetExists(LightingManifestPath);
-                    EnsureAssetExists(ReflectionCenterPath);
-                    EnsureAssetExists(ReflectionWestPath);
-                    EnsureAssetExists(ReflectionEastPath);
 
                     var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
                     if (!scene.IsValid() || scene.path != ScenePath)

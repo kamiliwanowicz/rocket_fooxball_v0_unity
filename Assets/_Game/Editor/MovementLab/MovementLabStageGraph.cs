@@ -111,7 +111,7 @@ namespace RocketFooxball.Editor
                 {
                     GraphicsQualityConfigurator.HighPipelinePath, GraphicsQualityConfigurator.HighRendererPath,
                     GraphicsQualityConfigurator.LowPipelinePath, GraphicsQualityConfigurator.LowRendererPath,
-                    "Assets/Settings/PC_Iteration_RPAsset.asset", "Assets/Settings/PC_Iteration_Renderer.asset",
+                    GraphicsQualityConfigurator.IterationPipelinePath, GraphicsQualityConfigurator.IterationRendererPath,
                     GraphicsQualityConfigurator.QualitySettingsPath, GraphicsQualityConfigurator.ProjectSettingsPath
                 }), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.Lighting,
@@ -119,6 +119,7 @@ namespace RocketFooxball.Editor
                 new[]
                 {
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
+                    MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta",
                     MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
                      "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs"
                  }, Array.Empty<string>(),
@@ -189,7 +190,15 @@ namespace RocketFooxball.Editor
                         reason == "digest-predecessor-changed" || reason == "profile-changed");
                     if (drift.Count > 0)
                     {
-                        var ignoreDrift = allowBakedOutputDrift && definition.Stage == MovementLabStage.BakedOutput;
+                        // A lighting bake legitimately rewrites baked scene
+                        // bindings alongside the BakedOutput files. Keep the
+                        // fail-closed drift gate for every other stage/path,
+                        // while allowing this explicit post-bake handoff to
+                        // carry both records forward atomically.
+                        var ignoreDrift = allowBakedOutputDrift &&
+                            (definition.Stage == MovementLabStage.BakedOutput ||
+                             (definition.Stage == MovementLabStage.GameplayScene &&
+                              drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath)));
                         var expectedSceneRecreation = definition.Stage == MovementLabStage.BakedOutput && declaredInputChanged &&
                             drift.All(path => path == "changed:" + MovementLabContract.ScenePath || path == "missing:" + MovementLabContract.ScenePath);
                         if (stopOnOutputDrift && !ignoreDrift && !expectedSceneRecreation)

@@ -73,7 +73,10 @@ namespace RocketFooxball.Editor
         private static MovementLabStageProbe Run(bool forceAllNonLighting)
         {
             MovementLabStageGraph.RunCanonicalSceneInvariantSelfCheck();
-            var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
+            // A development/intermediate bake may legitimately remove or
+            // replace baked files. Keep those records stale for callers, but
+            // let non-lighting closure continue without authorizing a bake.
+            var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
             var before = forceAllNonLighting ? CaptureNonLightingHashes() : null;
             var current = initial;
@@ -115,7 +118,7 @@ namespace RocketFooxball.Editor
                     // Recompute immediately after every write. This closes
                     // newly-stale downstream stages in topological order and
                     // prevents returning a probe based only on the initial DAG.
-                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
+                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
                     executedThisPass = true;
                     sawWork = true;
                 }
@@ -128,7 +131,7 @@ namespace RocketFooxball.Editor
                 }
             }
 
-            var final = MovementLabStageGraph.Probe(stopOnOutputDrift: true);
+            var final = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var unresolved = stages.Where(final.IsStale).ToArray();
             if (unresolved.Length > 0)
             {

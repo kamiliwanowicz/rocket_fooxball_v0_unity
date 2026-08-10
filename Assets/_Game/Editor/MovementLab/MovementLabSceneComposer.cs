@@ -571,7 +571,9 @@ namespace RocketFooxball.Editor
                         NormalizeYamlFile(GeneratedYamlAssetPaths[i]);
                         NormalizeYamlFile(GeneratedYamlAssetPaths[i] + ".meta");
                     }
-                    for (var i = 0; i < GeneratedImporterMetadataPaths.Length; i++) NormalizeYamlFile(GeneratedImporterMetadataPaths[i]);
+                    // Importer metadata is protected input/output state. Do
+                    // not canonicalize it during bake/preview lifecycle work;
+                    // Unity may rewrite empty fields and create false drift.
                 }
 
                 internal static void NormalizeYamlFile(string path)

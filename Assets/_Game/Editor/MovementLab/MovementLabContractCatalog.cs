@@ -93,9 +93,6 @@ namespace RocketFooxball.Editor
         internal const string VolumeProfilePath = MovementLabContract.VolumeProfilePath;
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
-        internal const string ReflectionCenterPath = MovementLabContract.ReflectionCenterPath;
-        internal const string ReflectionWestPath = MovementLabContract.ReflectionWestPath;
-        internal const string ReflectionEastPath = MovementLabContract.ReflectionEastPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
         internal const int ExpectedLightmapCount = 5;
         internal const int ExpectedReflectionProbeBakeCount = 4;
@@ -263,12 +260,8 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.ProjectSettingsPath);
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath);
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta");
             for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
             {
                 AddGeneratedFingerprintPath(paths, seen, GeneratedBakedLightingPaths[i]);

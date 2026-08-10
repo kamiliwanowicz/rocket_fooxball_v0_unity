@@ -26,9 +26,6 @@ namespace RocketFooxball.Editor
         internal const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
-        internal const string ReflectionCenterPath = LightingPath + "/ReflectionProbe_Center.exr";
-        internal const string ReflectionWestPath = LightingPath + "/ReflectionProbe_WestGoal.exr";
-        internal const string ReflectionEastPath = LightingPath + "/ReflectionProbe_EastGoal.exr";
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
 
         internal const float BallPrefabScale = 4.32f;
@@ -117,6 +114,8 @@ namespace RocketFooxball.Editor
             GraphicsQualityConfigurator.HighRendererPath,
             GraphicsQualityConfigurator.LowPipelinePath,
             GraphicsQualityConfigurator.LowRendererPath,
+            GraphicsQualityConfigurator.IterationPipelinePath,
+            GraphicsQualityConfigurator.IterationRendererPath,
             GraphicsQualityConfigurator.QualitySettingsPath,
             GraphicsQualityConfigurator.ProjectSettingsPath
         };
@@ -131,7 +130,7 @@ namespace RocketFooxball.Editor
             BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
             BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
             BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr",
-            LightingManifestPath, ReflectionCenterPath, ReflectionWestPath, ReflectionEastPath
+            LightingManifestPath
         };
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
