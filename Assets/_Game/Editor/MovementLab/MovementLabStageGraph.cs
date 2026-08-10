@@ -416,8 +416,14 @@ namespace RocketFooxball.Editor
         {
             var repositoryParts = new List<string> { "contract:" + definition.ContractVersion };
             AddRepositoryDigests(repositoryParts, definition.RepositoryInputs);
-            if (definition.Stage == MovementLabStage.Lighting) repositoryParts.AddRange(CaptureLightingSceneState());
-            if (definition.Stage == MovementLabStage.BakedOutput) repositoryParts.AddRange(CaptureLightingSceneState());
+            if (definition.Stage == MovementLabStage.Lighting)
+            {
+                repositoryParts.AddRange(CaptureLightingSceneState(includeBakedRendererBindings: false));
+            }
+            if (definition.Stage == MovementLabStage.BakedOutput)
+            {
+                repositoryParts.AddRange(CaptureLightingSceneState(includeBakedRendererBindings: true));
+            }
             if (definition.IncludeUnityVersion) repositoryParts.Add("unity:" + Application.unityVersion);
             var dependencyParts = new List<string>();
             AddDependencyDigests(dependencyParts, definition.ObservedDependencyInputs);
@@ -585,7 +591,7 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static IEnumerable<string> CaptureLightingSceneState()
+        private static IEnumerable<string> CaptureLightingSceneState(bool includeBakedRendererBindings)
         {
             if (AssetDatabase.LoadAssetAtPath<SceneAsset>(MovementLabContract.ScenePath) == null)
             {
@@ -606,7 +612,7 @@ namespace RocketFooxball.Editor
             {
                 var renderer = renderers[i];
                 var mesh = renderer is SkinnedMeshRenderer skinned ? skinned.sharedMesh : renderer.GetComponent<MeshFilter>()?.sharedMesh;
-                parts.Add("renderer:" + GetHierarchyPath(renderer.transform) + ":global=" + PersistentObjectIdentity(renderer.gameObject) +
+                var rendererPart = "renderer:" + GetHierarchyPath(renderer.transform) + ":global=" + PersistentObjectIdentity(renderer.gameObject) +
                     ":component=" + PersistentObjectIdentity(renderer) + ":prefab=" + PrefabSourceIdentity(renderer.gameObject) +
                     ":" + TransformDigest(renderer.transform) +
                     ":static=" + (int)GameObjectUtility.GetStaticEditorFlags(renderer.gameObject) +
@@ -614,9 +620,12 @@ namespace RocketFooxball.Editor
                     ":materials=" + string.Join(",", renderer.sharedMaterials.Select(AssetDependencyIdentity)) +
                     ":shadow=" + renderer.shadowCastingMode + ":receive=" + renderer.receiveShadows +
                     ":lightProbe=" + renderer.lightProbeUsage + ":reflectionProbe=" + renderer.reflectionProbeUsage +
-                    ":lightmapIndex=" + renderer.lightmapIndex + ":realtimeLightmapIndex=" + renderer.realtimeLightmapIndex +
-                    ":lightmapScaleOffset=" + Vector4Digest(renderer.lightmapScaleOffset) +
-                    ":realtimeLightmapScaleOffset=" + Vector4Digest(renderer.realtimeLightmapScaleOffset));
+                    (includeBakedRendererBindings
+                        ? ":lightmapIndex=" + renderer.lightmapIndex + ":realtimeLightmapIndex=" + renderer.realtimeLightmapIndex +
+                          ":lightmapScaleOffset=" + Vector4Digest(renderer.lightmapScaleOffset) +
+                          ":realtimeLightmapScaleOffset=" + Vector4Digest(renderer.realtimeLightmapScaleOffset)
+                        : string.Empty);
+                parts.Add(rendererPart);
             }
 
             var lights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsSortMode.None)
