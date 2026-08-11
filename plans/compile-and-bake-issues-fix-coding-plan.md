@@ -1,6 +1,6 @@
 # Compile And Bake Issues Fix Coding Plan
 
-Status: accepted
+Status: implementation paused; final verification incomplete
 Source: `plans/compile_and_bake_issues_fix.md`
 Run ID: direct
 Plan ID: direct
@@ -8,6 +8,56 @@ Attempt ID: direct
 Covered Requirements: direct request
 Baseline: 7ea182440ad82eafaab08fbeba0421cb9abc8ac6
 Dependencies: None
+
+## Execution Status
+
+- updated: 2026-08-11
+- mode: `user-direct`
+- branch: `codex/compile-bake-fix-20260811T084153389-f901a0`
+- worktree: `C:\wt\cbf-f901a0`
+- current execution head: `7b4208cd508c71115225a3567ec83c3050de2ce0`
+- repository state at stop: clean worktree; zero Unity processes; no `Temp/UnityLockfile` or `Library/UnityLockfile`; temporary `T:` mapping removed
+- result: T1-T5 implementation and checkpoint work complete; FINAL incomplete
+
+### Completed
+
+- T1: semantic accumulator added across builder, validator, pre-bake gate, and stage graph; Unity compile passed; review findings fixed
+- T2: manifest derived-consistency and capture heuristic gates demoted; structural, authorization, technical capture, path, process, and atomic safety retained; Unity compile passed
+- T3: review-marker and routine capture workflow removed; marker script deleted; direct `production-validator` retained; PowerShell and plan-only checks passed
+- T4: workflow phase accumulation added; probe/preflight/mode/postflight checks batch safe defects; safety boundaries remain fail-fast; malformed-probe and plan-only fixtures passed
+- T5: capture/review-marker policy removed; direct semantic validation, bake-only lighting invalidation, warning-first predicates, and output-hash provenance rules synchronized across owned policy files
+- checkpoint reviews: CP1-CP5 completed; accepted Critical/High findings fixed under review policy
+- follow-up workflow fixes: asset-prerequisite guards; ledger sequence-array preservation; case-insensitive profile comparison; generated-inventory separation; exact root `.slnx` cleanup; lock-sentinel cleanup; primary-error preservation; absent-lock-parent handling; ordered-dictionary property access; workflow script removal from production-bake inputs
+- follow-up atomic fixes: bounded `File.Replace` retry in build-manifest and lighting-manifest writers; lighting temp cleanup added after High review finding
+- production proof at `3ce26ef`: one real `ProductionPrepare` passed; generated outputs committed at `021fc41`; separate `ProductionValidate` passed at `021fc41`
+- replacement production proof at `6e37170`: one real `ProductionPrepare` passed; generated outputs committed at `73984e2`
+- current-head `ProductionValidate -PlanOnly`: `production-validator` remained deferred/pending and never reused
+
+### Earlier Proof Invalidated
+
+- `021fc41` validator proof: invalidated by later workflow and editor-source fixes
+- `73984e2` generated-output proof: remains historical output evidence; later changes to `Invoke-MovementLabWorkflow.ps1` and `MovementLabLightingProfiles.cs` require new FINAL sequence
+- `production-success-6` ledger: emitted under old production-bake input contract containing workflow script; new input contract intentionally invalidates row; migration, backfill, or rewrite prohibited
+
+### Not Completed
+
+- replacement comparator gate step 2: failed; L1 `ProductionPrepare -PlanOnly` emitted deferred `prebake-validate` and `production-bake`; L2 at same SHA with L1 as `-LedgerPath` also emitted deferred rows, not reused; zero `input digest changed` or `production bake input digest changed` matches
+- comparator gate failure reason: `Merge-ExistingLedger` accepts prior `executed` or `reused` rows only; L1 rows were `deferred` and held no accepted execution evidence
+- final static scope at current execution head: not rerun because comparator gate stop occurred first
+- new-contract real `ProductionPrepare`: not run because user required stop on comparator gate step-2 failure
+- generated-output inspection/commit from new-contract bake: not run because no new bake ran
+- production-bake descendant reattestation: not run because no new accepted bake row exists
+- separate real `ProductionValidate` at exact final SHA: not run because preceding FINAL steps did not complete
+- final scope, cleanliness, snapshot, and evidence closure: not run because execution stopped before FINAL
+- R1-R4 synchronization into `AGENTS.md`: pending; plan Decisions now record rules, but user-scoped plan update does not edit `AGENTS.md`
+- launch-branch integration: not requested; isolated branch/worktree retained
+
+### Intentional Omissions
+
+- manual capture, automated visual comparison, and agent visual acceptance: prohibited as routine proof
+- Development bake: on-demand only; not required by FINAL
+- old efficiency worktree/branch deletion: outside plan authority
+- scene local-fileID renumbering and lightmap LFS oid/size drift: accepted generated bake churn; no determinism work attempted
 
 ## Objective
 
@@ -67,6 +117,10 @@ Completion boundary: source changes reviewed; one real `ProductionPrepare` run c
 - decision: new PowerShell validation predicates are warning/collection-first; only proven retained invariants stay hard failures
 - decision: production bake invalidation binds lighting inputs, not bake-generated output paths. Same-run generated-only commit may reattest bake evidence when source/input digest, environment, `lightingInputDigest`, and workflow-reported after-output inventory match; this is provenance, not cross-run determinism
 - decision: final production workflow runs once after all source reviews/fixes; manual capture does not run
+- decision: intentional `input_paths` or `invalidation_paths` change invalidates every prior row for same check ID; pay exactly one accepted re-execution; never migrate, backfill, weaken, or rewrite historical proof rows
+- decision: reuse gate is valid only against ledger emitted under same input contract. Gate spanning contract change is malformed and rejected; comparator remains strict
+- decision: comparator defects reproduce with same-commit `-PlanOnly` self-fixture: emit ledger, feed it back through `-LedgerPath`, then inspect row state before any production run
+- decision: production-bake inputs use lighting source/input paths only. Workflow script remains compile and `production-validator` input, never production-bake input
 - question: None
 
 ## Execution Graph
@@ -177,7 +231,7 @@ Completion boundary: source changes reviewed; one real `ProductionPrepare` run c
   5. Replace `capture-validator` with new `production-validator`; never alias/migrate historical row. Row always invokes `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab` with `-nographics`, reads probe, and asserts `ProductionValidate` contract
   6. Keep row subsumption of `validator-readonly` if still semantically used. Ensure prior ledger containing `capture-validator` leaves `production-validator` pending
   7. Remove `capture` and `review-marker` from manual-proof classification. Bake remains non-reattestable after lighting-input changes
-  8. Narrow `production-bake` input/invalidation sets to exact lighting inputs from `MovementLabStageGraph` contract plus source/config inputs; exclude bake-generated output paths. Preserve same-run generated inventory/hashes as provenance evidence, never cross-run equality gate
+  8. Narrow `production-bake` input/invalidation sets to exact lighting source/input paths from `MovementLabStageGraph` contract; exclude workflow script and bake-generated output paths. Keep workflow script in compile and `production-validator` inputs. Preserve same-run generated inventory/hashes as provenance evidence, never cross-run equality gate
   9. Keep result `schemaVersion: 1` unless an observed repository consumer requires version bump. Result exposes no obsolete marker/capture fields; update all repository consumers in T5
 - done when: `ProductionPrepare` accepts no review-marker arguments and has no marker row; `ProductionValidate` has no capture option and always runs direct semantic validator; old capture ledger cannot suppress new validation; marker script absent; evidence/source/input integrity remains
 - checks:
