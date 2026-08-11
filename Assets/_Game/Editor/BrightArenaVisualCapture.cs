@@ -31,9 +31,9 @@ namespace RocketFooxball.Editor
         private const int RendererCap = 80;
         private const int OpaquePassCap = 1000;
         private const int TransparentRendererCap = 8;
-        private const int TriangleCap = 50000;
-        private const long TextureBytesCap = 8L * 1024L * 1024L;
-        private const int TextureDimensionCap = 512;
+        private const int TriangleCap = 100000;
+        private const long TextureBytesCap = 512L * 1024L * 1024L;
+        private const int TextureDimensionCap = 2048;
         private const float MeanLuminanceFloor = 0.28f;
         private const float DarkPixelFractionCap = 0.35f;
         private const float ClippedPixelFractionCap = 0.25f;
