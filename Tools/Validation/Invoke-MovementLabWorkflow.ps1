@@ -19,9 +19,8 @@ $ErrorActionPreference = 'Stop'
 
 $script:UnityVersion = '6000.5.6f1'
 $script:UnityPath = 'C:\Program Files\Unity\Hub\Editor\6000.5.6f1\Editor\Unity.exe'
-if ([string]::IsNullOrWhiteSpace($ProjectPath) -or $ProjectPath.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw 'ProjectPath must be non-empty and one line.' }
-$script:ProjectRoot = [System.IO.Path]::GetFullPath($ProjectPath)
-$script:ProjectInputRoot = $script:ProjectRoot
+$script:ProjectRoot = $null
+$script:ProjectInputRoot = $ProjectPath
 $script:GitCommonRoot = $null
 $script:CanonicalProjectRoot = $null
 $script:EvidenceDirectory = $null
@@ -104,6 +103,34 @@ $script:BuilderOutputContract = @(
     'Assets/_Game/Scenes/MovementLab.unity.meta', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
     'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset.meta'
 )
+
+function New-WorkflowViolationList {
+    return ,(New-Object System.Collections.Generic.List[object])
+}
+
+function Add-WorkflowViolation {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Violations,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message
+    )
+    $text = if ([string]::IsNullOrWhiteSpace($Message)) { 'validation failed' } else { $Message.Trim() }
+    $Violations.Add([ordered]@{ label = $Label; message = $text }) | Out-Null
+}
+
+function Complete-WorkflowValidationPhase {
+    param(
+        [Parameter(Mandatory = $true)][string]$Phase,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Violations
+    )
+    if ($Violations.Count -eq 0) { return }
+    $lines = New-Object System.Collections.Generic.List[string]
+    for ($index = 0; $index -lt $Violations.Count; $index++) {
+        $violation = $Violations[$index]
+        $lines.Add(('[' + ($index + 1) + '] ' + [string]$violation.label + ': ' + [string]$violation.message)) | Out-Null
+    }
+    throw ('Workflow validation phase ' + $Phase + ' failed with ' + $Violations.Count + ' violation(s):' + [Environment]::NewLine + ($lines -join [Environment]::NewLine))
+}
 
 function Get-FullPath {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -929,21 +956,50 @@ function Invoke-UnityStep {
     })
 }
 
-function Assert-ProbeString {
-    param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Value)
-    if ($Value -isnot [string]) { throw ('Stage probe ' + $Name + ' must be a string.') }
-    return Assert-OneLineValue ('Stage probe ' + $Name) ([string]$Value)
+function Get-ProbeStringValue {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Violations,
+        [Parameter(Mandatory = $true)]$Probe,
+        [Parameter(Mandatory = $true)][string]$Field,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $value = $Probe.PSObject.Properties[$Field].Value
+    if ($value -isnot [string]) {
+        Add-WorkflowViolation $Violations ($Label + '.type') ('Stage probe ' + $Field + ' must be a string.')
+        return $null
+    }
+    $text = [string]$value
+    if ([string]::IsNullOrWhiteSpace($text) -or $text.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
+        Add-WorkflowViolation $Violations ($Label + '.shape') ('Stage probe ' + $Field + ' must be non-empty and one line.')
+        return $null
+    }
+    return $text.Trim()
 }
 
-function Assert-ProbeStringArray {
-    param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)]$Value)
-    if ($Value -is [string] -or $Value -isnot [System.Collections.IEnumerable]) { throw ('Stage probe ' + $Name + ' must be an array of strings.') }
-    $values = @($Value)
-    foreach ($item in $values) {
-        if ($item -isnot [string]) { throw ('Stage probe ' + $Name + ' must contain only strings.') }
-        if ([string]$item -and ([string]$item).IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw ('Stage probe ' + $Name + ' contains a multi-line value.') }
+function Get-ProbeStringArrayValue {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.List[object]]$Violations,
+        [Parameter(Mandatory = $true)]$Probe,
+        [Parameter(Mandatory = $true)][string]$Field,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $value = $Probe.PSObject.Properties[$Field].Value
+    if ($null -eq $value -or $value -is [string] -or $value -isnot [System.Collections.IEnumerable]) {
+        Add-WorkflowViolation $Violations ($Label + '.type') ('Stage probe ' + $Field + ' must be an array of strings.')
+        return $null
     }
-    return $values
+    $values = @($value)
+    for ($index = 0; $index -lt $values.Count; $index++) {
+        $item = $values[$index]
+        if ($item -isnot [string]) {
+            Add-WorkflowViolation $Violations ($Label + '.item[' + $index + '].type') ('Stage probe ' + $Field + ' must contain only strings.')
+            continue
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$item) -or ([string]$item).IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
+            Add-WorkflowViolation $Violations ($Label + '.item[' + $index + '].shape') ('Stage probe ' + $Field + ' contains an empty or multi-line value.')
+        }
+    }
+    return ,$values
 }
 
 function Read-ProbeContract {
@@ -968,84 +1024,122 @@ function Read-ProbeContract {
             fingerprintHashes = @()
         }
     }
-    $raw = Get-Content -Raw -LiteralPath $path
-    $probe = $raw | ConvertFrom-Json
-    if ($null -eq $probe) { throw 'Stage probe JSON is empty.' }
+
+    $violations = New-WorkflowViolationList
+    $raw = $null
+    try { $raw = Get-Content -Raw -LiteralPath $path -ErrorAction Stop } catch {
+        Add-WorkflowViolation $violations 'probe.root.read' ('Stage probe could not be read: ' + $_.Exception.Message)
+        Complete-WorkflowValidationPhase 'probe' $violations
+    }
+    $probe = $null
+    try { $probe = $raw | ConvertFrom-Json -ErrorAction Stop } catch {
+        Add-WorkflowViolation $violations 'probe.root.parse' ('Stage probe JSON is unparseable: ' + $_.Exception.Message)
+        Complete-WorkflowValidationPhase 'probe' $violations
+    }
+    if ($null -eq $probe -or $probe -isnot [pscustomobject]) {
+        Add-WorkflowViolation $violations 'probe.root.shape' 'Stage probe JSON root must be an object.'
+        Complete-WorkflowValidationPhase 'probe' $violations
+    }
+
     $requiredFields = @(
         'schemaVersion', 'gitSha', 'unityVersion', 'manifestStatus', 'staleStages', 'staleReasons',
         'lightingInputDigest', 'sourceSignature', 'outputFingerprint', 'bakedProfile', 'fingerprintPaths', 'fingerprintHashes'
     )
     $propertyNames = @($probe.PSObject.Properties.Name)
     foreach ($field in $requiredFields) {
-        if (-not $propertyNames.Contains($field)) { throw ('Stage probe field is missing: ' + $field) }
+        if (-not $propertyNames.Contains($field)) {
+            Add-WorkflowViolation $violations ('probe.field.' + $field + '.missing') ('Stage probe field is missing: ' + $field)
+        }
     }
-    $schemaValue = $probe.schemaVersion
-    if (($schemaValue -isnot [int16]) -and ($schemaValue -isnot [int32]) -and ($schemaValue -isnot [int64]) -and
-        ($schemaValue -isnot [uint16]) -and ($schemaValue -isnot [uint32]) -and ($schemaValue -isnot [uint64])) {
-        throw 'Stage probe schemaVersion must be an integer.'
+    $schemaValue = $null
+    if ($propertyNames.Contains('schemaVersion')) {
+        $schemaValue = $probe.schemaVersion
+        $schemaValid = ($schemaValue -is [int16]) -or ($schemaValue -is [int32]) -or ($schemaValue -is [int64]) -or
+            ($schemaValue -is [uint16]) -or ($schemaValue -is [uint32]) -or ($schemaValue -is [uint64])
+        if (-not $schemaValid) {
+            Add-WorkflowViolation $violations 'probe.schemaVersion.type' 'Stage probe schemaVersion must be an integer.'
+        } elseif ([int64]$schemaValue -ne 1) {
+            Add-WorkflowViolation $violations 'probe.schemaVersion.value' 'Stage probe schemaVersion must equal 1.'
+        }
     }
-    if ([int64]$schemaValue -ne 1) { throw 'Stage probe schemaVersion must equal 1.' }
-    $sha = Assert-ProbeString 'gitSha' $probe.gitSha
-    if ($sha -notmatch '^[0-9a-fA-F]{40}$') { throw 'Stage probe gitSha must be an exact 40-character SHA.' }
-    $sha = $sha.ToLowerInvariant()
-    if ($sha -ne (Get-HeadSha)) { throw 'Stage probe Git SHA does not match current HEAD.' }
-    $unityVersion = Assert-ProbeString 'unityVersion' $probe.unityVersion
-    if ($unityVersion -ne $script:UnityVersion) { throw ('Stage probe Unity version must equal ' + $script:UnityVersion + '.') }
-    $manifestStatus = Assert-ProbeString 'manifestStatus' $probe.manifestStatus
-    $stale = @(Assert-ProbeStringArray 'staleStages' $probe.staleStages)
-    $staleReasons = @(Assert-ProbeStringArray 'staleReasons' $probe.staleReasons)
-    $lighting = Assert-ProbeString 'lightingInputDigest' $probe.lightingInputDigest
-    $sourceSignature = Assert-ProbeString 'sourceSignature' $probe.sourceSignature
-    $outputFingerprint = Assert-ProbeString 'outputFingerprint' $probe.outputFingerprint
-    $bakedProfile = Assert-ProbeString 'bakedProfile' $probe.bakedProfile
-    $fingerprintPaths = @(Assert-ProbeStringArray 'fingerprintPaths' $probe.fingerprintPaths)
-    $fingerprintHashes = @(Assert-ProbeStringArray 'fingerprintHashes' $probe.fingerprintHashes)
-    if ($fingerprintPaths.Count -ne $fingerprintHashes.Count) { throw 'Stage probe fingerprintPaths and fingerprintHashes counts must match.' }
+    $sha = if ($propertyNames.Contains('gitSha')) { Get-ProbeStringValue $violations $probe 'gitSha' 'probe.gitSha' } else { $null }
+    if ($null -ne $sha -and $sha -notmatch '^[0-9a-fA-F]{40}$') {
+        Add-WorkflowViolation $violations 'probe.gitSha.shape' 'Stage probe gitSha must be an exact 40-character SHA.'
+        $sha = $null
+    } elseif ($null -ne $sha) {
+        $sha = $sha.ToLowerInvariant()
+        if ($sha -ne (Get-HeadSha)) { Add-WorkflowViolation $violations 'probe.gitSha.binding' 'Stage probe Git SHA does not match current HEAD.' }
+    }
+    $unityVersion = if ($propertyNames.Contains('unityVersion')) { Get-ProbeStringValue $violations $probe 'unityVersion' 'probe.unityVersion' } else { $null }
+    if ($null -ne $unityVersion -and $unityVersion -cne $script:UnityVersion) { Add-WorkflowViolation $violations 'probe.unityVersion.binding' ('Stage probe Unity version must equal ' + $script:UnityVersion + '.') }
+    $manifestStatus = if ($propertyNames.Contains('manifestStatus')) { Get-ProbeStringValue $violations $probe 'manifestStatus' 'probe.manifestStatus' } else { $null }
+    if ($null -ne $manifestStatus -and $manifestStatus -notin @('current', 'stale')) { Add-WorkflowViolation $violations 'probe.manifestStatus.value' ('Stage probe manifestStatus is invalid: ' + $manifestStatus) }
+    $stale = if ($propertyNames.Contains('staleStages')) { Get-ProbeStringArrayValue $violations $probe 'staleStages' 'probe.staleStages' } else { $null }
+    $staleReasons = if ($propertyNames.Contains('staleReasons')) { Get-ProbeStringArrayValue $violations $probe 'staleReasons' 'probe.staleReasons' } else { $null }
+    if ($null -ne $stale -and $null -ne $staleReasons -and $stale.Count -ne $staleReasons.Count) { Add-WorkflowViolation $violations 'probe.stale.countParity' 'Stage probe staleStages and staleReasons counts must match.' }
+    $lighting = if ($propertyNames.Contains('lightingInputDigest')) { Get-ProbeStringValue $violations $probe 'lightingInputDigest' 'probe.lightingInputDigest' } else { $null }
+    $sourceSignature = if ($propertyNames.Contains('sourceSignature')) { Get-ProbeStringValue $violations $probe 'sourceSignature' 'probe.sourceSignature' } else { $null }
+    $outputFingerprint = if ($propertyNames.Contains('outputFingerprint')) { Get-ProbeStringValue $violations $probe 'outputFingerprint' 'probe.outputFingerprint' } else { $null }
+    $bakedProfile = if ($propertyNames.Contains('bakedProfile')) { Get-ProbeStringValue $violations $probe 'bakedProfile' 'probe.bakedProfile' } else { $null }
+    if ($null -ne $bakedProfile -and $bakedProfile -notin @('none', 'development', 'production')) { Add-WorkflowViolation $violations 'probe.bakedProfile.value' ('Stage probe bakedProfile is invalid: ' + $bakedProfile) }
+    $fingerprintPaths = if ($propertyNames.Contains('fingerprintPaths')) { Get-ProbeStringArrayValue $violations $probe 'fingerprintPaths' 'probe.fingerprintPaths' } else { $null }
+    $fingerprintHashes = if ($propertyNames.Contains('fingerprintHashes')) { Get-ProbeStringArrayValue $violations $probe 'fingerprintHashes' 'probe.fingerprintHashes' } else { $null }
+    if ($null -ne $fingerprintPaths -and $null -ne $fingerprintHashes -and $fingerprintPaths.Count -ne $fingerprintHashes.Count) { Add-WorkflowViolation $violations 'probe.fingerprint.countParity' 'Stage probe fingerprintPaths and fingerprintHashes counts must match.' }
+    foreach ($hashRecord in @(
+        @{ name = 'lightingInputDigest'; value = $lighting },
+        @{ name = 'sourceSignature'; value = $sourceSignature },
+        @{ name = 'outputFingerprint'; value = $outputFingerprint }
+    )) {
+        if ($null -ne $hashRecord.value -and [string]$hashRecord.value -notmatch '^[0-9a-fA-F]{32,128}$') { Add-WorkflowViolation $violations ('probe.' + $hashRecord.name + '.shape') ('Stage probe ' + $hashRecord.name + ' must be a hexadecimal hash.') }
+    }
+    if ($null -ne $fingerprintHashes) {
+        for ($index = 0; $index -lt $fingerprintHashes.Count; $index++) {
+            if ([string]$fingerprintHashes[$index] -notmatch '^[0-9a-fA-F]{32,128}$') { Add-WorkflowViolation $violations ('probe.fingerprintHashes.item[' + $index + '].shape') 'Stage probe fingerprint hash must be hexadecimal.' }
+        }
+    }
+    Complete-WorkflowValidationPhase 'probe' $violations
     $script:ProbeInventoryPaths = @($fingerprintPaths)
     $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
     return [ordered]@{
-        status = 'read'
-        path = $path
-        schemaVersion = [int]$schemaValue
-        sha256 = $hash
-        gitSha = $sha
-        unityVersion = $unityVersion
-        manifestStatus = $manifestStatus
-        staleStages = $stale
-        staleReasons = $staleReasons
-        lightingInputDigest = $lighting
-        sourceSignature = $sourceSignature
-        outputFingerprint = $outputFingerprint
-        bakedProfile = $bakedProfile
-        fingerprintPaths = $fingerprintPaths
-        fingerprintHashes = $fingerprintHashes
-        raw = $probe
+        status = 'read'; path = $path; schemaVersion = [int]$schemaValue; sha256 = $hash; gitSha = $sha; unityVersion = $unityVersion; manifestStatus = $manifestStatus
+        staleStages = @($stale); staleReasons = @($staleReasons); lightingInputDigest = $lighting; sourceSignature = $sourceSignature; outputFingerprint = $outputFingerprint
+        bakedProfile = $bakedProfile; fingerprintPaths = @($fingerprintPaths); fingerprintHashes = @($fingerprintHashes); raw = $probe
     }
 }
 
 function Assert-ProbeContractForMode {
     param([Parameter(Mandatory = $true)]$Probe, [Parameter(Mandatory = $true)][string]$WorkflowMode)
+    $violations = New-WorkflowViolationList
     if ([string]$Probe.status -eq 'missing') {
-        if (-not $PlanOnly) { throw ('Stage probe is required for executing ' + $WorkflowMode + ' workflow; missing probe is allowed only for PlanOnly.') }
+        if (-not $PlanOnly) { Add-WorkflowViolation $violations 'mode.probe.required' ('Stage probe is required for executing ' + $WorkflowMode + ' workflow; missing probe is allowed only for PlanOnly.'); Complete-WorkflowValidationPhase ('mode-' + $WorkflowMode) $violations }
         return
     }
-    if ([string]$Probe.status -ne 'read' -or [int]$Probe.schemaVersion -ne 1) { throw 'Stage probe schemaVersion 1 is required before workflow execution.' }
-    if ([string]$Probe.gitSha -ne (Get-HeadSha) -or [string]$Probe.unityVersion -ne $script:UnityVersion) { throw 'Stage probe SHA/version binding failed.' }
-    if ([string]$Probe.manifestStatus -notin @('current', 'stale')) { throw ('Stage probe manifestStatus is invalid: ' + [string]$Probe.manifestStatus) }
-    if (@($Probe.staleStages).Count -ne @($Probe.staleReasons).Count) { throw 'Stage probe staleStages/staleReasons coverage mismatch.' }
-    if ([string]$Probe.manifestStatus -eq 'current' -and @($Probe.staleStages).Count -gt 0) { throw 'Stage probe current manifest cannot list stale stages.' }
-    if ([string]$Probe.manifestStatus -eq 'stale' -and @($Probe.staleStages).Count -eq 0) { throw 'Stage probe stale manifest must list stale stages and reasons.' }
-    foreach ($staleStage in @($Probe.staleStages)) { if ([string]::IsNullOrWhiteSpace([string]$staleStage)) { throw 'Stage probe staleStages cannot contain empty values.' } }
-    foreach ($staleReason in @($Probe.staleReasons)) { if ([string]::IsNullOrWhiteSpace([string]$staleReason)) { throw 'Stage probe staleReasons cannot contain empty values.' } }
-    if (@($Probe.fingerprintPaths).Count -eq 0 -or @($Probe.fingerprintPaths).Count -ne @($Probe.fingerprintHashes).Count) { throw 'Stage probe fingerprint coverage is incomplete.' }
+    if ([string]$Probe.status -ne 'read') { Add-WorkflowViolation $violations 'mode.probe.status' 'Stage probe must be read before workflow execution.'; Complete-WorkflowValidationPhase ('mode-' + $WorkflowMode) $violations }
+    if ([int]$Probe.schemaVersion -ne 1) { Add-WorkflowViolation $violations 'mode.schemaVersion.value' 'Stage probe schemaVersion 1 is required before workflow execution.' }
+    if ([string]$Probe.gitSha -ne (Get-HeadSha)) { Add-WorkflowViolation $violations 'mode.gitSha.binding' 'Stage probe SHA binding failed.' }
+    if ([string]$Probe.unityVersion -cne $script:UnityVersion) { Add-WorkflowViolation $violations 'mode.unityVersion.binding' ('Stage probe Unity version must equal ' + $script:UnityVersion + '.') }
+    if ([string]$Probe.manifestStatus -notin @('current', 'stale')) { Add-WorkflowViolation $violations 'mode.manifestStatus.value' ('Stage probe manifestStatus is invalid: ' + [string]$Probe.manifestStatus) }
+    $staleStages = @($Probe.staleStages); $staleReasons = @($Probe.staleReasons)
+    if ($staleStages.Count -ne $staleReasons.Count) { Add-WorkflowViolation $violations 'mode.stale.countParity' 'Stage probe staleStages/staleReasons coverage mismatch.' }
+    if ([string]$Probe.manifestStatus -eq 'current' -and $staleStages.Count -gt 0) { Add-WorkflowViolation $violations 'mode.stale.currentCoverage' 'Stage probe current manifest cannot list stale stages.' }
+    if ([string]$Probe.manifestStatus -eq 'stale' -and $staleStages.Count -eq 0) { Add-WorkflowViolation $violations 'mode.stale.requiredCoverage' 'Stage probe stale manifest must list stale stages and reasons.' }
+    for ($index = 0; $index -lt $staleStages.Count; $index++) { if ([string]::IsNullOrWhiteSpace([string]$staleStages[$index])) { Add-WorkflowViolation $violations ('mode.staleStages.item[' + $index + ']') 'Stage probe staleStages cannot contain empty values.' } }
+    for ($index = 0; $index -lt $staleReasons.Count; $index++) { if ([string]::IsNullOrWhiteSpace([string]$staleReasons[$index])) { Add-WorkflowViolation $violations ('mode.staleReasons.item[' + $index + ']') 'Stage probe staleReasons cannot contain empty values.' } }
+    $fingerprintPaths = @($Probe.fingerprintPaths); $fingerprintHashes = @($Probe.fingerprintHashes)
+    if ($fingerprintPaths.Count -eq 0) { Add-WorkflowViolation $violations 'mode.fingerprint.coverage' 'Stage probe fingerprint coverage is incomplete.' }
+    if ($fingerprintPaths.Count -ne $fingerprintHashes.Count) { Add-WorkflowViolation $violations 'mode.fingerprint.countParity' 'Stage probe fingerprintPaths/fingerprintHashes coverage mismatch.' }
     $seen = @{}
-    foreach ($fingerprintPath in @($Probe.fingerprintPaths)) {
-        $normalized = ([string]$fingerprintPath).Replace('\', '/').TrimStart('/')
-        if (-not (Test-ProbeInventoryMember $normalized) -or $seen.ContainsKey($normalized)) { throw ('Stage probe fingerprint path is outside closed inventory or duplicated: ' + $normalized) }
-        $seen[$normalized] = $true
+    for ($index = 0; $index -lt $fingerprintPaths.Count; $index++) {
+        $normalized = ([string]$fingerprintPaths[$index]).Replace('\', '/').TrimStart('/')
+        if (-not (Test-ProbeInventoryMember $normalized)) { Add-WorkflowViolation $violations ('mode.fingerprintPaths.item[' + $index + '].scope') ('Stage probe fingerprint path is outside closed inventory: ' + $normalized) }
+        elseif ($seen.ContainsKey($normalized)) { Add-WorkflowViolation $violations ('mode.fingerprintPaths.item[' + $index + '].duplicate') ('Stage probe fingerprint path is duplicated: ' + $normalized) }
+        else { $seen[$normalized] = $true }
     }
-    foreach ($fingerprintHash in @($Probe.fingerprintHashes)) { if ([string]$fingerprintHash -notmatch '^[0-9a-fA-F]{32,128}$') { throw 'Stage probe fingerprint hash is invalid.' } }
-    if ($WorkflowMode -in @('Development', 'ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.manifestStatus -ne 'current') { throw ($WorkflowMode + ' requires a current stage probe manifest.') }
+    for ($index = 0; $index -lt $fingerprintHashes.Count; $index++) { if ([string]$fingerprintHashes[$index] -notmatch '^[0-9a-fA-F]{32,128}$') { Add-WorkflowViolation $violations ('mode.fingerprintHashes.item[' + $index + '].shape') 'Stage probe fingerprint hash is invalid.' } }
+    if ($WorkflowMode -in @('Development', 'ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.manifestStatus -ne 'current') { Add-WorkflowViolation $violations 'mode.manifestStatus.currentRequired' ($WorkflowMode + ' requires a current stage probe manifest.') }
+    if ($WorkflowMode -eq 'Development' -and [string]$Probe.bakedProfile -cne 'development') { Add-WorkflowViolation $violations 'mode.bakedProfile.development' 'Development workflow requires bakedProfile=development.' }
+    if ($WorkflowMode -in @('ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.bakedProfile -cne 'production') { Add-WorkflowViolation $violations 'mode.bakedProfile.production' ($WorkflowMode + ' requires bakedProfile=production.') }
+    Complete-WorkflowValidationPhase ('mode-' + $WorkflowMode) $violations
 }
 
 function Write-AtomicJson {
@@ -1063,40 +1157,108 @@ function Write-AtomicJson {
     }
 }
 
-if (-not (Test-Path -LiteralPath $script:ProjectRoot -PathType Container)) { throw ('Project path not found: ' + $script:ProjectRoot) }
-$script:ProjectRoot = Get-CanonicalPath $script:ProjectRoot
-$script:CanonicalProjectRoot = $script:ProjectRoot
-if ($script:ProjectRoot.Length -gt 80) { throw 'Project path must be short (80 characters or fewer).' }
-if (-not [System.IO.Path]::IsPathRooted($ProjectPath)) { throw 'ProjectPath must be absolute.' }
-if (-not $PlanOnly -and -not (Test-Path -LiteralPath $script:UnityPath -PathType Leaf)) { throw ('Unity ' + $script:UnityVersion + ' not found: ' + $script:UnityPath) }
-if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot 'ProjectSettings\ProjectVersion.txt') -PathType Leaf)) { throw 'ProjectVersion.txt missing.' }
-$projectVersion = Get-Content -Raw -LiteralPath (Join-Path $script:ProjectRoot 'ProjectSettings\ProjectVersion.txt')
-if ($projectVersion -notmatch ('m_EditorVersion:\s*' + [Regex]::Escape($script:UnityVersion))) { throw ('Project Unity version is not ' + $script:UnityVersion + '.') }
+$preflightViolations = New-WorkflowViolationList
+$projectPathText = [string]$ProjectPath
+$projectPathShapeValid = $true
+if ([string]::IsNullOrWhiteSpace($projectPathText) -or $projectPathText.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
+    Add-WorkflowViolation $preflightViolations 'preflight.argument.ProjectPath.shape' 'ProjectPath must be non-empty and one line.'
+    $projectPathShapeValid = $false
+}
+if ($projectPathShapeValid -and -not [System.IO.Path]::IsPathRooted($projectPathText)) {
+    Add-WorkflowViolation $preflightViolations 'preflight.argument.ProjectPath.absolute' 'ProjectPath must be absolute.'
+    $projectPathShapeValid = $false
+}
+if ($TimeoutSeconds -le 0) { Add-WorkflowViolation $preflightViolations 'preflight.argument.TimeoutSeconds' 'TimeoutSeconds must be greater than zero.' }
+if ($projectPathShapeValid) {
+    $projectInputRoot = $null
+    try { $projectInputRoot = [System.IO.Path]::GetFullPath($projectPathText) } catch { throw ('ProjectPath canonicalization failed: ' + $_.Exception.Message) }
+    $script:ProjectInputRoot = $projectInputRoot
+    if (-not (Test-Path -LiteralPath $projectInputRoot -PathType Container)) {
+        Add-WorkflowViolation $preflightViolations 'preflight.repository.ProjectPath.exists' ('Project path not found: ' + $projectInputRoot)
+    } else {
+        try { $script:ProjectRoot = Get-CanonicalPath $projectInputRoot } catch { throw ('ProjectPath canonicalization failed: ' + $_.Exception.Message) }
+        $script:CanonicalProjectRoot = $script:ProjectRoot
+        if ($script:ProjectRoot.Length -gt 80) { Add-WorkflowViolation $preflightViolations 'preflight.repository.ProjectPath.length' 'Project path must be short (80 characters or fewer).' }
+    }
+}
+if ($null -eq $script:ProjectRoot) { Complete-WorkflowValidationPhase 'preflight' $preflightViolations }
+$projectVersionPath = Join-Path $script:ProjectRoot 'ProjectSettings\ProjectVersion.txt'
+if (-not (Test-Path -LiteralPath $projectVersionPath -PathType Leaf)) {
+    Add-WorkflowViolation $preflightViolations 'preflight.config.ProjectVersionPath' 'ProjectVersion.txt missing.'
+} else {
+    try { $projectVersion = Get-Content -Raw -LiteralPath $projectVersionPath -ErrorAction Stop } catch { throw ('ProjectVersion.txt could not be read: ' + $_.Exception.Message) }
+    if ($projectVersion -notmatch ('m_EditorVersion:\s*' + [Regex]::Escape($script:UnityVersion))) { Add-WorkflowViolation $preflightViolations 'preflight.config.unityVersion' ('Project Unity version is not ' + $script:UnityVersion + '.') }
+}
+if (-not $PlanOnly -and -not (Test-Path -LiteralPath $script:UnityPath -PathType Leaf)) { Add-WorkflowViolation $preflightViolations 'preflight.config.unityPath' ('Unity ' + $script:UnityVersion + ' not found: ' + $script:UnityPath) }
 $libraryPath = Get-FullPath (Join-Path $script:ProjectRoot 'Library')
 if (-not $PlanOnly) {
-    if (-not (Test-Path -LiteralPath $libraryPath -PathType Container)) { throw 'Warm private Library is missing.' }
-    $libraryItem = Get-Item -LiteralPath $libraryPath
-    if ($libraryItem.LinkType -or ($libraryItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Library must remain private to this project; shared link detected.' }
+    if (-not (Test-Path -LiteralPath $libraryPath -PathType Container)) { Add-WorkflowViolation $preflightViolations 'preflight.config.library.missing' 'Warm private Library is missing.' }
+    else {
+        $libraryItem = Get-Item -LiteralPath $libraryPath
+        if ($libraryItem.LinkType -or ($libraryItem.Attributes -band [IO.FileAttributes]::ReparsePoint)) { Add-WorkflowViolation $preflightViolations 'preflight.config.library.private' 'Library must remain private to this project; shared link detected.' }
+    }
 }
 
 $commonRaw = Invoke-Git @('rev-parse', '--git-common-dir')
 $commonGit = if ([System.IO.Path]::IsPathRooted($commonRaw)) { Get-FullPath $commonRaw } else { Get-FullPath (Join-Path $script:ProjectRoot $commonRaw) }
-$script:GitCommonRoot = Get-CanonicalPath $commonGit
+try { $script:GitCommonRoot = Get-CanonicalPath $commonGit } catch { throw ('Git-common path canonicalization failed: ' + $_.Exception.Message) }
 $commonGit = $script:GitCommonRoot
 $projectRoot = $script:ProjectRoot.TrimEnd('\')
 if ($commonGit.Equals($projectRoot, [StringComparison]::OrdinalIgnoreCase) -or
     $commonGit.StartsWith($projectRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw ('Git-common evidence destination must be outside project: ' + $commonGit)
 }
-$attemptValue = if ([string]::IsNullOrWhiteSpace($AttemptId)) { [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') } else { $AttemptId }
-if ($attemptValue -notmatch '^[A-Za-z0-9._-]+$') { throw 'AttemptId must contain only letters, digits, dot, underscore, or hyphen.' }
-if ($attemptValue.Length -gt 80) { throw 'AttemptId must be 80 characters or fewer.' }
-$script:InvocationId = $attemptValue + '-' + [Guid]::NewGuid().ToString('N')
+$attemptValue = if ([string]::IsNullOrWhiteSpace($AttemptId)) { [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') } else { [string]$AttemptId }
+$attemptPathSafe = $true
+if (-not [string]::IsNullOrWhiteSpace($AttemptId)) {
+    if ($attemptValue.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { Add-WorkflowViolation $preflightViolations 'preflight.argument.AttemptId.shape' 'AttemptId must be non-empty and one line.'; $attemptPathSafe = $false }
+    elseif ($attemptValue -notmatch '^[A-Za-z0-9._-]+$') { Add-WorkflowViolation $preflightViolations 'preflight.argument.AttemptId.characters' 'AttemptId must contain only letters, digits, dot, underscore, or hyphen.'; $attemptPathSafe = $false }
+    if ($attemptValue.Length -gt 80) { Add-WorkflowViolation $preflightViolations 'preflight.argument.AttemptId.length' 'AttemptId must be 80 characters or fewer.'; $attemptPathSafe = $false }
+}
+$attemptPathValue = if ($attemptPathSafe) { $attemptValue } else { [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') }
+$script:InvocationId = $attemptPathValue + '-' + [Guid]::NewGuid().ToString('N')
+$evidenceRootPathSafe = $true
+$probePathPathSafe = $true
+$ledgerPathPathSafe = $true
+foreach ($pathArgument in @(
+    @{ name = 'EvidenceRoot'; value = [string]$EvidenceRoot },
+    @{ name = 'ProbePath'; value = [string]$ProbePath },
+    @{ name = 'LedgerPath'; value = [string]$LedgerPath }
+)) {
+    if (-not [string]::IsNullOrWhiteSpace($pathArgument.value) -and $pathArgument.value.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
+        Add-WorkflowViolation $preflightViolations ('preflight.argument.' + $pathArgument.name + '.shape') ($pathArgument.name + ' must be one line.')
+        if ($pathArgument.name -eq 'EvidenceRoot') { $evidenceRootPathSafe = $false }
+        elseif ($pathArgument.name -eq 'ProbePath') { $probePathPathSafe = $false }
+        elseif ($pathArgument.name -eq 'LedgerPath') { $ledgerPathPathSafe = $false }
+    }
+}
+for ($generatedIndex = 0; $generatedIndex -lt @($GeneratedPath).Count; $generatedIndex++) {
+    $generatedValue = [string]$GeneratedPath[$generatedIndex]
+    if ([string]::IsNullOrWhiteSpace($generatedValue) -or $generatedValue.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { Add-WorkflowViolation $preflightViolations ('preflight.argument.GeneratedPath[' + $generatedIndex + '].shape') 'GeneratedPath must be non-empty and one line.' }
+    elseif ([IO.Path]::IsPathRooted($generatedValue) -or -not (Test-InventoryMember $generatedValue)) { Add-WorkflowViolation $preflightViolations ('preflight.repository.GeneratedPath[' + $generatedIndex + '].scope') ('GeneratedPath is outside authoritative inventory: ' + $generatedValue) }
+}
 $evidenceBase = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
-    Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptValue))) 'EvidenceRoot'
-} else { Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot' }
+    Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
+} elseif ($evidenceRootPathSafe) {
+    Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot'
+} else {
+    Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
+}
 $script:EvidenceDirectory = Assert-DurableEvidencePath (Join-Path $evidenceBase ('invocation-' + $script:InvocationId)) 'InvocationEvidenceRoot'
 if (Test-Path -LiteralPath $script:EvidenceDirectory) { throw ('Evidence invocation path already exists; refusing overwrite: ' + $script:EvidenceDirectory) }
+ $script:ProbeOutputPath = if ([string]::IsNullOrWhiteSpace($ProbePath) -or -not $probePathPathSafe) {
+    Join-Path $script:EvidenceDirectory 'movement-lab-stage-probe.json'
+} else {
+    Assert-DurableEvidencePath $ProbePath 'ProbePath'
+}
+if (-not [string]::IsNullOrWhiteSpace($LedgerPath) -and $ledgerPathPathSafe) { $null = Assert-DurableEvidencePath $LedgerPath 'LedgerPath' }
+if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
+
+$beforeHead = Get-HeadSha
+$dirtyBefore = @(Get-NonGeneratedDirtyPaths)
+if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { Add-WorkflowViolation $preflightViolations 'preflight.repository.dirtyScope' ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
+Complete-WorkflowValidationPhase 'preflight' $preflightViolations
+
 New-Item -ItemType Directory -Force -Path $script:EvidenceDirectory | Out-Null
 $evidenceItem = Get-Item -LiteralPath $script:EvidenceDirectory -Force
 if (($evidenceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Evidence invocation path may not be a junction or alias: ' + $script:EvidenceDirectory) }
@@ -1105,12 +1267,6 @@ if ($canonicalEvidenceParent.Equals($script:CanonicalProjectRoot, [StringCompari
 $script:LeaseReleaseProofPath = Join-Path $script:EvidenceDirectory 'lease-release-proof.json'
 $logs = Join-Path $script:EvidenceDirectory 'logs'
 if (-not (Test-Path -LiteralPath $logs -PathType Container)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }
-$script:ProbeOutputPath = if ([string]::IsNullOrWhiteSpace($ProbePath)) { Join-Path $script:EvidenceDirectory 'movement-lab-stage-probe.json' } else { Assert-DurableEvidencePath $ProbePath 'ProbePath' }
-if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
-
-$beforeHead = Get-HeadSha
-$dirtyBefore = @(Get-NonGeneratedDirtyPaths)
-if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Acquire-ProjectLease | Out-Null
 try {
 Assert-NoProjectProcessOrLock
@@ -1175,13 +1331,24 @@ $changedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
 $afterGeneratedHashDigest = Get-GeneratedHashDigest $afterHashes
 $afterWorkingTreeDigest = Get-WorkingTreeDigest
 $dirtyAfter = @(Get-NonGeneratedDirtyPaths)
+$postflightViolations = New-WorkflowViolationList
 if ($Mode -eq 'ProductionPrepare') {
-    if ($dirtyAfter.Count -gt 0) { throw ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
-    if (($dirtyBefore -join "`n") -cne ($dirtyAfter -join "`n")) { throw 'Production preparation changed non-generated Git status.' }
+    if ($dirtyAfter.Count -gt 0) { Add-WorkflowViolation $postflightViolations 'postflight.dirtyScope.nonGenerated' ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
+    if (($dirtyBefore -join "`n") -cne ($dirtyAfter -join "`n")) { Add-WorkflowViolation $postflightViolations 'postflight.dirtyScope.stability' 'Production preparation changed non-generated Git status.' }
 }
-if ($script:BakeCount -gt 1) { throw ('Workflow bake count exceeded one: ' + $script:BakeCount) }
+if ($script:BakeCount -gt 1) { Add-WorkflowViolation $postflightViolations 'postflight.bakeCount.max' ('Workflow bake count exceeded one: ' + $script:BakeCount) }
+for ($generatedIndex = 0; $generatedIndex -lt $changedGeneratedPaths.Count; $generatedIndex++) {
+    if (-not (Test-GeneratedPath ([string]$changedGeneratedPaths[$generatedIndex]))) {
+        Add-WorkflowViolation $postflightViolations ('postflight.generatedScope[' + $generatedIndex + ']') ('Changed generated path is outside authoritative generated scope: ' + [string]$changedGeneratedPaths[$generatedIndex])
+    }
+}
+if ([string]$afterGeneratedHashDigest -notmatch '^[0-9a-fA-F]{64}$') { Add-WorkflowViolation $postflightViolations 'postflight.evidence.generatedHashDigest' 'Generated hash digest is not a SHA-256 value.' }
+if ([string]$afterWorkingTreeDigest -notmatch '^[0-9a-fA-F]{64}$') { Add-WorkflowViolation $postflightViolations 'postflight.evidence.workingTreeDigest' 'Working-tree digest is not a SHA-256 value.' }
+$expectedChangedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
+if (-not (Test-StringSetEqual $changedGeneratedPaths $expectedChangedGeneratedPaths)) { Add-WorkflowViolation $postflightViolations 'postflight.evidence.generatedChanges' 'Generated change inventory is inconsistent with before/after hashes.' }
 $afterHead = Get-HeadSha
-if ($beforeHead -cne $afterHead) { throw ('Git HEAD changed during workflow: expected ' + $beforeHead + ', observed ' + $afterHead) }
+if ($beforeHead -cne $afterHead) { Add-WorkflowViolation $postflightViolations 'postflight.head.stability' ('Git HEAD changed during workflow: expected ' + $beforeHead + ', observed ' + $afterHead) }
+Complete-WorkflowValidationPhase 'postflight' $postflightViolations
 
 $ledgerEvidencePath = Join-Path $script:EvidenceDirectory 'check-ledger.json'
 $ledgerPayloadPath = Join-Path $script:EvidenceDirectory 'check-ledger-payload.json'
