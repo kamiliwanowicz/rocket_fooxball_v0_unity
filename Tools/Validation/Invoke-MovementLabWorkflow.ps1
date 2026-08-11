@@ -35,7 +35,6 @@ $script:RequestedInventoryPaths = @()
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
-$script:ProductionBakeReuseCandidates = @{}
 $script:BakeCount = 0
 $script:ReleaseProof = New-Object System.Collections.Generic.List[object]
 $script:GeneratedRoots = @(
@@ -663,8 +662,6 @@ function Get-EnvironmentFingerprint {
         projectPath = $script:ProjectRoot
         libraryPath = Join-Path $script:ProjectRoot 'Library'
         powershell = $PSVersionTable.PSVersion.ToString()
-        os = [Environment]::OSVersion.VersionString
-        machine = [Environment]::MachineName
     } | ConvertTo-Json -Compress
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($value)
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -754,6 +751,7 @@ function New-LedgerRow {
         subsumed_checks = @()
         invalidation_reason = $null
         bake_count = $null
+        bake_marker = $null
         probe = $null
     }
 }
@@ -773,28 +771,18 @@ function New-CheckLedger {
         }
         'ProductionPrepare' {
             $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'source-freeze'))
-            $rows.Add((New-LedgerRow -CheckId 'prebake-validate' -Tier 'production-final' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') -Subsumes @() -RunPoint 'source-freeze'))
             $productionBakeInputs = @(
-                'Assets/_Game/Editor/MovementLab/MovementLabContract.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabStageGraph.cs',
+                'Assets/_Game/Lighting',
                 'Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs',
                 'Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs',
-                'Assets/_Game/Editor/GraphicsQualityConfigurator.cs',
-                'Assets/InputSystem_Actions.inputactions',
-                'Assets/InputSystem_Actions.inputactions.meta',
                 'Assets/_Game/Lighting/MovementLabLightingSettings.asset',
                 'Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta',
                 'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset',
                 'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset.meta',
                 'Assets/_Game/Lighting/MovementLabVolumeProfile.asset',
                 'Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta',
-                'Packages/manifest.json',
-                'Packages/packages-lock.json',
-                'ProjectSettings/ProjectVersion.txt'
+                'Assets/_Game/Lighting/MovementLabLightingManifest.json',
+                'Assets/_Game/Lighting/MovementLabLightingManifest.json.meta'
             )
             $rows.Add((New-LedgerRow -CheckId 'production-bake' -Tier 'production-final' -MutatesProject $true -InputPaths $productionBakeInputs -InvalidationPaths $productionBakeInputs -Subsumes @() -RunPoint 'source-freeze'))
         }
@@ -877,104 +865,17 @@ function Test-StringSetEqual {
     return $true
 }
 
-function Get-PriorManifestForRow {
-    param([Parameter(Mandatory = $true)]$Prior)
-    $validatedSha = Get-ObjectPropertyText $Prior 'validated_sha'
-    if ([string]::IsNullOrWhiteSpace($validatedSha)) { return $null }
-    return @($script:PriorManifestHistory | Where-Object {
-        $null -ne $_ -and (Get-ObjectPropertyText $_ 'exactSha') -eq $validatedSha
-    } | Select-Object -First 1)
-}
-
-function Test-ProductionBakeReuseProof {
+function Set-CheckInvalidated {
     param(
-        [Parameter(Mandatory = $true)]$Prior,
         [Parameter(Mandatory = $true)]$Row,
-        [Parameter(Mandatory = $true)][string]$CurrentSha,
-        [string[]]$ChangedPaths = @(),
-        [switch]$RequireDescendant,
-        $PriorManifest
+        [AllowEmptyString()][string]$Reason
     )
-    if ([string]$Prior.check_id -ne 'production-bake' -or [string]$Row.check_id -ne 'production-bake') { return @{ valid = $false; reason = 'production-bake row identity mismatch' } }
-    if ([string]$Prior.status -notin @('executed', 'reused')) { return @{ valid = $false; reason = 'prior production bake was not executed' } }
-    $priorSha = Get-ObjectPropertyText $Prior 'validated_sha'
-    if ([string]::IsNullOrWhiteSpace($priorSha)) { return @{ valid = $false; reason = 'prior production bake SHA missing' } }
-    if ((Get-ObjectPropertyText $Prior 'input_digest') -ne (Get-ObjectPropertyText $Row 'input_digest')) { return @{ valid = $false; reason = 'production bake input digest changed' } }
-    if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'production bake environment changed' } }
-    if (-not (Test-StringSetEqual @(Get-ObjectPropertyValue $Prior 'input_paths') @(Get-ObjectPropertyValue $Row 'input_paths'))) { return @{ valid = $false; reason = 'production bake input coverage changed' } }
-
-    if ($RequireDescendant) {
-        if ($null -eq $ChangedPaths -or @($ChangedPaths).Count -eq 0) { return @{ valid = $false; reason = 'production bake descendant has no generated change' } }
-        if (-not (Test-IsAncestor $priorSha $CurrentSha)) { return @{ valid = $false; reason = 'production bake prior SHA is not an ancestor' } }
-        foreach ($changedPath in @($ChangedPaths)) {
-            if (-not (Test-GeneratedPath ([string]$changedPath))) { return @{ valid = $false; reason = 'production bake descendant changed non-generated source' } }
-        }
-        if (Test-PathIntersects @($ChangedPaths) @(Get-ObjectPropertyValue $Row 'invalidation_paths')) { return @{ valid = $false; reason = 'production bake input path changed' } }
+    $reasonText = if ($null -eq $Reason) { '' } else { $Reason.Trim() }
+    if ([string]::IsNullOrWhiteSpace($reasonText)) {
+        $reasonText = 'reuse proof rejected for check: ' + [string]$Row.check_id
     }
-
-    $evidencePath = Get-ObjectPropertyText $Prior 'evidence_path'
-    $evidenceDigest = Get-ObjectPropertyText $Prior 'evidence_digest'
-    if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { return @{ valid = $false; reason = 'production bake evidence missing' } }
-    try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { return @{ valid = $false; reason = $_.Exception.Message } }
-    if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { return @{ valid = $false; reason = 'production bake evidence digest missing' } }
-    if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { return @{ valid = $false; reason = 'production bake evidence digest mismatch' } }
-
-    $bakeCountText = Get-ObjectPropertyText $Prior 'bake_count'
-    if ([string]::IsNullOrWhiteSpace($bakeCountText)) { $bakeCountText = Get-ObjectPropertyText $Prior 'bakeCount' }
-    if ([string]::IsNullOrWhiteSpace($bakeCountText) -and $null -ne $PriorManifest) { $bakeCountText = Get-ObjectPropertyText $PriorManifest 'bakeCount' }
-    $bakeCount = 0
-    try { $bakeCount = [int]$bakeCountText } catch { return @{ valid = $false; reason = 'prior production bake count is invalid' } }
-    if ($bakeCount -ne 1) { return @{ valid = $false; reason = 'prior production bake count was not exactly one' } }
-
-    $priorProbe = $null
-    if ($Prior.PSObject.Properties.Name -contains 'probe') { $priorProbe = $Prior.probe }
-    if ($null -eq $priorProbe -and $Prior.PSObject.Properties.Name -contains 'probe_state') { $priorProbe = $Prior.probe_state }
-    if ($null -eq $priorProbe -and $null -ne $PriorManifest -and $PriorManifest.PSObject.Properties.Name -contains 'probe') { $priorProbe = $PriorManifest.probe }
-    if ($null -eq $priorProbe) { return @{ valid = $false; reason = 'prior production bake probe state missing' } }
-    if ((Get-ObjectPropertyText $priorProbe 'status') -ne 'read') { return @{ valid = $false; reason = 'prior production bake probe was not read' } }
-    foreach ($probeField in @('schemaVersion', 'gitSha', 'unityVersion', 'manifestStatus', 'lightingInputDigest', 'sourceSignature', 'outputFingerprint', 'bakedProfile')) {
-        if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $priorProbe $probeField))) { return @{ valid = $false; reason = 'prior production bake probe field missing: ' + $probeField } }
-    }
-    if (@(Get-ObjectPropertyValue $priorProbe 'fingerprintPaths').Count -eq 0 -or @((Get-ObjectPropertyValue $priorProbe 'fingerprintPaths')).Count -ne @((Get-ObjectPropertyValue $priorProbe 'fingerprintHashes')).Count) { return @{ valid = $false; reason = 'prior production bake probe fingerprint coverage incomplete' } }
-    return @{ valid = $true; reason = $null; priorProbe = $priorProbe }
-}
-
-function Test-ProductionBakeProbeReuseProof {
-    param([Parameter(Mandatory = $true)]$PriorProbe, [Parameter(Mandatory = $true)]$CurrentProbe)
-    if ([string]$CurrentProbe.status -eq 'missing' -and $PlanOnly) { return @{ valid = $true; reason = $null } }
-    if ([string]$CurrentProbe.status -ne 'read') { return @{ valid = $false; reason = 'current production bake probe was not read' } }
-    foreach ($probeField in @('schemaVersion', 'unityVersion', 'manifestStatus', 'lightingInputDigest', 'sourceSignature', 'bakedProfile')) {
-        if ((Get-ObjectPropertyText $PriorProbe $probeField) -cne (Get-ObjectPropertyText $CurrentProbe $probeField)) { return @{ valid = $false; reason = 'production bake probe state changed: ' + $probeField } }
-    }
-    foreach ($probeField in @('outputFingerprint')) {
-        if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $CurrentProbe $probeField))) { return @{ valid = $false; reason = 'current production bake probe field missing: ' + $probeField } }
-    }
-    $currentFingerprintPaths = @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintPaths')
-    $currentFingerprintHashes = @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintHashes')
-    if ($currentFingerprintPaths.Count -eq 0 -or $currentFingerprintPaths.Count -ne $currentFingerprintHashes.Count) { return @{ valid = $false; reason = 'current production bake probe fingerprint coverage incomplete' } }
-    return @{ valid = $true; reason = $null }
-}
-
-function Confirm-ProductionBakeReuse {
-    param([Parameter(Mandatory = $true)]$Probe)
-    if (-not $script:ProductionBakeReuseCandidates.ContainsKey('production-bake')) { return }
-    $row = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1
-    if ($null -eq $row -or [string]$row.status -ne 'reused') { return }
-    $candidate = $script:ProductionBakeReuseCandidates['production-bake']
-    $proof = Test-ProductionBakeProbeReuseProof $candidate.priorProbe $Probe
-    if (-not $proof.valid) {
-        $row.status = 'invalidated'
-        $row.invalidation_reason = [string]$proof.reason
-    }
-}
-
-function Refresh-ProductionBakeOutputState {
-    $row = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1
-    if ($null -eq $row) { return }
-    $hashes = Get-GeneratedHashes
-    $row.generated_inventory = @(Get-AuthoritativeGeneratedInventory)
-    $row.generated_hashes = $hashes
-    $row.generated_hash_digest = Get-GeneratedHashDigest $hashes
+    $Row.status = 'invalidated'
+    $Row.invalidation_reason = $reasonText
 }
 
 function Merge-ExistingLedger {
@@ -1001,35 +902,27 @@ function Merge-ExistingLedger {
         # history only; no prior evidence may suppress this invocation.
         if ([string]$row.check_id -eq 'production-validator') { continue }
         $evidencePath = [string]$prior.evidence_path
-        if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { $row.status = 'invalidated'; continue }
-        try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { $row.status = 'invalidated'; $row.invalidation_reason = $_.Exception.Message; continue }
+        if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { Set-CheckInvalidated $row 'evidence path missing'; continue }
+        try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { Set-CheckInvalidated $row $_.Exception.Message; continue }
         $evidenceDigest = [string]$prior.evidence_digest
-        if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { $row.status = 'invalidated'; $row.invalidation_reason = 'evidence digest missing'; continue }
-        if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { $row.status = 'invalidated'; $row.invalidation_reason = 'evidence digest mismatch'; continue }
+        if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { Set-CheckInvalidated $row 'evidence digest missing'; continue }
+        if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { Set-CheckInvalidated $row 'evidence digest mismatch'; continue }
         $priorSha = [string]$prior.validated_sha
         $changed = if ($priorSha) { Get-ChangedPathsSince $priorSha $CurrentSha } else { $null }
         $sameInputs = [string]$prior.input_digest -eq [string]$row.input_digest
         $sameEnvironment = [string]$prior.environment_fingerprint -eq [string]$row.environment_fingerprint
         $exact = $priorSha -eq $CurrentSha
         $pureReattest = (-not [bool]$row.mutates_project) -and $sameInputs -and $sameEnvironment -and $null -ne $changed -and -not (Test-PathIntersects @($changed) @($row.invalidation_paths))
-        $manualProof = ([string]$row.check_id -match '(bake|manual)') -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
         $reuseProof = Test-RowReuseProof $prior $row
-        $isProductionBake = [string]$row.check_id -eq 'production-bake'
-        $priorManifestForRow = if ($isProductionBake) { Get-PriorManifestForRow $prior } else { $null }
-        $productionBakeProof = $null
-        if ($isProductionBake) {
-            $productionBakeProof = if ($exact) {
-                Test-ProductionBakeReuseProof $prior $row $CurrentSha -PriorManifest $priorManifestForRow
-            } elseif ($null -ne $changed) {
-                Test-ProductionBakeReuseProof $prior $row $CurrentSha -ChangedPaths @($changed) -RequireDescendant -PriorManifest $priorManifestForRow
-            } else {
-                @{ valid = $false; reason = 'production bake ancestry or SHA changed' }
-            }
-        }
+        $manualProof = ([string]$row.check_id -match '(bake|manual)') -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
+        # ProductionBake is always delegated to the C# builder gate. Historical
+        # rows cannot suppress the invocation because only its completed log
+        # can prove marker-based reuse versus an actual bake.
+        if ([string]$row.check_id -eq 'production-bake') { continue }
         if ($exact) {
-            if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid -or ($isProductionBake -and -not $productionBakeProof.valid)) {
-                $row.status = 'invalidated'
-                $row.invalidation_reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } elseif ($isProductionBake) { [string]$productionBakeProof.reason } else { [string]$reuseProof.reason }
+            if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid) {
+                $reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } else { [string]$reuseProof.reason }
+                Set-CheckInvalidated $row $reason
                 continue
             }
             $row.status = 'reused'
@@ -1038,29 +931,6 @@ function Merge-ExistingLedger {
             $row.evidence_path = $evidencePath
             $row.evidence_digest = $evidenceDigest
             $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
-            if ($isProductionBake) {
-                $row.generated_inventory = @(Get-ObjectPropertyValue $prior 'generated_inventory')
-                $priorBakeCountText = Get-ObjectPropertyText $prior 'bake_count'
-                if ([string]::IsNullOrWhiteSpace($priorBakeCountText)) { $priorBakeCountText = Get-ObjectPropertyText $prior 'bakeCount' }
-                if ([string]::IsNullOrWhiteSpace($priorBakeCountText) -and $null -ne $priorManifestForRow) { $priorBakeCountText = Get-ObjectPropertyText $priorManifestForRow 'bakeCount' }
-                $row.bake_count = [int]$priorBakeCountText
-                $row.probe = $productionBakeProof.priorProbe
-                $script:ProductionBakeReuseCandidates['production-bake'] = [ordered]@{ priorProbe = $productionBakeProof.priorProbe; prior = $prior; manifest = $priorManifestForRow }
-            }
-        } elseif ($isProductionBake -and $productionBakeProof.valid) {
-            $row.status = 'reused'
-            $row.executed_sha = [string]$prior.executed_sha
-            $row.validated_sha = $CurrentSha
-            $row.evidence_path = $evidencePath
-            $row.evidence_digest = $evidenceDigest
-            $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
-            $row.generated_inventory = @(Get-ObjectPropertyValue $prior 'generated_inventory')
-            $priorBakeCountText = Get-ObjectPropertyText $prior 'bake_count'
-            if ([string]::IsNullOrWhiteSpace($priorBakeCountText)) { $priorBakeCountText = Get-ObjectPropertyText $prior 'bakeCount' }
-            if ([string]::IsNullOrWhiteSpace($priorBakeCountText) -and $null -ne $priorManifestForRow) { $priorBakeCountText = Get-ObjectPropertyText $priorManifestForRow 'bakeCount' }
-            $row.bake_count = [int]$priorBakeCountText
-            $row.probe = $productionBakeProof.priorProbe
-            $script:ProductionBakeReuseCandidates['production-bake'] = [ordered]@{ priorProbe = $productionBakeProof.priorProbe; prior = $prior; manifest = $priorManifestForRow }
         } elseif ($pureReattest -and -not $manualProof) {
             $row.status = 'reused'
             $row.executed_sha = [string]$prior.executed_sha
@@ -1076,8 +946,8 @@ function Merge-ExistingLedger {
             $row.evidence_digest = $evidenceDigest
             $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
         } else {
-            $row.status = 'invalidated'
-            $row.invalidation_reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
+            $reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
+            Set-CheckInvalidated $row $reason
         }
     }
 }
@@ -1165,12 +1035,63 @@ function Invoke-UnityStep {
         tier = if ($Mode -eq 'Development') { 'development' } elseif ($Mode -eq 'Fast') { 'fast' } else { 'production-final' }
         method = $Method
         arguments = @($arguments)
+        startedUtc = $started.ToString('o')
+        completedUtc = [DateTime]::UtcNow.ToString('o')
         exitCode = $exitCode
         skipped = $skipped
         mutatesProject = $MutatesProject
         logPath = $logPath
         elapsedMs = ([DateTime]::UtcNow - $started).TotalMilliseconds
     })
+}
+
+function Resolve-ProductionBakeOutcome {
+    $commands = @($script:CommandRecords.ToArray() | Where-Object {
+        [string]$_.label -eq 'ProductionBake'
+    })
+    if ($commands.Count -ne 1) { throw 'production-bake.result.missing: expected exactly one completed ProductionBake command record.' }
+    $command = $commands[0]
+    if ([string]$command.method -cne 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting') {
+        throw 'production-bake.result.method: ProductionBake command method is not the authoritative builder bake.'
+    }
+    if ([bool]$command.skipped) {
+        $command['bakeOutcome'] = 'planned'
+        $command['markerLine'] = $null
+        return [ordered]@{ status = 'planned'; markerLine = $null; logPath = $null }
+    }
+    if ([int]$command.exitCode -ne 0) { throw 'production-bake.result.exitCode: completed ProductionBake result was not successful.' }
+    $logPath = [string]$command.logPath
+    if ([string]::IsNullOrWhiteSpace($logPath) -or -not (Test-Path -LiteralPath $logPath -PathType Leaf)) {
+        throw 'production-bake.result.logMissing: completed ProductionBake log is missing.'
+    }
+    try { $logPath = Assert-DurableEvidencePath $logPath 'ProductionBake log' } catch { throw ('production-bake.result.logPath: ' + $_.Exception.Message) }
+    $evidencePrefix = $script:EvidenceDirectory.TrimEnd('\') + '\'
+    if (-not $logPath.StartsWith($evidencePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'production-bake.result.logBinding: ProductionBake log is outside this invocation evidence directory.'
+    }
+    try {
+        $startedUtc = [DateTime]::Parse([string]$command.startedUtc, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        if ((Get-Item -LiteralPath $logPath -Force).LastWriteTimeUtc -lt $startedUtc) { throw 'production-bake.result.logStale: ProductionBake log predates this invocation.' }
+    } catch [System.FormatException] {
+        throw 'production-bake.result.binding: ProductionBake command start time is invalid.'
+    } catch {
+        if ($_.Exception.Message -like 'production-bake.result.logStale:*') { throw $_.Exception }
+        throw ('production-bake.result.binding: ' + $_.Exception.Message)
+    }
+    $markerPattern = '^\[MovementLab\] production bake skipped: lighting inputs current \(digest [0-9a-fA-F]{64}\)$'
+    $markerLines = @(Get-Content -LiteralPath $logPath -ErrorAction Stop | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match $markerPattern })
+    if ($markerLines.Count -gt 1) { throw 'production-bake.marker.duplicate: completed ProductionBake log contains multiple exact skip markers.' }
+    if ($markerLines.Count -eq 1) {
+        if ($script:BakeCount -ne 1) { throw ('production-bake.marker.bakeCount: exact skip marker requires one ProductionBake invocation before classification; observed ' + $script:BakeCount + '.') }
+        $script:BakeCount = 0
+        $command['bakeOutcome'] = 'reused'
+        $command['markerLine'] = [string]$markerLines[0]
+        return [ordered]@{ status = 'reused'; markerLine = [string]$markerLines[0]; logPath = $logPath }
+    }
+    if ($script:BakeCount -ne 1) { throw ('production-bake.executed.bakeCount: absent skip marker requires bakeCount exactly one; observed ' + $script:BakeCount + '.') }
+    $command['bakeOutcome'] = 'executed'
+    $command['markerLine'] = $null
+    return [ordered]@{ status = 'executed'; markerLine = $null; logPath = $logPath }
 }
 
 function Get-ProbeStringValue {
@@ -1510,27 +1431,33 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
+            # PlanOnly can validate an existing probe before recording any skipped Unity step.
+            # Executing runs keep probe generation order unchanged.
+            if ($PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath -PathType Leaf)) {
+                $probeRecord = Read-ProbeContract
+                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
+            }
             if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
-            $probeRecord = Read-ProbeContract
-            Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
-            Refresh-ProductionBakeOutputState
-            Confirm-ProductionBakeReuse $probeRecord
-            $productionBakePending = Test-CheckPending 'production-bake'
-            if ($productionBakePending) {
-                Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
+            if ($null -eq $probeRecord) {
+                $probeRecord = Read-ProbeContract
+                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
             }
-            if (Test-CheckPending 'prebake-validate') { Invoke-UnityStep 'PreBakeValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabPreBake' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'prebake-validate' } else { Mark-CheckReused 'prebake-validate' }
+            Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
             if ($script:BakeCount -gt 0) { throw 'ProductionPrepare attempted a bake before production bake step.' }
-            $productionBakePending = Test-CheckPending 'production-bake'
-            if ($productionBakePending) {
-                Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabProbePath', $script:ProbeOutputPath) $true
-                Mark-CheckExecuted 'production-bake'
-                if (-not $PlanOnly -and $script:BakeCount -ne 1) { throw ('Production bake count must equal one: ' + $script:BakeCount) }
+            Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabProbePath', $script:ProbeOutputPath) $true
+            Mark-CheckExecuted 'production-bake'
+            $productionBakeOutcome = Resolve-ProductionBakeOutcome
+            $productionBakeRow = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1
+            if ($null -eq $productionBakeRow) { throw 'production-bake.result.ledger: production-bake ledger row missing.' }
+            if ($PlanOnly) {
+                $productionBakeRow.status = 'pending'
             } else {
-                Mark-CheckReused 'production-bake'
-                if ($script:BakeCount -ne 0) { throw ('Reused production bake row must not invoke a bake: ' + $script:BakeCount) }
+                $productionBakeRow.status = [string]$productionBakeOutcome.status
+                $productionBakeRow.bake_count = $script:BakeCount
+                $productionBakeRow.bake_marker = $productionBakeOutcome.markerLine
             }
             $probeRecord = Read-ProbeContract
+            if (-not $PlanOnly) { $productionBakeRow.probe = $probeRecord }
             Assert-ProbeContractForMode $probeRecord 'ProductionPrepareFinal'
         }
         'ProductionValidate' {
@@ -1558,6 +1485,21 @@ $changedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
 $afterGeneratedHashDigest = Get-GeneratedHashDigest $afterHashes
 $afterWorkingTreeDigest = Get-WorkingTreeDigest
 $dirtyAfter = @(Get-NonGeneratedDirtyPaths)
+$predicateClassification = [ordered]@{
+    preBake = @(
+        [ordered]@{ predicate = 'ProductionPrepare mode contract'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode immediately after probe read'; inputs = @('Mode', 'Probe') },
+        [ordered]@{ predicate = 'config/argument shape'; phase = 'pre-bake'; location = 'preflight'; inputs = @('workflow arguments', 'project configuration') },
+        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') }
+    )
+    postflight = @(
+        [ordered]@{ predicate = 'ProductionPrepareFinal output contract'; phase = 'postflight'; reason = 'requires post-bake probe profile and manifest' },
+        [ordered]@{ predicate = 'clean-tree'; phase = 'postflight'; reason = 'requires before/after Git status' },
+        [ordered]@{ predicate = 'generated inventory'; phase = 'postflight'; reason = 'requires post-step generated hashes and paths' },
+        [ordered]@{ predicate = 'bake count'; phase = 'postflight'; reason = 'requires Unity invocation count' },
+        [ordered]@{ predicate = 'HEAD stability'; phase = 'postflight'; reason = 'requires final Git HEAD' },
+        [ordered]@{ predicate = 'evidence digests'; phase = 'postflight'; reason = 'requires post-step hash evidence' }
+    )
+}
 $postflightViolations = New-WorkflowViolationList
 if ($Mode -eq 'ProductionPrepare') {
     if ($dirtyAfter.Count -gt 0) { Add-WorkflowViolation $postflightViolations 'postflight.dirtyScope.nonGenerated' ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
@@ -1580,9 +1522,9 @@ Complete-WorkflowValidationPhase 'postflight' $postflightViolations
 $ledgerEvidencePath = Join-Path $script:EvidenceDirectory 'check-ledger.json'
 $ledgerPayloadPath = Join-Path $script:EvidenceDirectory 'check-ledger-payload.json'
 foreach ($row in $ledger) {
-    if ($PlanOnly) { $row.status = 'deferred' }
+    if ($PlanOnly -and [string]$row.status -eq 'pending') { $row.status = 'deferred' }
     elseif ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
-        $row.status = 'executed'
+        $row.status = if ([string]$row.status -eq 'reused') { 'reused' } else { 'executed' }
         $row.executed_sha = $beforeHead
         $row.validated_sha = $afterHead
         $row.generated_hashes = $afterHashes
@@ -1604,7 +1546,7 @@ foreach ($row in $ledger) {
 Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
 $ledgerEvidenceDigest = (Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
 foreach ($row in $ledger) {
-    if ($row.status -eq 'executed') {
+    if ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
         $row.evidence_digest = $ledgerEvidenceDigest
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $ledgerEvidenceDigest }
     }
@@ -1638,6 +1580,7 @@ $result = [ordered]@{
     checkLedgerSha256 = $ledgerFinalDigest
     checkLedger = @($ledger)
     lockReleaseProof = @($script:ReleaseProof.ToArray())
+    predicateClassification = $predicateClassification
     evidenceManifestPath = $manifestPath
     evidenceManifestSha256 = $null
     outputManifestPath = $manifestPath
@@ -1670,6 +1613,7 @@ $manifest = [ordered]@{
     checkLedger = @($ledger)
     history = @($script:PriorManifestHistory.ToArray())
     lockReleaseProof = @($script:ReleaseProof.ToArray())
+    predicateClassification = $predicateClassification
     gitMutation = $false
 }
 Write-AtomicJson $manifestPath $manifest
@@ -1688,6 +1632,7 @@ if ((Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash.ToLowerInvari
     evidenceManifestSha256 = $manifestDigest
     bakeCount = $script:BakeCount
     changedGeneratedPaths = $changedGeneratedPaths
+    predicateClassification = $predicateClassification
     gitMutation = $false
 } | ConvertTo-Json -Depth 14
 } catch {

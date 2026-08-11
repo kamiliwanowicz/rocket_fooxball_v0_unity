@@ -422,7 +422,7 @@ namespace RocketFooxball.Editor
                     stream.Write(bytes, 0, bytes.Length);
                     stream.Flush(true);
                 }
-                if (File.Exists(fullPath)) File.Replace(temporaryPath, fullPath, null);
+                if (File.Exists(fullPath)) MovementLabAtomicFile.ReplaceAtomicWithRetry(temporaryPath, fullPath);
                 else File.Move(temporaryPath, fullPath);
             }
             finally
