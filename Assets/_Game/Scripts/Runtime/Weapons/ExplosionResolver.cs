@@ -3,6 +3,7 @@ using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Weapons
 {
@@ -16,6 +17,10 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField, Min(0f)] private float ballImpulseStrength = 16f;
         [SerializeField, Range(0f, 1f)] private float occludedForce = 0.25f;
         [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
+
+        [Header("Participant Damage")]
+        [SerializeField, Min(0f)] private float directRocketDamage = 50f;
+        [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = 0.5f;
 
         [Header("Rocket Jump")]
         [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
@@ -34,6 +39,8 @@ namespace RocketFooxball.Runtime.Weapons
 
         public float BlastRadius => blastRadius;
         public float OccludedForce => occludedForce;
+        public float DirectRocketDamage => directRocketDamage;
+        public float EnemyRocketImpulseMultiplier => enemyRocketImpulseMultiplier;
 
         /// <summary>Resolves one accepted rocket blast. Impact-owned gameplay targets remain eligible.</summary>
         public void ResolveExplosion(Vector3 origin, RocketProjectile source = null, Collider impactCollider = null)
@@ -51,10 +58,10 @@ namespace RocketFooxball.Runtime.Weapons
                     continue;
                 }
 
-                var player = collider.GetComponentInParent<PlayerMotor>();
-                if (player != null)
+                var participant = collider.GetComponentInParent<ParticipantState>();
+                if (participant != null)
                 {
-                    targets.AddPlayer(player, collider, origin);
+                    targets.AddPlayer(participant, collider, origin);
                     continue;
                 }
 
@@ -65,7 +72,7 @@ namespace RocketFooxball.Runtime.Weapons
                 }
             }
 
-            DispatchPlayers(origin, impactCollider);
+            DispatchPlayers(origin, impactCollider, source != null ? source.OwnerParticipant : null);
             DispatchBalls(origin, impactCollider);
         }
 
@@ -76,10 +83,10 @@ namespace RocketFooxball.Runtime.Weapons
                 return;
             }
 
-            var player = impactCollider.GetComponentInParent<PlayerMotor>();
-            if (player != null)
+            var participant = impactCollider.GetComponentInParent<ParticipantState>();
+            if (participant != null)
             {
-                targets.AddPlayer(player, impactCollider, origin, true);
+                targets.AddPlayer(participant, impactCollider, origin, true);
                 return;
             }
 
@@ -90,7 +97,7 @@ namespace RocketFooxball.Runtime.Weapons
             }
         }
 
-        private void DispatchPlayers(Vector3 origin, Collider impactCollider)
+        private void DispatchPlayers(Vector3 origin, Collider impactCollider, ParticipantState sourceParticipant)
         {
             for (var i = 0; i < targets.PlayerCount; i++)
             {
@@ -103,10 +110,54 @@ namespace RocketFooxball.Runtime.Weapons
 
                 var strength = falloff * (IsOccluded(origin, targetCollider, targetCollider.ClosestPoint(origin), false, impactCollider) ? occludedForce : 1f);
                 var target = targets.GetPlayer(i);
-                var impulse = ComputePlayerImpulse(target, origin, playerImpulseStrength * strength);
-                target.AddExternalImpulse(impulse);
-                target.GetComponent<PlayerCameraFeedback>()?.RequestBlastShake(Mathf.Clamp01(strength * cameraFeedbackScale));
+                // Legacy direct calls without a source projectile remain force-only.
+                var relationship = GetRelationship(target, sourceParticipant);
+                if (relationship == ParticipantRelationship.Friendly || relationship == ParticipantRelationship.Immune)
+                {
+                    continue;
+                }
+
+                var impulseScale = relationship == ParticipantRelationship.Enemy ? enemyRocketImpulseMultiplier : 1f;
+                var impulse = ComputePlayerImpulse(target.Motor, origin, playerImpulseStrength * strength * impulseScale);
+                target.Motor?.AddExternalImpulse(impulse);
+                target.CameraFeedback?.RequestBlastShake(Mathf.Clamp01(strength * cameraFeedbackScale));
+
+                if (relationship == ParticipantRelationship.Enemy && target.IsAlive && !target.IsImmune)
+                {
+                    var damage = directRocketDamage * strength;
+                    target.TryApplyDamage(sourceParticipant, damage, ParticipantDamageCause.Rocket, "Rocket Launcher");
+                }
             }
+        }
+
+        private enum ParticipantRelationship
+        {
+            Unattributed,
+            Own,
+            Friendly,
+            Enemy,
+            Immune
+        }
+
+        private static ParticipantRelationship GetRelationship(ParticipantState target, ParticipantState sourceParticipant)
+        {
+            if (target == null)
+            {
+                return ParticipantRelationship.Immune;
+            }
+            if (!target.IsAlive || target.IsImmune)
+            {
+                return ParticipantRelationship.Immune;
+            }
+            if (sourceParticipant == null)
+            {
+                return ParticipantRelationship.Unattributed;
+            }
+            if (target == sourceParticipant)
+            {
+                return ParticipantRelationship.Own;
+            }
+            return target.Team == sourceParticipant.Team ? ParticipantRelationship.Friendly : ParticipantRelationship.Enemy;
         }
 
         private void DispatchBalls(Vector3 origin, Collider impactCollider)
@@ -132,6 +183,11 @@ namespace RocketFooxball.Runtime.Weapons
 
         private Vector3 ComputePlayerImpulse(PlayerMotor target, Vector3 origin, float strength)
         {
+            if (target == null)
+            {
+                return Vector3.zero;
+            }
+
             var controller = target.GetComponent<CharacterController>();
             var facing = Vector3.zero;
             var isUnderfoot = controller != null && BlastMath.TryGetUnderfootFacing(

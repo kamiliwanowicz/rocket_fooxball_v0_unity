@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Runtime.Feedback
@@ -17,6 +18,17 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private Animator worldAnimator;
         [SerializeField] private Animator fpsKickAnimator;
         [SerializeField] private Transform weaponVisual;
+        [SerializeField] private ParticipantState participant;
+        [SerializeField] private Renderer[] teamTintRenderers;
+        [SerializeField] private GameObject blueTeamCue;
+        [SerializeField] private GameObject redTeamCue;
+        [SerializeField] private GameObject immunityShield;
+        [SerializeField] private GameObject blueImmunityShield;
+        [SerializeField] private GameObject redImmunityShield;
+        [SerializeField] private GameObject worldVisual;
+        [SerializeField] private GameObject fpsVisual;
+        [SerializeField] private Color blueTeamColor = new Color(0.08f, 0.35f, 1f, 1f);
+        [SerializeField] private Color redTeamColor = new Color(1f, 0.12f, 0.1f, 1f);
 
         private static readonly int SpeedParameter = Animator.StringToHash("Speed");
         private static readonly int GroundedParameter = Animator.StringToHash("Grounded");
@@ -33,11 +45,20 @@ namespace RocketFooxball.Runtime.Feedback
         private bool recoilActive;
         private bool kickSubscribed;
         private bool launcherSubscribed;
+        private Transform[] worldLayerTransforms;
+        private int[] worldLayerValues;
+
+        public ParticipantState Participant => participant;
+        public ParticipantTeam Team => participant != null ? participant.Team : ParticipantTeam.Blue;
 
         private void OnEnable()
         {
             CacheReferences();
             CacheNeutralPose();
+            if (participant != null)
+            {
+                ConfigureSlot(participant);
+            }
 
             if (kick != null && !kickSubscribed)
             {
@@ -73,7 +94,7 @@ namespace RocketFooxball.Runtime.Feedback
 
         private void Update()
         {
-            if (worldAnimator == null || !worldAnimator.isActiveAndEnabled || motor == null)
+            if (worldAnimator == null || !worldAnimator.isActiveAndEnabled || motor == null || (participant != null && !participant.IsAlive))
             {
                 return;
             }
@@ -154,6 +175,122 @@ namespace RocketFooxball.Runtime.Feedback
             if (launcher == null)
             {
                 launcher = GetComponent<RocketLauncher>();
+            }
+            if (participant == null)
+            {
+                participant = GetComponent<ParticipantState>();
+            }
+        }
+
+        /// <summary>Applies serialized team palette and shape cue to this participant.</summary>
+        public void ConfigureSlot(ParticipantState owner)
+        {
+            participant = owner;
+            var isBlue = owner == null || owner.Team == ParticipantTeam.Blue;
+            if (blueTeamCue != null)
+            {
+                blueTeamCue.SetActive(isBlue);
+            }
+            if (redTeamCue != null)
+            {
+                redTeamCue.SetActive(!isBlue);
+            }
+
+            var color = isBlue ? blueTeamColor : redTeamColor;
+            if (teamTintRenderers != null)
+            {
+                for (var i = 0; i < teamTintRenderers.Length; i++)
+                {
+                    var renderer = teamTintRenderers[i];
+                    if (renderer == null)
+                    {
+                        continue;
+                    }
+
+                    var propertyBlock = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(propertyBlock);
+                    propertyBlock.SetColor("_BaseColor", color);
+                    propertyBlock.SetColor("_Color", color);
+                    renderer.SetPropertyBlock(propertyBlock);
+                }
+            }
+        }
+
+        public void ConfigureTeam(ParticipantTeam configuredTeam)
+        {
+            ConfigureSlot(participant);
+            var isBlue = configuredTeam == ParticipantTeam.Blue;
+            blueTeamCue?.SetActive(isBlue);
+            redTeamCue?.SetActive(!isBlue);
+        }
+
+        public void SetAlive(bool alive)
+        {
+            if (worldVisual != null)
+            {
+                worldVisual.SetActive(alive);
+            }
+            if (fpsVisual != null)
+            {
+                fpsVisual.SetActive(alive && participant != null && participant.IsLocalParticipant);
+            }
+            if (worldAnimator != null)
+            {
+                worldAnimator.enabled = alive;
+            }
+            if (!alive)
+            {
+                recoilActive = false;
+                RestoreNeutralPose();
+            }
+        }
+
+        public void SetImmune(bool immune)
+        {
+            if (immunityShield != null)
+            {
+                immunityShield.SetActive(immune);
+            }
+            var isBlue = participant == null || participant.Team == ParticipantTeam.Blue;
+            blueImmunityShield?.SetActive(immune && isBlue);
+            redImmunityShield?.SetActive(immune && !isBlue);
+        }
+
+        public void SetLocalMode(bool local)
+        {
+            if (weaponVisual != null)
+            {
+                weaponVisual.gameObject.SetActive(local);
+            }
+            if (worldVisual == null)
+            {
+                return;
+            }
+
+            CacheWorldLayers();
+            var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
+            for (var i = 0; i < worldLayerTransforms.Length; i++)
+            {
+                if (worldLayerTransforms[i] == null)
+                {
+                    continue;
+                }
+                worldLayerTransforms[i].gameObject.layer = local && hiddenLayer >= 0 ? hiddenLayer : worldLayerValues[i];
+            }
+        }
+
+        private void CacheWorldLayers()
+        {
+            if (worldLayerTransforms != null || worldVisual == null)
+            {
+                return;
+            }
+
+            worldLayerTransforms = worldVisual.GetComponentsInChildren<Transform>(true);
+            worldLayerValues = new int[worldLayerTransforms.Length];
+            for (var i = 0; i < worldLayerTransforms.Length; i++)
+            {
+                worldLayerValues[i] = worldLayerTransforms[i] != null ? worldLayerTransforms[i].gameObject.layer : 0;
             }
         }
 

@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Feedback
 {
@@ -8,8 +9,39 @@ namespace RocketFooxball.Runtime.Feedback
     public sealed class RocketTrailVfx : MonoBehaviour
     {
         [SerializeField] private ParticleSystem[] particleSystems;
+        [SerializeField] private TrailRenderer[] trailRenderers;
+        [SerializeField] private GameObject blueImpactAccent;
+        [SerializeField] private GameObject redImpactAccent;
+        [SerializeField] private Color blueTrailColor = new Color(0.08f, 0.35f, 1f, 1f);
+        [SerializeField] private Color redTrailColor = new Color(1f, 0.12f, 0.1f, 1f);
 
         private bool detached;
+
+        public ParticipantTeam Team { get; private set; } = ParticipantTeam.Blue;
+
+        /// <summary>Configures team color and shape-coded impact endpoint before flight.</summary>
+        public void ConfigureTeam(ParticipantTeam team)
+        {
+            Team = team;
+            var isBlue = team == ParticipantTeam.Blue;
+            blueImpactAccent?.SetActive(false);
+            redImpactAccent?.SetActive(false);
+            var color = isBlue ? blueTrailColor : redTrailColor;
+            if (trailRenderers != null)
+            {
+                for (var i = 0; i < trailRenderers.Length; i++)
+                {
+                    var trail = trailRenderers[i];
+                    if (trail == null)
+                    {
+                        continue;
+                    }
+
+                    trail.startColor = color;
+                    trail.endColor = new Color(color.r, color.g, color.b, 0f);
+                }
+            }
+        }
 
         /// <summary>Stops new emission, preserves world pose, and schedules this effect root for cleanup.</summary>
         public void DetachAndFade()
@@ -20,6 +52,8 @@ namespace RocketFooxball.Runtime.Feedback
             }
 
             detached = true;
+            blueImpactAccent?.SetActive(Team == ParticipantTeam.Blue);
+            redImpactAccent?.SetActive(Team == ParticipantTeam.Red);
             var effectRoot = transform;
             var systems = particleSystems;
             if (systems == null || systems.Length == 0)

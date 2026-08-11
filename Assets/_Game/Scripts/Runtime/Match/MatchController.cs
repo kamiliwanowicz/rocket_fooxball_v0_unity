@@ -1,14 +1,14 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Feedback;
-using RocketFooxball.Runtime.Input;
-using RocketFooxball.Runtime.Movement;
-using RocketFooxball.Runtime.Weapons;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Match
 {
-    /// <summary>Single owner for score, goal freeze, gameplay gate, celebration camera, and reset timing.</summary>
+    /// <summary>Single owner for match state, roster-wide gates, reset timing, collisions, and spectator selection.</summary>
     [MovedFrom("RocketFooxball")]
     public sealed class MatchController : MonoBehaviour
     {
@@ -20,21 +20,20 @@ namespace RocketFooxball.Runtime.Match
             Reset
         }
 
-        [Header("Owners")]
-        [SerializeField] private PlayerInputReader input;
-        [SerializeField] private PlayerMotor player;
-        [SerializeField] private PlayerLook playerLook;
-        [SerializeField] private PlayerCameraFeedback cameraFeedback;
+        [Header("Roster")]
+        [SerializeField] private ParticipantState[] participants = new ParticipantState[6];
+        [SerializeField] private ParticipantState localParticipant;
+        [SerializeField] private ParticipantSpawnSet spawnSet;
+
+        [Header("Match Owners")]
         [SerializeField] private BallMotor ball;
-        [SerializeField] private RocketLauncher launcher;
-        [SerializeField] private BallKick kick;
+        [SerializeField] private PlayerCameraFeedback cameraFeedback;
         [SerializeField] private GoalTrigger northGoal;
         [SerializeField] private GoalTrigger southGoal;
 
         [Header("Reset")]
         [SerializeField, Min(0.1f)] private float goalFreezeDuration = 5f;
         [SerializeField] private Vector3 ballResetPosition = new Vector3(0f, 2.16f, 0f);
-        [SerializeField] private Vector3 playerResetPosition = new Vector3(3f, 0f, 0f);
         [SerializeField] private Vector3 resetLookTarget = Vector3.zero;
 
         private MatchRules.MatchState state = MatchRules.MatchState.Playing;
@@ -47,13 +46,14 @@ namespace RocketFooxball.Runtime.Match
         public int NorthScore => northScore;
         public int SouthScore => southScore;
         public bool GameplayEnabled => state == MatchRules.MatchState.Playing;
+        public IReadOnlyList<ParticipantState> Participants => participants;
+        public ParticipantState LocalParticipant => localParticipant;
+        public ParticipantSpawnSet SpawnSet => spawnSet;
+        public BallMotor Ball => ball;
 
         private void Awake()
         {
-            if (!ValidateComposition())
-            {
-                return;
-            }
+            ValidateComposition();
         }
 
         private void OnEnable()
@@ -66,6 +66,9 @@ namespace RocketFooxball.Runtime.Match
             {
                 southGoal.GoalCrossed += OnGoalCrossed;
             }
+
+            SubscribeParticipants();
+            ReconcileParticipantCollisions();
         }
 
         private void OnDisable()
@@ -78,6 +81,8 @@ namespace RocketFooxball.Runtime.Match
             {
                 southGoal.GoalCrossed -= OnGoalCrossed;
             }
+
+            UnsubscribeParticipants();
         }
 
         private void Update()
@@ -112,54 +117,64 @@ namespace RocketFooxball.Runtime.Match
             northScore = transition.NorthScore;
             southScore = transition.SouthScore;
             ApplyGameplayGate(false);
-            launcher?.DestroyAllProjectiles();
-            cameraFeedback?.BeginGoalCelebration(freezeRemaining);
+            DestroyAllProjectiles();
+            GetCameraFeedback()?.BeginGoalCelebration(freezeRemaining);
         }
 
         private void ApplyGameplayGate(bool enabled)
         {
-            if (input != null)
+            if (participants != null)
             {
-                input.SetGameplayInputEnabled(enabled);
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchSimulationEnabled(enabled);
+                }
             }
-            player?.SetSimulationEnabled(enabled);
             ball?.SetSimulationEnabled(enabled);
-            launcher?.SetSimulationEnabled(enabled);
-            kick?.SetSimulationEnabled(enabled);
         }
 
         /// <summary>Immediate reset command; normal flow calls after unscaled freeze.</summary>
         public void ResetMatch()
         {
             state = MatchRules.MatchState.Reset;
+            ball?.ResetState(ballResetPosition, Quaternion.identity);
 
-            if (ball != null)
+            if (participants != null)
             {
-                ball.ResetState(ballResetPosition, Quaternion.identity);
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    var participant = participants[i];
+                    if (participant == null)
+                    {
+                        continue;
+                    }
+
+                    var spawn = spawnSet != null ? spawnSet.GetKickoffSpawn(participant, i) : null;
+                    if (spawn != null)
+                    {
+                        var lookDirection = resetLookTarget - spawn.position;
+                        lookDirection.y = 0f;
+                        if (lookDirection.sqrMagnitude <= 0.000001f)
+                        {
+                            lookDirection = spawn.forward;
+                        }
+                        participant.ResetForKickoff(spawn.position, Quaternion.LookRotation(lookDirection.normalized, Vector3.up));
+                    }
+                    else
+                    {
+                        participant.ResetForKickoff();
+                    }
+                }
             }
 
-            var lookDirection = resetLookTarget - playerResetPosition;
-            lookDirection.y = 0f;
-            if (lookDirection.sqrMagnitude <= 0.000001f)
-            {
-                lookDirection = Vector3.forward;
-            }
-            var playerRotation = Quaternion.LookRotation(lookDirection.normalized, Vector3.up);
-            player?.ResetState(playerResetPosition, playerRotation);
-            playerLook?.ResetView(lookDirection);
-            cameraFeedback?.ResetFeedback();
-            launcher?.ResetState();
-            kick?.ResetState();
+            GetCameraFeedback()?.ResetFeedback();
             northGoal?.Rearm();
             southGoal?.Rearm();
-
-            if (input != null)
-            {
-                input.ResetInputState();
-            }
+            DestroyAllProjectiles();
             freezeRemaining = 0f;
             state = MatchRules.CompleteReset();
             ApplyGameplayGate(true);
+            ReconcileParticipantCollisions();
         }
 
         /// <summary>Clears score and resets current frame without changing gameplay contract.</summary>
@@ -170,11 +185,217 @@ namespace RocketFooxball.Runtime.Match
             ResetMatch();
         }
 
+        private void DestroyAllProjectiles()
+        {
+            if (participants == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                participants[i]?.Launcher?.DestroyAllProjectiles();
+            }
+        }
+
+        private void SubscribeParticipants()
+        {
+            if (participants == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var participant = participants[i];
+                if (participant == null)
+                {
+                    continue;
+                }
+
+                participant.Died += OnParticipantDied;
+                participant.RespawnRequested += OnRespawnRequested;
+                participant.LifecycleChanged += OnParticipantLifecycleChanged;
+                participant.CollisionStateChanged += OnParticipantCollisionStateChanged;
+            }
+        }
+
+        private void UnsubscribeParticipants()
+        {
+            if (participants == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var participant = participants[i];
+                if (participant == null)
+                {
+                    continue;
+                }
+
+                participant.Died -= OnParticipantDied;
+                participant.RespawnRequested -= OnRespawnRequested;
+                participant.LifecycleChanged -= OnParticipantLifecycleChanged;
+                participant.CollisionStateChanged -= OnParticipantCollisionStateChanged;
+            }
+        }
+
+        private void OnParticipantDied(ParticipantDeathEvent death)
+        {
+            ReconcileParticipantCollisions();
+            if (death.Victim == localParticipant)
+            {
+                SetLocalSpectatorTarget();
+            }
+        }
+
+        private void OnParticipantLifecycleChanged(ParticipantLifecycleEvent _)
+        {
+            ReconcileParticipantCollisions();
+            if (localParticipant != null && localParticipant.IsAlive)
+            {
+                GetCameraFeedback()?.ExitSpectator();
+            }
+            else if (localParticipant != null && localParticipant.IsDead)
+            {
+                SetLocalSpectatorTarget();
+            }
+        }
+
+        private void OnParticipantCollisionStateChanged(ParticipantState _)
+        {
+            ReconcileParticipantCollisions();
+        }
+
+        private void OnRespawnRequested(ParticipantState participant)
+        {
+            if (participant == null || state != MatchRules.MatchState.Playing || spawnSet == null)
+            {
+                return;
+            }
+
+            var spawn = spawnSet.SelectSafestSpawn(participant, ball, participants);
+            if (spawn == null)
+            {
+                return;
+            }
+
+            var lookDirection = resetLookTarget - spawn.position;
+            lookDirection.y = 0f;
+            if (lookDirection.sqrMagnitude <= 0.000001f)
+            {
+                lookDirection = spawn.forward;
+            }
+            participant.RespawnAt(spawn.position, Quaternion.LookRotation(lookDirection.normalized, Vector3.up));
+        }
+
+        private void SetLocalSpectatorTarget()
+        {
+            var feedback = GetCameraFeedback();
+            if (feedback == null)
+            {
+                return;
+            }
+
+            ParticipantState bestAlly = null;
+            if (participants != null && localParticipant != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    var candidate = participants[i];
+                    if (candidate == null || candidate == localParticipant || !candidate.IsAlive || candidate.Team != localParticipant.Team)
+                    {
+                        continue;
+                    }
+                    if (bestAlly == null || candidate.SlotId < bestAlly.SlotId)
+                    {
+                        bestAlly = candidate;
+                    }
+                }
+            }
+
+            feedback.SetSpectatorTarget(bestAlly != null ? bestAlly.transform : ball != null ? ball.transform : null);
+        }
+
+        private void ReconcileParticipantCollisions()
+        {
+            if (participants == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var first = participants[i];
+                var firstController = first != null ? first.CharacterController : null;
+                if (firstController == null)
+                {
+                    continue;
+                }
+
+                for (var j = i + 1; j < participants.Length; j++)
+                {
+                    var second = participants[j];
+                    var secondController = second != null ? second.CharacterController : null;
+                    if (secondController == null || first == null || second == null)
+                    {
+                        continue;
+                    }
+
+                    var ignore = !first.IsAlive || !second.IsAlive || first.IsImmune || second.IsImmune;
+                    Physics.IgnoreCollision(firstController, secondController, ignore);
+                }
+            }
+        }
+
+        private PlayerCameraFeedback GetCameraFeedback()
+        {
+            return cameraFeedback != null ? cameraFeedback : localParticipant != null ? localParticipant.CameraFeedback : null;
+        }
+
         private bool ValidateComposition()
         {
-            if (input == null || player == null || playerLook == null || cameraFeedback == null || ball == null || launcher == null || kick == null || northGoal == null || southGoal == null)
+            if (participants == null || participants.Length != 6 || localParticipant == null || spawnSet == null || ball == null || northGoal == null || southGoal == null)
             {
-                Debug.LogError("MatchController requires serialized references: input, player, playerLook, cameraFeedback, ball, launcher, kick, northGoal, southGoal.", this);
+                Debug.LogError("MatchController requires serialized references: six participants, localParticipant, spawnSet, ball, northGoal, southGoal.", this);
+                enabled = false;
+                return false;
+            }
+
+            var ids = new HashSet<int>();
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            var blueCount = 0;
+            var redCount = 0;
+            var localCount = 0;
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var participant = participants[i];
+                if (participant == null || !ids.Add(participant.SlotId) || !names.Add(participant.DisplayName))
+                {
+                    Debug.LogError("MatchController requires six non-null participants with unique slot IDs and display names.", this);
+                    enabled = false;
+                    return false;
+                }
+
+                if (participant.Team == ParticipantTeam.Blue)
+                {
+                    blueCount++;
+                }
+                else
+                {
+                    redCount++;
+                }
+                if (participant.IsLocalParticipant)
+                {
+                    localCount++;
+                }
+            }
+
+            if (!Array.Exists(participants, participant => participant == localParticipant) || localCount != 1 || localParticipant.Team != ParticipantTeam.Blue || blueCount != 3 || redCount != 3)
+            {
+                Debug.LogError("MatchController requires one local Blue participant and exactly three participants per team.", this);
                 enabled = false;
                 return false;
             }
