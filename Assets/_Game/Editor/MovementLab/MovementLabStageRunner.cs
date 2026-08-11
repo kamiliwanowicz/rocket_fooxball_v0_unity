@@ -73,15 +73,14 @@ namespace RocketFooxball.Editor
             var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
             var current = initial;
-            // Legacy manifests need one uninterrupted non-lighting pass. The
-            // first merge upgrades schema and records live output paths before
-            // their writers run; probing that intermediate snapshot would
-            // treat those migration-only missing outputs as fatal identity
-            // violations. Resume strict probing after all initial stages run.
-            var deferProbeUntilMigrationPassCompletes = initial.ManifestReadStatus != MovementLabManifestReadStatus.Current;
+            // Legacy manifests stay resumable until every initial non-lighting
+            // stage has persisted and reloaded its outputs. Upgrade manifest
+            // schema only after that uninterrupted pass completes.
+            var deferManifestMigrationUntilPassCompletes = initial.ManifestReadStatus != MovementLabManifestReadStatus.Current;
             var sawWork = false;
             var visitedStates = new HashSet<string>(StringComparer.Ordinal);
             var maxIterations = Math.Max(4, stages.Length * 4);
+            MovementLabManifestStore.EnsureWriteAuthorization();
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 var stale = stages.Where(current.IsStale).ToArray();
@@ -96,7 +95,6 @@ namespace RocketFooxball.Editor
                 }
 
                 var executedThisPass = false;
-                MovementLabManifestStore.EnsureWriteAuthorization();
                 for (var i = 0; i < stages.Length; i++)
                 {
                     var stage = stages[i];
@@ -106,20 +104,22 @@ namespace RocketFooxball.Editor
                         ExecuteStage(stage);
                     }
                     PersistAndReload(stage);
+
+                    if (deferManifestMigrationUntilPassCompletes)
+                    {
+                        executedThisPass = true;
+                        sawWork = true;
+                        continue;
+                    }
+
                     var merged = MovementLabStageGraph.MergeStageRecord(stage);
-                    // Intermediate merges preserve atomic recovery state; the
-                    // externally returned/probed state is written only after
-                    // the closure below proves no non-lighting stage remains.
+                    // Current manifests retain atomic recovery after each
+                    // stage; migration writes one complete live snapshot below.
                     MovementLabManifestStore.WriteAtomic(merged);
                     AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
 
-                    // Recompute immediately after every write. Migration is
-                    // the sole exception: its initial full live snapshot can
-                    // contain outputs not yet written by later stages.
-                    if (!deferProbeUntilMigrationPassCompletes)
-                    {
-                        current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
-                    }
+                    // Recompute immediately after every current-schema write.
+                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
                     executedThisPass = true;
                     sawWork = true;
                 }
@@ -130,10 +130,13 @@ namespace RocketFooxball.Editor
                         string.Join(",", stale.Select(stage => stage.ToString()).ToArray()));
                 }
 
-                if (deferProbeUntilMigrationPassCompletes)
+                if (deferManifestMigrationUntilPassCompletes)
                 {
+                    var migrationState = MovementLabStageGraph.MergeStageRecord(stages[stages.Length - 1]);
+                    MovementLabManifestStore.WriteAtomic(migrationState);
+                    AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
                     current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
-                    deferProbeUntilMigrationPassCompletes = false;
+                    deferManifestMigrationUntilPassCompletes = false;
                 }
             }
 
