@@ -67,7 +67,6 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 
 ## Validation
 
-- Test creation deferred unless user requests it. Run relevant existing tests.
 - Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
