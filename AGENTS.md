@@ -27,7 +27,6 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 - Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity`
 - Input actions: `Assets/InputSystem_Actions.inputactions`
 - Runtime ownership and dependencies: `plans/runtime-architecture.md`
-- Active graphics, VFX, containment, and movement overhaul: `plans/comprehensive-graphics-overhaul-coding-plan.md`
 - Unity, package, and project configuration: `ProjectSettings/`, `Packages/`
 
 Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content outside that root unchanged unless task targets it.
@@ -58,11 +57,13 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Tooling: no Computer Use or related `sky.documentation` / `node_repl` tools.
 - Unity worktrees: use short paths such as `C:\wt\<id>`. Existing long path -> verified junction or `subst` drive. Use same short project path for all Unity commands and process checks.
 - Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture exit code -> confirm process and project lock release.
+- Harness pre-gate: before any Unity-mutating workflow, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1` harness-unit suite; finish in `<10s` without Unity process or project lock. Failure or timeout blocks Unity.
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
 - Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild. Generated output bytes never gate rebuild.
+- Production bake gate: `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild from current lighting inputs. Valid skip logs `[MovementLab] production bake skipped: lighting inputs current (digest <64-hex>)` -> `reused`, `bakeCount=0`; absent marker -> one bake, `bakeCount=1`; duplicate or invalid marker -> fail. Generated output hashes never decide.
 - IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
 ## Validation

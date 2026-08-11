@@ -87,7 +87,8 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - merge wave/status: [wave + pending | merged | blocked]
 - accepted integration SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
-- ledger rows: [check_id list or None]
+- executed ledger: [absolute `check-ledger.json` path or None]
+- executed ledger sha256: [lowercase digest or None]
 - question: [one question or None]
 - blocker: [evidence + needed action/recheck or None]
 
@@ -106,9 +107,9 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - checks: [check -> result/evidence/SHA or pending]
 - clean: true | false | unknown
 
-## Check Ledger
+## Executed Check Ledger
 
-One row per declared check. Keep rows compact; LP is sole writer.
+Harness-owned `check-ledger.json` is sole executed ledger. Ordinary checks keep compact proof; `production-final` rows keep full contract. State stores pointer plus SHA-256 only; LP never copies or rewrites executed rows. Verify ledger path and digest before resume or merge. Evidence paths and evidence SHA-256 values remain integrity checks.
 
 - check_id: [stable ID]
 - owner: [one worker/orchestrator identity]
@@ -129,7 +130,7 @@ One row per declared check. Keep rows compact; LP is sole writer.
 - `evidence`: [path + SHA-256 object or None]
 - `invalidation_reason`: [changed path/condition or None]
 
-Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly; pure checks reattest only with descendant ancestry, matching input/environment digests, and empty diffs across every invalidation path; production bake -> only lighting proof, and lighting-input changes invalidate bake only. Resume and merge read rows mechanically. Builder-output byte/hash equality never gates; source/input digests and orchestration artifact/evidence hashes remain integrity checks.
+Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly. Any Unity-mutating row requires `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit` first, under `<10s` with no Unity process or lock. Builder-gate reattest rule -> production bake invokes `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` and accepts current lighting-input digest plus exact skip marker. `production-bake lighting-input set` -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Only this set invalidates production bake. Resume and merge read `check-ledger.json` mechanically after digest verification. Builder-output byte/hash equality never gates; source/input digests and orchestration artifact/evidence hashes remain integrity checks.
 ```
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
@@ -160,11 +161,13 @@ Merge:
 
 `done -> merged` only after merging agent result matches observed integration Git facts. Merge blocker keeps plan `done` when plan output remains accepted; record integration `blocked`. Plan status `blocked` applies only when plan artifact/execution acceptance itself fails.
 
+`single_plan` route -> `done -> READY_FOR_USER_MERGE` after execution identity, scope, checks, and clean worktree pass. Skip merging agent; accepted execution SHA is final integration SHA.
+
 `needs_user` always maps to `awaiting_user`, never `blocked`. User response creates fresh role attempt. Blocker resolution requires observable recheck before fresh attempt.
 
 ## Dispatch and acceptance writes
 
-Before dispatch, record phase, attempt identity, role/profile, plan status, immutable execution start SHA, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
+Before dispatch, record phase, attempt identity, role/profile, plan status, immutable execution start SHA, branch/worktree when applicable, expected head, dependencies, authority, pending checks, and current `check-ledger.json` pointer/digest when present.
 
 After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
 
@@ -204,7 +207,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Source drift after binding is ignored.
+3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Source drift after binding is ignored.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
@@ -222,7 +225,7 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 
 ## Recovery scenarios
 
-- one plan: `pending -> planning -> planned -> executing -> done -> merged`; integration pre-head baseline, input execution SHA, final SHA may equal input after fast-forward.
+- one plan (`single_plan` route): `pending -> planning -> planned -> executing -> done -> READY_FOR_USER_MERGE`; skip BREAKDOWN and MERGING agents; accepted execution SHA serves as final integration SHA.
 - parallel: disjoint plans share wave; each reaches `done`; merger consumes breakdown order; each becomes `merged` at one observed integration SHA.
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
@@ -236,4 +239,4 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 
 Stop/verify writers before cleanup. Remove current run's temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
 
-Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged, integration worktree clean, final checks bound final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.
+Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged or accepted through `single_plan`, required `check-ledger.json` pointers/digests match, final checks bind final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.

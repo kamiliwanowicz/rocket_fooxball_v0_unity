@@ -105,7 +105,7 @@ Every plan contains:
 - execution graph: mandatory task/review/gate dependency graph showing sequential and parallel execution, fan-out, join conditions, and downstream gates.
 - tasks: bounded ordered work with enough coding detail to remove non-local worker decisions.
 - review checkpoints: every task maps to one checkpoint; default per worker; grouped checkpoint records covered tasks/workers, join condition, dependency gate, and technical rationale.
-- checks: command/workflow, owner, run point, expected result, evidence, invalidation.
+- checks: ordinary -> one `proof: <command> -> <expected>` line; `production-final` -> full row contract.
 - proof: discriminatory scenario or safe alternate proof.
 - review focus: concrete material Critical/High failure or delivery risks under `$orchestrate-implementation` PoC review filter.
 - handoff: exact head requirement, changed paths, residual risks, integration/user-branch authority.
@@ -116,11 +116,12 @@ Each task names objective, done condition, dependency, owned/protected paths, fo
 
 ### Check contract
 
-Planner checks use machine-readable rows. Required fields: `check_id`, `tier` (`fast|development|production-final`), `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`. Include `executed_sha`, `validated_sha`, `status`, and evidence path/digest in execution state. Require one owner for every production-final row after source fan-in and accepted fixes. Review never substitutes for production bake or direct semantic validation.
+Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner for every production-final row after source fan-in and accepted fixes. Review never substitutes for production bake or direct semantic validation.
 
 ### Validation authoring rules
 
 - Plans never require image capture, screenshots, screenshot comparison, or agent visual verification. Human visual review remains on demand.
+- Unity-mutating proof -> run `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit` first; require `<10s` and no Unity process before builder or validator invocation.
 - Production bake -> only lighting proof; semantic proof uses direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()`.
 - New validator predicate -> warning-only first. Promote to hard failure only after one representative green Unity run.
 - Builder-generated output byte/hash equality never gates. Source/input digests and orchestration artifact/evidence hashes remain allowed integrity checks.
@@ -194,7 +195,7 @@ Dependencies: [accepted full SHAs or None]
 - focused_reads: `[exact paths/symbols and reason]`
 - implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
 - done when: [observable acceptance]
-- checks: [owner, command/workflow, result, evidence, invalidation; include full check contract fields]
+- checks: ordinary -> `proof: <command> -> <expected>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
 - proof: [discriminatory evidence]
 - review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
