@@ -450,16 +450,28 @@ function Test-GuardG1 {
         if ([string]$member.Extent.Text -cne ('$' + $operand + '.PSObject.Properties')) {
             return New-HarnessFail ('G1 operand chain is not normalized: ' + $member.Extent.Text)
         }
-        $functionText = [string]$function.Extent.Text
         switch ($key) {
-            'Get-CanonicalPath|item' {
-                if ($functionText -notmatch '(?im)\$item\s*=\s*Get-Item\b') { return New-HarnessFail 'G1 item provenance is not Get-Item metadata' }
+            'Get-CanonicalPath|item|index:Target' {
+                $itemAssignments = @($function.FindAll({
+                    param($Node)
+                    if ($Node -isnot [System.Management.Automation.Language.AssignmentStatementAst]) { return $false }
+                    $left = $Node.Left
+                    if ($left -isnot [System.Management.Automation.Language.VariableExpressionAst] -or
+                        [string]$left.VariablePath.UserPath -cne 'item') { return $false }
+                    $right = $Node.Right
+                    if ($right -isnot [System.Management.Automation.Language.PipelineAst]) { return $false }
+                    $elements = @($right.PipelineElements)
+                    return $elements.Count -eq 1 -and
+                        $elements[0] -is [System.Management.Automation.Language.CommandAst] -and
+                        [string]$elements[0].GetCommandName() -ceq 'Get-Item'
+                }, $true))
+                if ($itemAssignments.Count -ne 1) { return New-HarnessFail 'G1 item provenance requires one AST assignment with RHS command Get-Item' }
             }
             'Get-ObjectPropertyValue|Object|name' {
-                if ($functionText -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
+                if ([string]$function.Extent.Text -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
             }
             'Get-ObjectPropertyValue|Object|index:Name' {
-                if ($functionText -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
+                if ([string]$function.Extent.Text -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
             }
             'Merge-ExistingLedger|parsed|contains:history' {
                 if (@($function.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and [string]$Node.Left.Extent.Text -ceq '$parsed' -and $Node.Right.Extent.Text -match '(?i)ConvertFrom-Json' }, $true)).Count -eq 0) { return New-HarnessFail 'G1 parsed provenance is not ConvertFrom-Json' }
@@ -527,6 +539,10 @@ function Test-ScratchDrill {
         $g3Fails = $scratchAst.Extent.Text -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]'
         if (-not $gopvFails -or -not $g3Fails) { return New-HarnessFail ('scratch drill did not trip both guards: gopv=' + $gopvFails + '; G3=' + $g3Fails) }
 
+        $itemAssignmentScratch = $State.CurrentSource -replace '(?m)^[ \t]*\$item[ \t]*=[ \t]*Get-Item\b[^\r\n]*(?:\r?$)', '    $item = [ordered]@{ Target = $full }'
+        $itemAssignmentResult = Test-GuardG1 ([pscustomobject]@{ CurrentSource = $itemAssignmentScratch })
+        if ([bool](Get-HarnessField $itemAssignmentResult 'pass')) { return New-HarnessFail 'G1 dictionary-like item assignment scratch unexpectedly passed' }
+
         $aliasScratch = $State.CurrentSource.Replace(
             '$targetProperty = $item.PSObject.Properties[''Target'']',
             ('$adapter = $item.PSObject' + [Environment]::NewLine + '        $targetProperty = $adapter.Properties[''Target'']'))
@@ -553,80 +569,159 @@ function Test-HookSettings {
     catch { return New-HarnessFail ('invalid hook JSON: ' + $_.Exception.Message) }
 
     if ($null -eq $settings.hooks) { return New-HarnessFail 'hook JSON has no hooks object' }
-    $entries = if ($null -ne $settings.hooks.PostToolUse) { @($settings.hooks.PostToolUse) } else { @() }
-    $matching = @($entries | Where-Object { [string]$_.matcher -ceq 'Edit|Write' })
-    if ($matching.Count -ne 1) { return New-HarnessFail ('expected one Edit|Write PostToolUse matcher, found ' + $matching.Count) }
-    if ($matching[0].PSObject.Properties.Name -contains 'paths') { return New-HarnessFail 'PostToolUse matcher uses unsupported paths field' }
-    $commandHooks = @($matching[0].hooks | Where-Object {
-        [string]$_.type -ceq 'command' -and [string]$_.command -match 'Tools[/\\]Tests[/\\]Invoke-HarnessTests\.ps1'
-    })
-    if ($commandHooks.Count -ne 1) { return New-HarnessFail 'PostToolUse matcher has no harness command hook' }
-    $command = [string]$commandHooks[0].command
-    if ($command -notmatch '(?i)-HookMode\s+PostToolUse') { return New-HarnessFail 'PostToolUse command omits -HookMode PostToolUse' }
+    function Get-ConfiguredHook {
+        param(
+            [Parameter(Mandatory = $true)][string]$HookName,
+            [Parameter(Mandatory = $true)][string]$Matcher,
+            [Parameter(Mandatory = $true)][string]$Mode
+        )
+        $entries = if ($null -ne $settings.hooks.$HookName) { @($settings.hooks.$HookName) } else { @() }
+        $matching = @($entries | Where-Object { [string]$_.matcher -ceq $Matcher })
+        if ($matching.Count -ne 1) { throw ('expected one ' + $Matcher + ' ' + $HookName + ' matcher, found ' + $matching.Count) }
+        if ($matching[0].PSObject.Properties.Name -contains 'paths') { throw ($HookName + ' matcher uses unsupported paths field') }
+        $commandHooks = @($matching[0].hooks | Where-Object { [string]$_.type -ceq 'command' })
+        if ($commandHooks.Count -ne 1) { throw ($HookName + ' matcher must have one command hook') }
+        $hook = $commandHooks[0]
+        $properties = @($hook.PSObject.Properties.Name | Sort-Object)
+        if (($properties -join '|') -cne 'args|command|type') { throw ($HookName + ' command hook schema must contain exactly type, command, args') }
+        if ([string]$hook.command -cne 'powershell.exe') { throw ($HookName + ' command must be powershell.exe') }
+        if ($hook.args -is [string] -or $null -eq $hook.args) { throw ($HookName + ' command args must be an array') }
+        $actualArgs = @($hook.args | ForEach-Object { [string]$_ })
+        $expectedArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', '${CLAUDE_PROJECT_DIR}/Tools/Tests/Invoke-HarnessTests.ps1', '-HookMode', $Mode)
+        if (($actualArgs -join '|') -cne ($expectedArgs -join '|')) { throw ($HookName + ' command args mismatch: ' + ($actualArgs -join ' ')) }
+        return $hook
+    }
 
-    $preEntries = if ($null -ne $settings.hooks.PreToolUse) { @($settings.hooks.PreToolUse) } else { @() }
-    $preMatching = @($preEntries | Where-Object { [string]$_.matcher -ceq 'Bash' })
-    if ($preMatching.Count -ne 1) { return New-HarnessFail ('expected one Bash PreToolUse matcher, found ' + $preMatching.Count) }
-    $preCommandHooks = @($preMatching[0].hooks | Where-Object {
-        [string]$_.type -ceq 'command' -and [string]$_.command -match 'Tools[/\\]Tests[/\\]Invoke-HarnessTests\.ps1'
-    })
-    if ($preCommandHooks.Count -ne 1) { return New-HarnessFail 'PreToolUse matcher has no harness command hook' }
-    $preCommand = [string]$preCommandHooks[0].command
-    if ($preCommand -notmatch '(?i)-HookMode\s+PreToolUse') { return New-HarnessFail 'PreToolUse command omits -HookMode PreToolUse' }
+    $postHook = $null
+    $preHook = $null
+    try {
+        $postHook = Get-ConfiguredHook 'PostToolUse' 'Edit|Write' 'PostToolUse'
+        $preHook = Get-ConfiguredHook 'PreToolUse' 'Bash|PowerShell' 'PreToolUse'
+    } catch {
+        return New-HarnessFail $_.Exception.Message
+    }
     if ($State.SkipHookCheck) { return New-HarnessPass 'hook command resolved (nested check skipped)' }
 
-    function Invoke-HookFixture {
+    function Start-HookFixture {
         param(
-            [Parameter(Mandatory = $true)][string]$CommandText,
+            [Parameter(Mandatory = $true)]$Hook,
             [Parameter(Mandatory = $true)][string]$EventJson,
             [switch]$ForceFailure
         )
-        $fileMatch = [regex]::Match($CommandText, '(?i)-File\s+(?:"([^"]+)"|([^\s]+))')
-        if (-not $fileMatch.Success) { throw 'hook command has no -File target' }
-        $fileValue = if ($fileMatch.Groups[1].Success) { $fileMatch.Groups[1].Value } else { $fileMatch.Groups[2].Value }
-        $resolved = if ([System.IO.Path]::IsPathRooted($fileValue)) { [System.IO.Path]::GetFullPath($fileValue) } else { [System.IO.Path]::GetFullPath((Join-Path $State.ProjectRoot $fileValue)) }
-        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw ('hook target missing: ' + $resolved) }
-        $modeMatch = [regex]::Match($CommandText, '(?i)-HookMode\s+(PostToolUse|PreToolUse)')
-        if (-not $modeMatch.Success) { throw 'hook command has no supported -HookMode' }
-        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $resolved, '-HookMode', $modeMatch.Groups[1].Value)
+        $arguments = @($Hook.args | ForEach-Object {
+            $value = [string]$_
+            if ($value.Contains('${CLAUDE_PROJECT_DIR}')) { $value.Replace('${CLAUDE_PROJECT_DIR}', $State.ProjectRoot) } else { $value }
+        })
         if ($ForceFailure) { $arguments += '-HookTestForceFailure' }
-        $output = @($EventJson | & powershell.exe @arguments 2>&1)
-        return [pscustomobject]@{
-            exitCode = [int]$LASTEXITCODE
-            output = @($output | ForEach-Object { [string]$_ })
-            mode = $modeMatch.Groups[1].Value
+        $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('RocketFooxballHook-' + [guid]::NewGuid().ToString('N'))
+        [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
+        $process = $null
+        $quoteArgument = {
+            param([string]$Value)
+            return ('"' + $Value.Replace('"', '\"') + '"')
+        }
+        try {
+            $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+            $startInfo.FileName = [string]$Hook.command
+            $startInfo.Arguments = (($arguments | ForEach-Object { & $quoteArgument ([string]$_) }) -join ' ')
+            $startInfo.WorkingDirectory = $fixtureRoot
+            $startInfo.UseShellExecute = $false
+            $startInfo.CreateNoWindow = $true
+            $startInfo.RedirectStandardInput = $true
+            $startInfo.RedirectStandardOutput = $true
+            $startInfo.RedirectStandardError = $true
+            $process = New-Object System.Diagnostics.Process
+            $process.StartInfo = $startInfo
+            if (-not $process.Start()) { throw ('unable to launch configured ' + [string]$Hook.args[-1] + ' hook') }
+            $process.StandardInput.Write($EventJson)
+            $process.StandardInput.Close()
+            return [pscustomobject]@{ Process = $process; FixtureRoot = $fixtureRoot; Mode = [string]$Hook.args[-1] }
+        } catch {
+            if ($null -ne $process) { $process.Dispose() }
+            Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+            throw
         }
     }
 
-    $postTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
+    function Complete-HookFixture {
+        param([Parameter(Mandatory = $true)]$Pending)
+        $process = $Pending.Process
+        try {
+            $stdoutText = $process.StandardOutput.ReadToEnd()
+            $stderrText = $process.StandardError.ReadToEnd()
+            $process.WaitForExit()
+            $exitCode = [int]$process.ExitCode
+        } finally {
+            $process.Dispose()
+        }
+        Remove-Item -LiteralPath $Pending.FixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+        $stdoutLines = @()
+        if (-not [string]::IsNullOrEmpty($stdoutText)) {
+            $stdoutLines = @($stdoutText -split "`r?`n" | Where-Object { $_ -ne '' })
+        }
+        return [pscustomobject]@{
+            exitCode = $exitCode
+            stdout = $stdoutLines
+            stderr = [string]$stderrText
+            mode = [string]$Pending.Mode
+        }
+    }
+
+    $postTestsTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
+    $postValidationTarget = '{"tool_name":"Write","tool_input":{"file_path":"Tools/Validation/Invoke-MovementLabWorkflow.ps1"}}'
+    $postEditorTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs"}}'
     $postUnrelated = '{"tool_name":"Edit","tool_input":{"file_path":"README.md"}}'
-    $preTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly; C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
-    $preUnrelated = '{"tool_name":"Bash","tool_input":{"command":"Get-Date"}}'
+    $preWorkflowTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly"}}'
+    $preUnityTarget = '{"tool_name":"PowerShell","tool_input":{"command":"C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
+    $preUnrelated = '{"tool_name":"PowerShell","tool_input":{"command":"Get-Date"}}'
     try {
-        $postTargetResult = Invoke-HookFixture $command $postTarget
-        $postUnrelatedResult = Invoke-HookFixture $command $postUnrelated
-        $preTargetResult = Invoke-HookFixture $preCommand $preTarget
-        $preUnrelatedResult = Invoke-HookFixture $preCommand $preUnrelated
-        $preForcedResult = Invoke-HookFixture $preCommand $preTarget -ForceFailure
+        $postTestsPending = Start-HookFixture $postHook $postTestsTarget
+        $postValidationPending = Start-HookFixture $postHook $postValidationTarget
+        $postEditorPending = Start-HookFixture $postHook $postEditorTarget
+        $postUnrelatedPending = Start-HookFixture $postHook $postUnrelated
+        $preWorkflowPending = Start-HookFixture $preHook $preWorkflowTarget
+        $preUnityPending = Start-HookFixture $preHook $preUnityTarget
+        $preUnrelatedPending = Start-HookFixture $preHook $preUnrelated
+        $preForcedPending = Start-HookFixture $preHook $preWorkflowTarget -ForceFailure
+        $postTestsResult = Complete-HookFixture $postTestsPending
+        $postValidationResult = Complete-HookFixture $postValidationPending
+        $postEditorResult = Complete-HookFixture $postEditorPending
+        $postUnrelatedResult = Complete-HookFixture $postUnrelatedPending
+        $preWorkflowResult = Complete-HookFixture $preWorkflowPending
+        $preUnityResult = Complete-HookFixture $preUnityPending
+        $preUnrelatedResult = Complete-HookFixture $preUnrelatedPending
+        $preForcedResult = Complete-HookFixture $preForcedPending
     } catch {
         return New-HarnessFail $_.Exception.Message
     }
     $State.HookExecution = [ordered]@{
-        postTargetExit = $postTargetResult.exitCode
+        postTestsExit = $postTestsResult.exitCode
+        postValidationExit = $postValidationResult.exitCode
+        postEditorExit = $postEditorResult.exitCode
         postUnrelatedExit = $postUnrelatedResult.exitCode
-        preTargetExit = $preTargetResult.exitCode
+        preWorkflowExit = $preWorkflowResult.exitCode
+        preUnityExit = $preUnityResult.exitCode
         preUnrelatedExit = $preUnrelatedResult.exitCode
         preForcedExit = $preForcedResult.exitCode
-        postTargetTail = @($postTargetResult.output | Select-Object -Last 2)
-        preForcedTail = @($preForcedResult.output | Select-Object -Last 2)
+        postTestsStderr = $postTestsResult.stderr.Trim()
+        preForcedStderr = $preForcedResult.stderr.Trim()
     }
-    if ($postTargetResult.exitCode -ne 0) { return New-HarnessFail ('target PostToolUse hook exited ' + $postTargetResult.exitCode) }
+    foreach ($fixture in @(
+        [pscustomobject]@{ Name = 'Tools/Tests'; Result = $postTestsResult },
+        [pscustomobject]@{ Name = 'Tools/Validation'; Result = $postValidationResult },
+        [pscustomobject]@{ Name = 'MovementLab C#'; Result = $postEditorResult },
+        [pscustomobject]@{ Name = 'workflow PreToolUse'; Result = $preWorkflowResult },
+        [pscustomobject]@{ Name = 'Unity PreToolUse'; Result = $preUnityResult }
+    )) {
+        if ($fixture.Result.exitCode -ne 0) { return New-HarnessFail ($fixture.Name + ' target hook exited ' + $fixture.Result.exitCode) }
+        if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout') }
+        if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness') }
+    }
     if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode) }
-    if ($preTargetResult.exitCode -ne 0) { return New-HarnessFail ('target workflow PreToolUse hook exited ' + $preTargetResult.exitCode) }
     if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode) }
-    if ($preForcedResult.exitCode -eq 0) { return New-HarnessFail 'forced failing PreToolUse hook unexpectedly exited 0' }
-    if (@($postUnrelatedResult.output | Where-Object { $_ -match '^CASE ' }).Count -gt 0) { return New-HarnessFail 'unrelated PostToolUse event ran harness suite' }
-    if (@($preUnrelatedResult.output | Where-Object { $_ -match '^CASE ' }).Count -gt 0) { return New-HarnessFail 'unrelated PreToolUse event ran harness suite' }
-    if (@($preForcedResult.output | Where-Object { $_ -match 'HOOK TEST FORCED FAILURE' }).Count -ne 1) { return New-HarnessFail 'forced PreToolUse fixture lacked failure marker' }
-    return New-HarnessPass 'target/unrelated PostToolUse + PreToolUse fixtures; forced PreToolUse failure blocks'
+    if ($postUnrelatedResult.stdout.Count -ne 0 -or $postUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PostToolUse event did not skip cleanly' }
+    if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PreToolUse event did not skip cleanly' }
+    if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2') }
+    if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail 'forced PreToolUse fixture lacked concise stderr failure' }
+    return New-HarnessPass 'exec-form hooks; three PostToolUse targets; workflow/Unity PreToolUse targets; skips and exit-2 failure'
 }

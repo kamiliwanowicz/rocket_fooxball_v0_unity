@@ -10,6 +10,25 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
+function Write-HarnessOutput {
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
+    if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
+        [Console]::Error.WriteLine($Message)
+        return
+    }
+    Write-Output $Message
+}
+
+trap {
+    if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
+        $message = [string]$_.Exception.Message
+        if ([string]::IsNullOrWhiteSpace($message)) { $message = 'unspecified hook failure' }
+        [Console]::Error.WriteLine(('HOOK ' + $HookMode + ' ERROR: ' + $message))
+        exit 2
+    }
+    throw $_
+}
+
 $testsRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Split-Path -Parent (Split-Path -Parent $testsRoot)
 $projectRoot = [System.IO.Path]::GetFullPath($projectRoot).TrimEnd('\')
@@ -91,7 +110,7 @@ function Test-HookPostToolTarget {
 function Test-HookPreToolTarget {
     param([Parameter(Mandatory = $true)]$Event)
     $toolName = [string](Get-HookProperty $Event 'tool_name')
-    if ($toolName -notin @('Bash', 'PowerShell', 'Command', 'Shell')) { return $false }
+    if ($toolName -notin @('Bash', 'PowerShell')) { return $false }
     $input = Get-HookInput $Event
     $commands = @(Get-HookStrings $input @('command', 'cmd', 'script'))
     $commands += @(Get-HookStrings $Event @('command', 'cmd', 'script'))
@@ -109,7 +128,7 @@ if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
     try { $hookEvent = $eventText | ConvertFrom-Json -ErrorAction Stop } catch { throw ($HookMode + ' hook event JSON invalid: ' + $_.Exception.Message) }
     $target = if ($HookMode -eq 'PostToolUse') { Test-HookPostToolTarget $hookEvent $projectRoot } else { Test-HookPreToolTarget $hookEvent }
     if (-not $target) {
-        Write-Output ('HOOK ' + $HookMode + ' SKIP unrelated event')
+        Write-HarnessOutput ('HOOK ' + $HookMode + ' SKIP unrelated event')
         exit 0
     }
     $SkipHookCheck = $true
@@ -191,8 +210,10 @@ foreach ($case in $cases) {
     $message = [string](Get-HarnessField $result 'message')
     $record = [ordered]@{ id = $case.Id; pass = $pass; message = $message; elapsedMs = [Math]::Round($caseStopwatch.Elapsed.TotalMilliseconds, 3) }
     $results.Add($record) | Out-Null
-    if ($pass) { Write-Output ('CASE ' + $case.Id + ' PASS ' + $message) }
-    else { Write-Output ('CASE ' + $case.Id + ' FAIL ' + $message) }
+    if ([string]::IsNullOrWhiteSpace($HookMode)) {
+        if ($pass) { Write-HarnessOutput ('CASE ' + $case.Id + ' PASS ' + $message) }
+        else { Write-HarnessOutput ('CASE ' + $case.Id + ' FAIL ' + $message) }
+    }
 }
 
 $stopwatch.Stop()
@@ -222,13 +243,26 @@ if (-not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
     $summaryPath = Join-Path $evidencePath 'harness-summary.json'
     $json = $summary | ConvertTo-Json -Depth 12
     [System.IO.File]::WriteAllText($summaryPath, $json + [Environment]::NewLine, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Output ('EVIDENCE ' + $summaryPath)
+    Write-HarnessOutput ('EVIDENCE ' + $summaryPath)
 }
 
-Write-Output ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=10000')
+if ([string]::IsNullOrWhiteSpace($HookMode)) {
+    Write-HarnessOutput ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=10000')
+}
 if ($HookTestForceFailure) {
-    Write-Output 'HOOK TEST FORCED FAILURE'
+    Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: forced harness failure')
+    if (-not [string]::IsNullOrWhiteSpace($HookMode)) { exit 2 }
     exit 1
 }
-if ($failed.Count -gt 0 -or $elapsedMs -ge 10000) { exit 1 }
+if ($failed.Count -gt 0 -or $elapsedMs -ge 10000) {
+    if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
+        $reason = if ($elapsedMs -ge 10000) { 'runtime limit exceeded' } else { ('harness cases failed=' + $failed.Count) }
+        Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: ' + $reason + '; elapsedMs=' + $elapsedMs)
+        exit 2
+    }
+    exit 1
+}
+if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
+    Write-HarnessOutput ('HOOK ' + $HookMode + ' PASS: harness cases=' + $cases.Count + '; elapsedMs=' + $elapsedMs)
+}
 exit 0
