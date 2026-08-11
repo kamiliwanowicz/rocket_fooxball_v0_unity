@@ -1,7 +1,5 @@
 # Rocket Fooxball Unity POC
 
-## Goal
-
 First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based.
 
 User new to Unity. Explain Unity-specific concepts at junior level. Keep general technical discussion concise.
@@ -22,12 +20,14 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 
 ## Repository map
 
-- Runtime gameplay: `Assets/_Game/Scripts/Runtime/`; namespace `RocketFooxball`
-- Editor tooling: command facade `Assets/_Game/Editor/MovementLabBuilder.cs` -> domain pipelines `Assets/_Game/Editor/MovementLab/*.cs`; namespace `RocketFooxball.Editor`
-- Validation workflow `Tools/Validation/Invoke-MovementLabWorkflow.ps1`; harness suite `Tools/Tests/`
-- Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity`
+Layout is discoverable by convention; list directories instead of trusting any enumeration here.
+
+- Runtime gameplay: `Assets/_Game/Scripts/Runtime/` -> one folder per gameplay concern, folder name = concern name -> namespace `RocketFooxball.Runtime.<Folder>`. Find owner of a concern by folder name; new concern -> new folder + matching namespace.
+- Editor tooling: `Assets/_Game/Editor/` -> thin command facade `MovementLabBuilder.cs` (menu entry points only) -> per-domain pipeline files under `MovementLab/`, each named for its domain. Namespace `RocketFooxball.Editor`. Read facade first to see which pipelines a command touches.
+- Tooling scripts: `Tools/` -> `Validation/` workflow entry points, `Tests/` harness suite guarding them, `Blender/` external asset generation.
+- Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity` — generated output, not hand-authored (see Architecture).
 - Input actions: `Assets/InputSystem_Actions.inputactions`
-- Runtime ownership and dependencies: `plans/runtime-architecture.md`
+- Agent orchestration skills: `.agents/skills/`. Active design and handoff docs: `plans/`.
 - Unity, package, and project configuration: `ProjectSettings/`, `Packages/`
 
 Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content outside that root unchanged unless task targets it.
@@ -35,13 +35,16 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 ## Architecture
 
 - Preserve current Unity and package versions unless requested.
-- URP rendering. Default Standalone target -> native 1920x1080 High quality with PBR materials, HDR, shadows, SSAO, restrained bloom, modern lighting, baked indirect light, and reflection/light probes. Maintain scalable Low fallback. Human-review High/Low visual quality and target-machine performance at 1920x1080 on demand.
+- URP rendering. Default Standalone target -> native 1920x1080 High quality: PBR materials, HDR, shadows, SSAO, restrained bloom, modern lighting, baked indirect light, reflection/light probes. Maintain scalable Low fallback. Concrete profile values live in the Editor quality/lighting-profile sources — read them, do not assume. Human-review High/Low visual quality and target-machine performance at 1920x1080 on demand.
 - Graphics work may add or replace project-owned arena, ball, rocket, explosion, and containment visuals. Preserve gameplay contracts unless current task explicitly authorizes named gameplay or collision changes.
 - Player collision/movement -> `CharacterController`. Ball and projectile physics -> `Rigidbody` forces and impulses.
 - Critical gameplay simulation -> fixed-step code. Shared physics configuration -> `GamePhysicsSettings`.
 - Device input -> Input System -> `PlayerInputReader` intent -> gameplay components. No legacy `UnityEngine.Input` polling.
-- Runtime code -> `RocketFooxball.Runtime`, no `UnityEditor`. Editor tooling -> `RocketFooxball.Editor` with explicit assembly references.
-- `MovementLabBuilder` owns generated MovementLab scene, gameplay prefabs, materials, wiring, build-scene entry, and physics settings.
+- Runtime code -> `RocketFooxball.Runtime`, no `UnityEditor`. Editor tooling -> `RocketFooxball.Editor` with explicit assembly references. Rendering concern owns URP-only behaviour so core gameplay stays testable without URP or editor code.
+- One state owner per concern. Callers request operations; owners mutate their own state. Leaf components report narrow events upward and never own match-wide state such as score or coordinated reset. Match concern is the single owner of score, match state machine (`Playing -> GoalFreeze -> Reset -> Playing`), input gate, and reset timing; triggers only raise events, owners execute their own reset.
+- Wiring is direct serialized references plus narrow callbacks. No event bus, DI container, or speculative service layer — PoC favours traceable references over indirection. Runtime components never search the scene for gameplay owners; same-object required components may use `GetComponent` fallback; missing serialized dependency -> log exact composition error and disable component. Diagnostics-only components are the sole exception and may keep discovery fallback.
+- Frame ownership: gameplay physics, impulses, cooldowns, goal crossing -> `FixedUpdate`; input sampling, look, freeze timers -> `Update`; camera pose/FOV/shake -> `LateUpdate`.
+- Editor builder is the composition root: it owns the generated scene, gameplay prefabs, materials, every cross-object reference, build-scene entry, and physics settings. Its validator reopens the generated scene and verifies persisted references, prefab provenance, and component contracts. Rationale: scene and prefabs are build outputs, so hand-edits in the Editor lose to the next rebuild and reference bugs only surface after reload.
 
 ## Unity asset safety
 
@@ -51,7 +54,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
-- Atomic generated-file replacement: `File.Replace(` only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`; every `Tools/Validation/*.ps1` must parse clean. Harness guards G4/G5 enforce both.
+- Atomic generated-file replacement: one helper owns it — `File.Replace(` may appear only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`, and every `Tools/Validation/*.ps1` must parse clean. Harness guards enforce both; a partially written generated asset corrupts the import cache, so scattering raw replaces is a hard no.
 - Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization after Editor saves. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`.
 
 ## Unity execution
@@ -60,21 +63,23 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Unity worktrees: use short paths such as `C:\wt\<id>`. Existing long path -> verified junction or `subst` drive. Use same short project path for all Unity commands and process checks.
 - Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture exit code -> confirm process and project lock release.
 - Harness pre-gate: before any Unity-mutating workflow, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1` harness-unit suite; finish in `<10s` without Unity process or project lock. Failure or timeout blocks Unity.
+- Harness red baseline: `Tools/Tests/Fixtures/` holds deliberately broken copies of guarded scripts. Missing fixture throws instead of silently skipping. Guard cases must pass at HEAD and fail against their fixture, proving the guard can still detect regressions. Edit a guarded workflow script -> update its fixture so it stays red, else harness self-check breaks.
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
 - Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild. Generated output bytes never gate rebuild.
-- Production bake gate: `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild from current lighting inputs. Valid skip logs `[MovementLab] production bake skipped: lighting inputs current (digest <64-hex>)` -> `reused`, `bakeCount=0`; absent marker -> one bake, `bakeCount=1`; duplicate or invalid marker -> fail. Generated output hashes never decide.
+- Production bake gate: the bake entry point, not the caller, owns skip/rebuild from current lighting inputs. Valid skip emits a digest-stamped skip marker and reports reuse with zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Generated output hashes never decide. Exact marker text is shared between the lighting pipeline and harness expectations — copy it from source, never retype.
+- Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Invariant: full build and semantic validate both fail unless a production bake is already current -> bake first.
 - IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
 
 ## Validation
 
 - Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
-- Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
-- Builder-generated change: run one authoritative `MovementLabBuilder.BuildMovementLab()` build, then run `ValidateMovementLab()` semantic pass in separate Unity process. Do not require second builds, builder-output byte/hash equality, or nondeterminism verdicts.
-- Semantic proof always uses direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()`; automated capture never substitutes for validator. Human visual review stays on demand.
+- Movement, input, generated-lab, or other builder-generated change: compile, then run the builder protocol.
+- Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process is the point: it proves references persisted to disk, not just in memory. Do not require second builds, builder-output byte/hash equality, or nondeterminism verdicts.
+- Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
