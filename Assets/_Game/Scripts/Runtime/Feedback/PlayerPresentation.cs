@@ -18,6 +18,8 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private Animator worldAnimator;
         [SerializeField] private Animator fpsKickAnimator;
         [SerializeField] private Transform weaponVisual;
+        [SerializeField] private Camera gameplayCamera;
+        [SerializeField] private AudioListener audioListener;
         [SerializeField] private ParticipantState participant;
         [SerializeField] private Renderer[] teamTintRenderers;
         [SerializeField] private GameObject blueTeamCue;
@@ -258,6 +260,14 @@ namespace RocketFooxball.Runtime.Feedback
 
         public void SetLocalMode(bool local)
         {
+            if (gameplayCamera != null)
+            {
+                gameplayCamera.enabled = local;
+            }
+            if (audioListener != null)
+            {
+                audioListener.enabled = local;
+            }
             if (weaponVisual != null)
             {
                 weaponVisual.gameObject.SetActive(local);

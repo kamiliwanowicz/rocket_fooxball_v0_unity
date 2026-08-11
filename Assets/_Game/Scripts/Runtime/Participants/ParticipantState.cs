@@ -187,6 +187,7 @@ namespace RocketFooxball.Runtime.Participants
             input?.ResetInputState();
             kick?.ResetState();
             launcher?.ResetState();
+            look?.ResetView();
             cameraFeedback?.ResetFeedback();
             presentation?.SetImmune(false);
             presentation?.SetAlive(true);
@@ -208,6 +209,7 @@ namespace RocketFooxball.Runtime.Participants
             {
                 transform.SetPositionAndRotation(worldPosition, worldRotation);
             }
+            look?.ResetView(transform.forward);
             cameraFeedback?.ResetFeedback();
         }
 
@@ -224,6 +226,7 @@ namespace RocketFooxball.Runtime.Participants
             {
                 transform.SetPositionAndRotation(worldPosition, worldRotation);
             }
+            look?.ResetView(transform.forward);
             input?.ResetInputState();
             kick?.ResetState();
             launcher?.ResetState();
@@ -256,7 +259,7 @@ namespace RocketFooxball.Runtime.Participants
         /// <summary>Applies enemy damage. Self and same-team requests reject before health mutation.</summary>
         public bool TryApplyDamage(ParticipantState attacker, float amount, ParticipantDamageCause cause, string weapon = "Rocket Launcher")
         {
-            if (!IsAlive || !IsFinite(amount) || amount <= 0f || attacker == this || (attacker != null && attacker.Team == team))
+            if (!IsAlive || IsImmune || !IsFinite(amount) || amount <= 0f || attacker == this || (attacker != null && attacker.Team == team))
             {
                 return false;
             }
@@ -392,6 +395,7 @@ namespace RocketFooxball.Runtime.Participants
             {
                 look.enabled = active && localParticipant;
             }
+            presentation?.SetLocalMode(localParticipant);
             if (cameraFeedback != null)
             {
                 cameraFeedback.enabled = localParticipant;

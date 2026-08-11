@@ -316,7 +316,18 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
 
-            feedback.SetSpectatorTarget(bestAlly != null ? bestAlly.transform : ball != null ? ball.transform : null);
+            if (bestAlly != null)
+            {
+                feedback.SetSpectatorTarget(bestAlly.transform);
+            }
+            else if (ball != null)
+            {
+                feedback.SetSpectatorWorldTarget(ball.transform);
+            }
+            else
+            {
+                feedback.SetSpectatorTarget(null);
+            }
         }
 
         private void ReconcileParticipantCollisions()

@@ -50,6 +50,7 @@ namespace RocketFooxball.Runtime.Feedback
         private bool crosshairWasActive;
         private bool celebrationStateCaptured;
         private Transform spectatorTarget;
+        private bool spectatorTargetRelative;
         private Transform spectatorOriginalParent;
         private Vector3 spectatorOriginalLocalPosition;
         private Quaternion spectatorOriginalLocalRotation;
@@ -187,10 +188,16 @@ namespace RocketFooxball.Runtime.Feedback
             celebrationStateCaptured = false;
         }
 
-        /// <summary>Follows a living ally or ball while local participant is dead.</summary>
+        /// <summary>Follows a living ally using target-relative behind-follow.</summary>
         public void SetSpectatorTarget(Transform target)
         {
-            if (target == spectatorTarget)
+            SetSpectatorTarget(target, true);
+        }
+
+        /// <summary>Follows a spectator target with optional target-relative offset.</summary>
+        public void SetSpectatorTarget(Transform target, bool targetRelative)
+        {
+            if (target == spectatorTarget && targetRelative == spectatorTargetRelative)
             {
                 return;
             }
@@ -218,6 +225,7 @@ namespace RocketFooxball.Runtime.Feedback
             }
 
             spectatorTarget = target;
+            spectatorTargetRelative = targetRelative;
             cameraTransform.SetParent(null, true);
             if (viewmodels != null)
             {
@@ -231,12 +239,18 @@ namespace RocketFooxball.Runtime.Feedback
             WriteSpectatorFollow();
         }
 
+        /// <summary>Follows a world-space target without inheriting its rotation.</summary>
+        public void SetSpectatorWorldTarget(Transform target) => SetSpectatorTarget(target, false);
+
         public void BeginSpectator(Transform target) => SetSpectatorTarget(target);
+
+        public void BeginSpectator(Transform target, bool targetRelative) => SetSpectatorTarget(target, targetRelative);
 
         /// <summary>Restores local camera parent and first-person overlays after respawn/reset.</summary>
         public void ExitSpectator()
         {
             spectatorTarget = null;
+            spectatorTargetRelative = false;
             if (!spectatorStateCaptured)
             {
                 return;
@@ -331,7 +345,8 @@ namespace RocketFooxball.Runtime.Feedback
             }
 
             var targetPosition = spectatorTarget.position;
-            var position = targetPosition + spectatorTarget.rotation * spectatorOffset;
+            var offset = spectatorTargetRelative ? spectatorTarget.rotation * spectatorOffset : spectatorOffset;
+            var position = targetPosition + offset;
             var lookPoint = targetPosition + Vector3.up * Mathf.Max(celebrationLookHeight, 0.5f);
             cameraTransform.position = position;
             cameraTransform.rotation = Quaternion.LookRotation((lookPoint - position).normalized, Vector3.up);
