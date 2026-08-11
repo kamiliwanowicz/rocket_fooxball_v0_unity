@@ -4847,7 +4847,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fad277b469a8444c8a87caa0bf26bb4f, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Feedback.RocketTrailVfx
   particleSystems:
   - {fileID: 6429022872448179805}
@@ -4946,7 +4946,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d618b5ef1f0c4bda9a9a3b7934e4c205, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Weapons.RocketProjectile
   speed: 48
   lifetime: 8
@@ -9840,11 +9840,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -7074283655807309934, guid: 7a94b566aedb5b1469c8eda27577dd64, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: 750dfb9a8aee53843991150e295e40c2, type: 2}
     - target: {fileID: -2829903169325899417, guid: 7a94b566aedb5b1469c8eda27577dd64, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
-      value:
+      value: 
       objectReference: {fileID: 2100000, guid: a261b9c508061db4a89c7ff13704ef55, type: 2}
     - target: {fileID: 919132149155446097, guid: 7a94b566aedb5b1469c8eda27577dd64, type: 3}
       propertyPath: m_Name
