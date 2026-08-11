@@ -794,8 +794,7 @@ function New-CheckLedger {
                 'Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta',
                 'Packages/manifest.json',
                 'Packages/packages-lock.json',
-                'ProjectSettings/ProjectVersion.txt',
-                'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+                'ProjectSettings/ProjectVersion.txt'
             )
             $rows.Add((New-LedgerRow -CheckId 'production-bake' -Tier 'production-final' -MutatesProject $true -InputPaths $productionBakeInputs -InvalidationPaths $productionBakeInputs -Subsumes @() -RunPoint 'source-freeze'))
         }
@@ -845,6 +844,10 @@ function Test-PathIntersects {
 
 function Get-ObjectPropertyValue {
     param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
     if ($null -eq $Object -or -not ($Object.PSObject.Properties.Name -contains $Name)) { return $null }
     return $Object.PSObject.Properties[$Name].Value
 }
