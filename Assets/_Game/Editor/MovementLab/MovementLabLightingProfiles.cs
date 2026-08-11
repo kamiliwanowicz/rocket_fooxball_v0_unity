@@ -244,37 +244,9 @@ namespace RocketFooxball.Editor
             Directory.CreateDirectory(directory);
             var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
             File.WriteAllText(temp, json, new UTF8Encoding(false));
-            if (File.Exists(path)) ReplaceAtomicWithRetry(temp, path); else File.Move(temp, path);
+            if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
             ValidateWrittenManifest(path, state);
             AssetDatabase.ImportAsset(MovementLabContract.LightingManifestPath, ImportAssetOptions.ForceSynchronousImport);
-        }
-
-        private static void ReplaceAtomicWithRetry(string temporaryPath, string destinationPath)
-        {
-            var retryDelaysMilliseconds = new[] { 50, 150, 300 };
-            for (var attempt = 0; attempt <= retryDelaysMilliseconds.Length; attempt++)
-            {
-                try
-                {
-                    File.Replace(temporaryPath, destinationPath, null);
-                    return;
-                }
-                catch (IOException exception)
-                {
-                    var win32Error = exception.HResult & 0xFFFF;
-                    var retryable = win32Error == 32 || win32Error == 33 || win32Error == 1175;
-                    if (!retryable || attempt == retryDelaysMilliseconds.Length)
-                    {
-                        throw;
-                    }
-
-                    System.Threading.Thread.Sleep(retryDelaysMilliseconds[attempt]);
-                    if (!File.Exists(destinationPath) || !File.Exists(temporaryPath))
-                    {
-                        throw;
-                    }
-                }
-            }
         }
 
         private static void ValidateWrittenManifest(string path, MovementLabLightingManifestState expected)
