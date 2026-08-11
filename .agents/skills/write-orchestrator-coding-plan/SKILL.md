@@ -13,7 +13,7 @@ Write implementation-ready Markdown plan. Planner pre-decides coding design from
 
 Required: request, repository scope, requested output location when any.
 
-1. Default output directory: `plans/`. Use user-specified location when given.
+1. Default output directory: active plan directory declared by [`AGENTS.md`](../../../AGENTS.md). Use user-specified location when given.
 2. Create directory if missing. Name file `<scope>-coding-plan.md`; scope uses concise kebab-case.
 3. Preserve existing plan files. Existing target -> next suffix: `<scope>-coding-plan-2.md`, then `-3`, onward.
 4. Write complete plan using output shape. Create/edit only requested plan file.
@@ -70,13 +70,10 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
-- Task: worker-review slice, not edit checklist. Default -> one implementation worker -> one unique review checkpoint. Keep ordered substeps inside task.
 - Size by reasoning and proof load, never lines/files: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary.
 - Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
 - Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
-- Serial: shared paths, contracts, generated/serialized assets, migrations, product decisions, cross-lane dependencies, unstable inputs, or shared validation environment.
-- Parallel: same launch head, disjoint paths, stable inputs, independent acceptance, explicit fan-in. Launch every ready sibling together; checkpoint dispatches when its worker completes; checkpoint gates fan-in, never unrelated sibling.
-- Group review only when joined chunk is more meaningful than partial states. Name covered tasks, join condition, dependency gate, technical rationale. Fewer reviewer calls is insufficient.
+- Execution graph and checkpoints must satisfy [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md#review-checkpoints). Encode named tasks/workers, dependencies, serial/parallel lanes, joins, review gates, and any grouped-review rationale.
 - Candidate dependencies: accepted SHAs supplied by LP.
 
 ## Implementation design gate
@@ -95,14 +92,12 @@ Example: `record walkable hit normal, project velocity along ramp, preserve laun
 
 ### Check contract
 
-Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner for every production-final row after source fan-in and accepted fixes. Review never substitutes for production bake or direct semantic validation.
+Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
 
 ### Validation authoring rules
 
-- Plans never require image capture, screenshots, screenshot comparison, or agent visual verification. Human visual review remains on demand.
-- Unity-mutating proof pre-gate: `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1` before builder or validator invocation.
-- Harness-unit acceptance: complete `<10s`; no Unity process or project lock.
-- Unity mutation, builder/validator, bake, validator-predicate, and generated-output proof policy: `AGENTS.md` -> `Unity execution`; `Validation`.
+- Plans follow `AGENTS.md` visual-proof policy. Task-specific source-asset previews required by applicable skills, including [`$use-blender`](../use-blender/SKILL.md), remain allowed as supplementary proof.
+- Plan Unity checks from [`AGENTS.md`](../../../AGENTS.md) -> `Unity execution`; `Validation`, including required pre-gates and generated-output proof policy.
 
 Execution route:
 

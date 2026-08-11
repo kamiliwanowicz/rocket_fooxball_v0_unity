@@ -55,7 +55,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
 - Atomic generated-file replacement: one helper owns it — `File.Replace(` may appear only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`, and every `Tools/Validation/*.ps1` must parse clean. Harness guards enforce both; a partially written generated asset corrupts the import cache, so scattering raw replaces is a hard no.
-- Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization after Editor saves. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`.
+- Capture pre/post Git status. Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`. Remove only newly generated IDE files.
 
 ## Unity execution
 
@@ -68,24 +68,29 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
-- Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild. Generated output bytes never gate rebuild.
-- Production bake gate: the bake entry point, not the caller, owns skip/rebuild from current lighting inputs. Valid skip emits a digest-stamped skip marker and reports reuse with zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Generated output hashes never decide. Exact marker text is shared between the lighting pipeline and harness expectations — copy it from source, never retype.
+- Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild.
+- Production bake gate: bake entry point owns skip/rebuild from current lighting inputs. Valid skip emits source-defined digest marker and zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Copy marker from source, never retype.
+- Integrity gates: source/input digests decide staleness and bake reuse. Generated-output bytes/hashes provide provenance only; never gate rebuild, acceptance, or nondeterminism.
 - Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Invariant: full build and semantic validate both fail unless a production bake is already current -> bake first.
-- IDE churn: compare pre/post Git status; remove only newly generated untracked IDE files.
+
+## Unity tests direction
+
+- `com.unity.test-framework` already installed; no project test assemblies yet.
+- Target: EditMode NUnit tests for deterministic pure runtime logic only (bot decisions, match state machine, scoring, cooldown math). First test assembly -> `Assets/_Game/Scripts/Tests/EditMode/` + test asmdef referencing `RocketFooxball.Runtime`; create when next touching pure gameplay logic.
+- Skip: PlayMode tests, coverage goals, feel/physics assertions (playtests own feel), MonoBehaviour wiring tests (builder validator owns wiring).
+- Tests grow only where regression would break playtests.
 
 ## Validation
 
-- Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
+- Final Unity checks: finish source edits first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
-- Movement, input, generated-lab, or other builder-generated change: compile, then run the builder protocol.
-- Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process is the point: it proves references persisted to disk, not just in memory. Do not require second builds, builder-output byte/hash equality, or nondeterminism verdicts.
+- Movement, input, generated-lab, or other builder-generated change -> run builder protocol.
+- Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process proves references persisted to disk. Do not require second builds.
 - Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
-- Lighting posture: Fast preview is default iteration. Development bake is explicit, on-demand, and best-effort. Production bake is explicit and milestone-only.
-- Production bake -> run after source edits and accepted Critical/High fixes settle in a scoped-clean worktree. Later source edits reopen only affected checks. No extra pre-bake ceremony.
-- Workflow probe schema is `schemaVersion: 1` with typed version/status/stale/profile/path fields plus source/input digest for staleness; generated output bytes are not acceptance criteria. Durable report paths stay under Git-common destination and outside product worktree.
+- Lighting posture: Fast preview is default. Development bake is explicit, on-demand, best-effort. Replacement production bake is explicit and milestone-only after source edits settle in scoped-clean worktree. Digest reattestation or zero-bake reuse may run whenever builder protocol requires current lighting. Later lighting-input edits reopen affected checks.
 - Report only checks run.
 - When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`
 

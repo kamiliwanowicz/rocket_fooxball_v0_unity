@@ -11,7 +11,7 @@ description: Use when task creates, edits, exports, validates, or troubleshoots 
 - repeatable procedural asset: source in `Tools/Blender/generate_<asset>.py`; output in `Assets/_Game/Models/`.
 - hand-authored state hard to express in script: preserve `.blend` source under `Tools/Blender/`; add thin deterministic export script.
 - external model pack: require user approval for source, license, attribution, visual fit, asset cost. Record source and license beside imported assets.
-- Unity owns gameplay components, colliders, physics, and URP materials. Blender owns mesh, UVs, normals, vertex colors, and optional animation.
+- Blender owns mesh, UVs, normals, vertex colors, and optional animation. Unity integration follows [`AGENTS.md`](../../../AGENTS.md) architecture.
 
 ## Asset contract
 
@@ -66,14 +66,12 @@ Completion: Blender exit `0`; FBX exists and is non-empty; audit passes; six pre
 - FBX axis conversion: verify imported geometry, never infer success from Blender transform values.
 - current projectile convention: model nose authored toward Blender `-Y` with export settings above -> imported Unity local `+Z`.
 - prefab layout: physics/gameplay root -> imported model nested as `Visual` -> Unity materials assigned to renderers.
-- builder-owned asset: edit generator and `MovementLabBuilder` source, then rebuild. Generated prefab/scene YAML is output, not source.
-- preserve Unity `.meta` files and GUIDs. Let Unity import new FBX and create metadata.
+- Builder ownership, generated-output authority, and `.meta`/GUID safety -> [`AGENTS.md`](../../../AGENTS.md). Let Unity create metadata for new FBX files.
 
 ## Validate
 
-1. Run Unity builder through one batch Editor process using repository-required `Start-Process -Wait -PassThru` pattern. Wait for process and project lock release.
-2. Run `ValidateMovementLab()` in separate Unity process.
-3. Validator proves every applicable invariant:
+1. When Unity integration changed, run current [`AGENTS.md`](../../../AGENTS.md) builder protocol through current facade entry points. This includes harness, bake-current, build, separate-process semantic validation, and process/lock gates.
+2. Validator proves every applicable invariant:
    - source model asset exists
    - prefab `Visual` contains imported FBX mesh and renderer
    - imported mesh provenance path matches expected FBX
@@ -84,7 +82,7 @@ Completion: Blender exit `0`; FBX exists and is non-empty; audit passes; six pre
    - rigged branch: expected Avatar, bones, clips, loop settings, root motion policy
    - environment branch: expected module dimensions, pivot, seams, static flags
    - root collider, Rigidbody, and gameplay settings unchanged
-4. Inspect Unity logs, `git status`, `git diff`, and `git diff --check`. Remove only task-created IDE churn. Completion: Blender exit `0`; Unity build exit `0`; Unity validation exit `0`; zero compile errors; expected diff only; no Unity process or lock.
+3. Follow `AGENTS.md` final-diff hygiene; additionally run `git diff --check`. Completion: Blender exit `0`; required Unity checks pass; expected diff only.
 
 ## Failure routing
 
@@ -96,5 +94,5 @@ Completion: Blender exit `0`; FBX exists and is non-empty; audit passes; six pre
 - preview differs from FBX import: compare evaluated Blender bounds with Unity imported bounds; inspect unapplied modifiers, export selection, axis conversion, material reassignment.
 - audit rejects intentional open geometry: declare allowed open surface in asset contract; keep closed-solid checks for every other mesh.
 - materials wrong: keep mesh material slots stable; assign project URP materials in builder.
-- FBX hash changes after identical runs: Blender metadata can change while geometry stays equal. Use semantic Unity validation and avoid needless regeneration; byte identity is not completion criterion.
+- FBX hash changes after identical runs: Blender metadata can change while geometry stays equal. Avoid needless regeneration; apply `AGENTS.md` semantic-validation rule.
 - batch import fails: inspect full Blender/Unity logs first, then confirm executable version, FBX existence, `.meta` health, Editor process, and lock state.
