@@ -1546,7 +1546,7 @@ foreach ($row in $ledger) {
 Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
 $ledgerEvidenceDigest = (Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
 foreach ($row in $ledger) {
-    if ($row.status -eq 'executed') {
+    if ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
         $row.evidence_digest = $ledgerEvidenceDigest
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $ledgerEvidenceDigest }
     }
