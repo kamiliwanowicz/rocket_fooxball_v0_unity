@@ -34,6 +34,7 @@ $projectRoot = Split-Path -Parent (Split-Path -Parent $testsRoot)
 $projectRoot = [System.IO.Path]::GetFullPath($projectRoot).TrimEnd('\')
 $shimPath = Join-Path $testsRoot 'HarnessShim.psm1'
 $testsPath = Join-Path $testsRoot 'MovementLabHarness.Tests.ps1'
+$redFixturePath = Join-Path $testsRoot 'Fixtures/red-workflow.ps1.txt'
 $workflowPath = Join-Path $projectRoot 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
 $hookSettingsPath = Join-Path $projectRoot '.claude/settings.json'
 
@@ -140,10 +141,11 @@ $shimInvoker = {
 }
 
 function Get-RedSource {
-    param([Parameter(Mandatory = $true)][string]$Root)
-    $text = @(& git -C $Root show '73984e2:Tools/Validation/Invoke-MovementLabWorkflow.ps1' 2>&1)
-    if ($LASTEXITCODE -ne 0) { throw ('Unable to read RedAtSha source: ' + ($text -join ' ')) }
-    return ($text -join [Environment]::NewLine)
+    param([Parameter(Mandatory = $true)][string]$FixturePath)
+    if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) {
+        throw ('Red baseline fixture missing: ' + $FixturePath)
+    }
+    return $FixturePath
 }
 
 function Assert-EvidenceRoot {
@@ -165,7 +167,7 @@ $state = [pscustomobject]@{
     HookSettingsPath = $hookSettingsPath
     ShimCommand = $shimInvoker
     CurrentSource = [System.IO.File]::ReadAllText($workflowPath)
-    RedSource = Get-RedSource $projectRoot
+    RedSource = Get-RedSource $redFixturePath
     SkipHookCheck = [bool]$SkipHookCheck
     HookExecution = $null
 }
@@ -181,6 +183,7 @@ $cases = @(
     [pscustomobject]@{ Id = 'row-field-sweep'; Function = ${function:Test-RowFieldSweep} },
     [pscustomobject]@{ Id = 'bake-inputs-literal'; Function = ${function:Test-BakeInputsLiteral} },
     [pscustomobject]@{ Id = 'bake-inputs-asymmetry'; Function = ${function:Test-BakeInputsAsymmetry} },
+    [pscustomobject]@{ Id = 'bake-count-production-method'; Function = ${function:Test-BakeCountProductionMethod} },
     [pscustomobject]@{ Id = 'path-intersects'; Function = ${function:Test-PathIntersects} },
     [pscustomobject]@{ Id = 'stringset-null'; Function = ${function:Test-StringSetNull} },
     [pscustomobject]@{ Id = 'planonly-pending-only'; Function = ${function:Test-PlanOnlyPendingOnly} },
@@ -226,10 +229,10 @@ $summary = [ordered]@{
     elapsedMs = $elapsedMs
     runtimeLimitSeconds = 10
     cases = @($results.ToArray())
-    redAtSha = '73984e2'
+    redBaseline = 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     redGreen = @(
-        [ordered]@{ case = 'gopv-ordered'; head = 'pass'; redAtSha = 'fail' }
-        [ordered]@{ case = 'row-reuse-equal'; head = 'pass'; redAtSha = 'fail' }
+        [ordered]@{ case = 'gopv-ordered'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'row-reuse-equal'; head = 'pass'; redBaseline = 'fail' }
     )
     scratchDrill = @($results | Where-Object { $_.id -eq 'scratch-drill' })
     hookExecution = $state.HookExecution

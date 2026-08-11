@@ -70,18 +70,14 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
-- Task is worker-review slice, not edit checklist item. One task -> one implementation worker -> one review checkpoint by default. Keep ordered substeps inside task.
-- Size slice by reasoning and proof load, never line or file count. Balanced slice has one dominant behavior or invariant, cohesive execution path, bounded failure domain, and one review risk model. Worker can implement it without context overload; reviewer can judge diff and proof without reconstructing unrelated mechanisms.
-- Fold incidental edits into nearest behavior task when they lack independent done condition or proof and share dependencies, lifecycle, paths, or validation. Preserve separate task when small edit carries distinct material risk or independent acceptance.
-- Split slice at stable contract, state-ownership, failure-domain, or validation barrier when it contains independently reasoned mechanisms, unrelated edge-case policy, distinct proof workflows, or reviewer risk-model switches. Each resulting slice must remain meaningful and independently reviewable.
-- Rebalance after design detail is known: merge thin slices; split overloaded slices. Inseparable candidate still exceeding one worker-review slice capacity -> decomposition mismatch.
-- Order shared-path tasks serially.
-- Parallel tasks require same launch head, disjoint paths, stable inputs, independent acceptance, and explicit fan-in. Cross-lane dependency or shared validation environment -> serial edge.
-- Shared files, contracts, generated/serialized assets, migrations, and product decisions stay serialized.
-- Default review boundary: one unique checkpoint after each expected implementation worker. Group multiple workers only when joined chunk is more meaningful to review than partial worker states; name covered tasks, join condition, and technical rationale. Reviewer-call reduction is insufficient rationale.
-- Fan-out launches every ready sibling together. Each per-worker checkpoint dispatches immediately when its worker completes; unrelated siblings continue. Branch checkpoint gates fan-in. Group only under rule above.
-- Candidate dependencies use accepted SHAs supplied by LP.
-- Assigned candidate exceeding detailed design capacity -> decomposition mismatch; LP mode returns `blocked` with `fresh task-breakdown`. Produce no shallow catch-all task.
+- Task: worker-review slice, not edit checklist. Default -> one implementation worker -> one unique review checkpoint. Keep ordered substeps inside task.
+- Size by reasoning and proof load, never lines/files: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary.
+- Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
+- Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
+- Serial: shared paths, contracts, generated/serialized assets, migrations, product decisions, cross-lane dependencies, unstable inputs, or shared validation environment.
+- Parallel: same launch head, disjoint paths, stable inputs, independent acceptance, explicit fan-in. Launch every ready sibling together; checkpoint dispatches when its worker completes; checkpoint gates fan-in, never unrelated sibling.
+- Group review only when joined chunk is more meaningful than partial states. Name covered tasks, join condition, dependency gate, technical rationale. Fewer reviewer calls is insufficient.
+- Candidate dependencies: accepted SHAs supplied by LP.
 
 ## Implementation design gate
 
@@ -89,30 +85,13 @@ Before writing artifact, ask what worker would still need to figure out. Resolve
 
 Ready task lets worker follow recorded design using only local coding judgment. Product/architecture choice missing from repository -> `needs_user`. Repository evidence gap -> LP `blocked`. Excess design surface -> decomposition mismatch.
 
-Run worker-review sizing gate after design gate. For each task, state dominant outcome, coupled edits kept inside boundary, independent work kept outside, and one proof boundary. If worker or reviewer must hold unrelated mechanisms in context -> split. If task has no meaningful independent acceptance -> fold into adjacent task.
+After design detail, apply `Plan shape` sizing/splitting rules. Record slice boundary in template. No meaningful independent acceptance -> fold.
 
 Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan explains concrete contact state, projection/order, ramp-exit handling, and separation from wall handling.
 
 ## Plan contract
 
-Every plan contains:
-
-- identity: LP mode includes `run_id`, `plan_id`, `attempt_id`, covered requirements, accepted baseline, and dependencies.
-- objective: requested outcome and completion boundary.
-- scope: included behavior/files and explicit exclusions.
-- findings: repository facts, constraints, gaps, proposed paths.
-- decisions: implementation choices, assumptions, and unresolved material questions.
-- execution graph: mandatory task/review/gate dependency graph showing sequential and parallel execution, fan-out, join conditions, and downstream gates.
-- tasks: bounded ordered work with enough coding detail to remove non-local worker decisions.
-- review checkpoints: every task maps to one checkpoint; default per worker; grouped checkpoint records covered tasks/workers, join condition, dependency gate, and technical rationale.
-- checks: ordinary -> one `proof: <command> -> <expected>` line; `production-final` -> full row contract.
-- proof: discriminatory scenario or safe alternate proof.
-- review focus: concrete material Critical/High failure or delivery risks under `$orchestrate-implementation` PoC review filter.
-- handoff: exact head requirement, changed paths, residual risks, integration/user-branch authority.
-
-Every candidate also binds `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`, and `proof_invalidation_paths`. Candidate may contain multiple workers only when paths and validation environments are disjoint; one owner must run each production-final proof after fan-in, review, and fixes.
-
-Each task names objective, done condition, dependency, owned/protected paths, focused reads, implementation instructions, validation, proof, and return evidence.
+`Output shape` is sole source for plan fields, placement, and task metadata. Every plan must satisfy this skill's task/graph rules and check contract.
 
 ### Check contract
 
@@ -121,10 +100,9 @@ Ordinary task checks (`fast|development`) use exactly one line: `proof: <command
 ### Validation authoring rules
 
 - Plans never require image capture, screenshots, screenshot comparison, or agent visual verification. Human visual review remains on demand.
-- Unity-mutating proof -> run `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit` first; require `<10s` and no Unity process before builder or validator invocation.
-- Production bake -> only lighting proof; semantic proof uses direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()`.
-- New validator predicate -> warning-only first. Promote to hard failure only after one representative green Unity run.
-- Builder-generated output byte/hash equality never gates. Source/input digests and orchestration artifact/evidence hashes remain allowed integrity checks.
+- Unity-mutating proof pre-gate: `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1` before builder or validator invocation.
+- Harness-unit acceptance: complete `<10s`; no Unity process or project lock.
+- Unity mutation, builder/validator, bake, validator-predicate, and generated-output proof policy: `AGENTS.md` -> `Unity execution`; `Validation`.
 
 Execution route:
 
@@ -171,11 +149,6 @@ Dependencies: [accepted full SHAs or None]
 
 - notation: `->` sequential; `||` parallel; `{...}` parallel fan-out/fan-in; `+` requires every named predecessor
 - gates: `START` -> [entry condition]; `JOIN1` -> [join condition]; `FINAL` -> [completion condition]
-- rule: include every task and review checkpoint exactly once; use only IDs defined in this plan
-- rule: fan-out launches every branch when predecessor passes; branch checkpoint gates join, not sibling launch
-- rule: parallel branches require disjoint paths, stable inputs, independent acceptance, and explicit join gate
-- rule: shared paths/contracts/assets, generated or serialized outputs, migrations, and product decisions remain sequential
-- rule: a single-task plan still includes `START -> T1 -> CP1 -> FINAL`
 
 ## Tasks
 ### T1: [coherent result]
@@ -217,11 +190,9 @@ Dependencies: [accepted full SHAs or None]
 - authority: [integration and user-branch approval]
 
 ## Done Criteria
-- every covered requirement maps to task, owner, check, and proof;
-- every task passes implementation design gate;
-- every task passes worker-review sizing gate: one meaningful outcome, cohesive reasoning, bounded failure domain, one proof boundary, and no incidental standalone slice;
-- Execution Graph includes every task and review checkpoint exactly once and makes every sequential dependency, parallel lane, and join gate explicit;
-- every implementation worker maps to one review checkpoint; grouped checkpoints include stronger-boundary rationale;
+- template fields complete; every covered requirement maps to task, owner, check, proof;
+- tasks meet `Plan shape` and `Implementation design gate`;
+- Execution Graph includes every task/checkpoint once; all dependencies, parallel lanes, joins explicit;
 - exact baseline and dependencies are factual;
 - execution route uses immutable attempt-bound snapshot and `$orchestrate-implementation`;
 - final checks bind clean committed head or blocker names needed action.
@@ -255,8 +226,6 @@ Needed LP Action or Recheck: [one action/fact or None]
 
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
-- Run worker-review sizing audit after design detail: fold tasks lacking independent acceptance; split tasks spanning unrelated reasoning, failure, or proof boundaries; return decomposition mismatch when no stable internal split exists.
-- Verify `## Execution Graph` matches dependencies, launches fan-out siblings together, and never parallelizes overlapping paths, unstable inputs, or shared validation environments.
+- Verify template completeness plus `Plan shape` and `Implementation design gate`.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
-- Run `git diff --check -- .agents/skills/write-orchestrator-coding-plan/SKILL.md .agents/skills/loop-orchestrator/agents/task-breakdown.md`.

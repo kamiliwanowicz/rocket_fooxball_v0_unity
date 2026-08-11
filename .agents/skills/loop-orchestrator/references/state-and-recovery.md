@@ -110,13 +110,20 @@ Blocker: [active blocker + evidence + recheck/action or None]
 
 ## Executed Ledger Pointer
 
-Harness-owned `check-ledger.json` is sole executed ledger. State stores only absolute ledger path plus SHA-256 in plan fields above; LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows and evidence only after digest verification. Full row contract stays in producer/consumer policy.
+Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harness-summary.json`. State stores only absolute ledger path plus SHA-256 in plan fields above; LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows and evidence only after digest verification. Full row contract stays in producer/consumer policy.
+
+## Workflow Harness Precondition
+
+Before every `Tools/Validation/Invoke-MovementLabWorkflow.ps1` or Unity invocation, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`. Require exit `0`, `<10s`, no Unity process, and no project lock.
+
+Nonzero, timeout, Unity process, or project lock -> `blocked`. Repair affected tooling; rerun harness to green before any workflow or Unity command, including `-PlanOnly` and read-only validation. Editing `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs` makes gate stale; rerun harness before next workflow or Unity command.
 
 ## Production Bake Gate
 
-- Before each bake-capable Unity invocation, rehash every bound run `workflow-result.json` and sum `bakeCount`. Cumulative `>=2` -> `blocked` before Unity. Retain postflight cumulative `>2` only as evidence-corruption/contract-violation detector; observed cumulative must never exceed `2`.
-- Replacement `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` after any prior production-final attempt requires explicit user authority recorded before dispatch.
-- Lighting-input intersection invalidates production-final proof. Missing authority -> `blocked` before Unity; never force rerun. With authority, builder owns skip/rebuild; exact current-lighting skip marker or one bake proves outcome.
+- Order: production-final preconditions -> `ProductionPrepare` -> `ProductionValidate` semantic pass. Never require `ValidateMovementLab()` before production bake.
+- Budget: rehash bound `workflow-result.json` where `mode == 'ProductionPrepare'`; sum `bakeCount`. Cumulative `>=2` -> `blocked` before `ProductionPrepare`. Postflight `>2` -> evidence-corruption/contract violation; observed total never exceeds `2`.
+- Reattest: lighting-input intersection invalidates production-final proof. Current lighting-input digest unchanged -> builder skip expected; rerun needs no authority. Exact current-lighting skip marker -> `reused`, `bakeCount=0`; absent marker -> one bake, `bakeCount=1`; invalid/duplicate marker -> `blocked`.
+- Replacement bake: current lighting-input digest changed after prior production-final attempt -> predicted real rebuild; explicit user authority required before dispatch. Missing authority -> `blocked`; never force rerun. With authority, `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
 

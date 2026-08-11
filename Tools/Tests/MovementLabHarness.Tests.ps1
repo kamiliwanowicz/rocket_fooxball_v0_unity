@@ -340,6 +340,34 @@ function Test-BakeInputsAsymmetry {
     return New-HarnessPass 'compile+validator include; bake excludes Tools/Validation'
 }
 
+function Test-BakeCountProductionMethod {
+    param([Parameter(Mandatory = $true)]$State)
+    $function = Get-HarnessFunctionAst $State.CurrentSource 'Invoke-UnityStep'
+    $method = 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting'
+    $conditions = @($function.FindAll({
+        param($Node)
+        if ($Node -isnot [System.Management.Automation.Language.IfStatementAst]) { return $false }
+        $Node.Clauses.Count -eq 1 -and
+            [string]$Node.Clauses[0].Item1.Extent.Text -match ('^\s*\$Method\s+-ceq\s+''' + [regex]::Escape($method) + '''\s*$') -and
+            [string]$Node.Clauses[0].Item2.Extent.Text -match '\$script:BakeCount\+\+'
+    }, $true))
+    if ($conditions.Count -ne 1) {
+        return New-HarnessFail 'Invoke-UnityStep must increment BakeCount only for exact production BakeMovementLabLighting method'
+    }
+
+    $counter = [scriptblock]::Create(
+        'param([string]$Method) $value = 0; if (' + [string]$conditions[0].Clauses[0].Item1.Extent.Text + ') { $value++ }; return $value')
+    $development = @(& $counter 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLightingDevelopment')
+    $production = @(& $counter $method)
+    if ($development.Count -ne 1 -or [int]$development[0] -ne 0) {
+        return New-HarnessFail 'development bake method incremented BakeCount'
+    }
+    if ($production.Count -ne 1 -or [int]$production[0] -ne 1) {
+        return New-HarnessFail 'production bake method did not increment BakeCount'
+    }
+    return New-HarnessPass 'development method=0; production method=1'
+}
+
 function Test-PathIntersects {
     param([Parameter(Mandatory = $true)]$State)
     $module = $null

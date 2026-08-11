@@ -23,7 +23,8 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 ## Repository map
 
 - Runtime gameplay: `Assets/_Game/Scripts/Runtime/`; namespace `RocketFooxball`
-- Editor tooling and authoritative lab generator: `Assets/_Game/Editor/MovementLabBuilder.cs`; namespace `RocketFooxball.Editor`
+- Editor tooling: command facade `Assets/_Game/Editor/MovementLabBuilder.cs` -> domain pipelines `Assets/_Game/Editor/MovementLab/*.cs`; namespace `RocketFooxball.Editor`
+- Validation workflow `Tools/Validation/Invoke-MovementLabWorkflow.ps1`; harness suite `Tools/Tests/`
 - Primary sandbox and build scene: `Assets/_Game/Scenes/MovementLab.unity`
 - Input actions: `Assets/InputSystem_Actions.inputactions`
 - Runtime ownership and dependencies: `plans/runtime-architecture.md`
@@ -50,6 +51,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
+- Atomic generated-file replacement: `File.Replace(` only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`; every `Tools/Validation/*.ps1` must parse clean. Harness guards G4/G5 enforce both.
 - Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization after Editor saves. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`.
 
 ## Unity execution

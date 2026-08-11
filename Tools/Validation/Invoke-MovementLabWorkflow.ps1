@@ -1010,7 +1010,7 @@ function Invoke-UnityStep {
     } else {
         Assert-NoProjectProcessOrLock
         if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot 'Library') -PathType Container)) { throw 'Warm private Library is missing.' }
-        if ($Method -match 'BakeMovementLabLighting') { $script:BakeCount++ }
+        if ($Method -ceq 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting') { $script:BakeCount++ }
         $process = $null
         $primaryError = $null
         try {
