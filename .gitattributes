@@ -29,6 +29,8 @@
 *.inputactions          unity-json
 *.shadergraph           unity-json
 *.shadersubgraph        unity-json
+Assets/_Game/Lighting/MovementLabLightingManifest.json text eol=lf
+Assets/_Game/Editor/GraphicsQualityConfigurator.cs text eol=lf
 
 # Unity UI Toolkit files
 *.tss                   text diff=css linguist-language=css

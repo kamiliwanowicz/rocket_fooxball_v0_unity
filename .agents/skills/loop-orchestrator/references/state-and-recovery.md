@@ -14,9 +14,9 @@ LP is sole state writer. Breakdown, planner, execution orchestrator, workers, re
 
 Truth priority:
 
-`observed Git + live-agent facts -> accepted immutable artifact bytes -> state claims -> agent prose`
+`observed Git + live-agent facts -> attempt-bound plan snapshot bytes -> state claims -> agent prose`
 
-State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or artifact digest.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative snapshot digest.
 
 ## Atomic write
 
@@ -65,18 +65,29 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - covered requirements: [REQ-*]
 - attempt_id: [current/latest]
 - baseline: [full SHA]
+- execution start SHA: [full SHA or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
-- artifact: [absolute path or None]
-- artifact sha256: [lowercase digest or None]
-- artifact bytes: [integer or None]
+- `read_paths`: [exact paths]
+- `validation_environment`: [bounded environment and lease]
+- `unity_mutation`: true | false
+- `expensive_proof_owner`: [identity or None]
+- `expensive_proof_run_point`: [boundary or None]
+- `proof_invalidation_paths`: [exact paths]
+- source artifact: [absolute path or None]
+- source artifact sha256: [lowercase digest or None]
+- source artifact bytes: [integer or None]
+- execution snapshot: [absolute path or None]
+- execution snapshot sha256: [lowercase digest or None]
+- execution snapshot bytes: [integer or None]
 - branch: [exact name or None]
 - worktree: [absolute path or None]
 - accepted execution SHA: [full SHA or None]
 - merge wave/status: [wave + pending | merged | blocked]
 - accepted integration SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
+- ledger rows: [check_id list or None]
 - question: [one question or None]
 - blocker: [evidence + needed action/recheck or None]
 
@@ -94,6 +105,31 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - final SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
 - clean: true | false | unknown
+
+## Check Ledger
+
+One row per declared check. Keep rows compact; LP is sole writer.
+
+- check_id: [stable ID]
+- owner: [one worker/orchestrator identity]
+- tier: `fast | development | production-final`
+- status: `pending | executed | reused | deferred | invalidated`
+- run_point: [coding | checkpoint | fan-in | source-freeze | final]
+- `executed_sha`: [full SHA or None]
+- `validated_sha`: [full SHA or None]
+- `input_paths`: [exact paths]
+- `input_digest`: [digest or None]
+- `environment_fingerprint`: [digest/identity or None]
+- `mutates_project`: `true | false`
+- `invalidation_paths`: [exact paths]
+- subsumes: [check IDs or None]
+- `subsumed_checks`: [check IDs or None]
+- `evidence_path`: [durable path or None]
+- `evidence_digest`: [SHA-256 or None]
+- `evidence`: [path + SHA-256 object or None]
+- `invalidation_reason`: [changed path/condition or None]
+
+Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly; pure checks reattest only with descendant ancestry, matching input/environment digests, and empty diffs across every invalidation path; bake/capture/manual rows never reattest after render or lighting input changes. Resume and merge read rows mechanically.
 ```
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
@@ -112,9 +148,13 @@ Blocked:
 
 `planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
 
-Digest mismatch:
+Pre-bind source digest mismatch:
 
 `planned -> blocked`; preserve accepted artifact metadata, record observed digest/size, mutate no product worktree, and start fresh planning attempt only after LP selects new reserved artifact path.
+
+Post-bind snapshot digest mismatch:
+
+`executing | done -> blocked`; preserve source provenance, record observed snapshot digest/size, stop mutation, and retry through fresh execution attempt plus fresh snapshot. Source artifact drift after snapshot binding is outside run gates and causes no transition.
 
 Merge:
 
@@ -124,7 +164,7 @@ Merge:
 
 ## Dispatch and acceptance writes
 
-Before dispatch, record phase, attempt identity, role/profile, plan status, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
+Before dispatch, record phase, attempt identity, role/profile, plan status, immutable execution start SHA, branch/worktree when applicable, expected head, dependencies, authority, and pending checks.
 
 After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
 
@@ -133,8 +173,9 @@ Planner acceptance:
 1. Stop planner.
 2. Verify reserved artifact exists and was create-once.
 3. Compute SHA-256 and byte size.
-4. Record artifact path/digest/size and status `planned` atomically.
-5. Rehash immediately before execution dispatch. Mismatch follows digest-mismatch transition.
+4. Record source artifact path/digest/size and status `planned` atomically.
+5. Read source once into create-once execution snapshot. Reopen snapshot and compare accepted digest/size; mismatch follows pre-bind source-digest transition.
+6. Record matching snapshot path/digest/size before execution dispatch.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 
@@ -163,8 +204,8 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash every accepted artifact; compare digest/size.
-4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, HEAD, ancestry, clean status, operation state, and path scope.
+3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Source drift after binding is ignored.
+4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
 7. Resume first incomplete mandatory stage. Never repeat completed work whose artifact/SHA/check facts remain valid.
@@ -177,7 +218,7 @@ Missing or corrupt state:
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
 
-Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+Authoritative artifact mismatch blocks execution: source before snapshot binding; snapshot after binding. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
 
 ## Recovery scenarios
 
@@ -186,7 +227,9 @@ Artifact mismatch blocks execution. Dirty/moving worktree blocks acceptance. Git
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
-- digest mismatch: rehash differs; status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
+- source digest mismatch before binding: status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
+- snapshot digest mismatch after binding: status `blocked`; fresh execution attempt and snapshot required; source drift ignored.
+- source-branch drift after worktree creation: no transition; use bound `start_sha..plan_head` comparison.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
 ## Cleanup and completion

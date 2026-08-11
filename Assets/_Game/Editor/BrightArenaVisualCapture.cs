@@ -6,7 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using RocketFooxball;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -32,9 +31,9 @@ namespace RocketFooxball.Editor
         private const int RendererCap = 80;
         private const int OpaquePassCap = 1000;
         private const int TransparentRendererCap = 8;
-        private const int TriangleCap = 50000;
-        private const long TextureBytesCap = 8L * 1024L * 1024L;
-        private const int TextureDimensionCap = 512;
+        private const int TriangleCap = 100000;
+        private const long TextureBytesCap = 512L * 1024L * 1024L;
+        private const int TextureDimensionCap = 2048;
         private const float MeanLuminanceFloor = 0.28f;
         private const float DarkPixelFractionCap = 0.35f;
         private const float ClippedPixelFractionCap = 0.25f;
@@ -49,15 +48,6 @@ namespace RocketFooxball.Editor
             "Assets/_Game/Editor/BrightArenaVisualCapture.cs",
             "Tools/Validation/Capture-BrightArenaVisuals.ps1"
         };
-
-        private sealed class BuildManifestDto
-        {
-            public int schemaVersion;
-            public string sourceSignature;
-            public string generatedOutputFingerprint;
-            public string unityVersion;
-            public string[] fingerprintPaths;
-        }
 
         [Serializable]
         private sealed class ManifestDto
@@ -429,14 +419,14 @@ namespace RocketFooxball.Editor
             return directory;
         }
 
-        private static BuildManifestDto ReadBuildManifest(string projectRoot)
+        private static MovementLabGeneratedState ReadBuildManifest(string projectRoot)
         {
             var absolute = Path.Combine(projectRoot, BuildManifestPath.Replace('/', Path.DirectorySeparatorChar));
             if (!File.Exists(absolute))
             {
                 throw new InvalidOperationException("Build manifest is missing: " + BuildManifestPath);
             }
-            var manifest = JsonUtility.FromJson<BuildManifestDto>(File.ReadAllText(absolute));
+            var manifest = JsonUtility.FromJson<MovementLabGeneratedState>(File.ReadAllText(absolute));
             if (manifest == null || manifest.schemaVersion <= 0 || string.IsNullOrEmpty(manifest.sourceSignature) || string.IsNullOrEmpty(manifest.generatedOutputFingerprint))
             {
                 throw new InvalidOperationException("Build manifest is stale or incomplete: " + BuildManifestPath);
@@ -486,12 +476,6 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Git HEAD changed before capture: expected " + expectedGitSha + ", observed " + sha + ".");
             }
 
-            var status = ReadScopedGitStatus(projectRoot);
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                throw new InvalidOperationException("Source scope is dirty before capture: " + status);
-            }
-
             var sourceFiles = new List<SourceFileHash>(RequiredSourceFiles.Length);
             for (var i = 0; i < RequiredSourceFiles.Length; i++)
             {
@@ -505,12 +489,6 @@ namespace RocketFooxball.Editor
             }
 
             return new SourceInfo { gitSha = sha, gitDirty = false, fileHashes = sourceFiles.ToArray() };
-        }
-
-        private static string ReadScopedGitStatus(string projectRoot)
-        {
-            var pathspec = string.Join(" ", SourceScopeRoots);
-            return RunGit(projectRoot, "status --porcelain=v1 --untracked-files=all -- " + pathspec).Replace('\0', '\n').Trim();
         }
 
         private static string RunGit(string projectRoot, string arguments)

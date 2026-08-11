@@ -1,6 +1,6 @@
 {
   "name": "RocketFooxball.Runtime",
-  "rootNamespace": "RocketFooxball",
+  "rootNamespace": "RocketFooxball.Runtime",
   "references": [
     "Unity.InputSystem"
   ],

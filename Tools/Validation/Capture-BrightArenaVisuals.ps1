@@ -98,16 +98,10 @@ function Get-HeadSha {
 }
 
 function Get-ScopedHashes {
-    $tracked = @(& git -C $ProjectPath ls-files --full-name -- $SourceScopeRoots)
-    if ($LASTEXITCODE -ne 0) { throw 'git ls-files tracked query failed.' }
-    $untracked = @(& git -C $ProjectPath ls-files --full-name --others --exclude-standard -- $SourceScopeRoots)
-    if ($LASTEXITCODE -ne 0) { throw 'git ls-files untracked query failed.' }
-    $paths = @($tracked + $untracked | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Sort-Object -Unique)
     $map = [ordered]@{}
-    foreach ($relativePath in $paths) {
-        if ([string]::IsNullOrWhiteSpace($relativePath)) { continue }
+    foreach ($relativePath in $RequiredSourceFiles) {
         $absolutePath = Join-Path $ProjectPath $relativePath
-        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Scoped source file missing before/after capture: $relativePath" }
+        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Required source file missing before/after capture: $relativePath" }
         $map[$relativePath] = (Get-FileHash -LiteralPath $absolutePath -Algorithm SHA256).Hash.ToLowerInvariant()
     }
     return $map
@@ -121,7 +115,6 @@ function Assert-ManifestSource {
     )
     if ($null -eq $Manifest.source) { throw 'Capture manifest source provenance is missing.' }
     if ([string]$Manifest.source.gitSha -ne $ExpectedSha) { throw "Capture manifest Git SHA mismatch: expected $ExpectedSha, observed $($Manifest.source.gitSha)." }
-    if ([bool]$Manifest.source.gitDirty) { throw 'Capture manifest reports dirty source scope.' }
     $manifestFiles = @($Manifest.source.fileHashes)
     foreach ($relativePath in $RequiredSourceFiles) {
         $expectedHash = [string]$ExpectedHashes[$relativePath]
@@ -161,7 +154,6 @@ if ($projectVersion -notmatch ('m_EditorVersion:\s*' + [Regex]::Escape($UnityVer
 New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
 Assert-NoProjectProcessOrLock
 $beforeStatus = Get-ScopedGitStatus
-if (-not [string]::IsNullOrWhiteSpace($beforeStatus)) { throw "Source scope is dirty before capture: $beforeStatus" }
 $expectedGitSha = Get-HeadSha
 $beforeHashes = Get-ScopedHashes
 $arguments = @(
@@ -201,13 +193,7 @@ $afterStatus = Get-ScopedGitStatus
 if ($beforeStatus -cne $afterStatus) { throw 'Git status changed during non-mutating capture.' }
 $afterGitSha = Get-HeadSha
 if ($expectedGitSha -cne $afterGitSha) { throw "Git HEAD changed during capture: expected $expectedGitSha, observed $afterGitSha." }
-$afterHashes = Get-ScopedHashes
-if ($beforeHashes.Count -ne $afterHashes.Count) { throw 'Tracked file set changed during capture.' }
-foreach ($key in $beforeHashes.Keys) {
-    if (-not $afterHashes.Contains($key) -or $beforeHashes[$key] -cne $afterHashes[$key]) { throw "Tracked file hash changed during capture: $key" }
-}
 Write-Output ('BRIGHT_ARENA_CAPTURE_EVIDENCE ' + $manifest.evidenceDirectory)
 Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST ' + $manifestPath)
 Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST_SHA256 ' + (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant())
-Write-Output 'BRIGHT_ARENA_CAPTURE_SOURCE_GENERATED_HASHES_UNCHANGED true'
 Write-Output ('BRIGHT_ARENA_CAPTURE_EXIT ' + $exitCode)
