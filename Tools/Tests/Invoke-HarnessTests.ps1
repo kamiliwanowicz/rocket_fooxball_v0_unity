@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$EvidenceRoot,
-    [switch]$SkipHookCheck
+    [switch]$SkipHookCheck,
+    [ValidateSet('PostToolUse', 'PreToolUse')][string]$HookMode,
+    [Alias('ForceFailure')][switch]$HookTestForceFailure
 )
 
 Set-StrictMode -Version Latest
@@ -18,6 +20,100 @@ $hookSettingsPath = Join-Path $projectRoot '.claude/settings.json'
 
 Import-Module -Name $shimPath -Force
 . $testsPath
+
+function Get-HookProperty {
+    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
+    $property = $Object.PSObject.Properties[$Name]
+    if ($null -eq $property) { return $null }
+    return $property.Value
+}
+
+function Get-HookInput {
+    param([Parameter(Mandatory = $true)]$Event)
+    $input = Get-HookProperty $Event 'tool_input'
+    if ($null -eq $input) { return $Event }
+    return $input
+}
+
+function Get-HookStrings {
+    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string[]]$Names)
+    $values = New-Object System.Collections.Generic.List[string]
+    foreach ($name in $Names) {
+        $value = Get-HookProperty $Object $name
+        if ($null -eq $value) { continue }
+        if ($value -is [System.Array] -and $value -isnot [string]) {
+            foreach ($item in @($value)) {
+                if ($null -ne $item -and -not [string]::IsNullOrWhiteSpace([string]$item)) { $values.Add([string]$item) | Out-Null }
+            }
+        } elseif (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+            $values.Add([string]$value) | Out-Null
+        }
+    }
+    return $values.ToArray()
+}
+
+function Convert-HookPathToRelative {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Root)
+    $value = $Path.Trim().Trim('"').Replace('\', '/')
+    $rootValue = $Root.TrimEnd('\').Replace('\', '/')
+    if ([System.IO.Path]::IsPathRooted($Path)) {
+        try { $value = ([System.IO.Path]::GetFullPath($Path)).Replace('\', '/') } catch { return $value.TrimStart('/') }
+        if ($value.StartsWith($rootValue + '/', [StringComparison]::OrdinalIgnoreCase)) {
+            return $value.Substring($rootValue.Length + 1).TrimStart('/')
+        }
+        return $value.TrimStart('/')
+    }
+    while ($value.StartsWith('./', [StringComparison]::Ordinal)) { $value = $value.Substring(2) }
+    return $value.TrimStart('/')
+}
+
+function Test-HookPostToolTarget {
+    param([Parameter(Mandatory = $true)]$Event, [Parameter(Mandatory = $true)][string]$Root)
+    $toolName = [string](Get-HookProperty $Event 'tool_name')
+    if ($toolName -notin @('Edit', 'Write')) { return $false }
+    $input = Get-HookInput $Event
+    $paths = @(Get-HookStrings $input @('file_path', 'path', 'filePath', 'filename'))
+    $paths += @(Get-HookStrings $Event @('file_path', 'path', 'filePath', 'filename'))
+    foreach ($path in $paths) {
+        $relative = Convert-HookPathToRelative $path $Root
+        if ($relative -match '(?i)^Tools/Tests(?:/|$)') { return $true }
+        if ($relative -match '(?i)^Tools/Validation/[^/]+\.ps1$') { return $true }
+        if ($relative -match '(?i)^Assets/_Game/Editor/MovementLab/[^/]+\.cs$') { return $true }
+    }
+    return $false
+}
+
+function Test-HookPreToolTarget {
+    param([Parameter(Mandatory = $true)]$Event)
+    $toolName = [string](Get-HookProperty $Event 'tool_name')
+    if ($toolName -notin @('Bash', 'PowerShell', 'Command', 'Shell')) { return $false }
+    $input = Get-HookInput $Event
+    $commands = @(Get-HookStrings $input @('command', 'cmd', 'script'))
+    $commands += @(Get-HookStrings $Event @('command', 'cmd', 'script'))
+    foreach ($command in $commands) {
+        if ($command -match '(?i)Invoke-MovementLabWorkflow\.ps1') { return $true }
+        if ($command -match '(?i)(?:^|[\s"''/\\])Unity(?:\.exe)?(?:$|[\s"''/\\])') { return $true }
+    }
+    return $false
+}
+
+if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
+    if ($HookTestForceFailure -and $HookMode -ne 'PreToolUse') { throw 'HookTestForceFailure is valid only for PreToolUse test dispatch.' }
+    $eventText = [Console]::In.ReadToEnd()
+    if ([string]::IsNullOrWhiteSpace($eventText)) { throw ($HookMode + ' hook event JSON missing on stdin.') }
+    try { $hookEvent = $eventText | ConvertFrom-Json -ErrorAction Stop } catch { throw ($HookMode + ' hook event JSON invalid: ' + $_.Exception.Message) }
+    $target = if ($HookMode -eq 'PostToolUse') { Test-HookPostToolTarget $hookEvent $projectRoot } else { Test-HookPreToolTarget $hookEvent }
+    if (-not $target) {
+        Write-Output ('HOOK ' + $HookMode + ' SKIP unrelated event')
+        exit 0
+    }
+    $SkipHookCheck = $true
+}
 
 $shimInvoker = {
     param([string]$Source, [string[]]$FunctionNames, [string[]]$VariableNames)
@@ -75,7 +171,7 @@ $cases = @(
     [pscustomobject]@{ Id = 'guard-g5'; Function = ${function:Test-GuardG5} },
     [pscustomobject]@{ Id = 'scratch-drill'; Function = ${function:Test-ScratchDrill} }
 )
-if (-not $SkipHookCheck) {
+if (-not $SkipHookCheck -and [string]::IsNullOrWhiteSpace($HookMode)) {
     $cases += [pscustomobject]@{ Id = 'hook-command'; Function = ${function:Test-HookSettings} }
 }
 
@@ -130,5 +226,9 @@ if (-not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
 }
 
 Write-Output ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=10000')
+if ($HookTestForceFailure) {
+    Write-Output 'HOOK TEST FORCED FAILURE'
+    exit 1
+}
 if ($failed.Count -gt 0 -or $elapsedMs -ge 10000) { exit 1 }
 exit 0

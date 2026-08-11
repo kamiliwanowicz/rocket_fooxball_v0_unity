@@ -217,7 +217,19 @@ function Test-RowReuseDiff {
         $proof = Invoke-HarnessModuleFunction $module 'Test-RowReuseProof' @{ Prior = $prior; Row = $row }
         if ([bool](Get-HarnessField $proof 'valid')) { return New-HarnessFail 'different digest accepted as reusable' }
         if ([string](Get-HarnessField $proof 'reason') -cne 'input digest changed') { return New-HarnessFail 'wrong discriminator reason' }
-        return New-HarnessPass 'digest discriminator'
+        $environmentPrior = [ordered]@{ input_digest = 'same'; environment_fingerprint = 'old-env' }
+        $environmentRow = [ordered]@{ input_digest = 'same'; environment_fingerprint = 'new-env' }
+        $environmentProof = Invoke-HarnessModuleFunction $module 'Test-RowReuseProof' @{ Prior = $environmentPrior; Row = $environmentRow }
+        if ([bool](Get-HarnessField $environmentProof 'valid')) { return New-HarnessFail 'different environment fingerprint accepted as reusable' }
+        if ([string](Get-HarnessField $environmentProof 'reason') -cne 'environment fingerprint changed') { return New-HarnessFail 'wrong environment discriminator reason' }
+        foreach ($fixture in @(
+            [pscustomobject]@{ Object = $environmentPrior; Expected = 'old-env' },
+            [pscustomobject]@{ Object = $environmentRow; Expected = 'new-env' }
+        )) {
+            $observed = [string](Invoke-HarnessModuleFunction $module 'Get-ObjectPropertyText' @{ Object = $fixture.Object; Name = 'environment_fingerprint' })
+            if ($observed -cne $fixture.Expected) { return New-HarnessFail ('environment_fingerprint getter mismatch: expected ' + $fixture.Expected + ', observed ' + $observed) }
+        }
+        return New-HarnessPass 'digest and environment discriminators'
     } finally {
         if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
     }
@@ -235,7 +247,13 @@ function Test-RowFieldSweep {
         }
         if ($null -eq $row -or $row -isnot [System.Collections.IDictionary]) { return New-HarnessFail 'New-LedgerRow did not return dictionary row' }
         foreach ($key in @($row.Keys)) {
-            $null = Invoke-HarnessModuleFunction $module 'Get-ObjectPropertyText' @{ Object = $row; Name = [string]$key }
+            $name = [string]$key
+            $directValue = $row[$key]
+            $expected = if ($null -eq $directValue) { '' } else { [string]$directValue }
+            $actual = [string](Invoke-HarnessModuleFunction $module 'Get-ObjectPropertyText' @{ Object = $row; Name = $name })
+            if ($actual -cne $expected) {
+                return New-HarnessFail ('row field text mismatch for ' + $name + ': expected [' + $expected + '], observed [' + $actual + ']')
+            }
         }
         return New-HarnessPass ('readable keys=' + $row.Keys.Count)
     } finally {
@@ -258,9 +276,55 @@ function Test-BakeInputsLiteral {
         'Assets/_Game/Lighting/MovementLabLightingManifest.json',
         'Assets/_Game/Lighting/MovementLabLightingManifest.json.meta'
     )
-    $actual = @(Get-HarnessStringAssignment $State.CurrentSource 'productionBakeInputs')
+    $ledger = Get-HarnessFunctionAst $State.CurrentSource 'New-CheckLedger'
+    $switches = @($ledger.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.SwitchStatementAst]
+    }, $true))
+    if ($switches.Count -ne 1) { return New-HarnessFail ('expected one New-CheckLedger switch AST, found ' + $switches.Count) }
+    $clauses = @($switches[0].Clauses | Where-Object { [string]$_.Item1.Value -ceq 'ProductionPrepare' })
+    if ($clauses.Count -ne 1) { return New-HarnessFail ('expected one ProductionPrepare switch branch, found ' + $clauses.Count) }
+    $branch = $clauses[0].Item2
+    $assignments = @($branch.FindAll({
+        param($Node)
+        if ($Node -isnot [System.Management.Automation.Language.AssignmentStatementAst]) { return $false }
+        $left = $Node.Left
+        $left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            [string]$left.VariablePath.UserPath -ceq 'productionBakeInputs'
+    }, $true))
+    if ($assignments.Count -ne 1) { return New-HarnessFail ('expected one productionBakeInputs assignment inside ProductionPrepare, found ' + $assignments.Count) }
+    $actual = @($assignments[0].Right.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { [string]$_.Value })
     if (($actual -join "`n") -cne ($expected -join "`n")) {
         return New-HarnessFail ('production bake literal mismatch: observed ' + ($actual -join ', '))
+    }
+
+    $rowCommands = @($branch.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.CommandAst] -and
+            @($Node.CommandElements | Where-Object { $_.Extent.Text -ceq 'New-LedgerRow' }).Count -gt 0
+    }, $true) | Where-Object {
+        [string]$_.Extent.Text -match "(?i)-CheckId\s+'production-bake'"
+    })
+    if ($rowCommands.Count -ne 1) { return New-HarnessFail ('expected one production-bake New-LedgerRow call inside ProductionPrepare, found ' + $rowCommands.Count) }
+    $arguments = @{}
+    $elements = @($rowCommands[0].CommandElements)
+    for ($index = 0; $index -lt $elements.Count; $index++) {
+        $element = $elements[$index]
+        if ($element -is [System.Management.Automation.Language.CommandParameterAst] -and $element.ParameterName -in @('InputPaths', 'InvalidationPaths')) {
+            if ($index + 1 -ge $elements.Count) { return New-HarnessFail ('production-bake row parameter has no argument: ' + $element.ParameterName) }
+            $arguments[$element.ParameterName] = $elements[$index + 1]
+        }
+    }
+    foreach ($name in @('InputPaths', 'InvalidationPaths')) {
+        if (-not $arguments.ContainsKey($name)) { return New-HarnessFail ('production-bake row missing -' + $name) }
+        $argument = $arguments[$name]
+        if ($argument -isnot [System.Management.Automation.Language.VariableExpressionAst] -or
+            [string]$argument.VariablePath.UserPath -cne 'productionBakeInputs') {
+            return New-HarnessFail ('production-bake -' + $name + ' is not $productionBakeInputs: ' + $argument.Extent.Text)
+        }
     }
     return New-HarnessPass 'exact production bake input literal'
 }
@@ -336,26 +400,83 @@ function Test-GuardG1 {
     $members = @($ast.FindAll({
         param($Node)
         $Node -is [System.Management.Automation.Language.MemberExpressionAst] -and
-            [string]$Node.Member.Extent.Text -eq 'Properties' -and
-            [string]$Node.Expression.Extent.Text -match '(?i)\.PSObject$'
+            [string]$Node.Member.Extent.Text -ceq 'Properties'
     }, $true))
     $allow = @{
-        147 = 'Get-Item metadata adapter'
-        839 = 'dictionary type-test fallback'
-        840 = 'dictionary type-test fallback'
-        891 = 'JSON ledger payload'
-        894 = 'JSON ledger payload'
-        895 = 'JSON ledger payload'
-        1104 = 'JSON probe payload'
-        1124 = 'JSON probe payload'
-        1185 = 'JSON probe payload'
+        'Get-CanonicalPath|item|index:Target' = 'Get-Item metadata adapter'
+        'Get-ObjectPropertyValue|Object|name' = 'IDictionary fallback'
+        'Get-ObjectPropertyValue|Object|index:Name' = 'IDictionary fallback'
+        'Merge-ExistingLedger|parsed|contains:history' = 'ConvertFrom-Json ledger payload'
+        'Merge-ExistingLedger|parsed|contains:checkLedger' = 'ConvertFrom-Json ledger payload'
+        'Merge-ExistingLedger|parsed|contains:rows' = 'ConvertFrom-Json ledger payload'
+        'Get-ProbeStringValue|Probe|index:Field' = 'validated probe payload'
+        'Get-ProbeStringArrayValue|Probe|index:Field' = 'validated probe payload'
+        'Read-ProbeContract|probe|name' = 'ConvertFrom-Json probe payload'
     }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach ($member in $members) {
-        $line = [int]$member.Extent.StartLineNumber
-        if (-not $allow.ContainsKey($line)) { return New-HarnessFail ('G1 new PSObject.Properties site at line ' + $line + ': ' + $member.Extent.Text) }
+        $expression = $member.Expression
+        if ($expression -isnot [System.Management.Automation.Language.MemberExpressionAst] -or
+            [string]$expression.Member.Extent.Text -cne 'PSObject' -or
+            $expression.Expression -isnot [System.Management.Automation.Language.VariableExpressionAst]) {
+            return New-HarnessFail ('G1 PSObject.Properties operand provenance invalid: ' + $member.Extent.Text)
+        }
+        $operand = [string]$expression.Expression.VariablePath.UserPath
+        $function = $member.Parent
+        while ($null -ne $function -and $function -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) { $function = $function.Parent }
+        if ($null -eq $function) { return New-HarnessFail ('G1 site has no enclosing function: ' + $member.Extent.Text) }
+        $usage = 'name'
+        $parent = $member.Parent
+        if ($parent -is [System.Management.Automation.Language.IndexExpressionAst]) {
+            $indexText = [string]$parent.Extent.Text
+            $indexMatch = [regex]::Match($indexText, '(?i)\[[''\"]([^''\"]+)[''\"]\]')
+            if ($indexMatch.Success) { $usage = 'index:' + $indexMatch.Groups[1].Value }
+            elseif ($indexText -match '(?i)\[\$Name\]') { $usage = 'index:Name' }
+            elseif ($indexText -match '(?i)\[\$Field\]') { $usage = 'index:Field' }
+            else { $usage = 'index' }
+        } else {
+            $context = $parent
+            while ($null -ne $context -and $context -isnot [System.Management.Automation.Language.FunctionDefinitionAst]) {
+                if ($context -is [System.Management.Automation.Language.BinaryExpressionAst] -and [string]$context.Extent.Text -match '(?i)-contains\s*[\''\"]([^\''\"]+)[\''\"]') {
+                    $usage = 'contains:' + ([regex]::Match([string]$context.Extent.Text, '(?i)-contains\s*[\''\"]([^\''\"]+)[\''\"]')).Groups[1].Value
+                    break
+                }
+                $context = $context.Parent
+            }
+        }
+        $key = [string]$function.Name + '|' + $operand + '|' + $usage
+        if (-not $allow.ContainsKey($key)) { return New-HarnessFail ('G1 unapproved symbol/provenance: ' + $key + ' at ' + $member.Extent.Text) }
+        if (-not $seen.Add($key)) { return New-HarnessFail ('G1 duplicate allowlisted symbol/provenance: ' + $key) }
+        if ([string]$member.Extent.Text -cne ('$' + $operand + '.PSObject.Properties')) {
+            return New-HarnessFail ('G1 operand chain is not normalized: ' + $member.Extent.Text)
+        }
+        $functionText = [string]$function.Extent.Text
+        switch ($key) {
+            'Get-CanonicalPath|item' {
+                if ($functionText -notmatch '(?im)\$item\s*=\s*Get-Item\b') { return New-HarnessFail 'G1 item provenance is not Get-Item metadata' }
+            }
+            'Get-ObjectPropertyValue|Object|name' {
+                if ($functionText -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
+            }
+            'Get-ObjectPropertyValue|Object|index:Name' {
+                if ($functionText -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]') { return New-HarnessFail 'G1 Object fallback lacks IDictionary guard' }
+            }
+            'Merge-ExistingLedger|parsed|contains:history' {
+                if (@($function.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and [string]$Node.Left.Extent.Text -ceq '$parsed' -and $Node.Right.Extent.Text -match '(?i)ConvertFrom-Json' }, $true)).Count -eq 0) { return New-HarnessFail 'G1 parsed provenance is not ConvertFrom-Json' }
+            }
+            'Merge-ExistingLedger|parsed|contains:checkLedger' {
+                if (@($function.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and [string]$Node.Left.Extent.Text -ceq '$parsed' -and $Node.Right.Extent.Text -match '(?i)ConvertFrom-Json' }, $true)).Count -eq 0) { return New-HarnessFail 'G1 parsed provenance is not ConvertFrom-Json' }
+            }
+            'Merge-ExistingLedger|parsed|contains:rows' {
+                if (@($function.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and [string]$Node.Left.Extent.Text -ceq '$parsed' -and $Node.Right.Extent.Text -match '(?i)ConvertFrom-Json' }, $true)).Count -eq 0) { return New-HarnessFail 'G1 parsed provenance is not ConvertFrom-Json' }
+            }
+            'Read-ProbeContract|probe|name' {
+                if (@($function.FindAll({ param($Node) $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and [string]$Node.Left.Extent.Text -ceq '$probe' -and $Node.Right.Extent.Text -match '(?i)ConvertFrom-Json' }, $true)).Count -eq 0) { return New-HarnessFail 'G1 probe provenance is not ConvertFrom-Json' }
+            }
+        }
     }
-    if ($members.Count -ne $allow.Count) { return New-HarnessFail ('G1 site count mismatch: expected ' + $allow.Count + ', observed ' + $members.Count) }
-    return New-HarnessPass ('G1 allowlist count=' + $members.Count)
+    if ($members.Count -ne $allow.Count -or $seen.Count -ne $allow.Count) { return New-HarnessFail ('G1 allowlist mismatch: expected ' + $allow.Count + ' exact sites, observed ' + $members.Count) }
+    return New-HarnessPass ('G1 exact symbol/provenance sites=' + $members.Count)
 }
 
 function Test-GuardG3 {
@@ -405,7 +526,19 @@ function Test-ScratchDrill {
         $scratchAst = Get-HarnessFunctionAst $scratch 'Get-ObjectPropertyValue'
         $g3Fails = $scratchAst.Extent.Text -notmatch '(?i)-is\s+\[System\.Collections\.IDictionary\]'
         if (-not $gopvFails -or -not $g3Fails) { return New-HarnessFail ('scratch drill did not trip both guards: gopv=' + $gopvFails + '; G3=' + $g3Fails) }
-        return New-HarnessPass 'scratch removal trips gopv-ordered and G3'
+
+        $aliasScratch = $State.CurrentSource.Replace(
+            '$targetProperty = $item.PSObject.Properties[''Target'']',
+            ('$adapter = $item.PSObject' + [Environment]::NewLine + '        $targetProperty = $adapter.Properties[''Target'']'))
+        $aliasResult = Test-GuardG1 ([pscustomobject]@{ CurrentSource = $aliasScratch })
+        if ([bool](Get-HarnessField $aliasResult 'pass')) { return New-HarnessFail 'G1 alias chain scratch unexpectedly passed' }
+
+        $dictionaryOperandScratch = $State.CurrentSource.Replace(
+            '$item.PSObject.Properties[''Target'']',
+            '$row.PSObject.Properties[''Target'']')
+        $dictionaryResult = Test-GuardG1 ([pscustomobject]@{ CurrentSource = $dictionaryOperandScratch })
+        if ([bool](Get-HarnessField $dictionaryResult 'pass')) { return New-HarnessFail 'G1 dictionary-like operand substitution unexpectedly passed' }
+        return New-HarnessPass 'scratch removal trips G3; alias/substitution trip G1'
     } finally {
         if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
     }
@@ -419,34 +552,81 @@ function Test-HookSettings {
     try { $settings = Get-Content -Raw -LiteralPath $State.HookSettingsPath | ConvertFrom-Json }
     catch { return New-HarnessFail ('invalid hook JSON: ' + $_.Exception.Message) }
 
-    $entries = @()
-    if ($null -ne $settings.hooks -and $null -ne $settings.hooks.PostToolUse) { $entries = @($settings.hooks.PostToolUse) }
+    if ($null -eq $settings.hooks) { return New-HarnessFail 'hook JSON has no hooks object' }
+    $entries = if ($null -ne $settings.hooks.PostToolUse) { @($settings.hooks.PostToolUse) } else { @() }
     $matching = @($entries | Where-Object { [string]$_.matcher -ceq 'Edit|Write' })
     if ($matching.Count -ne 1) { return New-HarnessFail ('expected one Edit|Write PostToolUse matcher, found ' + $matching.Count) }
+    if ($matching[0].PSObject.Properties.Name -contains 'paths') { return New-HarnessFail 'PostToolUse matcher uses unsupported paths field' }
     $commandHooks = @($matching[0].hooks | Where-Object {
         [string]$_.type -ceq 'command' -and [string]$_.command -match 'Tools[/\\]Tests[/\\]Invoke-HarnessTests\.ps1'
     })
     if ($commandHooks.Count -ne 1) { return New-HarnessFail 'PostToolUse matcher has no harness command hook' }
     $command = [string]$commandHooks[0].command
-    $paths = @($matching[0].paths | ForEach-Object { [string]$_ })
-    if ($paths -notcontains 'Tools/Validation/*.ps1' -or $paths -notcontains 'Assets/_Game/Editor/MovementLab/*.cs') {
-        return New-HarnessFail 'PostToolUse matcher paths omit required validation/editor scopes'
-    }
+    if ($command -notmatch '(?i)-HookMode\s+PostToolUse') { return New-HarnessFail 'PostToolUse command omits -HookMode PostToolUse' }
+
+    $preEntries = if ($null -ne $settings.hooks.PreToolUse) { @($settings.hooks.PreToolUse) } else { @() }
+    $preMatching = @($preEntries | Where-Object { [string]$_.matcher -ceq 'Bash' })
+    if ($preMatching.Count -ne 1) { return New-HarnessFail ('expected one Bash PreToolUse matcher, found ' + $preMatching.Count) }
+    $preCommandHooks = @($preMatching[0].hooks | Where-Object {
+        [string]$_.type -ceq 'command' -and [string]$_.command -match 'Tools[/\\]Tests[/\\]Invoke-HarnessTests\.ps1'
+    })
+    if ($preCommandHooks.Count -ne 1) { return New-HarnessFail 'PreToolUse matcher has no harness command hook' }
+    $preCommand = [string]$preCommandHooks[0].command
+    if ($preCommand -notmatch '(?i)-HookMode\s+PreToolUse') { return New-HarnessFail 'PreToolUse command omits -HookMode PreToolUse' }
     if ($State.SkipHookCheck) { return New-HarnessPass 'hook command resolved (nested check skipped)' }
 
-    $fileMatch = [regex]::Match($command, '(?i)-File\s+(?:"([^"]+)"|([^\s]+))')
-    if (-not $fileMatch.Success) { return New-HarnessFail 'hook command has no -File target' }
-    $fileValue = if ($fileMatch.Groups[1].Success) { $fileMatch.Groups[1].Value } else { $fileMatch.Groups[2].Value }
-    $resolved = if ([System.IO.Path]::IsPathRooted($fileValue)) { [System.IO.Path]::GetFullPath($fileValue) } else { [System.IO.Path]::GetFullPath((Join-Path $State.ProjectRoot $fileValue)) }
-    if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { return New-HarnessFail ('hook target missing: ' + $resolved) }
-    $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $resolved -SkipHookCheck 2>&1)
-    $exitCode = $LASTEXITCODE
-    $State.HookExecution = [ordered]@{
-        command = $command
-        resolvedPath = $resolved
-        exitCode = $exitCode
-        outputTail = @($output | ForEach-Object { [string]$_ } | Select-Object -Last 3)
+    function Invoke-HookFixture {
+        param(
+            [Parameter(Mandatory = $true)][string]$CommandText,
+            [Parameter(Mandatory = $true)][string]$EventJson,
+            [switch]$ForceFailure
+        )
+        $fileMatch = [regex]::Match($CommandText, '(?i)-File\s+(?:"([^"]+)"|([^\s]+))')
+        if (-not $fileMatch.Success) { throw 'hook command has no -File target' }
+        $fileValue = if ($fileMatch.Groups[1].Success) { $fileMatch.Groups[1].Value } else { $fileMatch.Groups[2].Value }
+        $resolved = if ([System.IO.Path]::IsPathRooted($fileValue)) { [System.IO.Path]::GetFullPath($fileValue) } else { [System.IO.Path]::GetFullPath((Join-Path $State.ProjectRoot $fileValue)) }
+        if (-not (Test-Path -LiteralPath $resolved -PathType Leaf)) { throw ('hook target missing: ' + $resolved) }
+        $modeMatch = [regex]::Match($CommandText, '(?i)-HookMode\s+(PostToolUse|PreToolUse)')
+        if (-not $modeMatch.Success) { throw 'hook command has no supported -HookMode' }
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $resolved, '-HookMode', $modeMatch.Groups[1].Value)
+        if ($ForceFailure) { $arguments += '-HookTestForceFailure' }
+        $output = @($EventJson | & powershell.exe @arguments 2>&1)
+        return [pscustomobject]@{
+            exitCode = [int]$LASTEXITCODE
+            output = @($output | ForEach-Object { [string]$_ })
+            mode = $modeMatch.Groups[1].Value
+        }
     }
-    if ($exitCode -ne 0) { return New-HarnessFail ('resolved hook command exited ' + $exitCode) }
-    return New-HarnessPass 'resolved hook command executed with exit 0'
+
+    $postTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
+    $postUnrelated = '{"tool_name":"Edit","tool_input":{"file_path":"README.md"}}'
+    $preTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly; C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
+    $preUnrelated = '{"tool_name":"Bash","tool_input":{"command":"Get-Date"}}'
+    try {
+        $postTargetResult = Invoke-HookFixture $command $postTarget
+        $postUnrelatedResult = Invoke-HookFixture $command $postUnrelated
+        $preTargetResult = Invoke-HookFixture $preCommand $preTarget
+        $preUnrelatedResult = Invoke-HookFixture $preCommand $preUnrelated
+        $preForcedResult = Invoke-HookFixture $preCommand $preTarget -ForceFailure
+    } catch {
+        return New-HarnessFail $_.Exception.Message
+    }
+    $State.HookExecution = [ordered]@{
+        postTargetExit = $postTargetResult.exitCode
+        postUnrelatedExit = $postUnrelatedResult.exitCode
+        preTargetExit = $preTargetResult.exitCode
+        preUnrelatedExit = $preUnrelatedResult.exitCode
+        preForcedExit = $preForcedResult.exitCode
+        postTargetTail = @($postTargetResult.output | Select-Object -Last 2)
+        preForcedTail = @($preForcedResult.output | Select-Object -Last 2)
+    }
+    if ($postTargetResult.exitCode -ne 0) { return New-HarnessFail ('target PostToolUse hook exited ' + $postTargetResult.exitCode) }
+    if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode) }
+    if ($preTargetResult.exitCode -ne 0) { return New-HarnessFail ('target workflow PreToolUse hook exited ' + $preTargetResult.exitCode) }
+    if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode) }
+    if ($preForcedResult.exitCode -eq 0) { return New-HarnessFail 'forced failing PreToolUse hook unexpectedly exited 0' }
+    if (@($postUnrelatedResult.output | Where-Object { $_ -match '^CASE ' }).Count -gt 0) { return New-HarnessFail 'unrelated PostToolUse event ran harness suite' }
+    if (@($preUnrelatedResult.output | Where-Object { $_ -match '^CASE ' }).Count -gt 0) { return New-HarnessFail 'unrelated PreToolUse event ran harness suite' }
+    if (@($preForcedResult.output | Where-Object { $_ -match 'HOOK TEST FORCED FAILURE' }).Count -ne 1) { return New-HarnessFail 'forced PreToolUse fixture lacked failure marker' }
+    return New-HarnessPass 'target/unrelated PostToolUse + PreToolUse fixtures; forced PreToolUse failure blocks'
 }
