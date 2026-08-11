@@ -12,6 +12,7 @@ using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
+using RocketFooxball.Runtime.Participants;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -40,6 +41,7 @@ namespace RocketFooxball.Editor
             RequireComponent<RocketFooxball.Runtime.Movement.PlayerMotor>(MovementLabContract.PlayerPrefabPath, "PlayerMotor");
             RequireComponent<RocketFooxball.Runtime.Ball.BallMotor>(MovementLabContract.BallPrefabPath, "BallMotor");
             RequireComponent<RocketFooxball.Runtime.Weapons.RocketLauncher>(MovementLabContract.PlayerPrefabPath, "RocketLauncher");
+            RequireComponent<RocketFooxball.Runtime.Participants.ParticipantState>(MovementLabContract.PlayerPrefabPath, "ParticipantState");
             RequireComponent<RocketFooxball.Runtime.Feedback.ExplosionVfx>(MovementLabContract.ExplosionPrefabPath, "ExplosionVfx");
         }
         internal static void RequireComponent<T>(string path, string label) where T : UnityEngine.Component
@@ -87,6 +89,10 @@ namespace RocketFooxball.Editor
                     var launcher = root.AddComponent<RocketLauncher>();
                     var kick = root.AddComponent<BallKick>();
                     var presentation = root.AddComponent<PlayerPresentation>();
+                    var participant = root.AddComponent<ParticipantState>();
+                    var participantLayer = EnsureGameplayLayer("Participants");
+                    var projectileLayer = EnsureGameplayLayer("Projectiles");
+                    root.layer = participantLayer;
                     var head = new GameObject("Head").transform;
                     head.SetParent(root.transform, false);
                     head.localPosition = new Vector3(0f, 1.55f, 0f);
@@ -116,6 +122,10 @@ namespace RocketFooxball.Editor
                     var characterBlack = GetOrCreateRetroMaterial("CharacterBlack", new Color(0.018f, 0.014f, 0.018f), null, Vector2.one);
                     var characterCream = GetOrCreateRetroMaterial("CharacterCream", new Color(0.78f, 0.67f, 0.50f), null, Vector2.one);
                     var characterEye = GetOrCreateRetroMaterial("CharacterEye", new Color(0.96f, 0.04f, 0.02f), null, Vector2.one);
+                    var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
+                    var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
+                    var teamBlueShieldMaterial = GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+                    var teamRedShieldMaterial = GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     var worldVisual = InstantiateImportedVisual(characterModel, "WorldVisual", root.transform, Vector3.zero, Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(worldVisual, characterRed, characterBlack, characterCream, characterEye);
                     var worldAnimator = worldVisual.GetComponent<Animator>();
@@ -129,7 +139,36 @@ namespace RocketFooxball.Editor
                     // Hide the complete imported world model from the local player's camera.
                     // The imported eye/head and body meshes are separate branches, so hiding
                     // only CharacterHead leaves the rest of the model rendered in first person.
-                    SetLayerRecursively(worldVisual, hiddenLayer);
+                    // Reusable prefab keeps world model visible. ParticipantState applies
+                    // LocalPlayerHidden only for local slot at runtime.
+                    SetLayerRecursively(worldVisual, 0);
+
+                    var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, new Vector3(0f, 1.12f, -0.32f));
+                    blueCue.transform.SetParent(root.transform, false);
+                    var redCue = CreateShapeCue("RedTriangleCue", true, teamRedMaterial, new Vector3(0f, 1.12f, -0.32f));
+                    redCue.transform.SetParent(root.transform, false);
+                    redCue.SetActive(false);
+
+                    var immunityShield = new GameObject("ImmunityShield");
+                    immunityShield.transform.SetParent(root.transform, false);
+                    immunityShield.transform.localPosition = Vector3.zero;
+                    immunityShield.SetActive(false);
+                    var blueImmunityShield = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    blueImmunityShield.name = "BlueImmunityShield";
+                    blueImmunityShield.transform.SetParent(immunityShield.transform, false);
+                    blueImmunityShield.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                    blueImmunityShield.transform.localScale = new Vector3(1.2f, 2.0f, 1.2f);
+                    UnityEngine.Object.DestroyImmediate(blueImmunityShield.GetComponent<Collider>());
+                    blueImmunityShield.GetComponent<Renderer>().sharedMaterial = teamBlueShieldMaterial;
+                    blueImmunityShield.SetActive(false);
+                    var redImmunityShield = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    redImmunityShield.name = "RedImmunityShield";
+                    redImmunityShield.transform.SetParent(immunityShield.transform, false);
+                    redImmunityShield.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                    redImmunityShield.transform.localScale = new Vector3(1.2f, 2.0f, 1.2f);
+                    UnityEngine.Object.DestroyImmediate(redImmunityShield.GetComponent<Collider>());
+                    redImmunityShield.GetComponent<Renderer>().sharedMaterial = teamRedShieldMaterial;
+                    redImmunityShield.SetActive(false);
 
                     var viewmodels = new GameObject("Viewmodels").transform;
                     viewmodels.SetParent(camera.transform, false);
@@ -200,6 +239,37 @@ namespace RocketFooxball.Editor
                     SetObjectReference(presentation, "worldAnimator", worldAnimator);
                     SetObjectReference(presentation, "fpsKickAnimator", fpsAnimator);
                     SetObjectReference(presentation, "weaponVisual", weaponVisual.transform);
+                    SetObjectReference(presentation, "gameplayCamera", camera);
+                    SetObjectReference(presentation, "audioListener", camera.GetComponent<AudioListener>());
+                    SetObjectReference(presentation, "participant", participant);
+                    SetObjectArray(presentation, "teamTintRenderers", worldVisual.GetComponentsInChildren<Renderer>(true));
+                    SetObjectReference(presentation, "blueTeamCue", blueCue);
+                    SetObjectReference(presentation, "redTeamCue", redCue);
+                    SetObjectReference(presentation, "immunityShield", immunityShield);
+                    SetObjectReference(presentation, "blueImmunityShield", blueImmunityShield);
+                    SetObjectReference(presentation, "redImmunityShield", redImmunityShield);
+                    SetObjectReference(presentation, "worldVisual", worldVisual);
+                    SetObjectReference(presentation, "fpsVisual", fpsVisual);
+                    SetObjectReference(participant, "motor", motor);
+                    SetObjectReference(participant, "characterController", controller);
+                    SetObjectReference(participant, "input", input);
+                    SetObjectReference(participant, "look", look);
+                    SetObjectReference(participant, "kick", kick);
+                    SetObjectReference(participant, "launcher", launcher);
+                    SetObjectReference(participant, "presentation", presentation);
+                    SetObjectReference(participant, "cameraFeedback", feedback);
+                    SetInteger(participant, "slotId", 0);
+                    SetString(participant, "displayName", "Player");
+                    SetEnum(participant, "team", "Blue");
+                    SetBool(participant, "localParticipant", true);
+                    SetFloat(participant, "maxHealth", 100f);
+                    SetFloat(participant, "deathWait", 5f);
+                    SetFloat(participant, "immunityDuration", 2f);
+                    SetObjectReference(feedback, "participant", participant);
+                    SetObjectReference(launcher, "ownerParticipant", participant);
+
+                    // Keep collider root explicit while camera/viewmodel children remain default.
+                    root.layer = participantLayer;
 
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
@@ -231,6 +301,7 @@ namespace RocketFooxball.Editor
                     SetFloat(motor, "restSpeed", 0.08f);
                     SetFloat(motor, "contactAssistStrength", 0.35f);
                     SetFloat(motor, "contactAssistImpulseCap", 5f);
+                    SetFloat(motor, "meaningfulContactSpeedThreshold", 1f);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, BallPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
                     return prefab;
@@ -245,6 +316,7 @@ namespace RocketFooxball.Editor
                     }
 
                     var root = new GameObject("Rocket");
+                    root.layer = EnsureGameplayLayer("Projectiles");
                     root.transform.localScale = Vector3.one * 0.24f;
                     var collider = root.AddComponent<SphereCollider>();
                     var visual = (GameObject)PrefabUtility.InstantiatePrefab(model);
@@ -358,6 +430,18 @@ namespace RocketFooxball.Editor
                     smokeSheet.frameOverTime = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(1f, 1f)));
                     var trailVfx = smokeTrail.AddComponent<RocketTrailVfx>();
                     SetObjectArray(trailVfx, "particleSystems", new UnityEngine.Object[] { smokeSystem });
+                    var blueTrailMaterial = GetOrCreateParticleMaterial("TeamBlueTrail", new Color(0.08f, 0.35f, 1f, 1f), LoadTexture(RocketGlowTexturePath));
+                    var redTrailMaterial = GetOrCreateParticleMaterial("TeamRedTrail", new Color(1f, 0.12f, 0.1f, 1f), LoadTexture(RocketGlowTexturePath));
+                    var blueAccent = CreateShapeCue("BlueImpactRing", false, blueTrailMaterial, new Vector3(0f, 0f, 0.16f));
+                    blueAccent.transform.SetParent(smokeTrail.transform, false);
+                    blueAccent.transform.localScale = Vector3.one * 0.55f;
+                    blueAccent.SetActive(false);
+                    var redAccent = CreateShapeCue("RedImpactTriangle", true, redTrailMaterial, new Vector3(0f, 0f, 0.16f));
+                    redAccent.transform.SetParent(smokeTrail.transform, false);
+                    redAccent.transform.localScale = Vector3.one * 0.55f;
+                    redAccent.SetActive(false);
+                    SetObjectReference(trailVfx, "blueImpactAccent", blueAccent);
+                    SetObjectReference(trailVfx, "redImpactAccent", redAccent);
                     SetObjectReference(projectile, "trailVfx", trailVfx);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
@@ -578,7 +662,13 @@ namespace RocketFooxball.Editor
 
                 internal static int EnsureLocalPlayerHiddenLayer()
                 {
-                    var layer = LayerMask.NameToLayer("LocalPlayerHidden");
+                    return EnsureGameplayLayer("LocalPlayerHidden");
+                }
+
+                internal static int EnsureGameplayLayer(string layerName)
+                {
+                    if (string.IsNullOrEmpty(layerName)) throw new InvalidOperationException("Gameplay layer name is empty.");
+                    var layer = LayerMask.NameToLayer(layerName);
                     if (layer >= 0) return layer;
                     var settings = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
                     if (settings.Length == 0) throw new InvalidOperationException("TagManager.asset unavailable.");
@@ -589,13 +679,92 @@ namespace RocketFooxball.Editor
                         var item = layers.GetArrayElementAtIndex(i);
                         if (string.IsNullOrEmpty(item.stringValue))
                         {
-                            item.stringValue = "LocalPlayerHidden";
+                            item.stringValue = layerName;
                             serialized.ApplyModifiedPropertiesWithoutUndo();
                             AssetDatabase.SaveAssets();
                             return i;
                         }
                     }
-                    throw new InvalidOperationException("No free user layer for LocalPlayerHidden.");
+                    throw new InvalidOperationException("No free user layer for " + layerName + ".");
+                }
+
+                internal static GameObject CreateShapeCue(string name, bool triangle, Material material, Vector3 localPosition)
+                {
+                    var cue = new GameObject(name);
+                    cue.transform.localPosition = localPosition;
+                    var filter = cue.AddComponent<MeshFilter>();
+                    var renderer = cue.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = material;
+                    filter.sharedMesh = GetOrCreateShapeMesh(triangle);
+                    cue.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                    cue.transform.localScale = triangle ? Vector3.one : new Vector3(0.42f, 0.42f, 1f);
+                    return cue;
+                }
+
+                internal static Mesh GetOrCreateShapeMesh(bool triangle)
+                {
+                    var path = triangle ? RedTriangleCueMeshPath : BlueCircleCueMeshPath;
+                    var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+                    if (mesh != null) return mesh;
+                    mesh = new Mesh { name = triangle ? "RedTriangleCueMesh" : "BlueCircleCueMesh" };
+                    if (triangle)
+                    {
+                        mesh.vertices = new[] { new Vector3(0f, 0.32f, 0f), new Vector3(-0.32f, -0.24f, 0f), new Vector3(0.32f, -0.24f, 0f) };
+                        mesh.uv = new[] { new Vector2(0.5f, 1f), new Vector2(0f, 0f), new Vector2(1f, 0f) };
+                        mesh.triangles = new[] { 0, 1, 2 };
+                    }
+                    else
+                    {
+                        const int segments = 16;
+                        var vertices = new Vector3[segments + 1];
+                        var uv = new Vector2[segments + 1];
+                        var triangles = new int[segments * 3];
+                        vertices[0] = Vector3.zero;
+                        uv[0] = new Vector2(0.5f, 0.5f);
+                        for (var i = 0; i < segments; i++)
+                        {
+                            var angle = (float)i / segments * Mathf.PI * 2f;
+                            vertices[i + 1] = new Vector3(Mathf.Cos(angle) * 0.5f, Mathf.Sin(angle) * 0.5f, 0f);
+                            uv[i + 1] = new Vector2(vertices[i + 1].x + 0.5f, vertices[i + 1].y + 0.5f);
+                            triangles[i * 3] = 0;
+                            triangles[(i * 3) + 1] = i + 1;
+                            triangles[(i * 3) + 2] = (i + 1) % segments + 1;
+                        }
+                        mesh.vertices = vertices;
+                        mesh.uv = uv;
+                        mesh.triangles = triangles;
+                    }
+                    mesh.RecalculateNormals();
+                    AssetDatabase.CreateAsset(mesh, path);
+                    AssetDatabase.SaveAssets();
+                    return mesh;
+                }
+
+                internal static void SetString(UnityEngine.Object target, string propertyName, string value)
+                {
+                    var serialized = new SerializedObject(target);
+                    var property = serialized.FindProperty(propertyName);
+                    if (property == null || property.propertyType != SerializedPropertyType.String) throw new InvalidOperationException(target.GetType().Name + " has no serialized string '" + propertyName + "'.");
+                    property.stringValue = value ?? string.Empty;
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+                }
+
+                internal static void SetBool(UnityEngine.Object target, string propertyName, bool value)
+                {
+                    var serialized = new SerializedObject(target);
+                    var property = serialized.FindProperty(propertyName);
+                    if (property == null || property.propertyType != SerializedPropertyType.Boolean) throw new InvalidOperationException(target.GetType().Name + " has no serialized bool '" + propertyName + "'.");
+                    property.boolValue = value;
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+                }
+
+                internal static void SetLayerMask(UnityEngine.Object target, string propertyName, int value)
+                {
+                    var serialized = new SerializedObject(target);
+                    var property = serialized.FindProperty(propertyName);
+                    if (property == null || property.propertyType != SerializedPropertyType.Integer) throw new InvalidOperationException(target.GetType().Name + " has no serialized layer mask '" + propertyName + "'.");
+                    property.intValue = value;
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
                 }
 
                 internal static void SetLayerRecursively(GameObject root, int layer)
@@ -645,7 +814,8 @@ namespace RocketFooxball.Editor
                         }
                         if (path == PrefabPath)
                         {
-                            Require(root.GetComponent<CharacterController>(), "Player prefab CharacterController");
+                            var controller = Require(root.GetComponent<CharacterController>(), "Player prefab CharacterController");
+                            if (root.layer != LayerMask.NameToLayer("Participants")) throw new InvalidOperationException("Player prefab root must use Participants layer.");
                             var input = Require(root.GetComponent<PlayerInputReader>(), "Player prefab PlayerInputReader");
                             var prefabMotor = Require(root.GetComponent<PlayerMotor>(), "Player prefab PlayerMotor");
                             ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
@@ -654,6 +824,7 @@ namespace RocketFooxball.Editor
                             var prefabFeedback = Require(root.GetComponent<PlayerCameraFeedback>(), "Player prefab PlayerCameraFeedback");
                             var prefabQualityRuntime = Require(root.transform.Find("Head/Camera").GetComponent<GraphicsQualityRuntime>(), "Player prefab GraphicsQualityRuntime");
                             var prefabPresentation = Require(root.GetComponent<PlayerPresentation>(), "Player prefab PlayerPresentation");
+                            var prefabParticipant = Require(root.GetComponent<ParticipantState>(), "Player prefab ParticipantState");
                             ValidateReference(prefabLauncher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath), "Player prefab RocketLauncher.projectilePrefab");
                             ValidateReference(prefabLauncher, "spawnPoint", root.transform.Find("Head/Camera/RocketMuzzle"), "Player prefab RocketLauncher.spawnPoint");
                             ValidateReference(prefabFeedback, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerCameraFeedback.targetCamera");
@@ -662,6 +833,20 @@ namespace RocketFooxball.Editor
                             ValidateReference(prefabQualityRuntime, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab GraphicsQualityRuntime.targetCamera");
                             ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
                             ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
+                            ValidateReference(prefabPresentation, "participant", prefabParticipant, "Player prefab PlayerPresentation.participant");
+                            ValidateReference(prefabPresentation, "gameplayCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerPresentation.gameplayCamera");
+                            ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
+                            ValidateReference(prefabParticipant, "motor", prefabMotor, "Player prefab ParticipantState.motor");
+                            ValidateReference(prefabParticipant, "characterController", controller, "Player prefab ParticipantState.characterController");
+                            ValidateReference(prefabParticipant, "presentation", prefabPresentation, "Player prefab ParticipantState.presentation");
+                            ValidateReference(prefabParticipant, "cameraFeedback", prefabFeedback, "Player prefab ParticipantState.cameraFeedback");
+                            ValidateReference(prefabLauncher, "ownerParticipant", prefabParticipant, "Player prefab RocketLauncher.ownerParticipant");
+                            ValidateReference(prefabFeedback, "participant", prefabParticipant, "Player prefab PlayerCameraFeedback.participant");
+                            ValidateSerializedInteger(prefabParticipant, "slotId", 0, "Player prefab ParticipantState.slotId");
+                            ValidateSerializedFloat(prefabParticipant, "maxHealth", 100f, "Player prefab ParticipantState.maxHealth");
+                            ValidateSerializedFloat(prefabParticipant, "deathWait", 5f, "Player prefab ParticipantState.deathWait");
+                            ValidateSerializedFloat(prefabParticipant, "immunityDuration", 2f, "Player prefab ParticipantState.immunityDuration");
+                            if (LayerMask.NameToLayer("Participants") < 0 || LayerMask.NameToLayer("Projectiles") < 0) throw new InvalidOperationException("Participants and Projectiles layers are required.");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "Player prefab PlayerCameraFeedback.celebrationOrbitRadius");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "Player prefab PlayerCameraFeedback.celebrationOrbitHeight");
                             ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
@@ -678,6 +863,12 @@ namespace RocketFooxball.Editor
                              ValidateWeaponMaterials(prefabWeaponVisual.gameObject);
                              ValidateNoPhysics(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual");
                             ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual").gameObject, "Player prefab FpsKickVisual");
+                            var worldVisual = Require(root.transform.Find("WorldVisual"), "Player prefab WorldVisual");
+                            ValidateLayerRecursively(worldVisual.gameObject, 0, "Player prefab WorldVisual");
+                            ValidateShapeCue(Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue"), BlueCircleCueMeshPath, "Player prefab BlueCircleCue");
+                            ValidateShapeCue(Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue"), RedTriangleCueMeshPath, "Player prefab RedTriangleCue");
+                            Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield");
+                            Require(root.transform.Find("ImmunityShield/RedImmunityShield"), "Player prefab RedImmunityShield");
                         }
                         else if (path == BallPrefabPath)
                         {
@@ -701,6 +892,7 @@ namespace RocketFooxball.Editor
                         }
                         else if (path == RocketPrefabPath)
                         {
+                            if (root.layer != LayerMask.NameToLayer("Projectiles")) throw new InvalidOperationException("Rocket prefab root must use Projectiles layer.");
                             var body = Require(root.GetComponent<Rigidbody>(), "Rocket prefab Rigidbody");
                             var collider = Require(root.GetComponent<Collider>(), "Rocket prefab collider");
                             var projectile = Require(root.GetComponent<RocketProjectile>(), "Rocket prefab RocketProjectile");
@@ -760,6 +952,15 @@ namespace RocketFooxball.Editor
                     {
                         if (float.IsNaN(uv[i].x) || float.IsNaN(uv[i].y) || float.IsInfinity(uv[i].x) || float.IsInfinity(uv[i].y)) throw new InvalidOperationException("Ball mesh UVs must be finite.");
                     }
+                }
+
+                internal static void ValidateShapeCue(Transform cue, string meshPath, string label)
+                {
+                    if (cue == null) throw new InvalidOperationException(label + " is missing.");
+                    var filter = Require(cue.GetComponent<MeshFilter>(), label + " MeshFilter");
+                    var renderer = Require(cue.GetComponent<MeshRenderer>(), label + " MeshRenderer");
+                    if (filter.sharedMesh == null || AssetDatabase.GetAssetPath(filter.sharedMesh) != meshPath || renderer.sharedMaterial == null)
+                        throw new InvalidOperationException(label + " mesh/material provenance invalid.");
                 }
 
                 internal static void ValidateRocketVisualForward(Transform rocketRoot, MeshFilter[] meshFilters)
@@ -889,6 +1090,8 @@ namespace RocketFooxball.Editor
                 {
                     if (rocketPrefab == null) throw new InvalidOperationException("Rocket prefab unavailable for trail validation.");
                     var trail = Require(rocketPrefab.GetComponentInChildren<RocketTrailVfx>(true), "RocketTrailVfx");
+                    ValidateReference(trail, "blueImpactAccent", trail.transform.Find("BlueImpactRing"), "RocketTrailVfx.blueImpactAccent");
+                    ValidateReference(trail, "redImpactAccent", trail.transform.Find("RedImpactTriangle"), "RocketTrailVfx.redImpactAccent");
                     var smokeSystems = trail.GetComponentsInChildren<ParticleSystem>(true);
                     if (smokeSystems.Length != 1) throw new InvalidOperationException("Rocket trail must contain one particle system.");
                     var system = smokeSystems[0];

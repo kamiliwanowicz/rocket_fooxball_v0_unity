@@ -12,6 +12,7 @@ using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
+using RocketFooxball.Runtime.Participants;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -36,6 +37,7 @@ namespace RocketFooxball.Editor
         internal GameObject Root;
         internal GoalTrigger Trigger;
         internal Collider Shield;
+        internal GameObject TeamCue;
     }
 
     internal sealed class ArenaBuild
@@ -62,7 +64,7 @@ namespace RocketFooxball.Editor
 
     internal static partial class MovementLabArenaPipeline
     {
-                internal static ArenaBuild BuildArena(Material floorMaterial, Material wallMaterial, Material markingMaterial, Material frameMaterial, Material shieldMaterial, PhysicsMaterial ballSurface, Material arenaPrimaryMaterial, Material arenaTrimMaterial, Material arenaHazardMaterial, Material arenaGlowMaterial, Material gridCeilingMaterial, Material gridLongWallMaterial, Material gridEndWallMaterial, Material northShieldMaterial, Material southShieldMaterial)
+                internal static ArenaBuild BuildArena(Material floorMaterial, Material wallMaterial, Material markingMaterial, Material frameMaterial, Material shieldMaterial, PhysicsMaterial ballSurface, Material arenaPrimaryMaterial, Material arenaTrimMaterial, Material arenaHazardMaterial, Material arenaGlowMaterial, Material gridCeilingMaterial, Material gridLongWallMaterial, Material gridEndWallMaterial, Material northShieldMaterial, Material southShieldMaterial, Material teamBlueMaterial = null, Material teamRedMaterial = null)
                 {
                     var arena = new GameObject("Arena");
                     CreateSolid("Floor", arena.transform, new Vector3(0f, -0.5f, 0f), new Vector3(130f, 1f, 90f), floorMaterial, ballSurface);
@@ -88,8 +90,8 @@ namespace RocketFooxball.Editor
                     CreateMarking("EastBox", markings, new Vector3(29f, 0.015f, 0f), new Vector3(0.25f, 0.02f, 36f), markingMaterial);
                     CreateMarking("CenterSpot", markings, new Vector3(0f, 0.015f, 0f), new Vector3(1f, 0.02f, 1f), markingMaterial);
 
-                    var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), frameMaterial, northShieldMaterial, wallMaterial, ballSurface);
-                    var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), frameMaterial, southShieldMaterial, wallMaterial, ballSurface);
+                    var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North, new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f), frameMaterial, northShieldMaterial, wallMaterial, ballSurface, teamRedMaterial);
+                    var south = BuildGoal("SouthGoal", GoalTrigger.GoalSide.South, new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f), frameMaterial, southShieldMaterial, wallMaterial, ballSurface, teamBlueMaterial);
                     north.Root.transform.SetParent(arena.transform, true);
                     south.Root.transform.SetParent(arena.transform, true);
 
@@ -123,7 +125,7 @@ namespace RocketFooxball.Editor
                     };
                 }
 
-                internal static GoalBuild BuildGoal(string name, GoalTrigger.GoalSide side, Vector3 position, Quaternion rotation, Material frameMaterial, Material shieldMaterial, Material wallMaterial, PhysicsMaterial ballSurface)
+                internal static GoalBuild BuildGoal(string name, GoalTrigger.GoalSide side, Vector3 position, Quaternion rotation, Material frameMaterial, Material shieldMaterial, Material wallMaterial, PhysicsMaterial ballSurface, Material teamMaterial = null)
                 {
                     var root = new GameObject(name);
                     root.transform.SetPositionAndRotation(position, rotation);
@@ -154,6 +156,9 @@ namespace RocketFooxball.Editor
                     shieldVisual.transform.localScale = new Vector3(36f, 7f, 1f);
                     UnityEngine.Object.DestroyImmediate(shieldVisual.GetComponent<Collider>());
                     shieldVisual.GetComponent<Renderer>().sharedMaterial = shieldMaterial;
+                    var cue = MovementLabPrefabPipeline.CreateShapeCue(side == GoalTrigger.GoalSide.North ? "RedTriangleCue" : "BlueCircleCue", side == GoalTrigger.GoalSide.North, teamMaterial != null ? teamMaterial : shieldMaterial, new Vector3(0f, 3.5f, -0.28f));
+                    cue.transform.SetParent(root.transform, false);
+                    cue.transform.localScale = new Vector3(3.5f, 3.5f, 1f);
                     var frameWest = CreateSolid("FrameWest", root.transform, new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
                     var frameEast = CreateSolid("FrameEast", root.transform, new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), frameMaterial, ballSurface);
                     var frameTop = CreateSolid("FrameTop", root.transform, new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), frameMaterial, ballSurface);
@@ -170,7 +175,7 @@ namespace RocketFooxball.Editor
                     {
                         if (recesses[i].gameObject.name.StartsWith("Recess", StringComparison.Ordinal)) recesses[i].enabled = false;
                     }
-                    return new GoalBuild { Root = root, Trigger = trigger, Shield = shieldCollider };
+                    return new GoalBuild { Root = root, Trigger = trigger, Shield = shieldCollider, TeamCue = cue };
                 }
 
                 internal static void BuildArenaArchitecture(Transform arenaRoot, GoalBuild northGoal, GoalBuild southGoal, Material[] arenaMaterials)
@@ -451,6 +456,12 @@ namespace RocketFooxball.Editor
                     if (collider == null || collider.isTrigger || visual.GetComponent<Collider>() != null || visual.GetComponent<MeshRenderer>() == null) throw new InvalidOperationException(label + " shield collider/render split invalid.");
                     var material = visual.GetComponent<MeshRenderer>().sharedMaterial;
                     if (material == null || material.shader == null || material.shader.name != "RocketFooxball/RetroShield" || Mathf.Abs(material.GetFloat("_Alpha") - 0.52f) > 0.001f) throw new InvalidOperationException(label + " shield material contract invalid.");
+                    var cueName = label == "NorthGoal" ? "RedTriangleCue" : "BlueCircleCue";
+                    var cue = Require(goal != null ? goal.Find(cueName) : null, label + " " + cueName);
+                    var cueRenderer = Require(cue.GetComponent<MeshRenderer>(), label + " team cue renderer");
+                    var expectedCueMaterial = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? TeamRedMaterialPath : TeamBlueMaterialPath);
+                    if (cueRenderer.sharedMaterial != expectedCueMaterial || cue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(cue.GetComponent<MeshFilter>().sharedMesh) != (label == "NorthGoal" ? RedTriangleCueMeshPath : BlueCircleCueMeshPath))
+                        throw new InvalidOperationException(label + " team shape cue contract invalid.");
                 }
 
     }

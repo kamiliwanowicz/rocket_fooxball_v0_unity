@@ -8,8 +8,8 @@ namespace RocketFooxball.Editor
     {
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
-        internal const int ManifestSchemaVersion = 7;
-        internal const int SerializedContractVersion = 1;
+        internal const int ManifestSchemaVersion = 8;
+        internal const int SerializedContractVersion = 2;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -21,12 +21,15 @@ namespace RocketFooxball.Editor
         internal const string TexturesPath = "Assets/_Game/Textures";
         internal const string ShadersPath = "Assets/_Game/Shaders";
         internal const string AnimationsPath = "Assets/_Game/Animations";
+        internal const string GeneratedPath = "Assets/_Game/Generated";
+        internal const string BlueCircleCueMeshPath = GeneratedPath + "/BlueCircleCueMesh.asset";
+        internal const string RedTriangleCueMeshPath = GeneratedPath + "/RedTriangleCueMesh.asset";
         internal const string LightingPath = "Assets/_Game/Lighting";
         internal const string BakedLightingPath = "Assets/_Game/Scenes/MovementLab";
         internal const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
-        internal const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
+        internal const string BuildMarkerPrefix = "MovementLabGeneratedT8_";
 
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
@@ -96,7 +99,11 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/ContainmentGridCeiling.mat", MaterialsPath + "/ContainmentGridLongWall.mat", MaterialsPath + "/ContainmentGridEndWall.mat",
             MaterialsPath + "/RetroSunnySky.mat", MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat",
-            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat"
+            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat",
+            MaterialsPath + "/TeamBlue.mat", MaterialsPath + "/TeamRed.mat",
+            MaterialsPath + "/TeamBlueShield.mat", MaterialsPath + "/TeamRedShield.mat",
+            MaterialsPath + "/TeamBlueTrail.mat", MaterialsPath + "/TeamRedTrail.mat",
+            BlueCircleCueMeshPath, RedTriangleCueMeshPath
         };
 
         internal static readonly string[] GameplaySceneOutputs =
