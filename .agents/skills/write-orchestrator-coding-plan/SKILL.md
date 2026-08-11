@@ -116,7 +116,14 @@ Each task names objective, done condition, dependency, owned/protected paths, fo
 
 ### Check contract
 
-Planner checks use machine-readable rows. Required fields: `check_id`, `tier` (`fast|development|production-final`), `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`. Include `executed_sha`, `validated_sha`, `status`, and evidence path/digest in execution state. Require one owner for every production-final row after source fan-in and accepted fixes. A review never proves bake or capture rerun.
+Planner checks use machine-readable rows. Required fields: `check_id`, `tier` (`fast|development|production-final`), `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`. Include `executed_sha`, `validated_sha`, `status`, and evidence path/digest in execution state. Require one owner for every production-final row after source fan-in and accepted fixes. Review never substitutes for production bake or direct semantic validation.
+
+### Validation authoring rules
+
+- Plans never require image capture, screenshots, screenshot comparison, or agent visual verification. Human visual review remains on demand.
+- Production bake -> only lighting proof; semantic proof uses direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()`.
+- New validator predicate -> warning-only first. Promote to hard failure only after one representative green Unity run.
+- Builder-generated output byte/hash equality never gates. Source/input digests and orchestration artifact/evidence hashes remain allowed integrity checks.
 
 Execution route:
 

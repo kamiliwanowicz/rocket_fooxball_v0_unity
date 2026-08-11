@@ -38,7 +38,7 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
    - Intermediate wave -> Git/scope/downstream-contract rows.
    - Final wave -> union pending or invalidated production-final rows once.
    - Unchanged one-plan fast-forward -> reuse exact valid plan evidence after cheap SHA/content attestation.
-   - Post-proof fix -> invalidate rows whose declared invalidation paths intersect changed paths; lighting/render changes reopen bake/capture.
+   - Post-proof fix -> invalidate rows whose declared invalidation paths intersect changed paths; lighting-input changes reopen production bake only.
 6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged one-plan head with still-valid checks and no integration edit. Report Critical/High findings only.
 7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, and do not re-review fix.
 8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, checks, and no active writer.

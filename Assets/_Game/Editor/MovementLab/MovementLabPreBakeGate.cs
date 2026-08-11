@@ -43,9 +43,20 @@ namespace RocketFooxball.Editor
 
         internal static string ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId profile)
         {
-            ValidatePersistedNonLightingState();
-            MovementLabValidator.ValidatePreBakeSemantics();
-            var probe = ProbePreparedScene(profile);
+            var accumulator = new MovementLabValidationAccumulator();
+            return ValidateAndWritePassRecord(profile, accumulator);
+        }
+
+        internal static string ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId profile,
+            MovementLabValidationAccumulator accumulator)
+        {
+            if (accumulator == null) throw new ArgumentNullException(nameof(accumulator));
+            ValidatePersistedNonLightingState(accumulator);
+            MovementLabValidator.ValidatePreBakeSemantics(accumulator);
+            var probe = ProbePreparedScene(profile, accumulator);
+            // Do not resolve evidence paths, construct pass records, or write
+            // durable proof after any semantic violation.
+            accumulator.ThrowIfAny("MovementLab pre-bake gate");
 
             var projectRoot = Directory.GetParent(Application.dataPath)?.FullName;
             if (string.IsNullOrEmpty(projectRoot)) throw new InvalidOperationException("Unable to resolve Unity project root.");
@@ -111,9 +122,11 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("MovementLab pre-bake pass path is not bound to selected profile and lighting digest.");
             }
 
-            ValidatePersistedNonLightingState();
-            MovementLabValidator.ValidatePreBakeSemantics();
-            var probe = ProbePreparedScene(profile);
+            var accumulator = new MovementLabValidationAccumulator();
+            ValidatePersistedNonLightingState(accumulator);
+            MovementLabValidator.ValidatePreBakeSemantics(accumulator);
+            var probe = ProbePreparedScene(profile, accumulator);
+            accumulator.ThrowIfAny("MovementLab pre-bake pass revalidation");
             if (!string.Equals(probe.LightingInputDigest, pass.lightingInputDigest, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("MovementLab pre-bake finalized lighting digest or non-lighting state changed after pass validation.");
@@ -125,7 +138,8 @@ namespace RocketFooxball.Editor
             return (left ?? Array.Empty<string>()).SequenceEqual(right ?? Array.Empty<string>(), StringComparer.Ordinal);
         }
 
-        private static MovementLabStageProbe ProbePreparedScene(MovementLabLightingProfiles.ProfileId profile)
+        private static MovementLabStageProbe ProbePreparedScene(MovementLabLightingProfiles.ProfileId profile,
+            MovementLabValidationAccumulator accumulator)
         {
             // Profile preparation intentionally rewrites lighting-owned fields
             // in the serialized scene. The StageGraph allowance is narrow for
@@ -133,8 +147,9 @@ namespace RocketFooxball.Editor
             // while every non-lighting stage/path remains fail-closed below.
             // Prior BakedOutput files are replaced by the selected bake and
             // therefore are not pre-bake prerequisites.
-            MovementLabLightingProfiles.ValidatePreparedScene(profile);
-            var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true);
+            accumulator.Capture("pre-bake/prepared-scene", "lighting-profile", () => MovementLabLightingProfiles.ValidatePreparedScene(profile));
+            var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
+            if (probe == null) return null;
 
             var stale = RequiredPreBakeStages
                 .Where(stage => probe.IsStale(stage) &&
@@ -143,9 +158,7 @@ namespace RocketFooxball.Editor
                 .Select(stage => stage.ToString())
                 .ToArray();
             if (stale.Length > 0)
-            {
-                throw new InvalidOperationException("MovementLab pre-bake gate failed; stale non-lighting stages: " + string.Join(", ", stale));
-            }
+                accumulator.Add("pre-bake/stale", "non-lighting-stages", "MovementLab pre-bake gate failed; stale non-lighting stages: " + string.Join(", ", stale));
 
             return probe;
         }
@@ -172,69 +185,84 @@ namespace RocketFooxball.Editor
 
         private static void ValidatePersistedNonLightingState()
         {
-            ValidateAssetAndMetaCoverage(MovementLabContract.ImportedAssetPaths);
-            ValidateAssetAndMetaCoverage(MovementLabContract.MaterialPrefabOutputs);
-            ValidateAssetAndMetaCoverage(MovementLabContract.QualityOutputs.Where(path => path.StartsWith("Assets/", StringComparison.Ordinal)).ToArray());
+            var accumulator = new MovementLabValidationAccumulator();
+            ValidatePersistedNonLightingState(accumulator);
+            accumulator.ThrowIfAny("MovementLab persisted non-lighting validation");
+        }
+
+        private static void ValidatePersistedNonLightingState(MovementLabValidationAccumulator accumulator)
+        {
+            ValidateAssetAndMetaCoverage(accumulator, MovementLabContract.ImportedAssetPaths, "imported-assets");
+            ValidateAssetAndMetaCoverage(accumulator, MovementLabContract.MaterialPrefabOutputs, "material-prefabs");
+            ValidateAssetAndMetaCoverage(accumulator,
+                MovementLabContract.QualityOutputs.Where(path => path.StartsWith("Assets/", StringComparison.Ordinal)).ToArray(), "quality-assets");
             for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
             {
                 var path = MovementLabContract.GameplaySceneOutputs[i];
-                if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path)))
+                accumulator.Capture("gameplay-outputs", path, () =>
                 {
-                    throw new InvalidOperationException("MovementLab pre-bake output is missing: " + path);
-                }
-                if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
-                    !File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
-                {
-                    throw new InvalidOperationException("MovementLab pre-bake output meta is missing: " + path + ".meta");
-                }
-                if (path.StartsWith("Assets/", StringComparison.Ordinal)) ValidateAssetMetaGuid(path);
+                    if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path)))
+                        throw new InvalidOperationException("MovementLab pre-bake output is missing: " + path);
+                    if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
+                        !File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
+                        throw new InvalidOperationException("MovementLab pre-bake output meta is missing: " + path + ".meta");
+                    if (path.StartsWith("Assets/", StringComparison.Ordinal)) ValidateAssetMetaGuid(path);
+                });
             }
 
-            var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
-            if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
+            Scene scene = default;
+            var sceneReady = false;
+            accumulator.Capture("persisted-scene", "open-scene", () =>
             {
-                throw new InvalidOperationException("MovementLab scene failed to reopen: " + MovementLabContract.ScenePath);
-            }
+                scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+                if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
+                    throw new InvalidOperationException("MovementLab scene failed to reopen: " + MovementLabContract.ScenePath);
+                sceneReady = true;
+            });
 
-            var volumes = UnityEngine.Object.FindObjectsByType<Volume>(FindObjectsSortMode.InstanceID);
             var persistedVolumeCount = 0;
-            for (var i = 0; i < volumes.Length; i++)
+            if (sceneReady)
             {
-                var volume = volumes[i];
-                if (volume == null || volume.sharedProfile == null) continue;
-                persistedVolumeCount++;
-                if (!EditorUtility.IsPersistent(volume.sharedProfile))
+                var volumes = UnityEngine.Object.FindObjectsByType<Volume>(FindObjectsSortMode.InstanceID);
+                for (var i = 0; i < volumes.Length; i++)
                 {
-                    throw new InvalidOperationException("MovementLab Volume must use a persisted sharedProfile.");
+                    var volume = volumes[i];
+                    if (volume == null || volume.sharedProfile == null) continue;
+                    persistedVolumeCount++;
+                    var volumeIndex = i;
+                    accumulator.Capture("persisted-volume", "volume-" + volumeIndex, () => ValidatePersistedVolume(volume));
                 }
-                if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(volume.sharedProfile, out var profileGuid, out long profileLocalId) ||
-                    string.IsNullOrEmpty(profileGuid) || profileLocalId == 0)
-                {
-                    throw new InvalidOperationException("MovementLab Volume sharedProfile has no persistent GUID/local file ID.");
-                }
-                var components = volume.sharedProfile.components;
-                var requiredTypes = new[] { typeof(UnityEngine.Rendering.Universal.Tonemapping),
-                    typeof(UnityEngine.Rendering.Universal.Bloom), typeof(UnityEngine.Rendering.Universal.ColorAdjustments) };
-                if (components == null || components.Count != requiredTypes.Length)
-                    throw new InvalidOperationException("MovementLab VolumeProfile required component set is incomplete or has unexpected entries.");
-                for (var componentIndex = 0; componentIndex < components.Count; componentIndex++)
-                {
-                    var component = components[componentIndex];
-                    if (component == null || !EditorUtility.IsPersistent(component) ||
-                        !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(component, out _, out long localId) || localId == 0)
-                    {
-                        throw new InvalidOperationException("MovementLab VolumeProfile component is not a persistent subasset.");
-                    }
-                    if (!requiredTypes.Contains(component.GetType()))
-                        throw new InvalidOperationException("MovementLab VolumeProfile contains unexpected component: " + component.GetType().Name);
-                }
-                for (var typeIndex = 0; typeIndex < requiredTypes.Length; typeIndex++)
-                    if (components.Count(component => component != null && component.GetType() == requiredTypes[typeIndex]) != 1)
-                        throw new InvalidOperationException("MovementLab VolumeProfile required component is missing or duplicated: " + requiredTypes[typeIndex].Name);
             }
-            if (persistedVolumeCount == 0) throw new InvalidOperationException("MovementLab persisted shared VolumeProfile is missing.");
+            if (persistedVolumeCount == 0)
+                accumulator.Add("persisted-volume", "shared-profile", "MovementLab persisted shared VolumeProfile is missing.");
 
-            ValidateLitMaterialPersistence();
+            accumulator.Capture("persisted-materials", "reload", ValidateLitMaterialPersistence);
+        }
+
+        private static void ValidatePersistedVolume(Volume volume)
+        {
+            if (!EditorUtility.IsPersistent(volume.sharedProfile))
+                throw new InvalidOperationException("MovementLab Volume must use a persisted sharedProfile.");
+            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(volume.sharedProfile, out var profileGuid, out long profileLocalId) ||
+                string.IsNullOrEmpty(profileGuid) || profileLocalId == 0)
+                throw new InvalidOperationException("MovementLab Volume sharedProfile has no persistent GUID/local file ID.");
+            var components = volume.sharedProfile.components;
+            var requiredTypes = new[] { typeof(UnityEngine.Rendering.Universal.Tonemapping),
+                typeof(UnityEngine.Rendering.Universal.Bloom), typeof(UnityEngine.Rendering.Universal.ColorAdjustments) };
+            if (components == null || components.Count != requiredTypes.Length)
+                throw new InvalidOperationException("MovementLab VolumeProfile required component set is incomplete or has unexpected entries.");
+            for (var componentIndex = 0; componentIndex < components.Count; componentIndex++)
+            {
+                var component = components[componentIndex];
+                if (component == null || !EditorUtility.IsPersistent(component) ||
+                    !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(component, out _, out long localId) || localId == 0)
+                    throw new InvalidOperationException("MovementLab VolumeProfile component is not a persistent subasset.");
+                if (!requiredTypes.Contains(component.GetType()))
+                    throw new InvalidOperationException("MovementLab VolumeProfile contains unexpected component: " + component.GetType().Name);
+            }
+            for (var typeIndex = 0; typeIndex < requiredTypes.Length; typeIndex++)
+                if (components.Count(component => component != null && component.GetType() == requiredTypes[typeIndex]) != 1)
+                    throw new InvalidOperationException("MovementLab VolumeProfile required component is missing or duplicated: " + requiredTypes[typeIndex].Name);
         }
 
         private static void ValidateAssetAndMetaCoverage(string[] paths)
@@ -248,6 +276,22 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
                 }
                 ValidateAssetMetaGuid(path);
+            }
+        }
+
+        private static void ValidateAssetAndMetaCoverage(MovementLabValidationAccumulator accumulator, string[] paths, string scope)
+        {
+            for (var i = 0; i < (paths ?? Array.Empty<string>()).Length; i++)
+            {
+                var path = paths[i];
+                accumulator.Capture(scope, path, () =>
+                {
+                    if (AssetDatabase.LoadMainAssetAtPath(path) == null)
+                        throw new InvalidOperationException("MovementLab pre-bake asset is missing: " + path);
+                    if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
+                        throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
+                    ValidateAssetMetaGuid(path);
+                });
             }
         }
 

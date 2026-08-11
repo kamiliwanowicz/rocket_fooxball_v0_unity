@@ -35,7 +35,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 ## Architecture
 
 - Preserve current Unity and package versions unless requested.
-- URP rendering. Default Standalone target -> native 1920x1080 High quality with PBR materials, HDR, shadows, SSAO, restrained bloom, modern lighting, baked indirect light, and reflection/light probes. Maintain scalable Low fallback. Validate High/Low visual quality and target-machine performance at 1920x1080.
+- URP rendering. Default Standalone target -> native 1920x1080 High quality with PBR materials, HDR, shadows, SSAO, restrained bloom, modern lighting, baked indirect light, and reflection/light probes. Maintain scalable Low fallback. Human-review High/Low visual quality and target-machine performance at 1920x1080 on demand.
 - Graphics work may add or replace project-owned arena, ball, rocket, explosion, and containment visuals. Preserve gameplay contracts unless current task explicitly authorizes named gameplay or collision changes.
 - Player collision/movement -> `CharacterController`. Ball and projectile physics -> `Rigidbody` forces and impulses.
 - Critical gameplay simulation -> fixed-step code. Shared physics configuration -> `GamePhysicsSettings`.
@@ -71,13 +71,13 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Final Unity checks: finish static edits and accepted review fixes first. Run only checks invalidated by final diff; explicit task or plan checks override.
 - C# changes: Unity compile with zero Console errors.
 - Movement, input, or generated-lab changes: compile plus relevant `MovementLabBuilder.BuildMovementLab()` and `ValidateMovementLab()` batch checks.
-- Builder-generated change: run one authoritative `MovementLabBuilder.BuildMovementLab()` build, then run `ValidateMovementLab()` semantic pass in separate Unity process. Do not require second builds, builder-output byte comparisons, or nondeterminism verdicts.
-- Bright-arena capture may satisfy separate-process semantic pass when capture invokes `ValidateMovementLab()`; avoid duplicate validator work.
+- Builder-generated change: run one authoritative `MovementLabBuilder.BuildMovementLab()` build, then run `ValidateMovementLab()` semantic pass in separate Unity process. Do not require second builds, builder-output byte/hash equality, or nondeterminism verdicts.
+- Semantic proof always uses direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()`; automated capture never substitutes for validator. Human visual review stays on demand.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
 - Lighting posture: Fast preview is default iteration. Development bake is explicit, on-demand, and best-effort. Production bake is explicit and milestone-only.
-- Production bake/capture -> run after source edits and accepted Critical/High fixes settle in a scoped-clean worktree. Later source edits reopen only affected checks. No extra pre-bake ceremony.
+- Production bake -> run after source edits and accepted Critical/High fixes settle in a scoped-clean worktree. Later source edits reopen only affected checks. No extra pre-bake ceremony.
 - Workflow probe schema is `schemaVersion: 1` with typed version/status/stale/profile/path fields plus source/input digest for staleness; generated output bytes are not acceptance criteria. Durable report paths stay under Git-common destination and outside product worktree.
 - Report only checks run.
 - When user must run Unity menu command, include standalone uppercase line: `MANUAL "ROCKET FOOXBALL → BUILD MOVEMENT LAB" REQUIRED.`

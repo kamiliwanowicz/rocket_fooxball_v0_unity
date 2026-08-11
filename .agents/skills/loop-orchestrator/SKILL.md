@@ -81,7 +81,7 @@ Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Execution orchestrator builds check ledger before worker dispatch. Ledger rows carry tier, status, SHAs, input/environment digests, mutation flag, evidence, invalidation paths, and subsumed checks. Workers run fast/local checks; development proof requires explicit task ownership. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and review marker.
+Execution orchestrator builds check ledger before worker dispatch. Ledger rows carry tier, status, SHAs, input/environment digests, mutation flag, evidence, invalidation paths, and subsumed checks. Workers run fast/local checks; development proof requires explicit task ownership. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()` semantic validation. Production bake remains only lighting proof.
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
@@ -95,7 +95,7 @@ Dispatch [merging agent](agents/merging.md) after every completed wave, includin
 
 Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. One-plan fast-forward may leave commit identity unchanged; isolated branch/worktree plus expected pre-merge and observed post-merge heads prove merge stage occurred.
 
-Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged one-plan fast-forward reuses exact valid plan evidence after cheap SHA/content attestation. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths.
+Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged one-plan fast-forward reuses exact valid plan evidence after cheap SHA/content attestation. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths; lighting-input changes reopen production bake only.
 
 Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 

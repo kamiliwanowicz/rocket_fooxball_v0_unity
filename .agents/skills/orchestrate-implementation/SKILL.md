@@ -91,13 +91,18 @@ Writer barriers follow ownership: completed disjoint lane closes independently b
 
 Candidate contract carries `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`, and `proof_invalidation_paths`. Candidate may contain multiple workers when ownership remains disjoint and one recovery/proof environment remains coherent. Planner must name one owner for each `production-final` proof after source fan-in, review, and fixes. Expensive-check reduction never changes default review boundaries.
 
-Worker validation defaults to fast/local checks. A worker runs development proof only when task ownership names it. Before project-mutating production-final Unity proof, orchestrator verifies zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and valid review marker. Unity process and project lock checks apply before and after every Unity step.
-
-Review marker contract -> Git-common `architecture-evidence/movement-lab-prebake/reviews/<projectSha>.json`; schema `1`; required `gitSha`, `projectSha`, `sourceSha`, `reviewedSha`, `sourceReviewCompleted`, `criticalHighFixesApplied`, reviewer/checkpoint identities, `completedUtc`, at least one durable `reviewReportPaths`/`reviewReportSha256s` pair, and finding dispositions. Writer requires review/fix flags true, validates current HEAD, source/reviewed ancestry, clean non-generated source, report bytes, and destination; writes atomically without Git mutation.
+Worker validation defaults to fast/local checks. A worker runs development proof only when task ownership names it. Before project-mutating production-final Unity proof, orchestrator verifies zero writers, clean exact source SHA, one Unity lease, and accepted checkpoint/fix state. Unity process and project lock checks apply before and after every Unity step.
 
 Probe contract -> when file exists, `schemaVersion: 1` requires typed `gitSha` (current HEAD), `unityVersion`, `manifestStatus`, `staleStages`, `staleReasons`, `lightingInputDigest`, `sourceSignature`, `outputFingerprint`, `bakedProfile`, `fingerprintPaths`, and `fingerprintHashes`; missing probe remains planned/optional until T4 producer exists.
 
-Workflow result contract -> modes `Fast`, `Development`, `ProductionPrepare`, `ProductionValidate`; durable evidence outside project; JSON fields `exactSha`, command arguments/exits/logs/elapsed times, probe records, bake count, before/after generated hashes, changed generated paths, check ledger, evidence-manifest SHA-256, and lock-release proof. Wrapper pins Unity `6000.5.6f1`, uses short absolute project path, private warm `Library`, hidden `Start-Process -Wait -PassThru`, exclusive process/lock lease, and no Git mutation.
+Workflow result contract -> modes `Fast`, `Development`, `ProductionPrepare`, `ProductionValidate`; `ProductionValidate` runs direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()` semantic validator; durable evidence outside project; JSON fields `exactSha`, command arguments/exits/logs/elapsed times, probe records, bake count, same-run generated inventory/hashes as provenance, changed generated paths, check ledger, evidence-manifest SHA-256, and lock-release proof. Builder-output byte/hash equality never gates. Wrapper pins Unity `6000.5.6f1`, uses short absolute project path, private warm `Library`, hidden `Start-Process -Wait -PassThru`, exclusive process/lock lease, and no Git mutation.
+
+### Gate remediation
+
+- Unblock/relax change touching predicate family -> net-subtractive in that gate family: deletions > insertions.
+- No compensating allowlist, replacement hard gate, or new fail-closed predicate in same change.
+- Two-fix rule -> second corrective change to same predicate family deletes family wholesale. Retain only separately named safety invariant requiring authority to remove: GUID/meta, path, process/lease, atomic write, source/input digest, or orchestration artifact/evidence integrity.
+- Source/input digests and orchestration artifact/evidence hashes remain allowed integrity checks; builder-owned output byte/hash equality never gates.
 
 ## Child dispatch contract
 
@@ -170,16 +175,16 @@ Orchestrator assigns checkpoint-scoped finding IDs during disposition. Reviewer 
 
 Build ledger before dispatch. Each row has `check_id`, `tier` (`fast|development|production-final`), `status` (`pending|executed|reused|deferred|invalidated`), `run_point`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `executed_sha`, `validated_sha`, `evidence_path`, `evidence_digest`, and `subsumed_checks`. One owner binds every production-final row. Workers do not claim rows outside task scope.
 
-Final verification runs pending or invalidated rows only. Reuse executed evidence at exact SHA. Pure checks may reattest at descendant SHA only when ancestry holds, declared input digest and environment match, and `git diff` across every invalidation path is empty. Bake, capture, and manual proof never reattest after render or lighting input changes. Merge/fix edits invalidate rows whose paths intersect `invalidation_paths`; unchanged one-plan fast-forward reuses valid plan evidence after cheap SHA/content attestation.
+Final verification runs pending or invalidated rows only. Reuse executed evidence at exact SHA. Pure checks may reattest at descendant SHA only when ancestry holds, declared input digest and environment match, and `git diff` across every invalidation path is empty. Production bake -> only lighting proof; lighting-input changes invalidate bake, while render-only or generated-output changes do not invalidate production bake. Merge/fix edits invalidate rows whose paths intersect `invalidation_paths`; unchanged one-plan fast-forward reuses valid plan evidence after cheap SHA/content attestation.
 
 Ledger traces:
 
-- validator-only diff -> `compile` and read-only `validate`; bake/capture rows remain valid.
-- shader-only diff -> `compile` and shader-message check; lighting rows remain valid unless declared render input.
-- lighting-input diff -> invalidate production bake/capture/manual rows; retain unrelated fast rows.
+- validator-only diff -> `compile` and direct semantic `validate`; production bake remains valid.
+- shader-only diff -> `compile` and shader-message check; production bake remains valid unless shader path is declared lighting input.
+- lighting-input diff -> invalidate production bake only; retain unrelated fast rows.
 - unchanged fast-forward -> exact-SHA proof reuse after ancestry, input digest, environment, and empty invalidation-path diff checks.
 - multi-wave merge -> merge/scope/downstream rows per wave; final wave executes union of pending production-final rows once.
-- post-proof fix -> invalidate only rows whose declared paths intersect fix; render/lighting intersection forces bake/capture rerun.
+- post-proof fix -> invalidate only rows whose declared paths intersect fix; lighting-input intersection forces bake rerun.
 
 1. Parse graph, tasks, and checkpoints. Dispatch every ready fan-out worker together; otherwise dispatch next serial worker.
 2. Keep running child assigned through normal difficulty. Same material issue survives two failed approaches or rechecks -> diagnose and guide current child. Guided recheck fails -> interrupt, retire, restore writer boundary, then dispatch fresh child. Recurring issue unresolved by orchestrator -> run recurring-issue escalation; `fix_found` dispatches fresh standard worker from investigator contract. Wider in-scope recovery issue exposed by that worker -> dispatch fresh exact `sol_high` recovery worker under escalation bounds. `no_reasonable_fix` or failed/out-of-bounds `sol_high` recovery -> stop execution as `blocked`. Process each worker terminal return immediately. Capture final report, retire child, then verify report against files, Git, scope, checks, and identity.
