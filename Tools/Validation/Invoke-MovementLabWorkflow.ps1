@@ -9,18 +9,7 @@ param(
     [string]$AttemptId,
     [string]$LedgerPath,
     [string]$ProbePath,
-    [string]$SourceSha,
-    [string]$ReviewedSha,
-    [string]$Reviewer,
-    [string]$ExecutionId,
-    [string]$Checkpoint = 'CP1',
-    [Alias('ReportPath', 'ReviewReportPaths')]
-    [string[]]$ReviewReportPath = @(),
-    [Alias('ReportSha256', 'ReviewReportSha256s')]
-    [string[]]$ReviewReportSha256 = @(),
-    [string[]]$FindingDisposition = @(),
     [string[]]$GeneratedPath = @(),
-    [switch]$Capture,
     [switch]$PlanOnly,
     [int]$TimeoutSeconds = 900
 )
@@ -542,13 +531,35 @@ function New-CheckLedger {
             $rows.Add((New-LedgerRow 'development-bake' 'development' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'checkpoint'))
         }
         'ProductionPrepare' {
-            $rows.Add((New-LedgerRow 'review-marker' 'production-final' $false @('.git') @('.agents', 'Assets', 'ProjectSettings', 'Packages', 'Tools') @() 'source-freeze'))
             $rows.Add((New-LedgerRow 'stage-probe' 'fast' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @() 'source-freeze'))
             $rows.Add((New-LedgerRow 'prebake-validate' 'production-final' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') @() 'source-freeze'))
-            $rows.Add((New-LedgerRow 'production-bake' 'production-final' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'source-freeze'))
+            $productionBakeInputs = @(
+                'Assets/_Game/Editor/MovementLab/MovementLabContract.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabStageGraph.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs',
+                'Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs',
+                'Assets/_Game/Editor/GraphicsQualityConfigurator.cs',
+                'Assets/InputSystem_Actions.inputactions',
+                'Assets/InputSystem_Actions.inputactions.meta',
+                'Assets/_Game/Lighting/MovementLabLightingSettings.asset',
+                'Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta',
+                'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset',
+                'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset.meta',
+                'Assets/_Game/Lighting/MovementLabVolumeProfile.asset',
+                'Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta',
+                'Packages/manifest.json',
+                'Packages/packages-lock.json',
+                'ProjectSettings/ProjectVersion.txt',
+                'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+            )
+            $rows.Add((New-LedgerRow 'production-bake' 'production-final' $true $productionBakeInputs $productionBakeInputs @() 'source-freeze'))
         }
         'ProductionValidate' {
-            $rows.Add((New-LedgerRow 'capture-validator' 'production-final' $false @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Tools/Validation') @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @('validator-readonly') 'final'))
+            $rows.Add((New-LedgerRow 'production-validator' 'production-final' $false @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Tools/Validation') @('Assets/_Game/Editor', 'Assets/_Game/Generated', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @('validator-readonly') 'final'))
         }
     }
     return @($rows.ToArray())
@@ -634,20 +645,13 @@ function Merge-ExistingLedger {
         $sameEnvironment = [string]$prior.environment_fingerprint -eq [string]$row.environment_fingerprint
         $exact = $priorSha -eq $CurrentSha
         $pureReattest = (-not [bool]$row.mutates_project) -and $sameInputs -and $sameEnvironment -and $null -ne $changed -and -not (Test-PathIntersects @($changed) @($row.invalidation_paths))
-        $manualProof = ([string]$row.check_id -match '(bake|capture|manual)') -or [string]$row.check_id -eq 'review-marker' -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
+        $manualProof = ([string]$row.check_id -match '(bake|manual)') -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
         $reuseProof = Test-RowReuseProof $prior $row
         if ($exact) {
             if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid) {
                 $row.status = 'invalidated'
                 $row.invalidation_reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } else { [string]$reuseProof.reason }
                 continue
-            }
-            if ([string]$row.check_id -eq 'review-marker') {
-                if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) {
-                    $row.status = 'invalidated'; $row.invalidation_reason = 'source/reviewed SHA missing for marker reuse'; continue
-                }
-                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha $ExecutionId $Checkpoint }
-                catch { $row.status = 'invalidated'; $row.invalidation_reason = 'review marker/report revalidation failed: ' + $_.Exception.Message; continue }
             }
             $row.status = 'reused'
             $row.executed_sha = [string]$prior.executed_sha
@@ -656,13 +660,6 @@ function Merge-ExistingLedger {
             $row.evidence_digest = $evidenceDigest
             $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
         } elseif ($pureReattest -and -not $manualProof) {
-            if ([string]$row.check_id -eq 'review-marker') {
-                if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) {
-                    $row.status = 'invalidated'; $row.invalidation_reason = 'source/reviewed SHA missing for marker reuse'; continue
-                }
-                try { $null = Read-ReviewMarker $CurrentSha $SourceSha $ReviewedSha $ExecutionId $Checkpoint }
-                catch { $row.status = 'invalidated'; $row.invalidation_reason = 'review marker/report revalidation failed: ' + $_.Exception.Message; continue }
-            }
             $row.status = 'reused'
             $row.executed_sha = [string]$prior.executed_sha
             $row.validated_sha = $CurrentSha
@@ -746,39 +743,6 @@ function Invoke-UnityStep {
         logPath = $logPath
         elapsedMs = ([DateTime]::UtcNow - $started).TotalMilliseconds
     })
-}
-
-function Invoke-ExternalScript {
-    param([Parameter(Mandatory = $true)][string]$Label, [Parameter(Mandatory = $true)][string]$ScriptPath, [Parameter(Mandatory = $true)][string[]]$Arguments)
-    $started = [DateTime]::UtcNow
-    if ($PlanOnly) {
-        Add-CommandRecord ([ordered]@{ label = $Label; tier = 'production-final'; method = $ScriptPath; arguments = @($Arguments); exitCode = 0; skipped = $true; mutatesProject = $false; logPath = $null; elapsedMs = 0; output = '{}' })
-        return '{}'
-    }
-    $output = @(& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $ScriptPath @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
-    Add-CommandRecord ([ordered]@{ label = $Label; tier = 'production-final'; method = $ScriptPath; arguments = @($Arguments); exitCode = $exitCode; skipped = $false; mutatesProject = $false; logPath = $null; elapsedMs = ([DateTime]::UtcNow - $started).TotalMilliseconds; output = ($output -join "`n") })
-    if ($exitCode -ne 0) { throw ($Label + ' failed: ' + ($output -join "`n")) }
-    return (($output -join "`n").Trim())
-}
-
-function Copy-CaptureEvidence {
-    param([Parameter(Mandatory = $true)][string]$Output)
-    $match = [Regex]::Match($Output, '(?m)^BRIGHT_ARENA_CAPTURE_MANIFEST\s+(.+)$')
-    if (-not $match.Success) { throw 'Capture manifest path missing from capture output.' }
-    $manifestPath = Assert-OneLineValue 'Capture manifest path' $match.Groups[1].Value
-    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw ('Capture manifest missing: ' + $manifestPath) }
-    $captureDirectory = Join-Path $script:EvidenceDirectory 'capture'
-    if (-not (Test-Path -LiteralPath $captureDirectory -PathType Container)) { New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null }
-    $sourceDirectory = Split-Path -Parent $manifestPath
-    foreach ($sourceFile in Get-ChildItem -LiteralPath $sourceDirectory -File -Force) {
-        $destination = Join-Path $captureDirectory $sourceFile.Name
-        if (Test-Path -LiteralPath $destination) { throw ('Capture evidence destination already exists: ' + $destination) }
-        Copy-Item -LiteralPath $sourceFile.FullName -Destination $destination
-    }
-    $durableManifest = Join-Path $captureDirectory (Split-Path -Leaf $manifestPath)
-    if (-not (Test-Path -LiteralPath $durableManifest -PathType Leaf)) { throw ('Durable capture manifest copy missing: ' + $durableManifest) }
-    return [ordered]@{ sourceManifest = $durableManifest; durableManifest = $durableManifest; durableDirectory = $captureDirectory; files = @((Get-ChildItem -LiteralPath $captureDirectory -File -Force | ForEach-Object { [ordered]@{ path = $_.FullName; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } })) }
 }
 
 function Assert-ProbeString {
@@ -900,71 +864,6 @@ function Assert-ProbeContractForMode {
     if ($WorkflowMode -in @('Development', 'ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.manifestStatus -ne 'current') { throw ($WorkflowMode + ' requires a current stage probe manifest.') }
 }
 
-function Read-ReviewMarker {
-    param(
-        [Parameter(Mandatory = $true)][string]$ProjectShaValue,
-        [Parameter(Mandatory = $true)][string]$SourceShaValue,
-        [Parameter(Mandatory = $true)][string]$ReviewedShaValue,
-        [string]$ExpectedExecutionId = '',
-        [string]$ExpectedCheckpoint = $Checkpoint
-    )
-    $path = Assert-DurableEvidencePath (Join-Path $script:GitCommonRoot ('architecture-evidence\movement-lab-prebake\reviews\' + $ProjectShaValue + '.json')) 'Review marker'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw ('Review marker missing: ' + $path) }
-    $marker = Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
-    if ($null -eq $marker) { throw ('Review marker is stale or incomplete: ' + $path) }
-    $required = @('schemaVersion', 'gitSha', 'projectSha', 'sourceSha', 'reviewedSha', 'sourceReviewCompleted', 'criticalHighFixesApplied', 'reviewer', 'reviewerIdentity', 'executionId', 'reviewExecutionId', 'checkpoint', 'reviewCheckpoint', 'completedUtc', 'reviewReportPaths', 'reviewReportSha256s', 'findingDispositions')
-    $markerProperties = @($marker.PSObject.Properties.Name)
-    foreach ($field in $required) { if (-not $markerProperties.Contains($field)) { throw ('Review marker field is missing: ' + $field) } }
-    if ([int]$marker.schemaVersion -ne 1) { throw 'Review marker schemaVersion must equal 1.' }
-    foreach ($boolField in @('sourceReviewCompleted', 'criticalHighFixesApplied')) { if ($marker.$boolField -isnot [bool]) { throw ('Review marker ' + $boolField + ' must be boolean.') } }
-    foreach ($shaField in @('gitSha', 'projectSha', 'sourceSha', 'reviewedSha')) {
-        if ($marker.$shaField -isnot [string] -or [string]$marker.$shaField -notmatch '^[0-9a-fA-F]{40}$') { throw ('Review marker ' + $shaField + ' must be an exact SHA.') }
-    }
-    if ([string]$marker.gitSha -ne $ProjectShaValue -or [string]$marker.projectSha -ne $ProjectShaValue -or [string]$marker.sourceSha -ne $SourceShaValue -or [string]$marker.reviewedSha -ne $ReviewedShaValue) { throw ('Review marker SHA binding mismatch: ' + $path) }
-    if (-not (Test-IsAncestor $SourceShaValue $ReviewedShaValue) -or -not (Test-IsAncestor $ReviewedShaValue $ProjectShaValue) -or -not (Test-IsAncestor $SourceShaValue $ProjectShaValue)) { throw ('Review marker SHA ancestry is invalid: ' + $path) }
-    if (-not [bool]$marker.sourceReviewCompleted -or -not [bool]$marker.criticalHighFixesApplied) { throw ('Review marker does not assert completed review/fixes: ' + $path) }
-    foreach ($field in @('reviewer', 'reviewerIdentity', 'executionId', 'reviewExecutionId', 'checkpoint', 'reviewCheckpoint', 'completedUtc')) {
-        if ($marker.$field -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$marker.$field) -or ([string]$marker.$field).IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { throw ('Review marker identity field is invalid: ' + $field) }
-    }
-    if ([string]$marker.checkpoint -ne [string]$marker.reviewCheckpoint -or $marker.checkpoint -ne $ExpectedCheckpoint) { throw ('Review marker checkpoint binding mismatch: ' + $path) }
-    if (-not [string]::IsNullOrWhiteSpace($ExpectedExecutionId) -and [string]$marker.executionId -ne $ExpectedExecutionId) { throw ('Review marker execution identity mismatch: ' + $path) }
-    $reportPaths = @($marker.reviewReportPaths)
-    $reportShas = @($marker.reviewReportSha256s)
-    if ($reportPaths.Count -eq 0 -or $reportPaths.Count -ne $reportShas.Count) { throw ('Review marker reports are incomplete: ' + $path) }
-    $dispositions = @($marker.findingDispositions)
-    $dispositionMap = @{}
-    foreach ($disposition in $dispositions) {
-        $id = [string]$disposition.id
-        $value = [string]$disposition.disposition
-        if ($id -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]*$' -or $value.ToLowerInvariant() -notin @('fixed', 'resolved', 'closed', 'accepted', 'waived') -or $dispositionMap.ContainsKey($id)) { throw ('Review marker finding disposition is invalid: ' + $id) }
-        $dispositionMap[$id] = $value
-    }
-    $findingIds = New-Object System.Collections.Generic.List[string]
-    for ($index = 0; $index -lt $reportPaths.Count; $index++) {
-        $reportPath = Assert-DurableEvidencePath ([string]$reportPaths[$index]) 'Review report'
-        if (-not (Test-Path -LiteralPath $reportPath -PathType Leaf)) { throw ('Review report missing: ' + $reportPath) }
-        if ([string]$reportShas[$index] -notmatch '^[0-9a-fA-F]{64}$') { throw ('Review report SHA-256 invalid: ' + $reportPath) }
-        $actualReportSha = (Get-FileHash -LiteralPath $reportPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        if ($actualReportSha -ne ([string]$reportShas[$index]).ToLowerInvariant()) { throw ('Review report SHA-256 mismatch: ' + $reportPath) }
-        $text = Get-Content -Raw -LiteralPath $reportPath
-        $report = $null
-        if ([IO.Path]::GetExtension($reportPath).Equals('.json', [StringComparison]::OrdinalIgnoreCase)) { try { $report = $text | ConvertFrom-Json } catch { throw ('Review report JSON is invalid: ' + $reportPath) } }
-        $field = { param([string]$name) $m = [Regex]::Match($text, '(?m)^\s*' + [Regex]::Escape($name) + ':\s*(.+?)\s*$'); if ($m.Success) { $m.Groups[1].Value.Trim() } else { '' } }
-        $executionId = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'execution_id') { [string]$report.execution_id } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'executionId') { [string]$report.executionId } else { & $field 'execution_id' }
-        $checkpointId = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'checkpoint_id') { [string]$report.checkpoint_id } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'checkpointId') { [string]$report.checkpointId } else { & $field 'checkpoint_id' }
-        $reviewed = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewed_sha') { [string]$report.reviewed_sha } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewedSha') { [string]$report.reviewedSha } else { & $field 'reviewed_sha' }
-        $verdict = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'verdict') { [string]$report.verdict } else { & $field 'verdict' }
-        $identity = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'identity') { [string]$report.identity } elseif ($null -ne $report -and $report.PSObject.Properties.Name -contains 'reviewer') { [string]$report.reviewer } else { & $field 'identity' }
-        $reportStatus = if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'status') { [string]$report.status } else { & $field 'status' }
-        if ($executionId -ne [string]$marker.reviewExecutionId -or $checkpointId -ne [string]$marker.reviewCheckpoint -or $reviewed.ToLowerInvariant() -ne $ReviewedShaValue -or $identity -ne [string]$marker.reviewer -or $reportStatus -notin @('complete', 'accepted', 'findings') -or $verdict.ToLowerInvariant() -notin @('accepted', 'findings')) { throw ('Review report semantics mismatch: ' + $reportPath) }
-        if ($null -ne $report -and $report.PSObject.Properties.Name -contains 'findings') { foreach ($finding in @($report.findings)) { if ($null -ne $finding -and -not $findingIds.Contains([string]$finding.id)) { $findingIds.Add([string]$finding.id) } } }
-        else { foreach ($line in ($text -split "`r?`n")) { $m = [Regex]::Match($line, '^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s+(Critical|High|Medium|Low)\s*:'); if ($m.Success -and -not $findingIds.Contains($m.Groups[1].Value)) { $findingIds.Add($m.Groups[1].Value) } } }
-    }
-    foreach ($findingId in $findingIds) { if (-not $dispositionMap.ContainsKey($findingId)) { throw ('Review marker missing finding disposition: ' + $findingId) } }
-    foreach ($dispositionId in @($dispositionMap.Keys)) { if (-not $findingIds.Contains([string]$dispositionId)) { throw ('Review marker has disposition for unknown finding: ' + $dispositionId) } }
-    return [ordered]@{ status = 'validated'; markerPath = $path; markerSha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant(); projectSha = $ProjectShaValue; sourceSha = $SourceShaValue; reviewedSha = $ReviewedShaValue; reviewer = [string]$marker.reviewer; reviewerIdentity = [string]$marker.reviewerIdentity; executionId = [string]$marker.executionId; reviewExecutionId = [string]$marker.reviewExecutionId; checkpoint = [string]$marker.checkpoint; reviewReportPaths = $reportPaths; reviewReportSha256s = $reportShas; findingDispositions = $dispositions; gitMutation = $false }
-}
-
 function Write-AtomicJson {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Value)
     $directory = Split-Path -Parent $Path
@@ -1026,33 +925,6 @@ $script:ProbeOutputPath = if ([string]::IsNullOrWhiteSpace($ProbePath)) { Join-P
 if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
 
 $beforeHead = Get-HeadSha
-$SourceSha = if ([string]::IsNullOrWhiteSpace($SourceSha)) { '' } else { Assert-OneLineValue 'SourceSha' $SourceSha }
-$ReviewedSha = if ([string]::IsNullOrWhiteSpace($ReviewedSha)) { '' } else { Assert-OneLineValue 'ReviewedSha' $ReviewedSha }
-foreach ($shaField in @(@('SourceSha', $SourceSha), @('ReviewedSha', $ReviewedSha))) {
-    if (-not [string]::IsNullOrWhiteSpace([string]$shaField[1]) -and [string]$shaField[1] -notmatch '^[0-9a-fA-F]{40}$') {
-        throw ($shaField[0] + ' must be an exact 40-character Git SHA.')
-    }
-}
-$SourceSha = $SourceSha.ToLowerInvariant()
-$ReviewedSha = $ReviewedSha.ToLowerInvariant()
-if (-not [string]::IsNullOrWhiteSpace($Reviewer)) { $Reviewer = Assert-OneLineValue 'Reviewer' $Reviewer }
-$ExecutionId = if ([string]::IsNullOrWhiteSpace($ExecutionId)) { '' } else { Assert-OneLineValue 'ExecutionId' $ExecutionId }
-$Checkpoint = Assert-OneLineValue 'Checkpoint' $Checkpoint
-$ReviewReportPath = @($ReviewReportPath)
-$ReviewReportSha256 = @($ReviewReportSha256)
-$FindingDisposition = @($FindingDisposition)
-if ($ReviewReportPath.Count -ne $ReviewReportSha256.Count) { throw 'ReviewReportPath and ReviewReportSha256 counts must match.' }
-for ($reportIndex = 0; $reportIndex -lt $ReviewReportPath.Count; $reportIndex++) {
-    $ReviewReportPath[$reportIndex] = Assert-DurableEvidencePath $ReviewReportPath[$reportIndex] 'Review report'
-    if ([string]$ReviewReportSha256[$reportIndex] -notmatch '^[0-9a-fA-F]{64}$') { throw ('Review report SHA-256 invalid: ' + $ReviewReportPath[$reportIndex]) }
-}
-foreach ($finding in $FindingDisposition) {
-    if (-not [string]::IsNullOrWhiteSpace([string]$finding)) { Assert-OneLineValue 'FindingDisposition' ([string]$finding) | Out-Null }
-}
-if ($Mode -eq 'ProductionPrepare') {
-    if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha)) { throw 'ProductionPrepare requires SourceSha and ReviewedSha.' }
-    if (-not (Test-IsAncestor $SourceSha $ReviewedSha) -or -not (Test-IsAncestor $ReviewedSha $beforeHead)) { throw 'ProductionPrepare requires SourceSha -> ReviewedSha -> project HEAD ancestry.' }
-}
 $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { throw ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Acquire-ProjectLease | Out-Null
@@ -1063,9 +935,7 @@ $beforeHashes = Get-GeneratedHashes
 $ledger = New-CheckLedger
 $script:LedgerRows = $ledger
 Merge-ExistingLedger $ledger $beforeHead
-$markerResult = $null
 $probeRecord = $null
-$captureEvidence = $null
 
 try {
     switch ($Mode) {
@@ -1083,27 +953,6 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
-            if ([string]::IsNullOrWhiteSpace($SourceSha) -or [string]::IsNullOrWhiteSpace($ReviewedSha) -or [string]::IsNullOrWhiteSpace($Reviewer) -or $ReviewReportPath.Count -eq 0) { throw 'ProductionPrepare requires SourceSha, ReviewedSha, Reviewer, and durable review reports.' }
-            $markerScript = Join-Path $PSScriptRoot 'Write-MovementLabPreBakeReviewMarker.ps1'
-            $markerArgs = @('-ProjectPath', $script:ProjectRoot, '-ProjectSha', $beforeHead, '-SourceSha', $SourceSha, '-ReviewedSha', $ReviewedSha, '-Reviewer', $Reviewer, '-Checkpoint', $Checkpoint)
-            if (-not [string]::IsNullOrWhiteSpace($ExecutionId)) { $markerArgs += @('-ExecutionId', $ExecutionId) }
-            if ($ReviewReportPath.Count -gt 0) { foreach ($path in $ReviewReportPath) { $markerArgs += @('-ReviewReportPath', $path) } }
-            if ($ReviewReportSha256.Count -gt 0) { foreach ($sha in $ReviewReportSha256) { $markerArgs += @('-ReviewReportSha256', $sha) } }
-            if ($FindingDisposition.Count -gt 0) { foreach ($finding in $FindingDisposition) { $markerArgs += @('-FindingDisposition', $finding) } }
-            $markerReused = $false
-            if (Test-CheckPending 'review-marker') {
-                $markerText = Invoke-ExternalScript 'ReviewMarker' $markerScript $markerArgs
-                $markerResult = $markerText | ConvertFrom-Json
-                Mark-CheckExecuted 'review-marker'
-            } else {
-                Mark-CheckReused 'review-marker'
-                $markerReused = $true
-                $markerResult = [ordered]@{ status = 'reused'; markerPath = (Join-Path $commonGit ('architecture-evidence\movement-lab-prebake\reviews\' + $beforeHead + '.json')); projectSha = $beforeHead; gitMutation = $false }
-            }
-            $markerPathForRead = Assert-DurableEvidencePath (Join-Path $script:GitCommonRoot ('architecture-evidence\movement-lab-prebake\reviews\' + $beforeHead + '.json')) 'Review marker'
-            if (-not $PlanOnly -or ($markerReused -and (Test-Path -LiteralPath $markerPathForRead -PathType Leaf))) {
-                $markerResult = Read-ReviewMarker $beforeHead $SourceSha $ReviewedSha $ExecutionId $Checkpoint
-            }
             if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
             $probeRecord = Read-ProbeContract
             Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
@@ -1125,16 +974,9 @@ try {
             Assert-ProbeContractForMode $probeRecord 'ProductionPrepareFinal'
         }
         'ProductionValidate' {
-            if ($Capture) {
-                $captureScript = Join-Path $PSScriptRoot 'Capture-BrightArenaVisuals.ps1'
-                $capturePending = Test-CheckPending 'capture-validator'
-                if ($capturePending) { $captureOutput = Invoke-ExternalScript 'ProductionCapture' $captureScript @('-ProjectPath', $script:ProjectRoot); $captureEvidence = Copy-CaptureEvidence $captureOutput; Mark-CheckExecuted 'capture-validator' } else { Mark-CheckReused 'capture-validator'; $captureOutput = '' }
-                Add-CommandRecord ([ordered]@{ label = 'CaptureManifestOutput'; tier = 'production-final'; method = $captureScript; arguments = @(); exitCode = 0; skipped = (-not $capturePending); mutatesProject = $false; logPath = $null; elapsedMs = 0; output = $captureOutput })
-            } else {
-                if (Test-CheckPending 'capture-validator') { Invoke-UnityStep 'ProductionValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'capture-validator' } else { Mark-CheckReused 'capture-validator' }
-                $probeRecord = Read-ProbeContract
-                Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
-            }
+            if (Test-CheckPending 'production-validator') { Invoke-UnityStep 'ProductionValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'production-validator' } else { Mark-CheckReused 'production-validator' }
+            $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
         }
     }
 } finally {
@@ -1196,8 +1038,6 @@ $result = [ordered]@{
     unityVersion = $script:UnityVersion
     unityPath = $script:UnityPath
     exactSha = $afterHead
-    sourceSha = $SourceSha
-    reviewedSha = $ReviewedSha
     evidenceRoot = $script:EvidenceDirectory
     commands = @($script:CommandRecords.ToArray())
     elapsedMs = ([DateTime]::UtcNow - $script:WorkflowStarted).TotalMilliseconds
@@ -1206,8 +1046,6 @@ $result = [ordered]@{
     beforeGeneratedHashes = $beforeHashes
     afterGeneratedHashes = $afterHashes
     changedGeneratedPaths = $changedGeneratedPaths
-    reviewMarker = $markerResult
-    captureEvidence = $captureEvidence
     checkLedgerPath = $ledgerEvidencePath
     checkLedgerPayloadPath = $ledgerPayloadPath
     checkLedgerPayloadSha256 = $ledgerEvidenceDigest
@@ -1239,7 +1077,6 @@ $manifest = [ordered]@{
     probe = $probeRecord
     bakeCount = $script:BakeCount
     changedGeneratedPaths = $changedGeneratedPaths
-    captureEvidence = $captureEvidence
     checkLedgerPath = $ledgerEvidencePath
     checkLedgerPayloadPath = $ledgerPayloadPath
     checkLedgerPayloadSha256 = $ledgerEvidenceDigest
