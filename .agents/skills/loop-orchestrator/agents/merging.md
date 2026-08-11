@@ -4,9 +4,9 @@ Role: `merging agent`
 
 Profile: exact `sol_high`
 
-Invocation: LP only; one completed wave per attempt, including one-plan wave
+Invocation: LP only; one completed multi-plan wave per attempt
 
-Merging agent is sole Git owner for LP-provisioned isolated integration branch/worktree during attempt. LP owns coordination, state writes, and user-branch authority. Child agents never merge.
+Merging agent applies only to `multi-plan` routes. `single_plan` routes dispatch no merging agent and provision no integration worktree; accepted execution SHA remains final integration SHA. Merging agent is sole Git owner for LP-provisioned isolated integration branch/worktree during attempt. LP owns coordination, state writes, and user-branch authority. Child agents never merge.
 
 ## Inputs
 
@@ -31,16 +31,16 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
 2. Reread integration branch HEAD immediately before each integration operation. Drift from expected current head -> stop; return `blocked` with observed head; perform no further mutation.
 3. Integrate each accepted execution SHA exactly once in declared order.
    - Fast-forward when current integration head is ancestor of candidate.
-   - One-plan fast-forward is mandatory when ancestry permits. Post-merge SHA may equal execution SHA.
+   - Post-merge SHA may equal execution SHA when fast-forward applies.
    - Otherwise merge exact candidate SHA only when dispatch permits merge commit.
 4. Conflict -> stop and report files/candidate SHAs. Resolve only dispatch-owned integration text. Product choice or protected-path change -> `blocked` before resolution.
-5. Run required boundary checks after declared merge boundaries and final integration. Any Unity-mutating check starts with `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit`; require `<10s` and no Unity process or lock. Merge/fix invalidates affected checks.
+5. Run required boundary checks after declared merge boundaries and final integration. Any Unity-mutating check starts with `Tools/Tests/Invoke-HarnessTests.ps1` for `harness-unit`; require `<10s` and no Unity process or lock. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; never pass workflow arguments to test runner. Carry prior accepted `-LedgerPath`. Merge/fix invalidates affected checks.
    - Intermediate wave -> Git/scope/downstream-contract rows.
    - Final wave -> union pending or invalidated production-final rows once.
-   - Unchanged one-plan fast-forward -> verify `check-ledger.json` SHA-256; reuse non-bake evidence after SHA/content attestation; production bake requires builder-gate reattest.
-   - Production bake -> invoke `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting`; exact current-lighting skip marker proves reuse, absent marker proves one bake. Invalidation set -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Other render/material/prefab/scene/arena/quality/input/package/version paths do not reopen bake.
-   - Post-proof fix -> invalidate rows whose declared paths intersect changed paths; lighting-input intersection forces builder-gate bake rerun.
-6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged one-plan head with still-valid checks and no integration edit. Report Critical/High findings only.
+   - Unchanged multi-plan fast-forward -> verify `check-ledger.json` SHA-256; reuse non-bake evidence after SHA/content attestation; production bake requires builder-gate reattest.
+   - Production bake -> before each bake-capable invocation, rehash every bound run `workflow-result.json` and sum `bakeCount`; cumulative `>=2` -> `blocked` before Unity. Retain postflight cumulative `>2` only as evidence-corruption/contract-violation detector; observed cumulative must never exceed `2`. Invoke `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting`; exact current-lighting skip marker proves reuse, absent marker proves one bake. Replacement invocation after prior production-final attempt requires explicit user authority recorded before dispatch. Lighting-input intersection invalidates production-final proof; missing authority -> `blocked` before Unity, never force rerun. With authority, builder owns skip/rebuild. Invalidation set -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Other render/material/prefab/scene/arena/quality/input/package/version paths do not reopen bake.
+   - Post-proof fix -> invalidate rows whose declared paths intersect changed paths; lighting-input intersection invalidates production-final proof and requires authority before replacement bake.
+6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged multi-plan integration head with still-valid checks and no integration edit. Report Critical/High findings only.
 7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, and do not re-review fix.
 8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, `check-ledger.json` pointer/digest, checks, and no active writer.
 

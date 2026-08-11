@@ -6,7 +6,7 @@ Every loop run uses one durable state document:
 
 `run_id` is globally unique for repository. Never reuse another run directory, including missing/corrupt-state recovery. Product tree contains no orchestration state.
 
-State contains current run facts only: bound plan worktrees and integration worktree. No repository-wide worktree inventory.
+State contains current run facts only: bound plan worktrees and, for `multi-plan`, integration worktree. No repository-wide worktree inventory.
 
 ## Ownership and truth
 
@@ -106,32 +106,17 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - final SHA: [full SHA or None]
 - checks: [check -> result/evidence/SHA or pending]
 - clean: true | false | unknown
-
-## Executed Check Ledger
-
-Harness-owned `check-ledger.json` is sole executed ledger. Ordinary checks keep compact proof; `production-final` rows keep full contract. State stores pointer plus SHA-256 only; LP never copies or rewrites executed rows. Verify ledger path and digest before resume or merge. Evidence paths and evidence SHA-256 values remain integrity checks.
-
-- check_id: [stable ID]
-- owner: [one worker/orchestrator identity]
-- tier: `fast | development | production-final`
-- status: `pending | executed | reused | deferred | invalidated`
-- run_point: [coding | checkpoint | fan-in | source-freeze | final]
-- `executed_sha`: [full SHA or None]
-- `validated_sha`: [full SHA or None]
-- `input_paths`: [exact paths]
-- `input_digest`: [digest or None]
-- `environment_fingerprint`: [digest/identity or None]
-- `mutates_project`: `true | false`
-- `invalidation_paths`: [exact paths]
-- subsumes: [check IDs or None]
-- `subsumed_checks`: [check IDs or None]
-- `evidence_path`: [durable path or None]
-- `evidence_digest`: [SHA-256 or None]
-- `evidence`: [path + SHA-256 object or None]
-- `invalidation_reason`: [changed path/condition or None]
-
-Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly. Any Unity-mutating row requires `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit` first, under `<10s` with no Unity process or lock. Builder-gate reattest rule -> production bake invokes `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` and accepts current lighting-input digest plus exact skip marker. `production-bake lighting-input set` -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Only this set invalidates production bake. Resume and merge read `check-ledger.json` mechanically after digest verification. Builder-output byte/hash equality never gates; source/input digests and orchestration artifact/evidence hashes remain integrity checks.
 ```
+
+## Executed Ledger Pointer
+
+Harness-owned `check-ledger.json` is sole executed ledger. State stores only absolute ledger path plus SHA-256 in plan fields above; LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows and evidence only after digest verification. Full row contract stays in producer/consumer policy.
+
+## Production Bake Gate
+
+- Before each bake-capable Unity invocation, rehash every bound run `workflow-result.json` and sum `bakeCount`. Cumulative `>=2` -> `blocked` before Unity. Retain postflight cumulative `>2` only as evidence-corruption/contract-violation detector; observed cumulative must never exceed `2`.
+- Replacement `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` after any prior production-final attempt requires explicit user authority recorded before dispatch.
+- Lighting-input intersection invalidates production-final proof. Missing authority -> `blocked` before Unity; never force rerun. With authority, builder owns skip/rebuild; exact current-lighting skip marker or one bake proves outcome.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
 
@@ -162,6 +147,11 @@ Merge:
 `done -> merged` only after merging agent result matches observed integration Git facts. Merge blocker keeps plan `done` when plan output remains accepted; record integration `blocked`. Plan status `blocked` applies only when plan artifact/execution acceptance itself fails.
 
 `single_plan` route -> `done -> READY_FOR_USER_MERGE` after execution identity, scope, checks, and clean worktree pass. Skip merging agent; accepted execution SHA is final integration SHA.
+
+Route handoff:
+
+- `single_plan` -> clean plan worktree; record accepted execution SHA as final integration SHA; create no integration worktree or merger result.
+- `multi-plan` -> clean integration worktree; merge each accepted execution SHA exactly once; record final integration SHA.
 
 `needs_user` always maps to `awaiting_user`, never `blocked`. User response creates fresh role attempt. Blocker resolution requires observable recheck before fresh attempt.
 
@@ -225,7 +215,7 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 
 ## Recovery scenarios
 
-- one plan (`single_plan` route): `pending -> planning -> planned -> executing -> done -> READY_FOR_USER_MERGE`; skip BREAKDOWN and MERGING agents; accepted execution SHA serves as final integration SHA.
+- one plan (`single_plan` route): `pending -> planning -> planned -> executing -> done -> READY_FOR_USER_MERGE`; skip BREAKDOWN and MERGING agents; keep plan worktree clean; accepted execution SHA serves as final integration SHA; no integration worktree or merge.
 - parallel: disjoint plans share wave; each reaches `done`; merger consumes breakdown order; each becomes `merged` at one observed integration SHA.
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.

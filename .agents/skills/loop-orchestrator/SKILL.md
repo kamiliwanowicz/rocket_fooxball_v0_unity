@@ -30,7 +30,7 @@ Profile unavailable -> current attempt `blocked`; LP records blocker and recheck
 
 User branch stays unchanged until explicit authority binds target branch and candidate SHA. Approval remains required for user-branch merge, destructive action, material scope or behavior change, external mutation, secrets, migration, or dirty-work overwrite.
 
-Worktree scope is closed: current run's plan worktrees plus integration worktree. Query and verify exact bound paths/branches only. Keep unrelated repository worktrees outside discovery, state, dispatch context, reports, and cleanup. Inspect target checkout only when needed to establish baseline, dirty overlap, or user-branch merge authority; never persist unrelated worktree inventory.
+Worktree scope is closed: current run's plan worktrees plus multi-plan integration worktree when route requires one. Query and verify exact bound paths/branches only. Keep unrelated repository worktrees outside discovery, state, dispatch context, reports, and cleanup. Inspect target checkout only when needed to establish baseline, dirty overlap, or user-branch merge authority; never persist unrelated worktree inventory.
 
 ## INIT
 
@@ -81,7 +81,7 @@ Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Execution orchestrator builds declared checks before worker dispatch. Harness writes sole executed `check-ledger.json`; state stores pointer plus SHA-256. Workers run compact fast/local proof; production-final rows retain full contract. Before any Unity-mutating workflow, run `Tools/Tests/Invoke-HarnessTests.ps1` `harness-unit` in `<10s` with no Unity process or lock. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()` semantic validation. Production bake -> builder gate `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting`; only exact current-lighting skip marker or one observed bake proves result.
+Execution orchestrator builds declared checks before worker dispatch. Harness writes sole executed `check-ledger.json`; state stores absolute pointer plus SHA-256. Workers run compact fast/local proof; production-final rows retain full contract. Before any Unity-mutating workflow, invoke `Tools/Tests/Invoke-HarnessTests.ps1` for `harness-unit` in `<10s` with no Unity process or lock. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; carry previous accepted `-LedgerPath` when present; never pass workflow arguments to test runner. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and direct `RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab()` semantic validation. Production bake -> builder gate `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting`; only exact current-lighting skip marker or one observed bake proves result. Replacement bake after prior production-final attempt requires explicit user authority before dispatch. Lighting-input intersection invalidates production-final proof; missing authority -> `blocked` before Unity, never force rerun. With authority, builder owns skip/rebuild.
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
@@ -95,7 +95,7 @@ Dispatch [merging agent](agents/merging.md) after every completed multi-plan wav
 
 Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. `single_plan` route accepts execution SHA as final integration SHA only after clean scope/check proof; no merge-stage agent result exists.
 
-Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged one-plan fast-forward reuses non-bake evidence after `check-ledger.json` digest attestation and builder-gate reattest. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths; only exact production-bake lighting-input set changes reopen builder-gate bake.
+Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged multi-plan fast-forward reuses non-bake evidence after `check-ledger.json` digest attestation and builder-gate reattest. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths; lighting-input intersection invalidates production-final proof and requires authority before replacement bake. Before each bake-capable Unity invocation, rehash every bound run `workflow-result.json` and sum `bakeCount`; cumulative `>=2` -> `blocked` before Unity. Retain postflight cumulative `>2` only as evidence-corruption/contract-violation detector; observed cumulative must never exceed `2`.
 
 Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 
@@ -128,8 +128,9 @@ Use [state and recovery](references/state-and-recovery.md) for every run, resume
 Final handoff requires:
 
 - phase `READY_FOR_USER_MERGE`;
-- observed clean integration branch/worktree and exact full final SHA;
-- every requirement covered and every accepted execution SHA merged once;
+- `single_plan` -> clean plan worktree; accepted execution SHA recorded as final integration SHA; zero integration worktree and zero merger;
+- `multi-plan` -> clean integration worktree; every accepted execution SHA merged exactly once; exact final integration SHA;
+- every requirement covered;
 - required checks bound to final SHA;
 - Critical/High finding dispositions recorded;
 - changed paths and residual risks recorded;
