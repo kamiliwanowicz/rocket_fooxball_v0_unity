@@ -160,7 +160,6 @@ $arguments = @(
     '-batchmode',
     '-quit',
     '-projectPath', $ProjectPath,
-    '-brightArenaExpectedGitSha', $expectedGitSha,
     '-executeMethod', 'RocketFooxball.Editor.BrightArenaVisualCapture.Capture',
     '-logFile', $LogPath
 )
