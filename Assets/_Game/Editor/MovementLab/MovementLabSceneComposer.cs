@@ -617,46 +617,15 @@ namespace RocketFooxball.Editor
 
                     var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.DynamicsManagerPath);
                     if (settings.Length == 0) throw new InvalidOperationException("DynamicsManager.asset unavailable.");
-                    var serialized = new SerializedObject(settings[0]);
-                    var matrix = serialized.FindProperty("m_LayerCollisionMatrix");
-                    if (matrix == null || matrix.propertyType != SerializedPropertyType.String || string.IsNullOrEmpty(matrix.stringValue))
-                    {
-                        throw new InvalidOperationException("DynamicsManager layer collision matrix is unavailable.");
-                    }
 
-                    var bits = matrix.stringValue.ToCharArray();
-                    EnableCollisionPair(bits, participantsLayer, participantsLayer);
-                    EnableCollisionPair(bits, participantsLayer, projectilesLayer);
-                    EnableCollisionPair(bits, projectilesLayer, projectilesLayer);
-                    matrix.stringValue = new string(bits);
-                    serialized.ApplyModifiedPropertiesWithoutUndo();
-
-                    // Refresh the live editor matrix after serialized repair;
-                    // this keeps validator reads aligned before scene reload.
+                    // Unity 6000.5 does not expose m_LayerCollisionMatrix as a
+                    // writable SerializedProperty. Use the supported API, then
+                    // persist its PhysicsManager changes with other assets.
                     UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, participantsLayer, false);
                     UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, projectilesLayer, false);
                     UnityEngine.Physics.IgnoreLayerCollision(projectilesLayer, projectilesLayer, false);
                     EditorUtility.SetDirty(settings[0]);
                     AssetDatabase.SaveAssets();
-                }
-
-                private static void EnableCollisionPair(char[] matrix, int firstLayer, int secondLayer)
-                {
-                    EnableCollisionBit(matrix, firstLayer * 32 + secondLayer);
-                    EnableCollisionBit(matrix, secondLayer * 32 + firstLayer);
-                }
-
-                private static void EnableCollisionBit(char[] matrix, int bitIndex)
-                {
-                    var nibbleIndex = bitIndex / 4;
-                    if (matrix == null || nibbleIndex < 0 || nibbleIndex >= matrix.Length)
-                    {
-                        throw new InvalidOperationException("DynamicsManager layer collision matrix is malformed.");
-                    }
-
-                    var digit = Convert.ToInt32(matrix[nibbleIndex].ToString(), 16);
-                    digit |= 1 << (bitIndex % 4);
-                    matrix[nibbleIndex] = digit.ToString("x")[0];
                 }
 
                 internal static void SetProjectFixedTimestep()
