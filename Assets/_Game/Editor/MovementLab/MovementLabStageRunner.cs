@@ -73,6 +73,12 @@ namespace RocketFooxball.Editor
             var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
             var current = initial;
+            // Legacy manifests need one uninterrupted non-lighting pass. The
+            // first merge upgrades schema and records live output paths before
+            // their writers run; probing that intermediate snapshot would
+            // treat those migration-only missing outputs as fatal identity
+            // violations. Resume strict probing after all initial stages run.
+            var deferProbeUntilMigrationPassCompletes = initial.ManifestReadStatus != MovementLabManifestReadStatus.Current;
             var sawWork = false;
             var visitedStates = new HashSet<string>(StringComparer.Ordinal);
             var maxIterations = Math.Max(4, stages.Length * 4);
@@ -107,10 +113,13 @@ namespace RocketFooxball.Editor
                     MovementLabManifestStore.WriteAtomic(merged);
                     AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
 
-                    // Recompute immediately after every write. This closes
-                    // newly-stale downstream stages in topological order and
-                    // prevents returning a probe based only on the initial DAG.
-                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
+                    // Recompute immediately after every write. Migration is
+                    // the sole exception: its initial full live snapshot can
+                    // contain outputs not yet written by later stages.
+                    if (!deferProbeUntilMigrationPassCompletes)
+                    {
+                        current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
+                    }
                     executedThisPass = true;
                     sawWork = true;
                 }
@@ -119,6 +128,12 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab non-lighting stage closure made no progress; stale stages remain: " +
                         string.Join(",", stale.Select(stage => stage.ToString()).ToArray()));
+                }
+
+                if (deferProbeUntilMigrationPassCompletes)
+                {
+                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
+                    deferProbeUntilMigrationPassCompletes = false;
                 }
             }
 
