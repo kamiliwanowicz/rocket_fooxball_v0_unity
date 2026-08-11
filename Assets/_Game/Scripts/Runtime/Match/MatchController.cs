@@ -356,7 +356,7 @@ namespace RocketFooxball.Runtime.Match
                     }
 
                     var ignore = !first.IsAlive || !second.IsAlive || first.IsImmune || second.IsImmune;
-                    Physics.IgnoreCollision(firstController, secondController, ignore);
+                    UnityEngine.Physics.IgnoreCollision(firstController, secondController, ignore);
                 }
             }
         }

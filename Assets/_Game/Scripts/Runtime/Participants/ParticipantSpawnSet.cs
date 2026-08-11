@@ -184,7 +184,7 @@ namespace RocketFooxball.Runtime.Participants
                 return true;
             }
 
-            if (!Physics.Raycast(origin, offset / distance, out var hit, distance, visibilityMask, QueryTriggerInteraction.Ignore))
+            if (!UnityEngine.Physics.Raycast(origin, offset / distance, out var hit, distance, visibilityMask, QueryTriggerInteraction.Ignore))
             {
                 return true;
             }
