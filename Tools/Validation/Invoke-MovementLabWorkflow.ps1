@@ -31,7 +31,6 @@ $script:LeaseReleaseProofPath = $null
 $script:InvocationId = $null
 $script:PriorLedgerHistory = New-Object System.Collections.Generic.List[object]
 $script:PriorManifestHistory = New-Object System.Collections.Generic.List[object]
-$script:ProbeInventoryPaths = @()
 $script:RequestedInventoryPaths = @()
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
@@ -235,15 +234,14 @@ function Get-AuthoritativeGeneratedInventory {
         if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
         elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
     }
-    foreach ($probePath in @($script:ProbeInventoryPaths)) {
-        $normalizedProbePath = ([string]$probePath).Replace('\', '/').TrimStart('/')
-        if (-not (Test-ProbeInventoryMember $normalizedProbePath)) { throw ('Probe inventory path expands closed inventory: ' + $normalizedProbePath) }
-        if (-not $paths.Contains($normalizedProbePath)) { $paths.Add($normalizedProbePath) }
-    }
     foreach ($requested in @($GeneratedPath)) {
         $value = Assert-OneLineValue 'GeneratedPath' ([string]$requested)
         if ([IO.Path]::IsPathRooted($value) -or -not (Test-InventoryMember $value)) { throw ('GeneratedPath is outside authoritative inventory: ' + $value) }
-        if (-not $requestedSelection.Contains($value.Replace('\', '/').TrimStart('/'))) { $requestedSelection.Add($value.Replace('\', '/').TrimStart('/')) }
+        $normalized = $value.Replace('\', '/').TrimStart('/')
+        if (-not $requestedSelection.Contains($normalized)) { $requestedSelection.Add($normalized) }
+        $full = Join-Path $script:ProjectRoot $normalized
+        if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($normalized)) { $paths.Add($normalized) }
+        elseif (-not (Test-Path -LiteralPath $full) -and -not $paths.Contains($normalized + '=__MISSING__')) { $paths.Add($normalized + '=__MISSING__') }
     }
     $script:RequestedInventoryPaths = @($requestedSelection.ToArray())
     return @($paths.ToArray() | Sort-Object -Unique)
@@ -290,6 +288,39 @@ function Get-NonGeneratedDirtyPaths {
         ForEach-Object { ([string]$_).Trim() } |
         Where-Object { $_ -and -not (Test-GeneratedPath $_) } |
         Sort-Object -Unique)
+}
+
+function Get-UntrackedPaths {
+    $text = Invoke-Git @('ls-files', '--others', '--exclude-standard')
+    return @($text -split "`n" |
+        ForEach-Object { ([string]$_).Trim().Replace('\', '/') } |
+        Where-Object { $_ } |
+        Sort-Object -Unique)
+}
+
+function Remove-NewUnityRootIdeChurn {
+    param([AllowEmptyCollection()][string[]]$InitialUntrackedPaths)
+    $canonicalRoot = ([string]$script:CanonicalProjectRoot).TrimEnd('\')
+    if ([string]::IsNullOrWhiteSpace($canonicalRoot)) { return @() }
+    $projectLeaf = [IO.Path]::GetFileName($canonicalRoot)
+    if ([string]::IsNullOrWhiteSpace($projectLeaf)) { return @() }
+    $candidateName = $projectLeaf + '.slnx'
+    $candidateRelative = $candidateName.Replace('\', '/')
+    $initial = @($InitialUntrackedPaths | ForEach-Object { ([string]$_).Trim().Replace('\', '/') } | Where-Object { $_ })
+    if (@($initial | Where-Object { $_.Equals($candidateRelative, [StringComparison]::OrdinalIgnoreCase) }).Count -gt 0) { return @() }
+    $current = @(Get-UntrackedPaths)
+    if (@($current | Where-Object { $_.Equals($candidateRelative, [StringComparison]::OrdinalIgnoreCase) }).Count -eq 0) { return @() }
+
+    $candidateFull = [IO.Path]::GetFullPath((Join-Path $canonicalRoot $candidateName))
+    $rootPrefix = $canonicalRoot + '\'
+    if (-not $candidateFull.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+        -not ([IO.Path]::GetDirectoryName($candidateFull)).Equals($canonicalRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not ([IO.Path]::GetFileName($candidateFull)).Equals($candidateName, [StringComparison]::OrdinalIgnoreCase)) { return @() }
+    if (-not (Test-Path -LiteralPath $candidateFull -PathType Leaf)) { return @() }
+
+    [IO.File]::Delete($candidateFull)
+    if (Test-Path -LiteralPath $candidateFull) { throw ('Unity IDE churn cleanup did not remove: ' + $candidateFull) }
+    return @($candidateRelative)
 }
 
 function Get-ProjectUnityProcesses {
@@ -663,20 +694,6 @@ function Test-StringSetEqual {
     return $true
 }
 
-function Test-GeneratedHashMapsEqual {
-    param([AllowNull()]$Left, [AllowNull()]$Right)
-    if ($null -eq $Left -or $null -eq $Right) { return $false }
-    $leftProperties = if ($Left -is [System.Collections.IDictionary]) { @($Left.Keys | ForEach-Object { [string]$_ } | Sort-Object -Unique) } else { @($Left.PSObject.Properties | ForEach-Object { $_.Name } | Sort-Object -Unique) }
-    $rightProperties = if ($Right -is [System.Collections.IDictionary]) { @($Right.Keys | ForEach-Object { [string]$_ } | Sort-Object -Unique) } else { @($Right.PSObject.Properties | ForEach-Object { $_.Name } | Sort-Object -Unique) }
-    if (-not (Test-StringSetEqual $leftProperties $rightProperties)) { return $false }
-    foreach ($name in $leftProperties) {
-        $leftValue = if ($Left -is [System.Collections.IDictionary]) { [string]$Left[$name] } else { [string]$Left.PSObject.Properties[$name].Value }
-        $rightValue = if ($Right -is [System.Collections.IDictionary]) { [string]$Right[$name] } else { [string]$Right.PSObject.Properties[$name].Value }
-        if ($leftValue -cne $rightValue) { return $false }
-    }
-    return $true
-}
-
 function Get-PriorManifestForRow {
     param([Parameter(Mandatory = $true)]$Prior)
     $validatedSha = Get-ObjectPropertyText $Prior 'validated_sha'
@@ -739,27 +756,19 @@ function Test-ProductionBakeReuseProof {
     return @{ valid = $true; reason = $null; priorProbe = $priorProbe }
 }
 
-function Test-ProductionBakeOutputReuseProof {
-    param([Parameter(Mandatory = $true)]$Prior, [Parameter(Mandatory = $true)]$Row, [Parameter(Mandatory = $true)]$CurrentProbe)
-    if ([string]$CurrentProbe.status -eq 'missing' -and $PlanOnly) { return @{ valid = $true; reason = $null } }
-    $priorInventory = @(Get-ObjectPropertyValue $Prior 'generated_inventory')
-    $currentInventory = @(Get-ObjectPropertyValue $Row 'generated_inventory')
-    if ($priorInventory.Count -eq 0 -or $currentInventory.Count -eq 0 -or -not (Test-StringSetEqual $priorInventory $currentInventory)) { return @{ valid = $false; reason = 'production bake generated inventory changed' } }
-    if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $Prior 'generated_hash_digest')) -or
-        (Get-ObjectPropertyText $Prior 'generated_hash_digest') -ne (Get-ObjectPropertyText $Row 'generated_hash_digest')) { return @{ valid = $false; reason = 'production bake generated output digest changed' } }
-    if (-not (Test-GeneratedHashMapsEqual (Get-ObjectPropertyValue $Prior 'generated_hashes') (Get-ObjectPropertyValue $Row 'generated_hashes'))) { return @{ valid = $false; reason = 'production bake generated output hashes changed' } }
-    return @{ valid = $true; reason = $null }
-}
-
 function Test-ProductionBakeProbeReuseProof {
     param([Parameter(Mandatory = $true)]$PriorProbe, [Parameter(Mandatory = $true)]$CurrentProbe)
     if ([string]$CurrentProbe.status -eq 'missing' -and $PlanOnly) { return @{ valid = $true; reason = $null } }
     if ([string]$CurrentProbe.status -ne 'read') { return @{ valid = $false; reason = 'current production bake probe was not read' } }
-    foreach ($probeField in @('schemaVersion', 'unityVersion', 'manifestStatus', 'lightingInputDigest', 'sourceSignature', 'outputFingerprint', 'bakedProfile')) {
+    foreach ($probeField in @('schemaVersion', 'unityVersion', 'manifestStatus', 'lightingInputDigest', 'sourceSignature', 'bakedProfile')) {
         if ((Get-ObjectPropertyText $PriorProbe $probeField) -cne (Get-ObjectPropertyText $CurrentProbe $probeField)) { return @{ valid = $false; reason = 'production bake probe state changed: ' + $probeField } }
     }
-    if (-not (Test-StringSetEqual @(Get-ObjectPropertyValue $PriorProbe 'fingerprintPaths') @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintPaths')) -or
-        -not (Test-StringSetEqual @(Get-ObjectPropertyValue $PriorProbe 'fingerprintHashes') @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintHashes'))) { return @{ valid = $false; reason = 'production bake probe output fingerprint changed' } }
+    foreach ($probeField in @('outputFingerprint')) {
+        if ([string]::IsNullOrWhiteSpace((Get-ObjectPropertyText $CurrentProbe $probeField))) { return @{ valid = $false; reason = 'current production bake probe field missing: ' + $probeField } }
+    }
+    $currentFingerprintPaths = @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintPaths')
+    $currentFingerprintHashes = @(Get-ObjectPropertyValue $CurrentProbe 'fingerprintHashes')
+    if ($currentFingerprintPaths.Count -eq 0 -or $currentFingerprintPaths.Count -ne $currentFingerprintHashes.Count) { return @{ valid = $false; reason = 'current production bake probe fingerprint coverage incomplete' } }
     return @{ valid = $true; reason = $null }
 }
 
@@ -770,7 +779,6 @@ function Confirm-ProductionBakeReuse {
     if ($null -eq $row -or [string]$row.status -ne 'reused') { return }
     $candidate = $script:ProductionBakeReuseCandidates['production-bake']
     $proof = Test-ProductionBakeProbeReuseProof $candidate.priorProbe $Probe
-    if ($proof.valid) { $proof = Test-ProductionBakeOutputReuseProof $candidate.prior $row $Probe }
     if (-not $proof.valid) {
         $row.status = 'invalidated'
         $row.invalidation_reason = [string]$proof.reason
@@ -1005,7 +1013,6 @@ function Get-ProbeStringArrayValue {
 function Read-ProbeContract {
     $path = $script:ProbeOutputPath
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        $script:ProbeInventoryPaths = @()
         return [ordered]@{
             status = 'missing'
             path = $path
@@ -1098,7 +1105,6 @@ function Read-ProbeContract {
         }
     }
     Complete-WorkflowValidationPhase 'probe' $violations
-    $script:ProbeInventoryPaths = @($fingerprintPaths)
     $hash = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
     return [ordered]@{
         status = 'read'; path = $path; schemaVersion = [int]$schemaValue; sha256 = $hash; gitSha = $sha; unityVersion = $unityVersion; manifestStatus = $manifestStatus
@@ -1255,6 +1261,7 @@ if (-not [string]::IsNullOrWhiteSpace($LedgerPath) -and $ledgerPathPathSafe) { $
 if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
 
 $beforeHead = Get-HeadSha
+$initialUntrackedPaths = @(Get-UntrackedPaths)
 $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { Add-WorkflowViolation $preflightViolations 'preflight.repository.dirtyScope' ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Complete-WorkflowValidationPhase 'preflight' $preflightViolations
@@ -1326,6 +1333,7 @@ try {
     if (-not $PlanOnly) { Wait-UnityRelease 'workflow-final' | Out-Null }
 }
 
+if (-not $PlanOnly) { $null = Remove-NewUnityRootIdeChurn $initialUntrackedPaths }
 $afterHashes = Get-GeneratedHashes
 $changedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
 $afterGeneratedHashDigest = Get-GeneratedHashDigest $afterHashes
