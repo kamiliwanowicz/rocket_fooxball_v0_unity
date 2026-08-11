@@ -722,6 +722,11 @@ function New-LedgerRow {
         [string[]]$Subsumes = @(),
         [Parameter(Mandatory = $true)][string]$RunPoint
     )
+    $inputPathArray = [string[]]@($InputPaths)
+    $invalidationPathArray = [string[]]@($InvalidationPaths)
+    $subsumesArray = [string[]]@($Subsumes)
+    $generatedInventoryArray = [string[]]@(Get-AuthoritativeGeneratedInventory)
+    $requestedInventoryArray = [string[]]@($script:RequestedInventoryPaths)
     $generatedHashes = Get-GeneratedHashes
     [ordered]@{
         invocation_id = $script:InvocationId
@@ -731,16 +736,16 @@ function New-LedgerRow {
         status = 'pending'
         run_point = $RunPoint
         mutates_project = $MutatesProject
-        input_paths = @($InputPaths)
-        input_digest = Get-InputDigest $InputPaths
+        input_paths = $inputPathArray
+        input_digest = Get-InputDigest -Paths $inputPathArray
         environment_fingerprint = Get-EnvironmentFingerprint
-        generated_inventory = @(Get-AuthoritativeGeneratedInventory)
-        requested_inventory = @($script:RequestedInventoryPaths)
+        generated_inventory = $generatedInventoryArray
+        requested_inventory = $requestedInventoryArray
         generated_hashes = $generatedHashes
         generated_hash_digest = Get-GeneratedHashDigest $generatedHashes
         working_tree_digest = Get-WorkingTreeDigest
-        invalidation_paths = @($InvalidationPaths)
-        subsumes = @($Subsumes)
+        invalidation_paths = $invalidationPathArray
+        subsumes = $subsumesArray
         executed_sha = $null
         validated_sha = $null
         evidence_path = $null
@@ -758,17 +763,17 @@ function New-CheckLedger {
     $rows = New-Object System.Collections.Generic.List[object]
     switch ($Mode) {
         'Fast' {
-            $rows.Add((New-LedgerRow 'compile' 'fast' $false $commonInputs @('Assets/_Game/Editor', 'Tools/Validation', 'ProjectSettings', 'Packages') @('validator-readonly') 'coding'))
-            $rows.Add((New-LedgerRow 'stage-probe' 'fast' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @() 'coding'))
-            $rows.Add((New-LedgerRow 'fast-build' 'fast' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') @() 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'compile' -Tier 'fast' -MutatesProject $false -InputPaths $commonInputs -InvalidationPaths @('Assets/_Game/Editor', 'Tools/Validation', 'ProjectSettings', 'Packages') -Subsumes @('validator-readonly') -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') -Subsumes @() -RunPoint 'coding'))
         }
         'Development' {
-            $rows.Add((New-LedgerRow 'fast-build' 'fast' $true @('Assets/_Game/Editor/MovementLab') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @() 'coding'))
-            $rows.Add((New-LedgerRow 'development-bake' 'development' $true @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') @() 'checkpoint'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'development-bake' -Tier 'development' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') -Subsumes @() -RunPoint 'checkpoint'))
         }
         'ProductionPrepare' {
-            $rows.Add((New-LedgerRow 'stage-probe' 'fast' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @() 'source-freeze'))
-            $rows.Add((New-LedgerRow 'prebake-validate' 'production-final' $false @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') @() 'source-freeze'))
+            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'source-freeze'))
+            $rows.Add((New-LedgerRow -CheckId 'prebake-validate' -Tier 'production-final' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') -Subsumes @() -RunPoint 'source-freeze'))
             $productionBakeInputs = @(
                 'Assets/_Game/Editor/MovementLab/MovementLabContract.cs',
                 'Assets/_Game/Editor/MovementLab/MovementLabStageGraph.cs',
@@ -792,15 +797,15 @@ function New-CheckLedger {
                 'ProjectSettings/ProjectVersion.txt',
                 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
             )
-            $rows.Add((New-LedgerRow 'production-bake' 'production-final' $true $productionBakeInputs $productionBakeInputs @() 'source-freeze'))
+            $rows.Add((New-LedgerRow -CheckId 'production-bake' -Tier 'production-final' -MutatesProject $true -InputPaths $productionBakeInputs -InvalidationPaths $productionBakeInputs -Subsumes @() -RunPoint 'source-freeze'))
         }
         'ProductionValidate' {
             $productionValidatorInputs = @('Assets/_Game/Editor', 'Assets/_Game/Scripts/Runtime', 'Assets/_Game/Generated', 'Tools/Validation', 'Packages', 'ProjectSettings')
             $productionValidatorInvalidationPaths = @('Assets/_Game/Editor', 'Assets/_Game/Scripts/Runtime', 'Assets/_Game/Generated', 'Tools/Validation', 'Packages', 'ProjectSettings', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes')
-            $rows.Add((New-LedgerRow 'production-validator' 'production-final' $false $productionValidatorInputs $productionValidatorInvalidationPaths @('validator-readonly') 'final'))
+            $rows.Add((New-LedgerRow -CheckId 'production-validator' -Tier 'production-final' -MutatesProject $false -InputPaths $productionValidatorInputs -InvalidationPaths $productionValidatorInvalidationPaths -Subsumes @('validator-readonly') -RunPoint 'final'))
         }
     }
-    return @($rows.ToArray())
+    return ,([object[]]$rows.ToArray())
 }
 
 function Test-IsAncestor {
