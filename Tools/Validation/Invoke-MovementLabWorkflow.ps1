@@ -1137,8 +1137,8 @@ function Assert-ProbeContractForMode {
     }
     for ($index = 0; $index -lt $fingerprintHashes.Count; $index++) { if ([string]$fingerprintHashes[$index] -notmatch '^[0-9a-fA-F]{32,128}$') { Add-WorkflowViolation $violations ('mode.fingerprintHashes.item[' + $index + '].shape') 'Stage probe fingerprint hash is invalid.' } }
     if ($WorkflowMode -in @('Development', 'ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.manifestStatus -ne 'current') { Add-WorkflowViolation $violations 'mode.manifestStatus.currentRequired' ($WorkflowMode + ' requires a current stage probe manifest.') }
-    if ($WorkflowMode -eq 'Development' -and [string]$Probe.bakedProfile -cne 'development') { Add-WorkflowViolation $violations 'mode.bakedProfile.development' 'Development workflow requires bakedProfile=development.' }
-    if ($WorkflowMode -in @('ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.bakedProfile -cne 'production') { Add-WorkflowViolation $violations 'mode.bakedProfile.production' ($WorkflowMode + ' requires bakedProfile=production.') }
+    if ($WorkflowMode -eq 'Development' -and [string]$Probe.bakedProfile -ine 'development') { Add-WorkflowViolation $violations 'mode.bakedProfile.development' 'Development workflow requires bakedProfile=development.' }
+    if ($WorkflowMode -in @('ProductionValidate', 'ProductionPrepareFinal') -and [string]$Probe.bakedProfile -ine 'production') { Add-WorkflowViolation $violations 'mode.bakedProfile.production' ($WorkflowMode + ' requires bakedProfile=production.') }
     Complete-WorkflowValidationPhase ('mode-' + $WorkflowMode) $violations
 }
 
