@@ -324,7 +324,9 @@ function Remove-NewUnityRootIdeChurn {
 }
 
 function Get-ProjectUnityProcesses {
-    $normalized = @($script:ProjectRoot.TrimEnd('\').ToLowerInvariant(), $script:ProjectInputRoot.TrimEnd('\').ToLowerInvariant()) | Sort-Object -Unique
+    $normalized = @($script:ProjectRoot.TrimEnd('\').ToLowerInvariant(), $script:ProjectInputRoot.TrimEnd('\').ToLowerInvariant())
+    if (-not [string]::IsNullOrWhiteSpace($script:CanonicalProjectRoot)) { $normalized += $script:CanonicalProjectRoot.TrimEnd('\').ToLowerInvariant() }
+    $normalized = @($normalized | Sort-Object -Unique)
     $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'")
     return @($all | Where-Object {
         $commandLine = [string]$_.CommandLine
@@ -333,32 +335,156 @@ function Get-ProjectUnityProcesses {
 }
 
 function Get-LockPaths {
+    if ([string]::IsNullOrWhiteSpace($script:CanonicalProjectRoot)) { throw 'Canonical project root is required for lock handling.' }
     return @(
-        (Join-Path $script:ProjectRoot 'Temp\UnityLockfile'),
-        (Join-Path $script:ProjectRoot 'Library\UnityLockfile')
+        (Join-Path $script:CanonicalProjectRoot 'Temp\UnityLockfile'),
+        (Join-Path $script:CanonicalProjectRoot 'Library\UnityLockfile')
     )
 }
 
-function Remove-ZeroByteUnityLockSentinels {
-    if (@(Get-ProjectUnityProcesses).Count -ne 0) { return }
-    if ([string]::IsNullOrWhiteSpace([string]$script:CanonicalProjectRoot)) { throw 'Canonical project root is required for Unity lock cleanup.' }
-    $canonicalRoot = [IO.Path]::GetFullPath(([string]$script:CanonicalProjectRoot).TrimEnd('\'))
-    $allowedPaths = @(
-        [IO.Path]::GetFullPath((Join-Path $canonicalRoot 'Temp\UnityLockfile')),
-        [IO.Path]::GetFullPath((Join-Path $canonicalRoot 'Library\UnityLockfile'))
-    )
-    foreach ($lockPath in @(Get-LockPaths)) {
-        $fullPath = [IO.Path]::GetFullPath($lockPath)
-        if (@($allowedPaths | Where-Object { $_.Equals($fullPath, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) { continue }
-        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
-        try { if (-not (Get-CanonicalPath $fullPath).Equals($fullPath, [StringComparison]::OrdinalIgnoreCase)) { continue } } catch { continue }
-        $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
-        if (@(Get-ProjectUnityProcesses).Count -ne 0) { return }
-        if ($item -isnot [IO.FileInfo] -or $item.PSIsContainer -or
-            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 0) { continue }
-        [IO.File]::Delete($fullPath)
-        if (Test-Path -LiteralPath $fullPath) { throw ('Unity lock sentinel remained after cleanup: ' + $fullPath) }
+function Ensure-LockSentinelNative {
+    if ($null -ne ('RocketFooxball.Validation.LockSentinelNative' -as [type])) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
+
+namespace RocketFooxball.Validation {
+    public static class LockSentinelNative {
+        public const uint Delete = 0x00010000;
+        public const uint ReadAttributes = 0x00000080;
+        public const uint ShareRead = 0x00000001;
+        public const uint ShareWrite = 0x00000002;
+        public const uint ShareDelete = 0x00000004;
+        public const uint OpenExisting = 3;
+        public const uint OpenReparsePoint = 0x00200000;
+        public const uint BackupSemantics = 0x02000000;
+        public const int FileDispositionInfoClass = 4;
+        public const uint FileAttributeDirectory = 0x00000010;
+        public const uint FileAttributeReparsePoint = 0x00000400;
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct ByHandleFileInformation {
+            public uint FileAttributes;
+            public uint CreationTimeLow;
+            public uint CreationTimeHigh;
+            public uint LastAccessTimeLow;
+            public uint LastAccessTimeHigh;
+            public uint LastWriteTimeLow;
+            public uint LastWriteTimeHigh;
+            public uint VolumeSerialNumber;
+            public uint FileSizeHigh;
+            public uint FileSizeLow;
+            public uint NumberOfLinks;
+            public uint FileIndexHigh;
+            public uint FileIndexLow;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct FileDispositionInfo {
+            public byte DeleteFile;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
+        public static extern SafeFileHandle CreateFile(
+            string path,
+            uint desiredAccess,
+            uint shareMode,
+            IntPtr securityAttributes,
+            uint creationDisposition,
+            uint flagsAndAttributes,
+            IntPtr templateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetFileInformationByHandle(
+            SafeFileHandle file,
+            out ByHandleFileInformation information);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetFileInformationByHandle(
+            SafeFileHandle file,
+            int fileInformationClass,
+            ref FileDispositionInfo information,
+            uint bufferSize);
     }
+}
+'@ -Language CSharp
+}
+
+function Assert-LockSentinelAncestors {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $root = $script:CanonicalProjectRoot.TrimEnd('\')
+    $full = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $expected = @(
+        (Join-Path $root 'Temp\UnityLockfile')
+        (Join-Path $root 'Library\UnityLockfile')
+    )
+    if (-not (@($expected | Where-Object { $_.Equals($full, [StringComparison]::OrdinalIgnoreCase) }).Count -eq 1)) {
+        throw ('Lock sentinel path is outside canonical cleanup set: ' + $Path)
+    }
+    $current = Split-Path -Parent $full
+    while ($true) {
+        $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
+        if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw ('Lock sentinel ancestor may not be a reparse point: ' + $current)
+        }
+        if ($current.Equals($root, [StringComparison]::OrdinalIgnoreCase)) { break }
+        if (-not $current.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw ('Lock sentinel ancestor escaped canonical project root: ' + $current)
+        }
+        $parent = Split-Path -Parent $current
+        if ([string]::IsNullOrWhiteSpace($parent) -or $parent.Equals($current, [StringComparison]::OrdinalIgnoreCase)) {
+            throw ('Unable to walk canonical lock sentinel ancestors: ' + $current)
+        }
+        $current = $parent
+    }
+    return $full
+}
+
+function Remove-LockSentinelExact {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $canonicalPath = Assert-LockSentinelAncestors $Path
+    Ensure-LockSentinelNative
+    $access = [RocketFooxball.Validation.LockSentinelNative]::Delete -bor [RocketFooxball.Validation.LockSentinelNative]::ReadAttributes
+    $share = [RocketFooxball.Validation.LockSentinelNative]::ShareRead -bor [RocketFooxball.Validation.LockSentinelNative]::ShareWrite -bor [RocketFooxball.Validation.LockSentinelNative]::ShareDelete
+    $flags = [RocketFooxball.Validation.LockSentinelNative]::OpenReparsePoint -bor [RocketFooxball.Validation.LockSentinelNative]::BackupSemantics
+    $handle = [RocketFooxball.Validation.LockSentinelNative]::CreateFile($canonicalPath, $access, $share, [IntPtr]::Zero, [RocketFooxball.Validation.LockSentinelNative]::OpenExisting, $flags, [IntPtr]::Zero)
+    if ($handle.IsInvalid) {
+        $nativeError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        $handle.Dispose()
+        if ($nativeError -eq 2 -or $nativeError -eq 3) { return $false }
+        throw ('Unable to open exact lock sentinel (Win32 ' + $nativeError + '): ' + $canonicalPath)
+    }
+    try {
+        $information = New-Object RocketFooxball.Validation.LockSentinelNative+ByHandleFileInformation
+        if (-not [RocketFooxball.Validation.LockSentinelNative]::GetFileInformationByHandle($handle, [ref]$information)) {
+            $nativeError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw ('Unable to inspect exact lock sentinel (Win32 ' + $nativeError + '): ' + $canonicalPath)
+        }
+        $attributes = [uint32]$information.FileAttributes
+        $zeroLength = ([uint32]$information.FileSizeHigh -eq 0 -and [uint32]$information.FileSizeLow -eq 0)
+        if (($attributes -band [RocketFooxball.Validation.LockSentinelNative]::FileAttributeDirectory) -ne 0 -or
+            ($attributes -band [RocketFooxball.Validation.LockSentinelNative]::FileAttributeReparsePoint) -ne 0 -or -not $zeroLength) {
+            throw ('Lock sentinel identity is not a zero-byte regular file: ' + $canonicalPath)
+        }
+        if (@(Get-ProjectUnityProcesses).Count -gt 0) { return }
+        $disposition = New-Object RocketFooxball.Validation.LockSentinelNative+FileDispositionInfo
+        $disposition.DeleteFile = 1
+        if (-not [RocketFooxball.Validation.LockSentinelNative]::SetFileInformationByHandle($handle, [RocketFooxball.Validation.LockSentinelNative]::FileDispositionInfoClass, [ref]$disposition, 1)) {
+            $nativeError = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
+            throw ('Unable to delete exact lock sentinel (Win32 ' + $nativeError + '): ' + $canonicalPath)
+        }
+    } finally {
+        $handle.Dispose()
+    }
+    if (Test-Path -LiteralPath $canonicalPath) { throw ('Lock sentinel remained after exact deletion: ' + $canonicalPath) }
+    return $true
+}
+
+function Remove-ZeroByteUnityLockSentinels {
+    foreach ($lockPath in @(Get-LockPaths)) { Remove-LockSentinelExact $lockPath | Out-Null }
 }
 
 function Get-CurrentProcessStartUtc {
@@ -457,9 +583,17 @@ function Wait-UnityRelease {
     $released = $false
     do {
         $active = @(Get-ProjectUnityProcesses)
-        if ($active.Count -eq 0) { Remove-ZeroByteUnityLockSentinels }
-        $locks = @(Get-LockPaths | Where-Object { Test-Path -LiteralPath $_ })
-        if ($active.Count -eq 0 -and $locks.Count -eq 0) { $released = $true; break }
+        $locksRemain = $false
+        if ($active.Count -eq 0) {
+            foreach ($lockPath in Get-LockPaths) {
+                $deleteResult = Remove-LockSentinelExact $lockPath
+                if ($null -eq $deleteResult) { $locksRemain = $true }
+            }
+        } else {
+            $locksRemain = $true
+        }
+        $activeAfter = @(Get-ProjectUnityProcesses)
+        if ($activeAfter.Count -eq 0 -and -not $locksRemain) { $released = $true; break }
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $deadline)
     if (-not $released) { throw ('Unity process or project lock remained after ' + $Label + '.') }
@@ -939,6 +1073,22 @@ function Add-CommandRecord {
     $script:CommandRecords.Add($Record)
 }
 
+function Add-CleanupFailureDiagnostic {
+    param(
+        [Parameter(Mandatory = $true)][System.Exception]$Primary,
+        [Parameter(Mandatory = $true)][System.Exception]$Cleanup,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    $key = 'MovementLab.Cleanup.' + $Label
+    $detail = $Cleanup.ToString()
+    try {
+        if ($Primary.Data.Contains($key)) { $Primary.Data[$key] = ([string]$Primary.Data[$key] + "`n" + $detail) }
+        else { $Primary.Data[$key] = $detail }
+    } catch {
+        try { $Primary.Data['MovementLab.Cleanup'] = ($Label + ': ' + $detail) } catch { }
+    }
+}
+
 function Mark-CheckExecuted {
     param([Parameter(Mandatory = $true)][string]$CheckId)
     if (-not $PlanOnly -and -not $script:ExecutedCheckIds.Contains($CheckId)) { $script:ExecutedCheckIds.Add($CheckId) }
@@ -966,15 +1116,23 @@ function Invoke-UnityStep {
         if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot 'Library') -PathType Container)) { throw 'Warm private Library is missing.' }
         if ($Method -match 'BakeMovementLabLighting') { $script:BakeCount++ }
         $process = $null
-        $waitError = $null
+        $primaryError = $null
         try {
-            $process = Start-Process -FilePath $script:UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
-            $exitCode = $process.ExitCode
+            try {
+                $process = Start-Process -FilePath $script:UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+                $exitCode = $process.ExitCode
+                if ($exitCode -ne 0) { throw ('Unity step failed: ' + $Label + ' (exit ' + $exitCode + '). Log: ' + $logPath) }
+            } catch {
+                $primaryError = $_.Exception
+            }
         } finally {
-            try { Wait-UnityRelease $Label | Out-Null } catch { $waitError = $_ }
+            try { Wait-UnityRelease $Label | Out-Null }
+            catch {
+                if ($null -ne $primaryError) { Add-CleanupFailureDiagnostic $primaryError $_.Exception ('unity-' + $Label) }
+                else { $primaryError = $_.Exception }
+            }
         }
-        if ($exitCode -ne 0) { throw ('Unity step failed: ' + $Label + ' (exit ' + $exitCode + '). Log: ' + $logPath) }
-        if ($null -ne $waitError) { throw $waitError }
+        if ($null -ne $primaryError) { throw $primaryError }
     }
     Add-CommandRecord ([ordered]@{
         label = $Label
@@ -1300,6 +1458,7 @@ $script:LeaseReleaseProofPath = Join-Path $script:EvidenceDirectory 'lease-relea
 $logs = Join-Path $script:EvidenceDirectory 'logs'
 if (-not (Test-Path -LiteralPath $logs -PathType Container)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }
 Acquire-ProjectLease | Out-Null
+$workflowPrimaryError = $null
 try {
 Assert-NoProjectProcessOrLock
 
@@ -1354,9 +1513,18 @@ try {
             Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
         }
     }
+} catch {
+    $workflowPrimaryError = $_.Exception
 } finally {
-    if (-not $PlanOnly) { Wait-UnityRelease 'workflow-final' | Out-Null }
+    if (-not $PlanOnly) {
+        try { Wait-UnityRelease 'workflow-final' | Out-Null }
+        catch {
+            if ($null -ne $workflowPrimaryError) { Add-CleanupFailureDiagnostic $workflowPrimaryError $_.Exception 'workflow-final' }
+            else { $workflowPrimaryError = $_.Exception }
+        }
+    }
 }
+if ($null -ne $workflowPrimaryError) { throw $workflowPrimaryError }
 
 if (-not $PlanOnly) { $null = Remove-NewUnityRootIdeChurn $initialUntrackedPaths }
 $afterHashes = Get-GeneratedHashes
@@ -1496,10 +1664,26 @@ if ((Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash.ToLowerInvari
     changedGeneratedPaths = $changedGeneratedPaths
     gitMutation = $false
 } | ConvertTo-Json -Depth 14
+} catch {
+    $workflowPrimaryError = $_.Exception
+    throw
 } finally {
-    try { Release-ProjectLease } finally {
+    $leaseCleanupError = $null
+    $proofCleanupError = $null
+    try { Release-ProjectLease }
+    catch { $leaseCleanupError = $_.Exception }
+    try {
         if ($script:ReleaseProof.Count -gt 0 -and -not (Test-Path -LiteralPath $script:LeaseReleaseProofPath)) {
             Write-AtomicJson $script:LeaseReleaseProofPath ([ordered]@{ schemaVersion = 1; invocationId = $script:InvocationId; canonicalProjectRoot = $script:CanonicalProjectRoot; leasePath = $script:LeasePath; releaseProof = @($script:ReleaseProof.ToArray()) })
         }
+    }
+    catch { $proofCleanupError = $_.Exception }
+    if ($null -ne $leaseCleanupError) {
+        if ($null -ne $workflowPrimaryError) { Add-CleanupFailureDiagnostic $workflowPrimaryError $leaseCleanupError 'lease-release' }
+        elseif ($null -ne $proofCleanupError) { Add-CleanupFailureDiagnostic $leaseCleanupError $proofCleanupError 'lease-release-proof'; throw $leaseCleanupError }
+        else { throw $leaseCleanupError }
+    } elseif ($null -ne $proofCleanupError) {
+        if ($null -ne $workflowPrimaryError) { Add-CleanupFailureDiagnostic $workflowPrimaryError $proofCleanupError 'lease-release-proof' }
+        else { throw $proofCleanupError }
     }
 }
