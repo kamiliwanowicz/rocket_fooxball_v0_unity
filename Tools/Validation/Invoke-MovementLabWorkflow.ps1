@@ -425,6 +425,23 @@ function Assert-LockSentinelAncestors {
         throw ('Lock sentinel path is outside canonical cleanup set: ' + $Path)
     }
     $current = Split-Path -Parent $full
+    try { $parentItem = Get-Item -LiteralPath $current -Force -ErrorAction Stop }
+    catch {
+        $errorId = [string]$_.FullyQualifiedErrorId
+        $nativeError = ([int]$_.Exception.HResult) -band 0xffff
+        if ($errorId.StartsWith('PathNotFound', [StringComparison]::OrdinalIgnoreCase) -or $nativeError -eq 2 -or $nativeError -eq 3) { return $null }
+        throw
+    }
+    if (($parentItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw ('Lock sentinel ancestor may not be a reparse point: ' + $current)
+    }
+    try { $sentinelItem = Get-Item -LiteralPath $full -Force -ErrorAction Stop }
+    catch {
+        $errorId = [string]$_.FullyQualifiedErrorId
+        $nativeError = ([int]$_.Exception.HResult) -band 0xffff
+        if ($errorId.StartsWith('PathNotFound', [StringComparison]::OrdinalIgnoreCase) -or $nativeError -eq 2 -or $nativeError -eq 3) { return $null }
+        throw
+    }
     while ($true) {
         $item = Get-Item -LiteralPath $current -Force -ErrorAction Stop
         if (($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
@@ -446,6 +463,7 @@ function Assert-LockSentinelAncestors {
 function Remove-LockSentinelExact {
     param([Parameter(Mandatory = $true)][string]$Path)
     $canonicalPath = Assert-LockSentinelAncestors $Path
+    if ($null -eq $canonicalPath) { return $false }
     Ensure-LockSentinelNative
     $access = [RocketFooxball.Validation.LockSentinelNative]::Delete -bor [RocketFooxball.Validation.LockSentinelNative]::ReadAttributes
     $share = [RocketFooxball.Validation.LockSentinelNative]::ShareRead -bor [RocketFooxball.Validation.LockSentinelNative]::ShareWrite -bor [RocketFooxball.Validation.LockSentinelNative]::ShareDelete
