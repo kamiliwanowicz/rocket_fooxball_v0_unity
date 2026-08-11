@@ -955,6 +955,19 @@ function Test-ProductionBakeProbeReuseProof {
     return @{ valid = $true; reason = $null }
 }
 
+function Set-CheckInvalidated {
+    param(
+        [Parameter(Mandatory = $true)]$Row,
+        [AllowEmptyString()][string]$Reason
+    )
+    $reasonText = if ($null -eq $Reason) { '' } else { $Reason.Trim() }
+    if ([string]::IsNullOrWhiteSpace($reasonText)) {
+        $reasonText = 'reuse proof rejected for check: ' + [string]$Row.check_id
+    }
+    $Row.status = 'invalidated'
+    $Row.invalidation_reason = $reasonText
+}
+
 function Confirm-ProductionBakeReuse {
     param([Parameter(Mandatory = $true)]$Probe)
     if (-not $script:ProductionBakeReuseCandidates.ContainsKey('production-bake')) { return }
@@ -963,8 +976,7 @@ function Confirm-ProductionBakeReuse {
     $candidate = $script:ProductionBakeReuseCandidates['production-bake']
     $proof = Test-ProductionBakeProbeReuseProof $candidate.priorProbe $Probe
     if (-not $proof.valid) {
-        $row.status = 'invalidated'
-        $row.invalidation_reason = [string]$proof.reason
+        Set-CheckInvalidated $row ([string]$proof.reason)
     }
 }
 
@@ -1001,11 +1013,11 @@ function Merge-ExistingLedger {
         # history only; no prior evidence may suppress this invocation.
         if ([string]$row.check_id -eq 'production-validator') { continue }
         $evidencePath = [string]$prior.evidence_path
-        if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { $row.status = 'invalidated'; continue }
-        try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { $row.status = 'invalidated'; $row.invalidation_reason = $_.Exception.Message; continue }
+        if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { Set-CheckInvalidated $row 'evidence path missing'; continue }
+        try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { Set-CheckInvalidated $row $_.Exception.Message; continue }
         $evidenceDigest = [string]$prior.evidence_digest
-        if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { $row.status = 'invalidated'; $row.invalidation_reason = 'evidence digest missing'; continue }
-        if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { $row.status = 'invalidated'; $row.invalidation_reason = 'evidence digest mismatch'; continue }
+        if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { Set-CheckInvalidated $row 'evidence digest missing'; continue }
+        if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { Set-CheckInvalidated $row 'evidence digest mismatch'; continue }
         $priorSha = [string]$prior.validated_sha
         $changed = if ($priorSha) { Get-ChangedPathsSince $priorSha $CurrentSha } else { $null }
         $sameInputs = [string]$prior.input_digest -eq [string]$row.input_digest
@@ -1028,8 +1040,8 @@ function Merge-ExistingLedger {
         }
         if ($exact) {
             if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid -or ($isProductionBake -and -not $productionBakeProof.valid)) {
-                $row.status = 'invalidated'
-                $row.invalidation_reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } elseif ($isProductionBake) { [string]$productionBakeProof.reason } else { [string]$reuseProof.reason }
+                $reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } elseif ($isProductionBake) { [string]$productionBakeProof.reason } else { [string]$reuseProof.reason }
+                Set-CheckInvalidated $row $reason
                 continue
             }
             $row.status = 'reused'
@@ -1076,8 +1088,8 @@ function Merge-ExistingLedger {
             $row.evidence_digest = $evidenceDigest
             $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
         } else {
-            $row.status = 'invalidated'
-            $row.invalidation_reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
+            $reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
+            Set-CheckInvalidated $row $reason
         }
     }
 }
@@ -1510,9 +1522,17 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
+            # PlanOnly can validate an existing probe before recording any skipped Unity step.
+            # Executing runs keep probe generation order unchanged.
+            if ($PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath -PathType Leaf)) {
+                $probeRecord = Read-ProbeContract
+                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
+            }
             if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
-            $probeRecord = Read-ProbeContract
-            Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
+            if ($null -eq $probeRecord) {
+                $probeRecord = Read-ProbeContract
+                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
+            }
             Refresh-ProductionBakeOutputState
             Confirm-ProductionBakeReuse $probeRecord
             $productionBakePending = Test-CheckPending 'production-bake'
@@ -1558,6 +1578,21 @@ $changedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
 $afterGeneratedHashDigest = Get-GeneratedHashDigest $afterHashes
 $afterWorkingTreeDigest = Get-WorkingTreeDigest
 $dirtyAfter = @(Get-NonGeneratedDirtyPaths)
+$predicateClassification = [ordered]@{
+    preBake = @(
+        [ordered]@{ predicate = 'ProductionPrepare mode contract'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode immediately after probe read'; inputs = @('Mode', 'Probe') },
+        [ordered]@{ predicate = 'config/argument shape'; phase = 'pre-bake'; location = 'preflight'; inputs = @('workflow arguments', 'project configuration') },
+        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') }
+    )
+    postflight = @(
+        [ordered]@{ predicate = 'ProductionPrepareFinal output contract'; phase = 'postflight'; reason = 'requires post-bake probe profile and manifest' },
+        [ordered]@{ predicate = 'clean-tree'; phase = 'postflight'; reason = 'requires before/after Git status' },
+        [ordered]@{ predicate = 'generated inventory'; phase = 'postflight'; reason = 'requires post-step generated hashes and paths' },
+        [ordered]@{ predicate = 'bake count'; phase = 'postflight'; reason = 'requires Unity invocation count' },
+        [ordered]@{ predicate = 'HEAD stability'; phase = 'postflight'; reason = 'requires final Git HEAD' },
+        [ordered]@{ predicate = 'evidence digests'; phase = 'postflight'; reason = 'requires post-step hash evidence' }
+    )
+}
 $postflightViolations = New-WorkflowViolationList
 if ($Mode -eq 'ProductionPrepare') {
     if ($dirtyAfter.Count -gt 0) { Add-WorkflowViolation $postflightViolations 'postflight.dirtyScope.nonGenerated' ('Production preparation changed non-generated source: ' + ($dirtyAfter -join ', ')) }
@@ -1580,7 +1615,7 @@ Complete-WorkflowValidationPhase 'postflight' $postflightViolations
 $ledgerEvidencePath = Join-Path $script:EvidenceDirectory 'check-ledger.json'
 $ledgerPayloadPath = Join-Path $script:EvidenceDirectory 'check-ledger-payload.json'
 foreach ($row in $ledger) {
-    if ($PlanOnly) { $row.status = 'deferred' }
+    if ($PlanOnly -and [string]$row.status -eq 'pending') { $row.status = 'deferred' }
     elseif ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
         $row.status = 'executed'
         $row.executed_sha = $beforeHead
@@ -1638,6 +1673,7 @@ $result = [ordered]@{
     checkLedgerSha256 = $ledgerFinalDigest
     checkLedger = @($ledger)
     lockReleaseProof = @($script:ReleaseProof.ToArray())
+    predicateClassification = $predicateClassification
     evidenceManifestPath = $manifestPath
     evidenceManifestSha256 = $null
     outputManifestPath = $manifestPath
@@ -1670,6 +1706,7 @@ $manifest = [ordered]@{
     checkLedger = @($ledger)
     history = @($script:PriorManifestHistory.ToArray())
     lockReleaseProof = @($script:ReleaseProof.ToArray())
+    predicateClassification = $predicateClassification
     gitMutation = $false
 }
 Write-AtomicJson $manifestPath $manifest
@@ -1688,6 +1725,7 @@ if ((Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash.ToLowerInvari
     evidenceManifestSha256 = $manifestDigest
     bakeCount = $script:BakeCount
     changedGeneratedPaths = $changedGeneratedPaths
+    predicateClassification = $predicateClassification
     gitMutation = $false
 } | ConvertTo-Json -Depth 14
 } catch {
