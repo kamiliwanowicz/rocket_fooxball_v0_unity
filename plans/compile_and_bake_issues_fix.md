@@ -40,7 +40,21 @@ Reader role: agent tasked with making Unity build/bake dev-process smooth. T7 + 
 - candidates: `MovementLabStageGraph` + `MovementLabStageRunner` + `MovementLabManifestStore` + most `MovementLabPreBakeGate` -> survivor set ~500 LOC semantic checks (prefab provenance, emission flags, shader compile, GUID/.meta pair, geometry budgets)
 - keep battle-tested checks; they carry paid tuition
 
-### 4. Codify process rules (add to AGENTS.md or skill)
+### 4. Codify process rules — concrete targets
+
+Orchestration skills live in `.agents/skills/` (loop-orchestrator, orchestrate-implementation, write-orchestrator-coding-plan, use-blender). Several mandate capture verification -> contradict TODO 2b. Required skill edits:
+
+- `.agents/skills/orchestrate-implementation/SKILL.md:171-182` -> check ledger treats capture rows as production-final proof; `:173` "Bake, capture, and manual proof never reattest after render or lighting input changes"; `:179`/`:182` lighting/render diff forces capture rerun -> remove capture row class entirely; bake-only. Keep input-digest staleness (policy-aligned).
+- `.agents/skills/write-orchestrator-coding-plan/SKILL.md:119` -> "A review never proves bake or capture rerun" + capture among required production-final rows -> drop capture; add plan-authoring rule: plans contain NO capture/visual-verify steps; new validation checks authored as warnings (promote after 1 green run).
+- `.agents/skills/loop-orchestrator/references/state-and-recovery.md:132` -> "bake/capture/manual rows never reattest" -> remove capture class.
+- `.agents/skills/loop-orchestrator/agents/merging.md:41` -> "lighting/render changes reopen bake/capture" -> bake only.
+- process rules below -> enforcement home = `orchestrate-implementation` (worker/investigator guidance: gate-deletion default, 2-fix budget) + `write-orchestrator-coding-plan` (authoring rules: warning-first, no byte gates, no capture steps).
+
+AGENTS.md edits required for image-verification scrap (currently contradicts TODO 2b):
+  - `:75` "Bright-arena capture may satisfy separate-process semantic pass" -> delete; capture never part of pass/fail
+  - `:80` "Production bake/capture -> run after ... settle" -> drop capture from required flow; bake only
+  - `:38` "Validate High/Low visual quality" -> reword: human review on demand, not agent capture gate
+- plan-authoring rule for future plans: no capture/visual-verify validation steps (see 2b)
 
 - new validation check -> lands as warning; promote to throw only after 1 green real run. Applies double to any assertion about Unity engine round-trip behavior — never author fail-closed against un-run API.
 - relaxation/unblock commit -> must be net-subtractive in gate files (deletions > insertions). Violations this run: `bfd5582` +130, `53333d6` +165 StageGraph, `d8aecd3`, `a1448f6` — each produced follow-on blockers.
