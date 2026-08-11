@@ -230,10 +230,11 @@ namespace RocketFooxball.Editor
         internal static readonly Color SunColor = new Color(1.0f, 0.8392157f, 0.6392157f, 1f);
         internal static readonly (string name, Vector3 position, Color color)[] AccentLightContract =
         {
-            ("GoalAccent_WestBlue_North", new Vector3(-58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_WestBlue_South", new Vector3(-58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_EastRed_North", new Vector3(58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_EastRed_South", new Vector3(58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f))
+            // Red owns negative-X/North; Blue owns positive-X/South.
+            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f))
         };
         internal static readonly (string name, Vector3 center, Vector3 size)[] ReflectionProbeContract =
         {
@@ -293,10 +294,10 @@ namespace RocketFooxball.Editor
             {
                 AddGeneratedFingerprintPath(paths, seen, GeneratedImporterMetadataPaths[i]);
             }
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TimeManager.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TagManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.EditorBuildSettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.DynamicsManagerPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TimeManagerPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TagManagerPath);
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath);
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath + ".meta");
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath);

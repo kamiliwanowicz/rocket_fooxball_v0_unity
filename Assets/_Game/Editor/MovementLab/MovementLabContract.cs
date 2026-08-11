@@ -30,6 +30,17 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT8_";
+        internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
+        internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
+        internal const string TimeManagerPath = "ProjectSettings/TimeManager.asset";
+        internal const string TagManagerPath = "ProjectSettings/TagManager.asset";
+
+        // GameplayScene owns these project-level physics names and collision
+        // settings. MaterialPrefab may bootstrap names needed by prefab roots;
+        // GameplayScene always reasserts and persists the contract.
+        internal const string ParticipantsLayerName = "Participants";
+        internal const string ProjectilesLayerName = "Projectiles";
+        internal const string LocalPlayerHiddenLayerName = "LocalPlayerHidden";
 
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
@@ -109,10 +120,10 @@ namespace RocketFooxball.Editor
         internal static readonly string[] GameplaySceneOutputs =
         {
             ScenePath,
-            "ProjectSettings/EditorBuildSettings.asset",
-            "ProjectSettings/DynamicsManager.asset",
-            "ProjectSettings/TimeManager.asset",
-            "ProjectSettings/TagManager.asset"
+            EditorBuildSettingsPath,
+            DynamicsManagerPath,
+            TimeManagerPath,
+            TagManagerPath
         };
 
         internal static readonly string[] QualityOutputs =

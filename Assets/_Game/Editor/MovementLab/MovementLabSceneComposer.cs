@@ -137,10 +137,11 @@ namespace RocketFooxball.Editor
                         RegisterBuildScene();
                         UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
                         SetProjectFixedTimestep();
+                        EnsureGameplayLayersAndCollisionMatrix();
                         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
                         var defaultCamera = Camera.main;
                         if (defaultCamera != null) UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
-                        var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial, teamBlueMaterial, teamRedMaterial);
+                        var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
                         var shieldSetObject = new GameObject("GoalShieldSet");
                         var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
                         SetObjectArray(goalShieldSet, "colliders", arena.Shields);
@@ -370,6 +371,7 @@ namespace RocketFooxball.Editor
                     RegisterBuildScene();
                     UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
                     SetProjectFixedTimestep();
+                    EnsureGameplayLayersAndCollisionMatrix();
 
                     GameObject explosionPrefabProbe = null;
                     try
@@ -383,7 +385,7 @@ namespace RocketFooxball.Editor
                         UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
                     }
 
-                    var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial, teamBlueMaterial, teamRedMaterial);
+                    var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
                     var shieldSetObject = new GameObject("GoalShieldSet");
                     var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
                     SetObjectArray(goalShieldSet, "colliders", arena.Shields);
@@ -598,6 +600,63 @@ namespace RocketFooxball.Editor
                     material.bounceCombine = PhysicsMaterialCombine.Maximum;
                     EditorUtility.SetDirty(material);
                     return material;
+                }
+
+                // GameplayScene owns TagManager/DynamicsManager repair. This
+                // runs before scene composition so stale project settings are
+                // fixed in same authoritative rebuild as scene wiring.
+                internal static void EnsureGameplayLayersAndCollisionMatrix()
+                {
+                    var participantsLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
+                    var projectilesLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
+                    var hiddenLayer = EnsureGameplayLayer(MovementLabContract.LocalPlayerHiddenLayerName);
+                    if (participantsLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
+                    {
+                        throw new InvalidOperationException("Gameplay layers could not be resolved.");
+                    }
+
+                    var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.DynamicsManagerPath);
+                    if (settings.Length == 0) throw new InvalidOperationException("DynamicsManager.asset unavailable.");
+                    var serialized = new SerializedObject(settings[0]);
+                    var matrix = serialized.FindProperty("m_LayerCollisionMatrix");
+                    if (matrix == null || matrix.propertyType != SerializedPropertyType.String || string.IsNullOrEmpty(matrix.stringValue))
+                    {
+                        throw new InvalidOperationException("DynamicsManager layer collision matrix is unavailable.");
+                    }
+
+                    var bits = matrix.stringValue.ToCharArray();
+                    EnableCollisionPair(bits, participantsLayer, participantsLayer);
+                    EnableCollisionPair(bits, participantsLayer, projectilesLayer);
+                    EnableCollisionPair(bits, projectilesLayer, projectilesLayer);
+                    matrix.stringValue = new string(bits);
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                    // Refresh the live editor matrix after serialized repair;
+                    // this keeps validator reads aligned before scene reload.
+                    UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, participantsLayer, false);
+                    UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, projectilesLayer, false);
+                    UnityEngine.Physics.IgnoreLayerCollision(projectilesLayer, projectilesLayer, false);
+                    EditorUtility.SetDirty(settings[0]);
+                    AssetDatabase.SaveAssets();
+                }
+
+                private static void EnableCollisionPair(char[] matrix, int firstLayer, int secondLayer)
+                {
+                    EnableCollisionBit(matrix, firstLayer * 32 + secondLayer);
+                    EnableCollisionBit(matrix, secondLayer * 32 + firstLayer);
+                }
+
+                private static void EnableCollisionBit(char[] matrix, int bitIndex)
+                {
+                    var nibbleIndex = bitIndex / 4;
+                    if (matrix == null || nibbleIndex < 0 || nibbleIndex >= matrix.Length)
+                    {
+                        throw new InvalidOperationException("DynamicsManager layer collision matrix is malformed.");
+                    }
+
+                    var digit = Convert.ToInt32(matrix[nibbleIndex].ToString(), 16);
+                    digit |= 1 << (bitIndex % 4);
+                    matrix[nibbleIndex] = digit.ToString("x")[0];
                 }
 
                 internal static void SetProjectFixedTimestep()

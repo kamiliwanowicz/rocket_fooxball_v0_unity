@@ -455,12 +455,14 @@ namespace RocketFooxball.Editor
                     var visual = Require(goal != null ? goal.Find("ShieldVisual") : null, label + " ShieldVisual");
                     if (collider == null || collider.isTrigger || visual.GetComponent<Collider>() != null || visual.GetComponent<MeshRenderer>() == null) throw new InvalidOperationException(label + " shield collider/render split invalid.");
                     var material = visual.GetComponent<MeshRenderer>().sharedMaterial;
-                    if (material == null || material.shader == null || material.shader.name != "RocketFooxball/RetroShield" || Mathf.Abs(material.GetFloat("_Alpha") - 0.52f) > 0.001f) throw new InvalidOperationException(label + " shield material contract invalid.");
+                    var expectedShieldMaterial = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? MaterialsPath + "/ShieldRed.mat" : MaterialsPath + "/ShieldBlue.mat");
+                    if (material == null || material != expectedShieldMaterial || material.shader == null || material.shader.name != "RocketFooxball/RetroShield" || Mathf.Abs(material.GetFloat("_Alpha") - 0.52f) > 0.001f) throw new InvalidOperationException(label + " shield team material contract invalid.");
                     var cueName = label == "NorthGoal" ? "RedTriangleCue" : "BlueCircleCue";
                     var cue = Require(goal != null ? goal.Find(cueName) : null, label + " " + cueName);
                     var cueRenderer = Require(cue.GetComponent<MeshRenderer>(), label + " team cue renderer");
                     var expectedCueMaterial = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? TeamRedMaterialPath : TeamBlueMaterialPath);
-                    if (cueRenderer.sharedMaterial != expectedCueMaterial || cue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(cue.GetComponent<MeshFilter>().sharedMesh) != (label == "NorthGoal" ? RedTriangleCueMeshPath : BlueCircleCueMeshPath))
+                    var expectedCueMeshPath = label == "NorthGoal" ? RedTriangleCueMeshPath : BlueCircleCueMeshPath;
+                    if (cueRenderer.sharedMaterial != expectedCueMaterial || cue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(cue.GetComponent<MeshFilter>().sharedMesh) != expectedCueMeshPath)
                         throw new InvalidOperationException(label + " team shape cue contract invalid.");
                 }
 

@@ -67,11 +67,12 @@ namespace RocketFooxball.Editor
     {
         private const string ImporterContract = "importer-contract:2";
         private const string MaterialContract = "material-prefab-contract:5";
-        // T6 canonicalizes the generated TagManager bytes. T2 adds six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:8";
+        // GameplayScene owns TagManager/DynamicsManager layer and collision
+        // repair, plus six-slot roster wiring.
+        private const string GameplayContract = "gameplay-scene-contract:9";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
-        private const string LightingContract = "lighting-contract:3";
+        private const string LightingContract = "lighting-contract:4";
         private const string BakedContract = "baked-output-contract:4";
 
         // Development can deterministically omit only lightmap variants 3/4;
@@ -121,10 +122,11 @@ namespace RocketFooxball.Editor
                 GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
                  Concat(new[]
                  {
-                     "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
-                     "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs",
-                     "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
-                     "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantSpawnSet.cs",
@@ -157,8 +159,9 @@ namespace RocketFooxball.Editor
                 {
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
                     MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta",
-                    MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
-                     "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs"
+                     MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
+                     "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs"
                  }, Array.Empty<string>(),
                 WithMetas(new[] { MovementLabContract.LightingSettingsPath, MovementLabContract.VolumeProfilePath }), includeUnityVersion: true),
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, new[] { MovementLabStage.Lighting }, BakedContract,

@@ -587,9 +587,9 @@ namespace RocketFooxball.Editor
                 if (all.Length != ParticipantSlots.Length) throw new InvalidOperationException("MovementLab must contain exactly six ParticipantState components.");
             });
 
-            var participantLayer = LayerMask.NameToLayer("Participants");
-            var projectilesLayer = LayerMask.NameToLayer("Projectiles");
-            var hiddenLayer = LayerMask.NameToLayer("LocalPlayerHidden");
+            var participantLayer = LayerMask.NameToLayer(MovementLabContract.ParticipantsLayerName);
+            var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
+            var hiddenLayer = LayerMask.NameToLayer(MovementLabContract.LocalPlayerHiddenLayerName);
             accumulator.Capture("scene/layers", "names", () =>
             {
                 if (participantLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)

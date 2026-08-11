@@ -90,8 +90,8 @@ namespace RocketFooxball.Editor
                     var kick = root.AddComponent<BallKick>();
                     var presentation = root.AddComponent<PlayerPresentation>();
                     var participant = root.AddComponent<ParticipantState>();
-                    var participantLayer = EnsureGameplayLayer("Participants");
-                    var projectileLayer = EnsureGameplayLayer("Projectiles");
+                    var participantLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
+                    var projectileLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
                     root.layer = participantLayer;
                     var head = new GameObject("Head").transform;
                     head.SetParent(root.transform, false);
@@ -316,7 +316,7 @@ namespace RocketFooxball.Editor
                     }
 
                     var root = new GameObject("Rocket");
-                    root.layer = EnsureGameplayLayer("Projectiles");
+                    root.layer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
                     root.transform.localScale = Vector3.one * 0.24f;
                     var collider = root.AddComponent<SphereCollider>();
                     var visual = (GameObject)PrefabUtility.InstantiatePrefab(model);
@@ -442,6 +442,8 @@ namespace RocketFooxball.Editor
                     redAccent.SetActive(false);
                     SetObjectReference(trailVfx, "blueImpactAccent", blueAccent);
                     SetObjectReference(trailVfx, "redImpactAccent", redAccent);
+                    SetObjectReference(trailVfx, "blueTrailMaterial", blueTrailMaterial);
+                    SetObjectReference(trailVfx, "redTrailMaterial", redTrailMaterial);
                     SetObjectReference(projectile, "trailVfx", trailVfx);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
@@ -662,7 +664,7 @@ namespace RocketFooxball.Editor
 
                 internal static int EnsureLocalPlayerHiddenLayer()
                 {
-                    return EnsureGameplayLayer("LocalPlayerHidden");
+                    return EnsureGameplayLayer(MovementLabContract.LocalPlayerHiddenLayerName);
                 }
 
                 internal static int EnsureGameplayLayer(string layerName)
@@ -670,7 +672,7 @@ namespace RocketFooxball.Editor
                     if (string.IsNullOrEmpty(layerName)) throw new InvalidOperationException("Gameplay layer name is empty.");
                     var layer = LayerMask.NameToLayer(layerName);
                     if (layer >= 0) return layer;
-                    var settings = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+                    var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.TagManagerPath);
                     if (settings.Length == 0) throw new InvalidOperationException("TagManager.asset unavailable.");
                     var serialized = new SerializedObject(settings[0]);
                     var layers = serialized.FindProperty("layers");
@@ -1094,6 +1096,20 @@ namespace RocketFooxball.Editor
                     ValidateReference(trail, "redImpactAccent", trail.transform.Find("RedImpactTriangle"), "RocketTrailVfx.redImpactAccent");
                     var smokeSystems = trail.GetComponentsInChildren<ParticleSystem>(true);
                     if (smokeSystems.Length != 1) throw new InvalidOperationException("Rocket trail must contain one particle system.");
+                    var serializedTrail = new SerializedObject(trail);
+                    var configuredSystems = serializedTrail.FindProperty("particleSystems");
+                    var configuredBlueMaterial = serializedTrail.FindProperty("blueTrailMaterial");
+                    var configuredRedMaterial = serializedTrail.FindProperty("redTrailMaterial");
+                    var expectedBlueMaterial = AssetDatabase.LoadAssetAtPath<Material>(TeamBlueTrailMaterialPath);
+                    var expectedRedMaterial = AssetDatabase.LoadAssetAtPath<Material>(TeamRedTrailMaterialPath);
+                    if (configuredSystems == null || !configuredSystems.isArray || configuredSystems.arraySize != smokeSystems.Length ||
+                        configuredSystems.GetArrayElementAtIndex(0).objectReferenceValue != smokeSystems[0] ||
+                        configuredBlueMaterial == null || configuredRedMaterial == null ||
+                        configuredBlueMaterial.objectReferenceValue != expectedBlueMaterial || configuredRedMaterial.objectReferenceValue != expectedRedMaterial ||
+                        expectedBlueMaterial == null || expectedRedMaterial == null || expectedBlueMaterial == expectedRedMaterial)
+                    {
+                        throw new InvalidOperationException("Rocket trail team-color particle routing is incomplete.");
+                    }
                     var system = smokeSystems[0];
                     var main = system.main;
                     var emission = system.emission;

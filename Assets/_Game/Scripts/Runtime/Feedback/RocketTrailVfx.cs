@@ -12,6 +12,8 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private TrailRenderer[] trailRenderers;
         [SerializeField] private GameObject blueImpactAccent;
         [SerializeField] private GameObject redImpactAccent;
+        [SerializeField] private Material blueTrailMaterial;
+        [SerializeField] private Material redTrailMaterial;
         [SerializeField] private Color blueTrailColor = new Color(0.08f, 0.35f, 1f, 1f);
         [SerializeField] private Color redTrailColor = new Color(1f, 0.12f, 0.1f, 1f);
 
@@ -39,6 +41,39 @@ namespace RocketFooxball.Runtime.Feedback
 
                     trail.startColor = color;
                     trail.endColor = new Color(color.r, color.g, color.b, 0f);
+                }
+            }
+
+            var systems = particleSystems;
+            if (systems == null || systems.Length == 0)
+            {
+                systems = GetComponentsInChildren<ParticleSystem>(true);
+            }
+            var trailMaterial = isBlue ? blueTrailMaterial : redTrailMaterial;
+            for (var i = 0; i < systems.Length; i++)
+            {
+                var particleSystem = systems[i];
+                if (particleSystem == null)
+                {
+                    continue;
+                }
+
+                var main = particleSystem.main;
+                main.startColor = color;
+                var colorOverLifetime = particleSystem.colorOverLifetime;
+                if (colorOverLifetime.enabled)
+                {
+                    var gradient = new Gradient();
+                    gradient.SetKeys(
+                        new[] { new GradientColorKey(color, 0f), new GradientColorKey(color, 1f) },
+                        new[] { new GradientAlphaKey(0.75f, 0f), new GradientAlphaKey(0f, 1f) });
+                    colorOverLifetime.color = gradient;
+                }
+
+                var renderer = particleSystem.GetComponent<ParticleSystemRenderer>();
+                if (renderer != null && trailMaterial != null)
+                {
+                    renderer.sharedMaterial = trailMaterial;
                 }
             }
         }
