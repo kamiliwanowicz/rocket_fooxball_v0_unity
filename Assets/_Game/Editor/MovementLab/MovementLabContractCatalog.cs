@@ -93,9 +93,6 @@ namespace RocketFooxball.Editor
         internal const string VolumeProfilePath = MovementLabContract.VolumeProfilePath;
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
-        internal const string ReflectionCenterPath = MovementLabContract.ReflectionCenterPath;
-        internal const string ReflectionWestPath = MovementLabContract.ReflectionWestPath;
-        internal const string ReflectionEastPath = MovementLabContract.ReflectionEastPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
         internal const int ExpectedLightmapCount = 5;
         internal const int ExpectedReflectionProbeBakeCount = 4;
@@ -173,7 +170,7 @@ namespace RocketFooxball.Editor
             WeaponAccentTexturePath + ".meta", WeaponAccentNormalTexturePath + ".meta", WeaponAccentMetallicTexturePath + ".meta", WeaponAccentOcclusionTexturePath + ".meta",
             WeaponAccentEmissionTexturePath + ".meta",
             RocketTexturePath + ".meta", RocketNormalTexturePath + ".meta", RocketMetallicTexturePath + ".meta", RocketOcclusionTexturePath + ".meta", RocketEmissionTexturePath + ".meta", RocketGlowTexturePath + ".meta",
-            ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta"
+            ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
 
         internal static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
@@ -241,11 +238,11 @@ namespace RocketFooxball.Editor
                 AddGeneratedFingerprintPath(paths, seen, GeneratedYamlAssetPaths[i] + ".meta");
             }
 
-            var generatedSourcePaths = MovementLabContract.ImportedAssetPaths;
-            for (var i = 0; i < generatedSourcePaths.Length; i++)
+            // Raw FBX/PNG sources are stage inputs, never trusted owned outputs.
+            // Importer metadata is the builder-owned output and remains drift-protected.
+            for (var i = 0; i < GeneratedImporterMetadataPaths.Length; i++)
             {
-                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i]);
-                AddGeneratedFingerprintPath(paths, seen, generatedSourcePaths[i] + ".meta");
+                AddGeneratedFingerprintPath(paths, seen, GeneratedImporterMetadataPaths[i]);
             }
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
             AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
@@ -263,12 +260,8 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.ProjectSettingsPath);
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath);
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionCenterPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionWestPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath);
-            AddGeneratedFingerprintPath(paths, seen, ReflectionEastPath + ".meta");
+            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta");
             for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
             {
                 AddGeneratedFingerprintPath(paths, seen, GeneratedBakedLightingPaths[i]);

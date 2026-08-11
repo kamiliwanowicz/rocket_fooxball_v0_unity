@@ -41,10 +41,34 @@ namespace RocketFooxball.Editor
             MovementLabArenaPipeline.Validate();
         }
         internal static void ValidatePreBakeSemantics() => ValidateMovementLabInternal(ComputeBuilderSignature(), false, false);
+
+        /// <summary>
+        /// Fast preview validation is persisted/read-only semantic coverage. It
+        /// deliberately excludes review markers, pass records, baked-output
+        /// proof, capture, and any writer/repair path.
+        /// </summary>
+        internal static void ValidateFastPersistedSemantics()
+        {
+            ValidateMovementLabInternal(ComputeBuilderSignature(), false, false);
+            MovementLabImportPipeline.ValidateTextureImporterContracts();
+            MovementLabAnimatorPipeline.Validate();
+            MovementLabPrefabPipeline.Validate();
+            MovementLabArenaPipeline.Validate();
+        }
     }
 
     internal static partial class MovementLabValidator
     {
+        private static readonly string[] RequiredCustomShaderPaths =
+        {
+            ToonShaderPath,
+            ParticleShaderPath,
+            AdditiveParticleShaderPath,
+            PowerGridShaderPath,
+            ShieldShaderPath,
+            SkyShaderPath
+        };
+
                 internal static void ValidateMovementLabInternal(string builderSignature, bool includeBakedLighting, bool logSuccess)
                 {
                     EnsureAssetExists(PrefabPath);
@@ -87,11 +111,12 @@ namespace RocketFooxball.Editor
                     EnsureAssetExists(SkyTexturePath);
                     EnsureAssetExists(SkyShaderPath);
                     EnsureAssetExists(DetailNormalTexturePath);
-                    EnsureAssetExists(ToonShaderPath);
-                    EnsureAssetExists(ParticleShaderPath);
-                    EnsureAssetExists(AdditiveParticleShaderPath);
-                    EnsureAssetExists(PowerGridShaderPath);
-                    EnsureAssetExists(ShieldShaderPath);
+                     EnsureAssetExists(ToonShaderPath);
+                     EnsureAssetExists(ParticleShaderPath);
+                     EnsureAssetExists(AdditiveParticleShaderPath);
+                     EnsureAssetExists(PowerGridShaderPath);
+                     EnsureAssetExists(ShieldShaderPath);
+                     ValidateCustomShaders();
                     EnsureAssetExists(WallTexturePath);
                     EnsureAssetExists(TrimTexturePath);
                     EnsureAssetExists(HazardTexturePath);
@@ -112,9 +137,6 @@ namespace RocketFooxball.Editor
                     EnsureAssetExists(VolumeProfilePath);
                     EnsureAssetExists(LightingSettingsPath);
                     EnsureAssetExists(LightingManifestPath);
-                    EnsureAssetExists(ReflectionCenterPath);
-                    EnsureAssetExists(ReflectionWestPath);
-                    EnsureAssetExists(ReflectionEastPath);
 
                     var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
                     if (!scene.IsValid() || scene.path != ScenePath)
@@ -371,6 +393,38 @@ namespace RocketFooxball.Editor
                     if (!File.Exists(path))
                     {
                         throw new InvalidOperationException("Missing generated asset: " + path);
+                    }
+                }
+
+                private static void ValidateCustomShaders()
+                {
+                    for (var shaderIndex = 0; shaderIndex < RequiredCustomShaderPaths.Length; shaderIndex++)
+                    {
+                        var path = RequiredCustomShaderPaths[shaderIndex];
+                        var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+                        if (shader == null)
+                            throw new InvalidOperationException("MovementLab custom shader is missing; bake/capture blocked: " + path);
+                        if (!shader.isSupported)
+                            throw new InvalidOperationException("MovementLab custom shader is unsupported; bake/capture blocked: " + path);
+
+                        var messages = ShaderUtil.GetShaderMessages(shader);
+                        if (messages == null) continue;
+                        var errors = new List<string>();
+                        for (var messageIndex = 0; messageIndex < messages.Length; messageIndex++)
+                        {
+                            var message = messages[messageIndex];
+                            var severityField = message.GetType().GetField("severity");
+                            var severity = severityField?.GetValue(message);
+                            if (severity == null)
+                            {
+                                var severityProperty = message.GetType().GetProperty("severity");
+                                severity = severityProperty?.GetValue(message, null);
+                            }
+                            if (severity != null && severity.ToString().IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0)
+                                errors.Add(message.ToString());
+                        }
+                        if (errors.Count > 0)
+                            throw new InvalidOperationException("MovementLab custom shader compiler errors block bake/capture: " + path + ": " + string.Join(" | ", errors.ToArray()));
                     }
                 }
 

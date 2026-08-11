@@ -18,7 +18,7 @@ Inspect request, repository instructions, Git status, full baseline SHA, cited f
 - `hybrid`: parallel independent wave followed by ordered dependent candidates.
 - `None`: status `needs_user` or `blocked`.
 
-Default to smallest coherent candidate planner can fully design and one implementation worker can execute without choosing architecture, algorithm, state ownership, lifecycle order, or edge-case policy. Use `single_plan` only when request forms one bounded behavior cluster with one integrated proof boundary.
+Default to smallest coherent candidate planner can fully design and worker set can execute without choosing architecture, algorithm, state ownership, lifecycle order, or edge-case policy. Candidate may contain multiple workers when ownership and validation environments remain disjoint; keep one coherent recovery and expensive-proof boundary. Use `single_plan` only when request forms one bounded behavior cluster with one integrated proof boundary.
 
 Split when candidate combines several independently reasoned mechanics or would force planner to compress important algorithms, state transitions, wiring, and proofs into broad summaries. Size test: planner can pre-think full candidate in one focused attempt; worker can implement it without inventing non-local design.
 
@@ -69,6 +69,12 @@ Baseline SHA: [exact 40-character lowercase SHA or None]
 - baseline rule: [accepted run baseline or accepted upstream integration SHA]
 - owned paths: `[exact paths or tight globs]`
 - protected paths: `[exact paths/symbols]`
+- `read_paths`: `[exact paths/symbols]`
+- `validation_environment`: `[bounded environment and lease]`
+- `unity_mutation`: `true | false`
+- `expensive_proof_owner`: `[one identity or None]`
+- `expensive_proof_run_point`: `[checkpoint/final boundary or None]`
+- `proof_invalidation_paths`: `[exact paths]`
 - validation boundary: [checks and evidence scope]
 - size check: [why candidate passes size test]
 

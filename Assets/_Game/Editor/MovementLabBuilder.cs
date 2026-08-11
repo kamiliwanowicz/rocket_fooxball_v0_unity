@@ -13,37 +13,32 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
+            MovementLabFastModeSession.RestoreIfActive();
             AssembleMovementLab();
             ValidateMovementLabPreBake();
-            var probe = MovementLabStageGraph.Probe(true);
+            // Probe without throwing so a development bake can be rejected by
+            // its typed profile tag before normal production stale checks.
+            var probe = MovementLabStageGraph.Probe(false);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
+            if (!string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("MovementLab production lighting is not valid (profile is " + (probe.CurrentState?.bakedProfile ?? "none") + "). Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
+            }
             if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
             {
-                throw new InvalidOperationException("MovementLab lighting is stale. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly.");
+                Debug.LogWarning("Rocket Fooxball Movement Lab stale lighting is informational; semantic validation and bake remain usable.");
             }
         }
 
         [MenuItem("Rocket Fooxball/Assemble Movement Lab")]
         public static void AssembleMovementLab()
         {
-            var probe = MovementLabStageGraph.Probe(true);
-            var generationStages = new[]
-            {
-                MovementLabStage.Importer,
-                MovementLabStage.MaterialPrefab,
-                MovementLabStage.GameplayScene,
-                MovementLabStage.Quality
-            };
-            if (!generationStages.Any(probe.IsStale))
-            {
-                Debug.Log("Rocket Fooxball Movement Lab assembly reused generated state: " + MovementLabContract.ScenePath);
-                return;
-            }
-
-            MovementLabManifestStore.EnsureWriteAuthorization();
-            MovementLabSceneComposer.AssembleMovementLabUnstaged();
-            MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureAssembledState());
-            AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
-            Debug.Log("Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
+            MovementLabFastModeSession.RestoreIfActive();
+            var probe = MovementLabStageRunner.RunSelective();
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
+            Debug.Log(probe.StaleStages.Length == 0
+                ? "Rocket Fooxball Movement Lab assembly reused generated state: " + MovementLabContract.ScenePath
+                : "Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
         }
 
         [MenuItem("Rocket Fooxball/Authorize Movement Lab Manifest Migration")]
@@ -56,6 +51,7 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Validate Movement Lab Pre-Bake")]
         public static void ValidateMovementLabPreBake()
         {
+            MovementLabFastModeSession.RestoreIfActive();
             // Gate owns semantic validation, stale-stage checks, and pass-record write.
             var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord();
             Debug.Log("Rocket Fooxball Movement Lab pre-bake gate passed: " + passPath);
@@ -64,7 +60,12 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Probe Movement Lab Generated State")]
         public static void ProbeMovementLabGeneratedState()
         {
-            var probe = MovementLabStageGraph.Probe(true);
+            MovementLabFastModeSession.RestoreIfActive();
+            // Development output is an intentional, bounded intermediate. Let
+            // the profile gate report the explicit production-only rejection
+            // before fail-closed stale-output validation.
+            var probe = MovementLabStageGraph.Probe(false);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
             Debug.Log("Rocket Fooxball Movement Lab stale stages: " +
                 (probe.StaleStages.Length == 0 ? "none" : string.Join(", ", probe.StaleStages)) +
                 "; lighting input digest: " + probe.LightingInputDigest);
@@ -73,29 +74,118 @@ namespace RocketFooxball.Editor
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting")]
         public static void BakeMovementLabLighting()
         {
-            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord();
+            MovementLabFastModeSession.RestoreIfActive();
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath);
-            MovementLabLightingPipeline.BakeSceneLighting(scene, passPath);
+            MovementLabLightingProfiles.EnsurePersistedProductionSettings();
+            // Always prepare the selected profile first. This makes a
+            // production bake valid even when the persisted scene currently
+            // contains the development intermediate.
+            MovementLabLightingProfiles.PrepareScene(scene, MovementLabLightingProfiles.ProfileId.Production);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
-            AssetDatabase.SaveAssets();
-            MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace();
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Production);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
+            scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
+            EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
+            MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            MovementLabPreBakeGate.RevalidatePassRecord(passPath, allowBakedOutputDrift: true);
+            MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Production, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true));
             Debug.Log("Rocket Fooxball Movement Lab lighting baked explicitly: " + MovementLabContract.ScenePath);
         }
 
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]
         public static void ValidateMovementLab()
         {
-            var probe = MovementLabStageGraph.Probe(true);
-            if (probe.StaleStages.Length > 0)
+            MovementLabFastModeSession.RestoreIfActive();
+            // Read the typed profile before fail-closed stale checks so a
+            // development bake reports the intended production-only rejection.
+            var probe = MovementLabStageGraph.Probe(false);
+            if (!string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("MovementLab validation requires a production lighting bake. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly; current profile=" + (probe.CurrentState?.bakedProfile ?? "none") + ".");
+
+            var staleNonLighting = probe.StaleStages.Where(stage =>
+                stage != MovementLabStage.Lighting &&
+                stage != MovementLabStage.BakedOutput &&
+                !probe.IsRawOutputDriftOnly(stage)).ToArray();
+            if (staleNonLighting.Length > 0)
             {
-                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", probe.StaleStages));
+                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", staleNonLighting));
             }
+            var staleRaw = probe.StaleStages.Where(probe.IsRawOutputDriftOnly).ToArray();
+            if (staleRaw.Length > 0)
+                Debug.Log("Rocket Fooxball Movement Lab validation proceeding with informational raw output drift: " + string.Join(", ", staleRaw));
+            var staleLighting = probe.StaleStages.Where(stage =>
+                stage == MovementLabStage.Lighting || stage == MovementLabStage.BakedOutput).ToArray();
+            if (staleLighting.Length > 0)
+                Debug.LogWarning("Rocket Fooxball Movement Lab validation proceeding with stale lighting stages: " + string.Join(", ", staleLighting));
+
             MovementLabValidator.Validate(includeBakedLighting: true, logSuccess: true);
+            MovementLabStageRunner.WriteProbeIfRequested(probe);
+        }
+
+        [MenuItem("Rocket Fooxball/Enter Movement Lab Fast Preview")]
+        public static void EnterMovementLabFastMode() => MovementLabFastModeSession.Enter();
+
+        [MenuItem("Rocket Fooxball/Exit Movement Lab Fast Preview")]
+        public static void ExitMovementLabFastMode() => MovementLabFastModeSession.RestoreIfActive();
+
+        [MenuItem("Rocket Fooxball/Build Movement Lab Fast")]
+        public static void BuildMovementLabFast()
+        {
+            MovementLabFastModeSession.RestoreIfActive();
+            try
+            {
+                AssembleMovementLab();
+                // Fast mode intentionally accepts the bounded Development
+                // lighting intermediate, but still proves persisted semantic
+                // state without review/pass/baked-output/capture work.
+                MovementLabValidator.ValidateFastPersistedSemantics();
+                GraphicsQualityConfigurator.Validate();
+                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true);
+                MovementLabStageRunner.WriteProbeIfRequested(probe);
+                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
+                    Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
+
+                MovementLabFastModeSession.Enter();
+                MovementLabFastModeSession.AssertAppliedState();
+                Debug.Log("Rocket Fooxball fast build preview state applied: detached lightmap indices, Iteration quality, transient ambient/post/reflection settings.");
+                if (Application.isBatchMode) MovementLabFastModeSession.RestoreIfActive();
+            }
+            catch
+            {
+                MovementLabFastModeSession.RestoreIfActive();
+                throw;
+            }
+        }
+
+        [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting Development")]
+        public static void BakeMovementLabLightingDevelopment()
+        {
+            MovementLabFastModeSession.RestoreIfActive();
+            var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.EnsurePersistedDevelopmentSettings();
+            MovementLabLightingProfiles.PrepareScene(scene, MovementLabLightingProfiles.ProfileId.Development);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
+            EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
+            var passPath = MovementLabPreBakeGate.ValidateAndWritePassRecord(MovementLabLightingProfiles.ProfileId.Development);
+            scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
+            scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
+            EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
+            MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
+            MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
+            MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
+            AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+            MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true));
+            Debug.Log("Rocket Fooxball Movement Lab development lighting baked explicitly: profile=development; production validation will reject this output.");
         }
     }
 }

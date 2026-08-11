@@ -112,8 +112,8 @@ Shader "RocketFooxball/RetroPowerGrid"
                 float2 cells = lerp(worldCells, uvCells, 0.85h);
                 half minor = LineMask(cells, max(_MinorWidth, 0.001h));
                 half major = LineMask(cells / max(_MajorInterval, 1.0h), max(_MajorWidth, 0.001h));
-                half line = saturate(max(minor * 0.55h, major));
-                half alpha = saturate(line * _Alpha);
+                half gridLine = saturate(max(minor * 0.55h, major));
+                half alpha = saturate(gridLine * _Alpha);
                 half3 color = MixFog(_GridColor.rgb, input.fogFactor);
                 color = lerp(color, _FogColor.rgb, saturate(_FogStrength) * (1.0h - input.fogFactor));
                 return half4(color, alpha);

@@ -40,6 +40,8 @@ Worktree scope is closed: current run's plan worktrees plus integration worktree
 
 Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
+Candidate records bind `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`, and `proof_invalidation_paths`. One production-final owner runs proof after source fan-in and accepted fixes. Candidate may contain multiple workers only with disjoint paths and stable validation environments.
+
 ## BREAKDOWN
 
 Dispatch [`task-breakdown`](agents/task-breakdown.md) for every run. LP never substitutes inline decomposition.
@@ -79,6 +81,8 @@ Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
+Execution orchestrator builds check ledger before worker dispatch. Ledger rows carry tier, status, SHAs, input/environment digests, mutation flag, evidence, invalidation paths, and subsumed checks. Workers run fast/local checks; development proof requires explicit task ownership. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and review marker.
+
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
 Accept `complete` only when exact execution identity matches, bound snapshot digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, exact `start_sha..plan_head` changed paths stay owned, required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
@@ -90,6 +94,8 @@ Before first merge, LP provisions unique isolated integration branch/worktree fr
 Dispatch [merging agent](agents/merging.md) after every completed wave, including one-plan wave. Inputs are exact accepted execution SHAs in breakdown-declared order. Sequential dependent planning waits for prerequisite wave merge and accepted integration SHA.
 
 Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. One-plan fast-forward may leave commit identity unchanged; isolated branch/worktree plus expected pre-merge and observed post-merge heads prove merge stage occurred.
+
+Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged one-plan fast-forward reuses exact valid plan evidence after cheap SHA/content attestation. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths.
 
 Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 

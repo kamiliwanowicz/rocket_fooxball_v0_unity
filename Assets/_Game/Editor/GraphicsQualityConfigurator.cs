@@ -15,13 +15,17 @@ namespace RocketFooxball.Editor
         public const string HighRendererPath = "Assets/Settings/PC_Renderer.asset";
         public const string LowPipelinePath = "Assets/Settings/PC_Low_RPAsset.asset";
         public const string LowRendererPath = "Assets/Settings/PC_Low_Renderer.asset";
+        public const string IterationPipelinePath = "Assets/Settings/PC_Iteration_RPAsset.asset";
+        public const string IterationRendererPath = "Assets/Settings/PC_Iteration_Renderer.asset";
         public const string QualitySettingsPath = "ProjectSettings/QualitySettings.asset";
         public const string ProjectSettingsPath = "ProjectSettings/ProjectSettings.asset";
 
         public const string HighQualityName = "High";
         public const string LowQualityName = "Low";
+        public const string IterationQualityName = "Iteration";
         public const int HighQualityIndex = 0;
         public const int LowQualityIndex = 1;
+        public const int IterationQualityIndex = 2;
         public const int NativeWidth = 1920;
         public const int NativeHeight = 1080;
 
@@ -56,7 +60,15 @@ namespace RocketFooxball.Editor
             ConfigureRenderer(lowRenderer, high: false);
             ConfigurePipeline(lowPipeline, lowRenderer, high: false);
 
-            ConfigureQualitySettings(highPipeline, lowPipeline);
+            // Iteration is a persisted, opt-in profile.  It deliberately keeps
+            // the useful HDR/SSAO/post/reflection path while disabling every
+            // shadow map and using Low-like scale/texture settings.
+            var iterationRenderer = GetOrCreateCopy<UniversalRendererData>(HighRendererPath, IterationRendererPath);
+            var iterationPipeline = GetOrCreateCopy<UniversalRenderPipelineAsset>(HighPipelinePath, IterationPipelinePath);
+            ConfigureRenderer(iterationRenderer, high: true, iteration: true);
+            ConfigurePipeline(iterationPipeline, iterationRenderer, high: true, iteration: true);
+
+            ConfigureQualitySettings(highPipeline, lowPipeline, iterationPipeline);
             ConfigureNativeResolution();
 
             AssetDatabase.SaveAssets();
@@ -70,12 +82,16 @@ namespace RocketFooxball.Editor
             var highPipeline = LoadRequiredAsset<UniversalRenderPipelineAsset>(HighPipelinePath);
             var lowRenderer = LoadRequiredAsset<UniversalRendererData>(LowRendererPath);
             var lowPipeline = LoadRequiredAsset<UniversalRenderPipelineAsset>(LowPipelinePath);
+            var iterationRenderer = LoadRequiredAsset<UniversalRendererData>(IterationRendererPath);
+            var iterationPipeline = LoadRequiredAsset<UniversalRenderPipelineAsset>(IterationPipelinePath);
 
             ValidatePipeline(highPipeline, highRenderer, high: true);
             ValidatePipeline(lowPipeline, lowRenderer, high: false);
+            ValidatePipeline(iterationPipeline, iterationRenderer, high: true, iteration: true);
             ValidateRenderer(highRenderer, high: true);
             ValidateRenderer(lowRenderer, high: false);
-            ValidateQualitySettings(highPipeline, lowPipeline);
+            ValidateRenderer(iterationRenderer, high: true, iteration: true);
+            ValidateQualitySettings(highPipeline, lowPipeline, iterationPipeline);
             ValidateNativeResolution();
         }
 
@@ -118,7 +134,7 @@ namespace RocketFooxball.Editor
             return LoadRequiredAsset<T>(destinationPath);
         }
 
-        private static void ConfigurePipeline(UniversalRenderPipelineAsset pipeline, UniversalRendererData renderer, bool high)
+        private static void ConfigurePipeline(UniversalRenderPipelineAsset pipeline, UniversalRendererData renderer, bool high, bool iteration = false)
         {
             var serialized = new SerializedObject(pipeline);
             SetInt(serialized, "k_AssetVersion", 13);
@@ -133,36 +149,37 @@ namespace RocketFooxball.Editor
             rendererDataList.arraySize = 1;
             rendererDataList.GetArrayElementAtIndex(0).objectReferenceValue = renderer;
 
+            var fullQuality = high && !iteration;
             SetBool(serialized, "m_SupportsHDR", high);
             SetInt(serialized, "m_HDRColorBufferPrecision", 0);
             SetInt(serialized, "m_MSAA", 1);
-            SetFloat(serialized, "m_RenderScale", high ? HighRenderScale : LowRenderScale);
-            SetInt(serialized, "m_MainLightRenderingMode", high ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
-            SetBool(serialized, "m_MainLightShadowsSupported", high);
-            SetInt(serialized, "m_MainLightShadowmapResolution", high ? HighShadowResolution : LowShadowResolution);
-            SetInt(serialized, "m_AdditionalLightsRenderingMode", high ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
-            SetInt(serialized, "m_AdditionalLightsPerObjectLimit", high ? 16 : 0);
+            SetFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
+            SetInt(serialized, "m_MainLightRenderingMode", (high || iteration) ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
+            SetBool(serialized, "m_MainLightShadowsSupported", fullQuality);
+            SetInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
+            SetInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
+            SetInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 0);
             SetBool(serialized, "m_AdditionalLightShadowsSupported", false);
             SetInt(serialized, "m_AdditionalLightsShadowmapResolution", LowShadowResolution);
-            SetFloat(serialized, "m_ShadowDistance", high ? HighShadowDistance : 0f);
-            SetInt(serialized, "m_ShadowCascadeCount", high ? HighShadowCascadeCount : 1);
-            SetBool(serialized, "m_AnyShadowsSupported", high);
-            SetBool(serialized, "m_SoftShadowsSupported", high);
+            SetFloat(serialized, "m_ShadowDistance", fullQuality ? HighShadowDistance : 0f);
+            SetInt(serialized, "m_ShadowCascadeCount", fullQuality ? HighShadowCascadeCount : 1);
+            SetBool(serialized, "m_AnyShadowsSupported", fullQuality);
+            SetBool(serialized, "m_SoftShadowsSupported", fullQuality);
             SetInt(serialized, "m_SoftShadowQuality", (int)SoftShadowQuality.Medium);
-            SetBool(serialized, "m_ReflectionProbeBlending", high);
-            SetBool(serialized, "m_ReflectionProbeBoxProjection", high);
-            SetBool(serialized, "m_ReflectionProbeAtlas", high);
+            SetBool(serialized, "m_ReflectionProbeBlending", high || iteration);
+            SetBool(serialized, "m_ReflectionProbeBoxProjection", high || iteration);
+            SetBool(serialized, "m_ReflectionProbeAtlas", high || iteration);
             SetBool(serialized, "m_UseSRPBatcher", true);
             SetInt(serialized, "m_ColorGradingMode", high ? (int)ColorGradingMode.HighDynamicRange : (int)ColorGradingMode.LowDynamicRange);
             SetInt(serialized, "m_VolumeFrameworkUpdateMode", (int)VolumeFrameworkUpdateMode.EveryFrame);
             Apply(serialized, pipeline);
         }
 
-        private static void ConfigureRenderer(UniversalRendererData renderer, bool high)
+        private static void ConfigureRenderer(UniversalRendererData renderer, bool high, bool iteration = false)
         {
             var serialized = new SerializedObject(renderer);
             SetInt(serialized, "m_AssetVersion", 3);
-            SetInt(serialized, "m_RenderingMode", high ? (int)RenderingMode.ForwardPlus : (int)RenderingMode.Forward);
+            SetInt(serialized, "m_RenderingMode", (high || iteration) ? (int)RenderingMode.ForwardPlus : (int)RenderingMode.Forward);
             Apply(serialized, renderer);
 
             var ssaoFeatures = renderer.rendererFeatures.OfType<ScreenSpaceAmbientOcclusion>().ToArray();
@@ -181,7 +198,7 @@ namespace RocketFooxball.Editor
                 renderer.rendererFeatures.Add(ssao);
             }
 
-            ConfigureSsao(ssao, high);
+            ConfigureSsao(ssao, high || iteration);
             UpdateRendererFeatureMap(renderer);
             renderer.SetDirty();
             EditorUtility.SetDirty(renderer);
@@ -234,7 +251,7 @@ namespace RocketFooxball.Editor
             Apply(serialized, ssao);
         }
 
-        private static void ConfigureQualitySettings(RenderPipelineAsset highPipeline, RenderPipelineAsset lowPipeline)
+        private static void ConfigureQualitySettings(RenderPipelineAsset highPipeline, RenderPipelineAsset lowPipeline, RenderPipelineAsset iterationPipeline)
         {
             var target = LoadProjectSettingsObject(QualitySettingsPath);
             var serialized = new SerializedObject(target);
@@ -244,9 +261,10 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Unsupported QualitySettings schema: m_QualitySettings is not an array.");
             }
 
-            levels.arraySize = 2;
+            levels.arraySize = 3;
             ConfigureQualityLevel(levels.GetArrayElementAtIndex(HighQualityIndex), HighQualityName, highPipeline, high: true);
             ConfigureQualityLevel(levels.GetArrayElementAtIndex(LowQualityIndex), LowQualityName, lowPipeline, high: false);
+            ConfigureQualityLevel(levels.GetArrayElementAtIndex(IterationQualityIndex), IterationQualityName, iterationPipeline, high: false, iteration: true);
             SetInt(serialized, "m_CurrentQuality", HighQualityIndex);
             SetPerPlatformDefault(serialized, HighQualityIndex);
             Apply(serialized, target);
@@ -264,7 +282,7 @@ namespace RocketFooxball.Editor
             standalone.intValue = qualityIndex;
         }
 
-        private static void ConfigureQualityLevel(SerializedProperty level, string name, RenderPipelineAsset pipeline, bool high)
+        private static void ConfigureQualityLevel(SerializedProperty level, string name, RenderPipelineAsset pipeline, bool high, bool iteration = false)
         {
             SetString(level, "name", name);
             SetObject(level, "customRenderPipeline", pipeline);
@@ -285,7 +303,7 @@ namespace RocketFooxball.Editor
             Apply(serialized, target);
         }
 
-        private static void ValidatePipeline(UniversalRenderPipelineAsset pipeline, UniversalRendererData renderer, bool high)
+        private static void ValidatePipeline(UniversalRenderPipelineAsset pipeline, UniversalRendererData renderer, bool high, bool iteration = false)
         {
             var serialized = new SerializedObject(pipeline);
             ExpectInt(serialized, "k_AssetVersion", 13);
@@ -301,32 +319,33 @@ namespace RocketFooxball.Editor
             ExpectBool(serialized, "m_SupportsHDR", high);
             ExpectInt(serialized, "m_HDRColorBufferPrecision", 0);
             ExpectInt(serialized, "m_MSAA", 1);
-            ExpectFloat(serialized, "m_RenderScale", high ? HighRenderScale : LowRenderScale);
-            ExpectInt(serialized, "m_MainLightRenderingMode", high ? 1 : 0);
-            ExpectBool(serialized, "m_MainLightShadowsSupported", high);
-            ExpectInt(serialized, "m_MainLightShadowmapResolution", high ? HighShadowResolution : LowShadowResolution);
-            ExpectInt(serialized, "m_AdditionalLightsRenderingMode", high ? 1 : 0);
-            ExpectInt(serialized, "m_AdditionalLightsPerObjectLimit", high ? 16 : 0);
+            var fullQuality = high && !iteration;
+            ExpectFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
+            ExpectInt(serialized, "m_MainLightRenderingMode", (high || iteration) ? 1 : 0);
+            ExpectBool(serialized, "m_MainLightShadowsSupported", fullQuality);
+            ExpectInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
+            ExpectInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? 1 : 0);
+            ExpectInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 0);
             ExpectBool(serialized, "m_AdditionalLightShadowsSupported", false);
             ExpectInt(serialized, "m_AdditionalLightsShadowmapResolution", LowShadowResolution);
-            ExpectFloat(serialized, "m_ShadowDistance", high ? HighShadowDistance : 0f);
-            ExpectInt(serialized, "m_ShadowCascadeCount", high ? HighShadowCascadeCount : 1);
-            ExpectBool(serialized, "m_AnyShadowsSupported", high);
-            ExpectBool(serialized, "m_SoftShadowsSupported", high);
+            ExpectFloat(serialized, "m_ShadowDistance", fullQuality ? HighShadowDistance : 0f);
+            ExpectInt(serialized, "m_ShadowCascadeCount", fullQuality ? HighShadowCascadeCount : 1);
+            ExpectBool(serialized, "m_AnyShadowsSupported", fullQuality);
+            ExpectBool(serialized, "m_SoftShadowsSupported", fullQuality);
             ExpectInt(serialized, "m_SoftShadowQuality", (int)SoftShadowQuality.Medium);
             ExpectBool(serialized, "m_UseSRPBatcher", true);
-            ExpectBool(serialized, "m_ReflectionProbeBlending", high);
-            ExpectBool(serialized, "m_ReflectionProbeBoxProjection", high);
-            ExpectBool(serialized, "m_ReflectionProbeAtlas", high);
+            ExpectBool(serialized, "m_ReflectionProbeBlending", high || iteration);
+            ExpectBool(serialized, "m_ReflectionProbeBoxProjection", high || iteration);
+            ExpectBool(serialized, "m_ReflectionProbeAtlas", high || iteration);
             ExpectInt(serialized, "m_ColorGradingMode", high ? (int)ColorGradingMode.HighDynamicRange : (int)ColorGradingMode.LowDynamicRange);
             ExpectInt(serialized, "m_VolumeFrameworkUpdateMode", (int)VolumeFrameworkUpdateMode.EveryFrame);
         }
 
-        private static void ValidateRenderer(UniversalRendererData renderer, bool high)
+        private static void ValidateRenderer(UniversalRendererData renderer, bool high, bool iteration = false)
         {
             var serialized = new SerializedObject(renderer);
             ExpectInt(serialized, "m_AssetVersion", 3);
-            ExpectInt(serialized, "m_RenderingMode", high ? (int)RenderingMode.ForwardPlus : (int)RenderingMode.Forward);
+            ExpectInt(serialized, "m_RenderingMode", (high || iteration) ? (int)RenderingMode.ForwardPlus : (int)RenderingMode.Forward);
 
             var ssaoFeatures = renderer.rendererFeatures.OfType<ScreenSpaceAmbientOcclusion>().ToArray();
             if (ssaoFeatures.Length != 1)
@@ -336,7 +355,7 @@ namespace RocketFooxball.Editor
             var ssao = ssaoFeatures[0];
 
             var feature = new SerializedObject(ssao);
-            ExpectBool(feature, "m_Active", high);
+            ExpectBool(feature, "m_Active", high || iteration);
             var settings = Required(feature, "m_Settings");
             ExpectInt(settings, "AOMethod", 0);
             ExpectBool(settings, "Downsample", true);
@@ -351,18 +370,19 @@ namespace RocketFooxball.Editor
             ExpectFloat(settings, "Falloff", SsaoFalloff);
         }
 
-        private static void ValidateQualitySettings(RenderPipelineAsset highPipeline, RenderPipelineAsset lowPipeline)
+        private static void ValidateQualitySettings(RenderPipelineAsset highPipeline, RenderPipelineAsset lowPipeline, RenderPipelineAsset iterationPipeline)
         {
             var target = LoadProjectSettingsObject(QualitySettingsPath);
             var serialized = new SerializedObject(target);
             var levels = Required(serialized, "m_QualitySettings");
-            if (!levels.isArray || levels.arraySize != 2)
+            if (!levels.isArray || levels.arraySize != 3)
             {
                 throw new InvalidOperationException("QualitySettings must contain exactly High and Low levels.");
             }
 
             ValidateQualityLevel(levels.GetArrayElementAtIndex(HighQualityIndex), HighQualityName, highPipeline, high: true);
             ValidateQualityLevel(levels.GetArrayElementAtIndex(LowQualityIndex), LowQualityName, lowPipeline, high: false);
+            ValidateQualityLevel(levels.GetArrayElementAtIndex(IterationQualityIndex), IterationQualityName, iterationPipeline, high: false, iteration: true);
             ExpectInt(serialized, "m_CurrentQuality", HighQualityIndex);
             var defaults = Required(serialized, "m_PerPlatformDefaultQuality");
             var standalone = FindPlatformDefault(defaults, serialized);
@@ -372,7 +392,7 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void ValidateQualityLevel(SerializedProperty level, string name, RenderPipelineAsset pipeline, bool high)
+        private static void ValidateQualityLevel(SerializedProperty level, string name, RenderPipelineAsset pipeline, bool high, bool iteration = false)
         {
             ExpectString(level, "name", name);
             if (Required(level, "customRenderPipeline").objectReferenceValue != pipeline)

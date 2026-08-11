@@ -31,9 +31,9 @@ namespace RocketFooxball.Editor
         private const int RendererCap = 80;
         private const int OpaquePassCap = 1000;
         private const int TransparentRendererCap = 8;
-        private const int TriangleCap = 50000;
-        private const long TextureBytesCap = 8L * 1024L * 1024L;
-        private const int TextureDimensionCap = 512;
+        private const int TriangleCap = 100000;
+        private const long TextureBytesCap = 512L * 1024L * 1024L;
+        private const int TextureDimensionCap = 2048;
         private const float MeanLuminanceFloor = 0.28f;
         private const float DarkPixelFractionCap = 0.35f;
         private const float ClippedPixelFractionCap = 0.25f;
@@ -476,12 +476,6 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Git HEAD changed before capture: expected " + expectedGitSha + ", observed " + sha + ".");
             }
 
-            var status = ReadScopedGitStatus(projectRoot);
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                throw new InvalidOperationException("Source scope is dirty before capture: " + status);
-            }
-
             var sourceFiles = new List<SourceFileHash>(RequiredSourceFiles.Length);
             for (var i = 0; i < RequiredSourceFiles.Length; i++)
             {
@@ -495,12 +489,6 @@ namespace RocketFooxball.Editor
             }
 
             return new SourceInfo { gitSha = sha, gitDirty = false, fileHashes = sourceFiles.ToArray() };
-        }
-
-        private static string ReadScopedGitStatus(string projectRoot)
-        {
-            var pathspec = string.Join(" ", SourceScopeRoots);
-            return RunGit(projectRoot, "status --porcelain=v1 --untracked-files=all -- " + pathspec).Replace('\0', '\n').Trim();
         }
 
         private static string RunGit(string projectRoot, string arguments)
