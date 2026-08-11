@@ -10,6 +10,8 @@ namespace RocketFooxball.Editor
     /// <summary>Public command facade. Domain ownership stays in pipeline modules.</summary>
     public static class MovementLabBuilder
     {
+        internal const string ProductionBakeSkippedMarker = "[MovementLab] production bake skipped: lighting inputs current (digest ";
+
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
@@ -75,6 +77,17 @@ namespace RocketFooxball.Editor
         public static void BakeMovementLabLighting()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            var probe = MovementLabStageGraph.Probe(false);
+            var productionProfile = string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase);
+            if (productionProfile &&
+                !probe.IsStale(MovementLabStage.Lighting) &&
+                !probe.IsStale(MovementLabStage.BakedOutput))
+            {
+                Debug.Log(ProductionBakeSkippedMarker + probe.LightingInputDigest + ")");
+                MovementLabStageRunner.WriteProbeIfRequested(probe);
+                return;
+            }
+
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.EnsurePersistedProductionSettings();
             // Always prepare the selected profile first. This makes a
