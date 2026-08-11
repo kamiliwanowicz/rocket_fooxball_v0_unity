@@ -170,9 +170,8 @@ namespace RocketFooxball.Editor
             MovementLabValidationAccumulator accumulator)
         {
             if (accumulator == null) throw new System.ArgumentNullException(nameof(accumulator));
-            // Raw output drift remains informational. Identity violations are
-            // blocking, but all stage families are scanned before terminal throw.
-            _ = stopOnOutputDrift;
+            // Changed-byte drift remains informational. Missing-output drift is
+            // blocking when requested. All stage families scan before terminal throw.
             _ = allowBakedOutputDrift;
             var manifestRead = MovementLabManifestStore.Read();
             if (manifestRead.Status == MovementLabManifestReadStatus.Unreadable)
@@ -226,6 +225,15 @@ namespace RocketFooxball.Editor
                         // GUID/local IDs, and persisted references.
 
                         for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
+                        if (stopOnOutputDrift)
+                        {
+                            for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++)
+                            {
+                                var driftToken = drift[driftIndex];
+                                if (driftToken.StartsWith("missing:", StringComparison.Ordinal))
+                                    accumulator.Add("stage-output", definition.Stage + ":" + driftToken, driftToken);
+                            }
+                        }
                     }
 
                     for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)

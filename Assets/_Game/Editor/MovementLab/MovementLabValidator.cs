@@ -233,11 +233,11 @@ namespace RocketFooxball.Editor
             MovementLabValidationAccumulator accumulator)
         {
             if (accumulator == null) throw new ArgumentNullException(nameof(accumulator));
-            ValidateAssetPrerequisites(accumulator);
-            var context = CaptureScenePrerequisites(builderSignature, accumulator);
+            var availableAssets = ValidateAssetPrerequisites(accumulator);
+            var context = CaptureScenePrerequisites(builderSignature, accumulator, availableAssets);
             ValidateGameplayAndSerializedWiring(context, accumulator);
-            ValidateImportedVisualAndAnimatorContracts(context, accumulator);
-            ValidateMaterialImporterAndPrefabContracts(context, accumulator);
+            ValidateImportedVisualAndAnimatorContracts(context, accumulator, availableAssets);
+            ValidateMaterialImporterAndPrefabContracts(context, accumulator, availableAssets);
             ValidateArenaContracts(context, accumulator);
             ValidateLightingAndProjectContracts(context, includeBakedLighting, accumulator);
             if (context.SceneReady)
@@ -247,8 +247,9 @@ namespace RocketFooxball.Editor
                 Debug.Log("Rocket Fooxball Movement Lab validation succeeded: " + ScenePath);
         }
 
-        private static void ValidateAssetPrerequisites(MovementLabValidationAccumulator accumulator)
+        private static HashSet<string> ValidateAssetPrerequisites(MovementLabValidationAccumulator accumulator)
         {
+            var availableAssets = new HashSet<string>(StringComparer.Ordinal);
             var paths = new[]
             {
                 PrefabPath, BallPrefabPath, RocketPrefabPath, RocketModelPath, ArenaKitModelPath, CharacterModelPath,
@@ -270,15 +271,18 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < paths.Length; i++)
             {
                 var path = paths[i];
+                if (File.Exists(path)) availableAssets.Add(path);
                 accumulator.Capture("assets", "exists:" + path, () => EnsureAssetExists(path));
             }
             ValidateCustomShaders(accumulator);
+            return availableAssets;
         }
 
         private static ValidationContext CaptureScenePrerequisites(string builderSignature,
-            MovementLabValidationAccumulator accumulator)
+            MovementLabValidationAccumulator accumulator, ISet<string> availableAssets)
         {
             var context = new ValidationContext();
+            if (availableAssets == null || !availableAssets.Contains(ScenePath)) return context;
             accumulator.Capture("scene/root", "open-scene", () =>
             {
                 context.Scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
@@ -442,7 +446,7 @@ namespace RocketFooxball.Editor
         private static void ValidateGameplayAndSerializedWiring(ValidationContext context,
             MovementLabValidationAccumulator accumulator)
         {
-            if (context == null) return;
+            if (context == null || !context.SceneReady) return;
             if (context.BallMotor != null)
             {
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.body", context.BallMotor, "body", context.BallBody);
@@ -548,10 +552,12 @@ namespace RocketFooxball.Editor
         }
 
         private static void ValidateImportedVisualAndAnimatorContracts(ValidationContext context,
-            MovementLabValidationAccumulator accumulator)
+            MovementLabValidationAccumulator accumulator, ISet<string> availableAssets)
         {
-            accumulator.Capture("visual/prefab", "RocketTrail", () => MovementLabPrefabPipeline.ValidateTrail(AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath)));
-            accumulator.Capture("visual/prefab", "ExplosionPrefab", () => MovementLabPrefabPipeline.ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath)));
+            if (availableAssets != null && availableAssets.Contains(RocketPrefabPath))
+                accumulator.Capture("visual/prefab", "RocketTrail", () => MovementLabPrefabPipeline.ValidateTrail(AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath)));
+            if (availableAssets != null && availableAssets.Contains(ExplosionPrefabPath))
+                accumulator.Capture("visual/prefab", "ExplosionPrefab", () => MovementLabPrefabPipeline.ValidateExplosionPrefab(AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath)));
             if (context == null || context.Player == null) return;
             context.Presentation = CaptureRequired(accumulator, "visual/root", "PlayerPresentation", context.Player.GetComponent<PlayerPresentation>(), "PlayerPresentation");
             context.WorldVisual = CaptureRequired(accumulator, "visual/root", "WorldVisual", context.Player.transform.Find("WorldVisual"), "Player WorldVisual");
@@ -589,12 +595,15 @@ namespace RocketFooxball.Editor
                     if (context.WorldAnimator.avatar == null)
                         throw new InvalidOperationException("World animator must have an imported avatar.");
                 });
-                accumulator.Capture("visual/imported", "WorldVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WorldVisual.gameObject, CharacterModelPath, "WorldVisual"));
-                accumulator.Capture("visual/animator", "WorldController", () => MovementLabAnimatorPipeline.ValidateWorldAnimatorController(context.WorldAnimator, WorldControllerPath, CharacterModelPath));
+                if (availableAssets != null && availableAssets.Contains(CharacterModelPath))
+                    accumulator.Capture("visual/imported", "WorldVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WorldVisual.gameObject, CharacterModelPath, "WorldVisual"));
+                if (availableAssets != null && availableAssets.Contains(WorldControllerPath) && availableAssets.Contains(CharacterModelPath))
+                    accumulator.Capture("visual/animator", "WorldController", () => MovementLabAnimatorPipeline.ValidateWorldAnimatorController(context.WorldAnimator, WorldControllerPath, CharacterModelPath));
             }
             if (context.WeaponVisual != null)
             {
-                accumulator.Capture("visual/imported", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WeaponVisual.gameObject, WeaponModelPath, "WeaponVisual"));
+                if (availableAssets != null && availableAssets.Contains(WeaponModelPath))
+                    accumulator.Capture("visual/imported", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WeaponVisual.gameObject, WeaponModelPath, "WeaponVisual"));
                 accumulator.Capture("visual/material", "WeaponMaterials", () => MovementLabMaterialPipeline.ValidateWeaponMaterials(context.WeaponVisual.gameObject));
                 accumulator.Capture("visual/physics", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.WeaponVisual.gameObject, "WeaponVisual"));
             }
@@ -610,9 +619,11 @@ namespace RocketFooxball.Editor
                     if (context.FpsAnimator.avatar == null)
                         throw new InvalidOperationException("FPS animator must have an imported avatar.");
                 });
-                accumulator.Capture("visual/imported", "FpsKickVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.FpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual"));
+                if (availableAssets != null && availableAssets.Contains(FpsKickModelPath))
+                    accumulator.Capture("visual/imported", "FpsKickVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.FpsVisual.gameObject, FpsKickModelPath, "FpsKickVisual"));
                 accumulator.Capture("visual/physics", "FpsKickVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.FpsVisual.gameObject, "FpsKickVisual"));
-                accumulator.Capture("visual/animator", "FpsController", () => MovementLabPrefabPipeline.ValidateAnimatorController(context.FpsAnimator, FpsControllerPath, FpsKickModelPath));
+                if (availableAssets != null && availableAssets.Contains(FpsControllerPath) && availableAssets.Contains(FpsKickModelPath))
+                    accumulator.Capture("visual/animator", "FpsController", () => MovementLabPrefabPipeline.ValidateAnimatorController(context.FpsAnimator, FpsControllerPath, FpsKickModelPath));
             }
             if (context.Camera != null)
             {
@@ -631,12 +642,17 @@ namespace RocketFooxball.Editor
         }
 
         private static void ValidateMaterialImporterAndPrefabContracts(ValidationContext context,
-            MovementLabValidationAccumulator accumulator)
+            MovementLabValidationAccumulator accumulator, ISet<string> availableAssets)
         {
-            accumulator.Capture("prefab", "Player", () => MovementLabPrefabPipeline.ValidatePrefab(PrefabPath, "Player", false, context?.BallSurface));
-            accumulator.Capture("prefab", "Ball", () => MovementLabPrefabPipeline.ValidatePrefab(BallPrefabPath, "Ball", true, context?.BallSurface));
-            accumulator.Capture("prefab", "Rocket", () => MovementLabPrefabPipeline.ValidatePrefab(RocketPrefabPath, "Rocket", false, null));
-            accumulator.Capture("prefab", "required-components", () => MovementLabPrefabPipeline.Validate());
+            if (availableAssets != null && availableAssets.Contains(PrefabPath))
+                accumulator.Capture("prefab", "Player", () => MovementLabPrefabPipeline.ValidatePrefab(PrefabPath, "Player", false, context?.BallSurface));
+            if (availableAssets != null && availableAssets.Contains(BallPrefabPath))
+                accumulator.Capture("prefab", "Ball", () => MovementLabPrefabPipeline.ValidatePrefab(BallPrefabPath, "Ball", true, context?.BallSurface));
+            if (availableAssets != null && availableAssets.Contains(RocketPrefabPath))
+                accumulator.Capture("prefab", "Rocket", () => MovementLabPrefabPipeline.ValidatePrefab(RocketPrefabPath, "Rocket", false, null));
+            if (availableAssets != null && availableAssets.Contains(PrefabPath) &&
+                availableAssets.Contains(BallPrefabPath) && availableAssets.Contains(ExplosionPrefabPath))
+                accumulator.Capture("prefab", "required-components", () => MovementLabPrefabPipeline.Validate());
             accumulator.Capture("importer", "texture-contracts", () => MovementLabImportPipeline.ValidateTextureImporterContracts());
             accumulator.Capture("importer", "animator-contracts", () => MovementLabAnimatorPipeline.Validate());
             accumulator.Capture("material", "opaque-references", () => MovementLabMaterialPipeline.ValidateOpaqueMaterialReferences());
