@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "paths": [
+          "Tools/Validation/*.ps1",
+          "Assets/_Game/Editor/MovementLab/*.cs"
+        ],
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1 -SkipHookCheck"
+          }
+        ]
+      }
+    ]
+  }
+}
