@@ -160,8 +160,18 @@ namespace RocketFooxball.Editor
         };
         internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift = false)
         {
-            // Retain legacy switches for callers; raw output drift is now
-            // informational and never blocks stage probing or builder writes.
+            var accumulator = new MovementLabValidationAccumulator();
+            var probe = Probe(stopOnOutputDrift, allowBakedOutputDrift, accumulator);
+            accumulator.ThrowIfAny("MovementLab generated-state probe");
+            return probe;
+        }
+
+        internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift,
+            MovementLabValidationAccumulator accumulator)
+        {
+            if (accumulator == null) throw new System.ArgumentNullException(nameof(accumulator));
+            // Raw output drift remains informational. Identity violations are
+            // blocking, but all stage families are scanned before terminal throw.
             _ = stopOnOutputDrift;
             _ = allowBakedOutputDrift;
             var manifestRead = MovementLabManifestStore.Read();
@@ -221,10 +231,10 @@ namespace RocketFooxball.Editor
                     for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)
                         stageReasons.Add(identityViolations[identityIndex]);
 
-                    if (stopOnOutputDrift && IsBlockingOutputDrift(drift, identityViolations))
+                    for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)
                     {
-                        throw new InvalidOperationException("MovementLab trusted output identity violation; refusing to run stage writers: " +
-                            string.Join(";", drift.Concat(identityViolations).Distinct(StringComparer.Ordinal).ToArray()));
+                        var identity = identityViolations[identityIndex];
+                        accumulator.Add("stage-identity", definition.Stage + ":" + identity, identity);
                     }
                 }
 
