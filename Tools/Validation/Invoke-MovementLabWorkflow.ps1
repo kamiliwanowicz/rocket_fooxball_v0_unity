@@ -339,6 +339,28 @@ function Get-LockPaths {
     )
 }
 
+function Remove-ZeroByteUnityLockSentinels {
+    if (@(Get-ProjectUnityProcesses).Count -ne 0) { return }
+    if ([string]::IsNullOrWhiteSpace([string]$script:CanonicalProjectRoot)) { throw 'Canonical project root is required for Unity lock cleanup.' }
+    $canonicalRoot = [IO.Path]::GetFullPath(([string]$script:CanonicalProjectRoot).TrimEnd('\'))
+    $allowedPaths = @(
+        [IO.Path]::GetFullPath((Join-Path $canonicalRoot 'Temp\UnityLockfile')),
+        [IO.Path]::GetFullPath((Join-Path $canonicalRoot 'Library\UnityLockfile'))
+    )
+    foreach ($lockPath in @(Get-LockPaths)) {
+        $fullPath = [IO.Path]::GetFullPath($lockPath)
+        if (@($allowedPaths | Where-Object { $_.Equals($fullPath, [StringComparison]::OrdinalIgnoreCase) }).Count -ne 1) { continue }
+        if (-not (Test-Path -LiteralPath $fullPath -PathType Leaf)) { continue }
+        try { if (-not (Get-CanonicalPath $fullPath).Equals($fullPath, [StringComparison]::OrdinalIgnoreCase)) { continue } } catch { continue }
+        $item = Get-Item -LiteralPath $fullPath -Force -ErrorAction Stop
+        if (@(Get-ProjectUnityProcesses).Count -ne 0) { return }
+        if ($item -isnot [IO.FileInfo] -or $item.PSIsContainer -or
+            ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $item.Length -ne 0) { continue }
+        [IO.File]::Delete($fullPath)
+        if (Test-Path -LiteralPath $fullPath) { throw ('Unity lock sentinel remained after cleanup: ' + $fullPath) }
+    }
+}
+
 function Get-CurrentProcessStartUtc {
     $process = Get-Process -Id $PID -ErrorAction Stop
     return $process.StartTime.ToUniversalTime().ToString('O')
@@ -435,6 +457,7 @@ function Wait-UnityRelease {
     $released = $false
     do {
         $active = @(Get-ProjectUnityProcesses)
+        if ($active.Count -eq 0) { Remove-ZeroByteUnityLockSentinels }
         $locks = @(Get-LockPaths | Where-Object { Test-Path -LiteralPath $_ })
         if ($active.Count -eq 0 -and $locks.Count -eq 0) { $released = $true; break }
         Start-Sleep -Milliseconds 250
@@ -943,13 +966,15 @@ function Invoke-UnityStep {
         if (-not (Test-Path -LiteralPath (Join-Path $script:ProjectRoot 'Library') -PathType Container)) { throw 'Warm private Library is missing.' }
         if ($Method -match 'BakeMovementLabLighting') { $script:BakeCount++ }
         $process = $null
+        $waitError = $null
         try {
             $process = Start-Process -FilePath $script:UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
             $exitCode = $process.ExitCode
         } finally {
-            Wait-UnityRelease $Label | Out-Null
+            try { Wait-UnityRelease $Label | Out-Null } catch { $waitError = $_ }
         }
         if ($exitCode -ne 0) { throw ('Unity step failed: ' + $Label + ' (exit ' + $exitCode + '). Log: ' + $logPath) }
+        if ($null -ne $waitError) { throw $waitError }
     }
     Add-CommandRecord ([ordered]@{
         label = $Label
