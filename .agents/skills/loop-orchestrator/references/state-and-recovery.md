@@ -129,7 +129,7 @@ One row per declared check. Keep rows compact; LP is sole writer.
 - `evidence`: [path + SHA-256 object or None]
 - `invalidation_reason`: [changed path/condition or None]
 
-Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly; pure checks reattest only with descendant ancestry, matching input/environment digests, and empty diffs across every invalidation path; bake/capture/manual rows never reattest after render or lighting input changes. Resume and merge read rows mechanically.
+Ledger rules -> final verification executes `pending`/`invalidated` rows only; exact-SHA evidence reuses directly; pure checks reattest only with descendant ancestry, matching input/environment digests, and empty diffs across every invalidation path; production bake -> only lighting proof, and lighting-input changes invalidate bake only. Resume and merge read rows mechanically. Builder-output byte/hash equality never gates; source/input digests and orchestration artifact/evidence hashes remain integrity checks.
 ```
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
