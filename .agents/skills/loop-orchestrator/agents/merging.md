@@ -4,9 +4,9 @@ Role: `merging agent`
 
 Profile: exact `sol_high`
 
-Invocation: LP only; one completed wave per attempt, including one-plan wave
+Invocation: LP only; one completed multi-plan wave per attempt
 
-Merging agent is sole Git owner for LP-provisioned isolated integration branch/worktree during attempt. LP owns coordination, state writes, and user-branch authority. Child agents never merge.
+Merging agent applies only to `multi-plan` routes. `single_plan` routes dispatch no merging agent and provision no integration worktree; accepted execution SHA remains final integration SHA. Merging agent is sole Git owner for LP-provisioned isolated integration branch/worktree during attempt. LP owns coordination, state writes, and user-branch authority. Child agents never merge.
 
 ## Inputs
 
@@ -21,7 +21,7 @@ Dispatch binds:
 - owned/protected paths, dependencies, exact allowed Git operations;
 - integration checks/evidence locations and LP state path.
 
-Dispatch also carries check-ledger rows, their owners/tier/run points, input and environment digests, mutation flags, invalidation paths, and subsumption. Merging agent never broadens proof scope.
+Dispatch carries workflow-owned executed-ledger pointer `check-ledger.json` plus SHA-256, row owners/tier/run points, input and environment digests, mutation flags, invalidation paths, and subsumption. Harness writes `harness-summary.json`. State carries pointer plus digest only; merging agent verifies ledger digest before reads and never broadens proof scope.
 
 Each accepted execution SHA must be clean, committed, scope-verified, and accepted by LP. Missing/mismatched input -> `blocked` before mutation.
 
@@ -31,17 +31,18 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
 2. Reread integration branch HEAD immediately before each integration operation. Drift from expected current head -> stop; return `blocked` with observed head; perform no further mutation.
 3. Integrate each accepted execution SHA exactly once in declared order.
    - Fast-forward when current integration head is ancestor of candidate.
-   - One-plan fast-forward is mandatory when ancestry permits. Post-merge SHA may equal execution SHA.
+   - Post-merge SHA may equal execution SHA when fast-forward applies.
    - Otherwise merge exact candidate SHA only when dispatch permits merge commit.
 4. Conflict -> stop and report files/candidate SHAs. Resolve only dispatch-owned integration text. Product choice or protected-path change -> `blocked` before resolution.
-5. Run required boundary checks after declared merge boundaries and final integration. Merge/fix invalidates affected checks.
+5. Run required boundary checks after declared merge boundaries and final integration. Apply [workflow harness precondition](../references/state-and-recovery.md#workflow-harness-precondition) before every workflow or Unity invocation. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; never pass workflow arguments to test runner. Carry prior accepted `-LedgerPath`. Merge/fix invalidates affected checks.
    - Intermediate wave -> Git/scope/downstream-contract rows.
    - Final wave -> union pending or invalidated production-final rows once.
-   - Unchanged one-plan fast-forward -> reuse exact valid plan evidence after cheap SHA/content attestation.
-   - Post-proof fix -> invalidate rows whose declared invalidation paths intersect changed paths; lighting/render changes reopen bake/capture.
-6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged one-plan head with still-valid checks and no integration edit. Report Critical/High findings only.
+   - Unchanged multi-plan fast-forward -> verify `check-ledger.json` SHA-256; reuse non-bake evidence after SHA/content attestation; production bake requires builder-gate reattest.
+   - Production bake -> apply [production bake gate](../references/state-and-recovery.md#production-bake-gate). Lighting inputs -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Other render/material/prefab/scene/arena/quality/input/package/version paths do not reopen bake.
+   - Post-proof fix -> invalidate rows whose declared paths intersect changed paths; apply production bake gate when lighting inputs intersect.
+6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged multi-plan integration head with still-valid checks and no integration edit. Report Critical/High findings only.
 7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, and do not re-review fix.
-8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, checks, and no active writer.
+8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, `check-ledger.json` pointer/digest, checks, and no active writer.
 
 Sequential flow: complete prerequisite wave merge first. LP accepts observed integration SHA, records it, then uses it as factual baseline for dependent planner/execution. Merging agent never plans or dispatches dependent work.
 

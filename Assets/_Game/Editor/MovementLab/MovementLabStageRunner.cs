@@ -255,7 +255,7 @@ namespace RocketFooxball.Editor
                     stream.Write(bytes, 0, bytes.Length);
                     stream.Flush(true);
                 }
-                if (File.Exists(path)) File.Replace(temporary, path, null);
+                if (File.Exists(path)) MovementLabAtomicFile.ReplaceAtomicWithRetry(temporary, path);
                 else File.Move(temporary, path);
             }
             finally

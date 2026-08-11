@@ -160,9 +160,18 @@ namespace RocketFooxball.Editor
         };
         internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift = false)
         {
-            // Retain legacy switches for callers; raw output drift is now
-            // informational and never blocks stage probing or builder writes.
-            _ = stopOnOutputDrift;
+            var accumulator = new MovementLabValidationAccumulator();
+            var probe = Probe(stopOnOutputDrift, allowBakedOutputDrift, accumulator);
+            accumulator.ThrowIfAny("MovementLab generated-state probe");
+            return probe;
+        }
+
+        internal static MovementLabStageProbe Probe(bool stopOnOutputDrift, bool allowBakedOutputDrift,
+            MovementLabValidationAccumulator accumulator)
+        {
+            if (accumulator == null) throw new System.ArgumentNullException(nameof(accumulator));
+            // Changed-byte drift remains informational. Missing-output drift is
+            // blocking when requested. All stage families scan before terminal throw.
             _ = allowBakedOutputDrift;
             var manifestRead = MovementLabManifestStore.Read();
             if (manifestRead.Status == MovementLabManifestReadStatus.Unreadable)
@@ -216,15 +225,24 @@ namespace RocketFooxball.Editor
                         // GUID/local IDs, and persisted references.
 
                         for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++) stageReasons.Add(drift[driftIndex]);
+                        if (stopOnOutputDrift)
+                        {
+                            for (var driftIndex = 0; driftIndex < drift.Count; driftIndex++)
+                            {
+                                var driftToken = drift[driftIndex];
+                                if (driftToken.StartsWith("missing:", StringComparison.Ordinal))
+                                    accumulator.Add("stage-output", definition.Stage + ":" + driftToken, driftToken);
+                            }
+                        }
                     }
 
                     for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)
                         stageReasons.Add(identityViolations[identityIndex]);
 
-                    if (stopOnOutputDrift && IsBlockingOutputDrift(drift, identityViolations))
+                    for (var identityIndex = 0; identityIndex < identityViolations.Count; identityIndex++)
                     {
-                        throw new InvalidOperationException("MovementLab trusted output identity violation; refusing to run stage writers: " +
-                            string.Join(";", drift.Concat(identityViolations).Distinct(StringComparer.Ordinal).ToArray()));
+                        var identity = identityViolations[identityIndex];
+                        accumulator.Add("stage-identity", definition.Stage + ":" + identity, identity);
                     }
                 }
 

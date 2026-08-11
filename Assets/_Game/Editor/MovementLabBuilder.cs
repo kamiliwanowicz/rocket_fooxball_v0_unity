@@ -10,6 +10,8 @@ namespace RocketFooxball.Editor
     /// <summary>Public command facade. Domain ownership stays in pipeline modules.</summary>
     public static class MovementLabBuilder
     {
+        internal const string ProductionBakeSkippedMarker = "[MovementLab] production bake skipped: lighting inputs current (digest ";
+
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
         {
@@ -75,6 +77,17 @@ namespace RocketFooxball.Editor
         public static void BakeMovementLabLighting()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            var probe = MovementLabStageGraph.Probe(false);
+            var productionProfile = string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase);
+            if (productionProfile &&
+                !probe.IsStale(MovementLabStage.Lighting) &&
+                !probe.IsStale(MovementLabStage.BakedOutput))
+            {
+                Debug.Log(ProductionBakeSkippedMarker + probe.LightingInputDigest + ")");
+                MovementLabStageRunner.WriteProbeIfRequested(probe);
+                return;
+            }
+
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.EnsurePersistedProductionSettings();
             // Always prepare the selected profile first. This makes a
@@ -103,20 +116,20 @@ namespace RocketFooxball.Editor
         public static void ValidateMovementLab()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            var accumulator = new MovementLabValidationAccumulator();
             // Read the typed profile before fail-closed stale checks so a
             // development bake reports the intended production-only rejection.
-            var probe = MovementLabStageGraph.Probe(false);
-            if (!string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("MovementLab validation requires a production lighting bake. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly; current profile=" + (probe.CurrentState?.bakedProfile ?? "none") + ".");
+            var probe = MovementLabStageGraph.Probe(false, allowBakedOutputDrift: false, accumulator: accumulator);
+            var productionProfile = string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase);
+            if (!productionProfile)
+                accumulator.Add("profile", "production-bake", "MovementLab validation requires a production lighting bake. Run 'Rocket Fooxball/Bake Movement Lab Lighting' explicitly; current profile=" + (probe.CurrentState?.bakedProfile ?? "none") + ".");
 
             var staleNonLighting = probe.StaleStages.Where(stage =>
                 stage != MovementLabStage.Lighting &&
                 stage != MovementLabStage.BakedOutput &&
                 !probe.IsRawOutputDriftOnly(stage)).ToArray();
             if (staleNonLighting.Length > 0)
-            {
-                throw new InvalidOperationException("MovementLab generated state is stale: " + string.Join(", ", staleNonLighting));
-            }
+                accumulator.Add("generated-state", "stale-non-lighting", "MovementLab generated state is stale: " + string.Join(", ", staleNonLighting));
             var staleRaw = probe.StaleStages.Where(probe.IsRawOutputDriftOnly).ToArray();
             if (staleRaw.Length > 0)
                 Debug.Log("Rocket Fooxball Movement Lab validation proceeding with informational raw output drift: " + string.Join(", ", staleRaw));
@@ -125,8 +138,12 @@ namespace RocketFooxball.Editor
             if (staleLighting.Length > 0)
                 Debug.LogWarning("Rocket Fooxball Movement Lab validation proceeding with stale lighting stages: " + string.Join(", ", staleLighting));
 
-            MovementLabValidator.Validate(includeBakedLighting: true, logSuccess: true);
-            MovementLabStageRunner.WriteProbeIfRequested(probe);
+            // Invalid profile still runs non-baked semantic coverage; valid
+            // production profile includes baked checks.
+            MovementLabValidator.Validate(accumulator, includeBakedLighting: productionProfile, logSuccess: true);
+            if (!accumulator.HasViolations)
+                MovementLabStageRunner.WriteProbeIfRequested(probe);
+            accumulator.ThrowIfAny("MovementLab validation");
         }
 
         [MenuItem("Rocket Fooxball/Enter Movement Lab Fast Preview")]
@@ -139,18 +156,22 @@ namespace RocketFooxball.Editor
         public static void BuildMovementLabFast()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            var accumulator = new MovementLabValidationAccumulator();
             try
             {
                 AssembleMovementLab();
                 // Fast mode intentionally accepts the bounded Development
                 // lighting intermediate, but still proves persisted semantic
                 // state without review/pass/baked-output/capture work.
-                MovementLabValidator.ValidateFastPersistedSemantics();
-                GraphicsQualityConfigurator.Validate();
-                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true);
-                MovementLabStageRunner.WriteProbeIfRequested(probe);
+                MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
+                accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
+                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
                 if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
                     Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
+
+                if (!accumulator.HasViolations)
+                    MovementLabStageRunner.WriteProbeIfRequested(probe);
+                accumulator.ThrowIfAny("MovementLab fast build semantic validation");
 
                 MovementLabFastModeSession.Enter();
                 MovementLabFastModeSession.AssertAppliedState();

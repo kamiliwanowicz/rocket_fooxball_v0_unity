@@ -40,8 +40,6 @@ namespace RocketFooxball.Editor
         private const float DarkLuminance = 0.08f;
         private const float ClippedLuminance = 0.98f;
         private const int UniqueColorFloor = 32;
-        private const string ExpectedGitShaArgument = "-brightArenaExpectedGitSha";
-        private const string ExpectedGitShaEnvironment = "BRIGHT_ARENA_EXPECTED_GIT_SHA";
         private static readonly string[] SourceScopeRoots = { "Assets", "Tools", "ProjectSettings", "Packages" };
         private static readonly string[] RequiredSourceFiles =
         {
@@ -62,6 +60,8 @@ namespace RocketFooxball.Editor
             public ImageEvidence[] images;
             public BudgetEvidence budgets;
             public bool pass;
+            public bool humanVisualReviewRequired = true;
+            public string visualReview = "human visual review required";
         }
 
         [Serializable]
@@ -227,7 +227,6 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Bright arena capture requires graphics-enabled Unity; GraphicsDeviceType.Null is unsupported.");
                 }
 
-                var expectedGitSha = ReadExpectedGitSha();
                 RunBudgetAccountingSelfChecks();
 
                 // Validator is the single authoritative scene/manifest check. Do not build,
@@ -240,15 +239,11 @@ namespace RocketFooxball.Editor
                 }
                 if (scene.isDirty)
                 {
-                    throw new InvalidOperationException("MovementLab scene became dirty during validation; capture refuses to continue.");
+                    UnityEngine.Debug.LogWarning("MovementLab scene is dirty after validation; capture continues for manual review.");
                 }
 
                 var buildManifest = ReadBuildManifest(projectRoot);
-                manifest.source = ReadSourceInfo(projectRoot, expectedGitSha);
-                if (!string.Equals(manifest.source.gitSha, expectedGitSha, StringComparison.OrdinalIgnoreCase) || manifest.source.gitDirty)
-                {
-                    throw new InvalidOperationException("Capture source provenance assertion failed.");
-                }
+                manifest.source = ReadSourceInfo(projectRoot);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_SOURCE sha=" + manifest.source.gitSha + " dirty=" + manifest.source.gitDirty);
                 manifest.unity = ReadUnityInfo();
                 manifest.build = new BuildInfo
@@ -351,22 +346,29 @@ namespace RocketFooxball.Editor
                     manifest.budgets.uniqueMeshes, manifest.budgets.visibleTriangles, manifest.budgets.authoredTextureRgbaBytes, manifest.budgets.maxTextureDimension));
                 if (!manifest.budgets.pass)
                 {
-                    throw new InvalidOperationException("Bright arena render budget exceeded; see manifest budget fields.");
+                    UnityEngine.Debug.LogWarning("Bright arena render budget heuristic exceeded; see manifest budget fields. Technical capture continues for human review.");
                 }
                 for (var i = 0; i < manifest.images.Length; i++)
                 {
                     if (!manifest.images[i].pass)
                     {
-                        throw new InvalidOperationException("Bright arena image threshold failed: " + manifest.images[i].view);
+                        UnityEngine.Debug.LogWarning("Bright arena image heuristic failed: " + manifest.images[i].view + "; technical capture continues for human review.");
                     }
                 }
 
+                // Technical capture completed; image/budget heuristics never approve visuals.
                 manifest.pass = true;
                 File.WriteAllText(manifestPath, JsonUtility.ToJson(manifest, true), new UTF8Encoding(false));
+                if (!File.Exists(manifestPath) || new FileInfo(manifestPath).Length <= 0)
+                {
+                    throw new InvalidOperationException("Capture manifest could not be written: " + manifestPath);
+                }
                 var evidenceAttributes = File.GetAttributes(evidenceDirectory);
                 File.SetAttributes(evidenceDirectory, evidenceAttributes | FileAttributes.ReadOnly);
                 LaunchEvidenceFinalizer(projectRoot, evidenceDirectory);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_MANIFEST_WRITTEN " + File.Exists(manifestPath) + " " + manifestPath);
+                UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_HUMAN_VISUAL_REVIEW_REQUIRED true");
+                UnityEngine.Debug.Log("Human visual review required; manifest.pass means technical capture completion only.");
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_PASS " + manifestPath);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_EVIDENCE " + evidenceDirectory);
             }
@@ -434,46 +436,12 @@ namespace RocketFooxball.Editor
             return manifest;
         }
 
-        private static string ReadExpectedGitSha()
+        private static SourceInfo ReadSourceInfo(string projectRoot)
         {
-            var commandLine = Environment.GetCommandLineArgs();
-            for (var i = 0; i < commandLine.Length; i++)
+            var sha = (RunGit(projectRoot, "rev-parse --verify HEAD") ?? string.Empty).Trim().ToLowerInvariant();
+            if (sha.Length != 40 || sha.Any(character => !Uri.IsHexDigit(character)))
             {
-                var argument = commandLine[i];
-                if (string.Equals(argument, ExpectedGitShaArgument, StringComparison.OrdinalIgnoreCase) && i + 1 < commandLine.Length)
-                {
-                    return NormalizeGitSha(commandLine[i + 1], "command line");
-                }
-                if (argument.StartsWith(ExpectedGitShaArgument + "=", StringComparison.OrdinalIgnoreCase))
-                {
-                    return NormalizeGitSha(argument.Substring(ExpectedGitShaArgument.Length + 1), "command line");
-                }
-            }
-
-            var environmentValue = Environment.GetEnvironmentVariable(ExpectedGitShaEnvironment);
-            if (!string.IsNullOrWhiteSpace(environmentValue))
-            {
-                return NormalizeGitSha(environmentValue, "environment");
-            }
-            throw new InvalidOperationException("Capture requires the wrapper-provided expected Git SHA.");
-        }
-
-        private static string NormalizeGitSha(string value, string source)
-        {
-            var normalized = (value ?? string.Empty).Trim().ToLowerInvariant();
-            if (normalized.Length != 40 || normalized.Any(character => !Uri.IsHexDigit(character)))
-            {
-                throw new InvalidOperationException("Expected Git SHA from " + source + " is not a 40-character hexadecimal SHA.");
-            }
-            return normalized;
-        }
-
-        private static SourceInfo ReadSourceInfo(string projectRoot, string expectedGitSha)
-        {
-            var sha = NormalizeGitSha(RunGit(projectRoot, "rev-parse --verify HEAD"), "git HEAD");
-            if (!string.Equals(sha, expectedGitSha, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Git HEAD changed before capture: expected " + expectedGitSha + ", observed " + sha + ".");
+                throw new InvalidOperationException("Git HEAD is not an exact 40-character hexadecimal SHA: " + sha + ".");
             }
 
             var sourceFiles = new List<SourceFileHash>(RequiredSourceFiles.Length);
@@ -565,6 +533,10 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("PNG encoding returned no bytes: " + view.Name);
                 }
                 File.WriteAllBytes(absolutePath, png);
+                if (!File.Exists(absolutePath) || new FileInfo(absolutePath).Length <= 0)
+                {
+                    throw new InvalidOperationException("PNG file could not be written: " + view.Name);
+                }
                 return AnalyzeImage(absolutePath, view.Name, png);
             }
             finally

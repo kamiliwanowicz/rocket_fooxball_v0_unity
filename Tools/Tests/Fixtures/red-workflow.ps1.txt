@@ -1,0 +1,21 @@
+# Historical red baseline for harness red/green checks.
+# Mirrors pre-IDictionary property access from red workflow baseline.
+function Get-ObjectPropertyValue {
+    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
+    if ($null -eq $Object -or -not ($Object.PSObject.Properties.Name -contains $Name)) { return $null }
+    return $Object.PSObject.Properties[$Name].Value
+}
+
+function Get-ObjectPropertyText {
+    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
+    $value = Get-ObjectPropertyValue $Object $Name
+    if ($null -eq $value) { return '' }
+    return [string]$value
+}
+
+function Test-RowReuseProof {
+    param([Parameter(Mandatory = $true)]$Prior, [Parameter(Mandatory = $true)]$Row)
+    if ((Get-ObjectPropertyText $Prior 'input_digest') -ne (Get-ObjectPropertyText $Row 'input_digest')) { return @{ valid = $false; reason = 'input digest changed' } }
+    if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
+    return @{ valid = $true; reason = $null }
+}

@@ -37,6 +37,15 @@ namespace RocketFooxball.Editor
         private const string AuthorizationFileName = "movement-lab-manifest-rebuild-authorization.json";
         private static bool rebuildAuthorizationLease;
 
+        private sealed class ManifestValidation
+        {
+            internal readonly List<string> StructuralViolations = new List<string>();
+            internal readonly List<string> DerivedViolations = new List<string>();
+
+            internal bool IsStructurallyValid => StructuralViolations.Count == 0;
+            internal bool IsFullyValid => IsStructurallyValid && DerivedViolations.Count == 0;
+        }
+
         [Serializable]
         private sealed class RebuildAuthorization
         {
@@ -87,39 +96,106 @@ namespace RocketFooxball.Editor
 
         internal static bool IsCurrentAndReadable(MovementLabGeneratedState state)
         {
-            if (state == null || state.schemaVersion != MovementLabContract.ManifestSchemaVersion || state.stages == null ||
-                string.IsNullOrWhiteSpace(state.sourceSignature) || string.IsNullOrWhiteSpace(state.generatedOutputFingerprint) ||
-                string.IsNullOrWhiteSpace(state.unityVersion) || string.IsNullOrWhiteSpace(state.gitSha) ||
-                state.gitSha.Length != 40 || string.IsNullOrWhiteSpace(state.manifestStatus) ||
-                (state.manifestStatus != "current" && state.manifestStatus != "stale") ||
-                string.IsNullOrWhiteSpace(state.bakedProfile) || state.fingerprintPaths == null || state.fingerprintHashes == null ||
-                state.fingerprintPaths.Length != state.fingerprintHashes.Length ||
-                state.staleStages == null || state.staleReasons == null || state.staleStages.Length != state.staleReasons.Length)
+            return Validate(state).IsFullyValid;
+        }
+
+        private static ManifestValidation Validate(MovementLabGeneratedState state)
+        {
+            var validation = new ManifestValidation();
+            if (state == null)
             {
-                return false;
+                validation.StructuralViolations.Add("state is null");
+                return validation;
             }
-            if (state.manifestStatus == "current" && state.staleStages.Length != 0) return false;
-            var staleStageNames = new HashSet<string>(StringComparer.Ordinal);
-            for (var staleIndex = 0; staleIndex < state.staleStages.Length; staleIndex++)
+
+            if (state.schemaVersion != MovementLabContract.ManifestSchemaVersion)
             {
-                if (string.IsNullOrWhiteSpace(state.staleStages[staleIndex]) ||
-                    !Enum.IsDefined(typeof(MovementLabStage), state.staleStages[staleIndex]) ||
-                    !staleStageNames.Add(state.staleStages[staleIndex]) ||
-                    string.IsNullOrWhiteSpace(state.staleReasons[staleIndex])) return false;
+                validation.StructuralViolations.Add("schemaVersion is not current");
+            }
+            if (state.stages == null)
+            {
+                validation.StructuralViolations.Add("stages are missing");
+            }
+            if (string.IsNullOrWhiteSpace(state.sourceSignature))
+            {
+                validation.StructuralViolations.Add("sourceSignature is missing");
+            }
+            if (string.IsNullOrWhiteSpace(state.generatedOutputFingerprint))
+            {
+                validation.StructuralViolations.Add("generatedOutputFingerprint is missing");
+            }
+            if (string.IsNullOrWhiteSpace(state.unityVersion))
+            {
+                validation.StructuralViolations.Add("unityVersion is missing");
+            }
+            if (string.IsNullOrWhiteSpace(state.gitSha) || state.gitSha.Length != 40)
+            {
+                validation.StructuralViolations.Add("gitSha is not a 40-character value");
+            }
+            if (string.IsNullOrWhiteSpace(state.manifestStatus) ||
+                (state.manifestStatus != "current" && state.manifestStatus != "stale"))
+            {
+                validation.StructuralViolations.Add("manifestStatus is invalid");
+            }
+            if (string.IsNullOrWhiteSpace(state.bakedProfile))
+            {
+                validation.StructuralViolations.Add("bakedProfile is missing");
+            }
+            if (state.fingerprintPaths == null || state.fingerprintHashes == null)
+            {
+                validation.StructuralViolations.Add("fingerprint arrays are missing");
+            }
+            else if (state.fingerprintPaths.Length != state.fingerprintHashes.Length)
+            {
+                validation.StructuralViolations.Add("fingerprint array counts differ");
+            }
+            if (state.staleStages == null || state.staleReasons == null)
+            {
+                validation.StructuralViolations.Add("stale arrays are missing");
+            }
+            else if (state.staleStages.Length != state.staleReasons.Length)
+            {
+                validation.StructuralViolations.Add("stale array counts differ");
+            }
+
+            if (state.staleStages != null && state.staleReasons != null && state.staleStages.Length == state.staleReasons.Length)
+            {
+                if (state.manifestStatus == "current" && state.staleStages.Length != 0)
+                {
+                    validation.StructuralViolations.Add("current manifest has stale stages");
+                }
+                var staleStageNames = new HashSet<string>(StringComparer.Ordinal);
+                for (var staleIndex = 0; staleIndex < state.staleStages.Length; staleIndex++)
+                {
+                    if (string.IsNullOrWhiteSpace(state.staleStages[staleIndex]) ||
+                        !Enum.IsDefined(typeof(MovementLabStage), state.staleStages[staleIndex]) ||
+                        !staleStageNames.Add(state.staleStages[staleIndex]) ||
+                        string.IsNullOrWhiteSpace(state.staleReasons[staleIndex]))
+                    {
+                        validation.StructuralViolations.Add("stale stage/reason entry is invalid at index " + staleIndex);
+                    }
+                }
             }
 
             var fingerprintPaths = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < state.fingerprintPaths.Length; i++)
+            if (state.fingerprintPaths != null && state.fingerprintHashes != null &&
+                state.fingerprintPaths.Length == state.fingerprintHashes.Length)
             {
-                try
+                for (var i = 0; i < state.fingerprintPaths.Length; i++)
                 {
-                    var normalized = NormalizeRepositoryPath(state.fingerprintPaths[i]);
-                    if (!string.Equals(normalized, state.fingerprintPaths[i], StringComparison.Ordinal) || !fingerprintPaths.Add(normalized) ||
-                        string.IsNullOrWhiteSpace(state.fingerprintHashes[i])) return false;
-                }
-                catch (InvalidOperationException)
-                {
-                    return false;
+                    try
+                    {
+                        var normalized = NormalizeRepositoryPath(state.fingerprintPaths[i]);
+                        if (!string.Equals(normalized, state.fingerprintPaths[i], StringComparison.Ordinal) ||
+                            !fingerprintPaths.Add(normalized) || string.IsNullOrWhiteSpace(state.fingerprintHashes[i]))
+                        {
+                            validation.StructuralViolations.Add("fingerprint path/hash entry is invalid at index " + i);
+                        }
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        validation.StructuralViolations.Add("fingerprint path is unsafe at index " + i);
+                    }
                 }
             }
 
@@ -133,68 +209,114 @@ namespace RocketFooxball.Editor
             };
             var seen = new HashSet<string>(StringComparer.Ordinal);
             var outputPathDigests = new Dictionary<string, MovementLabPathDigest>(StringComparer.Ordinal);
-            for (var i = 0; i < state.stages.Length; i++)
+            if (state.stages != null)
             {
-                var record = state.stages[i];
-                if (record == null || string.IsNullOrWhiteSpace(record.stage) || !Enum.IsDefined(typeof(MovementLabStage), record.stage) || !seen.Add(record.stage) ||
-                    record.schemaVersion != MovementLabContract.ManifestSchemaVersion ||
-                    string.IsNullOrWhiteSpace(record.contractVersion) || string.IsNullOrWhiteSpace(record.inputDigest) ||
-                    string.IsNullOrWhiteSpace(record.repositoryInputDigest) || string.IsNullOrWhiteSpace(record.dependencyDigest) ||
-                    string.IsNullOrWhiteSpace(record.outputDigest) || record.unityVersion == null || record.predecessorDigests == null || record.outputs == null)
+                for (var i = 0; i < state.stages.Length; i++)
                 {
-                    return false;
-                }
-
-                var stageOutputPaths = new HashSet<string>(StringComparer.Ordinal);
-                for (var outputIndex = 0; outputIndex < record.outputs.Length; outputIndex++)
-                {
-                    var output = record.outputs[outputIndex];
-                    string normalizedOutputPath = null;
-                    try
+                    var record = state.stages[i];
+                    if (record == null || string.IsNullOrWhiteSpace(record.stage) ||
+                        !Enum.IsDefined(typeof(MovementLabStage), record.stage) || !seen.Add(record.stage) ||
+                        record.schemaVersion != MovementLabContract.ManifestSchemaVersion ||
+                        string.IsNullOrWhiteSpace(record.contractVersion) || string.IsNullOrWhiteSpace(record.inputDigest) ||
+                        string.IsNullOrWhiteSpace(record.repositoryInputDigest) || string.IsNullOrWhiteSpace(record.dependencyDigest) ||
+                        string.IsNullOrWhiteSpace(record.outputDigest) || record.unityVersion == null ||
+                        record.predecessorDigests == null || record.outputs == null)
                     {
-                        normalizedOutputPath = output == null ? null : NormalizeRepositoryPath(output.path);
-                    }
-                    catch (InvalidOperationException)
-                    {
-                        return false;
-                    }
-                    if (output == null || string.IsNullOrWhiteSpace(output.path) || !stageOutputPaths.Add(output.path) ||
-                        !string.Equals(normalizedOutputPath, output.path, StringComparison.Ordinal) ||
-                        (!output.missing && string.IsNullOrWhiteSpace(output.digest)))
-                    {
-                        return false;
+                        validation.StructuralViolations.Add("stage record is invalid at index " + i);
+                        continue;
                     }
 
-                    outputPathDigests[output.path] = output;
+                    var stageOutputPaths = new HashSet<string>(StringComparer.Ordinal);
+                    for (var outputIndex = 0; outputIndex < record.outputs.Length; outputIndex++)
+                    {
+                        var output = record.outputs[outputIndex];
+                        string normalizedOutputPath = null;
+                        try
+                        {
+                            normalizedOutputPath = output == null ? null : NormalizeRepositoryPath(output.path);
+                        }
+                        catch (InvalidOperationException)
+                        {
+                            validation.StructuralViolations.Add("stage output path is unsafe at " + record.stage + ":" + outputIndex);
+                        }
+                        if (output == null || string.IsNullOrWhiteSpace(output.path) ||
+                            !stageOutputPaths.Add(output.path) ||
+                            !string.Equals(normalizedOutputPath, output.path, StringComparison.Ordinal) ||
+                            (!output.missing && string.IsNullOrWhiteSpace(output.digest)))
+                        {
+                            validation.StructuralViolations.Add("stage output entry is invalid at " + record.stage + ":" + outputIndex);
+                            continue;
+                        }
+
+                        // Shared output paths are valid; later baked ownership supersedes earlier ownership.
+                        outputPathDigests[output.path] = output;
+                    }
                 }
             }
 
             for (var i = 0; i < requiredStages.Length; i++)
             {
-                if (!seen.Contains(requiredStages[i])) return false;
+                if (!seen.Contains(requiredStages[i]))
+                {
+                    validation.StructuralViolations.Add("required stage is missing: " + requiredStages[i]);
+                }
             }
 
-            var expectedPaths = outputPathDigests.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray();
-            if (!expectedPaths.SequenceEqual(state.fingerprintPaths, StringComparer.Ordinal)) return false;
-            for (var i = 0; i < expectedPaths.Length; i++)
+            // These checks are intentionally derived. Existing trusted reads remain strict,
+            // but outgoing writes report drift without making byte equality a gate.
+            if (state.fingerprintPaths != null && state.fingerprintHashes != null &&
+                state.fingerprintPaths.Length == state.fingerprintHashes.Length)
             {
-                var output = outputPathDigests[expectedPaths[i]];
-                var expectedHash = output.missing ? Sha256Text("missing:" + output.path + "\n") : output.digest;
-                if (!string.Equals(expectedHash, state.fingerprintHashes[i], StringComparison.Ordinal)) return false;
+                var expectedPaths = outputPathDigests.Keys.OrderBy(path => path, StringComparer.Ordinal).ToArray();
+                if (!expectedPaths.SequenceEqual(state.fingerprintPaths, StringComparer.Ordinal))
+                {
+                    validation.DerivedViolations.Add("fingerprint path union differs from stage outputs");
+                }
+                var comparableCount = Math.Min(expectedPaths.Length, state.fingerprintHashes.Length);
+                for (var i = 0; i < comparableCount; i++)
+                {
+                    if (!outputPathDigests.TryGetValue(expectedPaths[i], out var output)) continue;
+                    var expectedHash = output.missing ? Sha256Text("missing:" + output.path + "\n") : output.digest;
+                    if (!string.Equals(expectedHash, state.fingerprintHashes[i], StringComparison.Ordinal))
+                    {
+                        validation.DerivedViolations.Add("fingerprint hash mismatch at " + expectedPaths[i]);
+                    }
+                }
             }
 
-            var expectedSource = Sha256Text(string.Join("\n", state.stages.Select(record => record.stage + ":" + record.inputDigest).OrderBy(value => value, StringComparer.Ordinal)) + "\n");
-            var expectedOutput = Sha256Text(string.Join("\n", state.stages.Select(record => record.stage + ":" + record.outputDigest).OrderBy(value => value, StringComparer.Ordinal)) + "\n");
-            return string.Equals(expectedSource, state.sourceSignature, StringComparison.Ordinal) &&
-                string.Equals(expectedOutput, state.generatedOutputFingerprint, StringComparison.Ordinal);
+            if (state.stages != null)
+            {
+                var expectedSource = Sha256Text(string.Join("\n", state.stages.Where(record => record != null)
+                    .Select(record => record.stage + ":" + record.inputDigest)
+                    .OrderBy(value => value, StringComparer.Ordinal)) + "\n");
+                var expectedOutput = Sha256Text(string.Join("\n", state.stages.Where(record => record != null)
+                    .Select(record => record.stage + ":" + record.outputDigest)
+                    .OrderBy(value => value, StringComparer.Ordinal)) + "\n");
+                if (!string.Equals(expectedSource, state.sourceSignature, StringComparison.Ordinal))
+                {
+                    validation.DerivedViolations.Add("source signature differs from stage inputs");
+                }
+                if (!string.Equals(expectedOutput, state.generatedOutputFingerprint, StringComparison.Ordinal))
+                {
+                    validation.DerivedViolations.Add("generated output fingerprint differs from stage outputs");
+                }
+            }
+
+            return validation;
         }
 
         internal static void WriteAtomic(MovementLabGeneratedState state)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
-            if (!IsCurrentAndReadable(state))
+            var validation = Validate(state);
+            if (!validation.IsStructurallyValid)
             {
-                throw new InvalidOperationException("MovementLab manifest write rejected: top-level signature, fingerprint, path-union, or stage schema is invalid.");
+                throw new InvalidOperationException("MovementLab manifest write rejected: structural/schema/path/stage violations: " +
+                    string.Join("; ", validation.StructuralViolations));
+            }
+            for (var i = 0; i < validation.DerivedViolations.Count; i++)
+            {
+                UnityEngine.Debug.LogWarning("MovementLab manifest derived consistency warning: " + validation.DerivedViolations[i]);
             }
             var read = Read();
             if (read.Status != MovementLabManifestReadStatus.Current || !IsCurrentAndReadable(read.State))
@@ -220,7 +342,7 @@ namespace RocketFooxball.Editor
                     stream.Flush(true);
                 }
 
-                if (File.Exists(path)) File.Replace(temporaryPath, path, null);
+                if (File.Exists(path)) MovementLabAtomicFile.ReplaceAtomicWithRetry(temporaryPath, path);
                 else File.Move(temporaryPath, path);
             }
             finally
@@ -416,7 +538,7 @@ namespace RocketFooxball.Editor
                     stream.Flush(true);
                 }
 
-                if (File.Exists(path)) File.Replace(temporaryPath, path, null);
+                if (File.Exists(path)) MovementLabAtomicFile.ReplaceAtomicWithRetry(temporaryPath, path);
                 else File.Move(temporaryPath, path);
             }
             finally

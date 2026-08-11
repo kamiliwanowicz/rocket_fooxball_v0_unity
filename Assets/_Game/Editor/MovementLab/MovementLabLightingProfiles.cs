@@ -243,8 +243,17 @@ namespace RocketFooxball.Editor
             var directory = Path.GetDirectoryName(path);
             Directory.CreateDirectory(directory);
             var temp = path + ".tmp-" + Guid.NewGuid().ToString("N");
-            File.WriteAllText(temp, json, new UTF8Encoding(false));
-            if (File.Exists(path)) File.Replace(temp, path, null); else File.Move(temp, path);
+            try
+            {
+                File.WriteAllText(temp, json, new UTF8Encoding(false));
+                if (File.Exists(path)) MovementLabAtomicFile.ReplaceAtomicWithRetry(temp, path);
+                else File.Move(temp, path);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
+
             ValidateWrittenManifest(path, state);
             AssetDatabase.ImportAsset(MovementLabContract.LightingManifestPath, ImportAssetOptions.ForceSynchronousImport);
         }

@@ -5,19 +5,19 @@ description: Use when user requests plan-first delegated implementation through 
 
 # Loop Orchestrator
 
-Act as loop owner (`LP`). Coordinate mandatory route:
+Act as loop owner (`LP`). Coordinate route:
 
 `INIT -> BREAKDOWN -> PLANNING -> EXECUTION -> MERGING -> READY_FOR_USER_MERGE`
 
-Every run follows every stage, including `single_plan`. LP coordinates, resolves blockers, owns durable state, verifies returned facts, and alone may merge exact accepted integration SHA into user branch after explicit authority. LP never writes product files, writes coding plans, dispatches implementation workers directly, performs substantive review, or acts as merging agent.
+`single_plan` route -> `INIT -> PLANNING -> EXECUTION -> READY_FOR_USER_MERGE`; skip BREAKDOWN and MERGING agents. LP coordinates, resolves blockers, owns durable state, verifies returned facts, and alone may merge exact accepted integration SHA into user branch after explicit authority. LP never writes product files, writes coding plans, dispatches implementation workers directly, performs substantive review, or acts as merging agent.
 
 ## Roles
 
 - LP: route owner, sole state writer, blocker resolver, acceptance verifier, user-branch merge authority.
-- [`task-breakdown`](agents/task-breakdown.md): exact `sol_high`; returns plan candidates and requirement coverage.
+- [`task-breakdown`](agents/task-breakdown.md): exact `sol_high`; returns plan candidates and requirement coverage; skipped for `single_plan`.
 - planner: exact `sol_high`; uses [`$write-orchestrator-coding-plan`](../write-orchestrator-coding-plan/SKILL.md) once per ready candidate.
 - execution orchestrator: exact `sol_high`; uses [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) once per accepted plan.
-- [merging agent](agents/merging.md): exact `sol_high`; integrates every completed wave in bound isolated integration worktree.
+- [merging agent](agents/merging.md): exact `sol_high`; integrates completed waves in bound isolated integration worktree; skipped for `single_plan`.
 
 Profile unavailable -> current attempt `blocked`; LP records blocker and recheck condition. No silent profile substitution.
 
@@ -30,13 +30,13 @@ Profile unavailable -> current attempt `blocked`; LP records blocker and recheck
 
 User branch stays unchanged until explicit authority binds target branch and candidate SHA. Approval remains required for user-branch merge, destructive action, material scope or behavior change, external mutation, secrets, migration, or dirty-work overwrite.
 
-Worktree scope is closed: current run's plan worktrees plus integration worktree. Query and verify exact bound paths/branches only. Keep unrelated repository worktrees outside discovery, state, dispatch context, reports, and cleanup. Inspect target checkout only when needed to establish baseline, dirty overlap, or user-branch merge authority; never persist unrelated worktree inventory.
+Worktree scope is closed: current run's plan worktrees plus multi-plan integration worktree when route requires one. Query and verify exact bound paths/branches only. Keep unrelated repository worktrees outside discovery, state, dispatch context, reports, and cleanup. Inspect target checkout only when needed to establish baseline, dirty overlap, or user-branch merge authority; never persist unrelated worktree inventory.
 
 ## INIT
 
 1. Read request, repository instructions, cited sources, dirty paths, current branch, full baseline SHA, checks, and authority.
 2. Generate unique `run_id`, stable `REQ-*` IDs, and unique run directory under Git common dir. Create required `state.md` through atomic-write contract before first dispatch.
-3. Bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, and state path.
+3. Multi-plan route -> bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, and state path. `single_plan` route -> bind planner directly from accepted plan context; no breakdown dispatch.
 
 Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
@@ -44,7 +44,7 @@ Candidate records bind `read_paths`, `validation_environment`, `unity_mutation`,
 
 ## BREAKDOWN
 
-Dispatch [`task-breakdown`](agents/task-breakdown.md) for every run. LP never substitutes inline decomposition.
+Dispatch [`task-breakdown`](agents/task-breakdown.md) for multi-plan routes. `single_plan` route skips BREAKDOWN agent; LP verifies accepted plan context, requirement coverage, baseline, dependencies, and owned/protected paths before planning. LP never substitutes inline decomposition for multi-plan routes.
 
 Accept result only when strict template is complete, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic.
 
@@ -81,7 +81,7 @@ Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Execution orchestrator builds check ledger before worker dispatch. Ledger rows carry tier, status, SHAs, input/environment digests, mutation flag, evidence, invalidation paths, and subsumed checks. Workers run fast/local checks; development proof requires explicit task ownership. Before project-mutating production-final Unity proof, require zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes, and review marker.
+Execution orchestrator builds declared checks before worker dispatch. Workflow writes sole executed `check-ledger.json`; harness writes `harness-summary.json`; state stores only ledger pointer plus SHA-256. Workers run compact fast/local proof; production-final rows retain full contract. Apply [workflow harness precondition](references/state-and-recovery.md#workflow-harness-precondition) before every workflow or Unity invocation. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; carry previous accepted `-LedgerPath`; never pass workflow arguments to test runner. Production-final order: zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes -> `ProductionPrepare` bake -> `ProductionValidate` semantic pass. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate).
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
@@ -89,13 +89,13 @@ Accept `complete` only when exact execution identity matches, bound snapshot dig
 
 ## MERGING
 
-Before first merge, LP provisions unique isolated integration branch/worktree from observed accepted baseline. Record branch, worktree, expected pre-merge head, exact allowed Git operations, integration order, and checks in state.
+Before first multi-plan merge, LP provisions unique isolated integration branch/worktree from observed accepted baseline. Record branch, worktree, expected pre-merge head, exact allowed Git operations, integration order, and checks in state. `single_plan` route provisions no merger; LP records accepted execution SHA after exact scope/check verification.
 
-Dispatch [merging agent](agents/merging.md) after every completed wave, including one-plan wave. Inputs are exact accepted execution SHAs in breakdown-declared order. Sequential dependent planning waits for prerequisite wave merge and accepted integration SHA.
+Dispatch [merging agent](agents/merging.md) after every completed multi-plan wave. Inputs are exact accepted execution SHAs in breakdown-declared order. Sequential dependent planning waits for prerequisite wave merge and accepted integration SHA. `single_plan` route dispatches planner then execution orchestrator directly and skips merger.
 
-Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. One-plan fast-forward may leave commit identity unchanged; isolated branch/worktree plus expected pre-merge and observed post-merge heads prove merge stage occurred.
+Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. `single_plan` route accepts execution SHA as final integration SHA only after clean scope/check proof; no merge-stage agent result exists.
 
-Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged one-plan fast-forward reuses exact valid plan evidence after cheap SHA/content attestation. Merge or fix invalidates only rows whose declared invalidation paths intersect changed paths.
+Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged multi-plan fast-forward reuses non-bake evidence after `check-ledger.json` digest attestation and production-bake-gate reattest. Merge or fix invalidates only intersecting rows. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate) when lighting inputs intersect.
 
 Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 
@@ -128,8 +128,9 @@ Use [state and recovery](references/state-and-recovery.md) for every run, resume
 Final handoff requires:
 
 - phase `READY_FOR_USER_MERGE`;
-- observed clean integration branch/worktree and exact full final SHA;
-- every requirement covered and every accepted execution SHA merged once;
+- `single_plan` -> clean plan worktree; accepted execution SHA recorded as final integration SHA; zero integration worktree and zero merger;
+- `multi-plan` -> clean integration worktree; every accepted execution SHA merged exactly once; exact final integration SHA;
+- every requirement covered;
 - required checks bound to final SHA;
 - Critical/High finding dispositions recorded;
 - changed paths and residual risks recorded;
