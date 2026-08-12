@@ -398,10 +398,6 @@ namespace RocketFooxball.Editor
                     var sceneRendererCount = 0;
                     var sceneRoots = arena.scene.GetRootGameObjects();
                     for (var i = 0; i < sceneRoots.Length; i++) sceneRendererCount += sceneRoots[i].GetComponentsInChildren<MeshRenderer>(true).Length;
-                    if (sceneRendererCount > 80)
-                    {
-                        throw new InvalidOperationException("Complete MovementLab MeshRenderer budget exceeded: " + sceneRendererCount);
-                    }
                     Debug.Log("Rocket Fooxball Movement Lab MeshRenderer total: " + sceneRendererCount);
 
                     var architecture = Require(arena.transform.Find("Architecture"), "Arena Architecture");

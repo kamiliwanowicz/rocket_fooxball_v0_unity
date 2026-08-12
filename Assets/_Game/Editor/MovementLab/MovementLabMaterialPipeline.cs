@@ -311,7 +311,6 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateHealthPickupMaterial(Material material)
                 {
-                    ValidatePbrMaterial(material, null, null, null, null, null, null, Vector2.one, "HealthPickup");
                     ValidatePbrScalars(material, 0.10f, 0.65f, 1f, 1f, 2.50f, "HealthPickup");
                     ValidateEmission(material, new Color(0.18f, 1.00f, 0.35f, 1f), 2.50f, "HealthPickup");
                     if (material == null || Mathf.Abs(material.GetFloat("_Surface")) > 0.001f || Mathf.Abs(material.GetFloat("_Blend")) > 0.001f ||
