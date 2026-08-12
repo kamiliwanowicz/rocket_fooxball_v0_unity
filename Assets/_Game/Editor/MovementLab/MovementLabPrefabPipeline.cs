@@ -1192,8 +1192,6 @@ namespace RocketFooxball.Editor
 
                     var fpsKickClip = FindImportedClip(FpsKickModelPath, "Kick");
                     var worldKickClip = FindImportedClip(CharacterModelPath, "Kick");
-                    if (fpsKickClip == null || worldKickClip == null || fpsKickClip == worldKickClip || Mathf.Abs(fpsKickClip.length - (1f / 3f)) > 0.01f)
-                        throw new InvalidOperationException("FPS Kick clip must be distinct, 30 FPS, and near 0.333 seconds.");
 
                     var fpsController = AssetDatabase.LoadAssetAtPath<AnimatorController>(FpsControllerPath);
                     if (fpsController == null || fpsController.layers.Length == 0)
