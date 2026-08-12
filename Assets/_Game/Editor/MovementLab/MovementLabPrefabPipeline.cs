@@ -153,22 +153,8 @@ namespace RocketFooxball.Editor
                     immunityShield.transform.SetParent(root.transform, false);
                     immunityShield.transform.localPosition = Vector3.zero;
                     immunityShield.SetActive(false);
-                    var blueImmunityShield = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    blueImmunityShield.name = "BlueImmunityShield";
-                    blueImmunityShield.transform.SetParent(immunityShield.transform, false);
-                    blueImmunityShield.transform.localPosition = new Vector3(0f, 0.9f, 0f);
-                    blueImmunityShield.transform.localScale = new Vector3(1.2f, 2.0f, 1.2f);
-                    UnityEngine.Object.DestroyImmediate(blueImmunityShield.GetComponent<Collider>());
-                    blueImmunityShield.GetComponent<Renderer>().sharedMaterial = teamBlueShieldMaterial;
-                    blueImmunityShield.SetActive(false);
-                    var redImmunityShield = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                    redImmunityShield.name = "RedImmunityShield";
-                    redImmunityShield.transform.SetParent(immunityShield.transform, false);
-                    redImmunityShield.transform.localPosition = new Vector3(0f, 0.9f, 0f);
-                    redImmunityShield.transform.localScale = new Vector3(1.2f, 2.0f, 1.2f);
-                    UnityEngine.Object.DestroyImmediate(redImmunityShield.GetComponent<Collider>());
-                    redImmunityShield.GetComponent<Renderer>().sharedMaterial = teamRedShieldMaterial;
-                    redImmunityShield.SetActive(false);
+                    var blueImmunityShield = CreateImmunityShieldVfx("BlueImmunityShield", immunityShield.transform, teamBlueShieldMaterial);
+                    var redImmunityShield = CreateImmunityShieldVfx("RedImmunityShield", immunityShield.transform, teamRedShieldMaterial);
 
                     var viewmodels = new GameObject("Viewmodels").transform;
                     viewmodels.SetParent(camera.transform, false);
@@ -445,9 +431,32 @@ namespace RocketFooxball.Editor
                     SetObjectReference(trailVfx, "blueTrailMaterial", blueTrailMaterial);
                     SetObjectReference(trailVfx, "redTrailMaterial", redTrailMaterial);
                     SetObjectReference(projectile, "trailVfx", trailVfx);
-                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
+                    PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
-                    return prefab;
+                    PersistRocketHierarchyReferences();
+                    return AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath);
+                }
+
+                private static void PersistRocketHierarchyReferences()
+                {
+                    var root = PrefabUtility.LoadPrefabContents(RocketPrefabPath);
+                    try
+                    {
+                        var projectile = Require(root.GetComponent<RocketProjectile>(), "Rocket prefab RocketProjectile");
+                        var trail = Require(root.GetComponentInChildren<RocketTrailVfx>(true), "Rocket prefab RocketTrailVfx");
+                        var system = Require(trail.GetComponent<ParticleSystem>(), "Rocket prefab SmokeTrail ParticleSystem");
+                        var blueAccent = Require(trail.transform.Find("BlueImpactRing"), "Rocket prefab BlueImpactRing");
+                        var redAccent = Require(trail.transform.Find("RedImpactTriangle"), "Rocket prefab RedImpactTriangle");
+                        SetObjectArray(trail, "particleSystems", new UnityEngine.Object[] { system });
+                        SetObjectReference(trail, "blueImpactAccent", blueAccent.gameObject);
+                        SetObjectReference(trail, "redImpactAccent", redAccent.gameObject);
+                        SetObjectReference(projectile, "trailVfx", trail);
+                        PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
+                    }
+                    finally
+                    {
+                        PrefabUtility.UnloadPrefabContents(root);
+                    }
                 }
 
                 internal static ExplosionVfx BuildExplosionVfxPrefab()
@@ -703,6 +712,45 @@ namespace RocketFooxball.Editor
                     return cue;
                 }
 
+                private static GameObject CreateImmunityShieldVfx(string name, Transform parent, Material material)
+                {
+                    var shield = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+                    shield.name = name;
+                    shield.transform.SetParent(parent, false);
+                    shield.transform.localPosition = new Vector3(0f, 0.9f, 0f);
+                    shield.transform.localScale = new Vector3(1.2f, 2.0f, 1.2f);
+                    var mesh = Require(shield.GetComponent<MeshFilter>(), name + " MeshFilter").sharedMesh;
+                    UnityEngine.Object.DestroyImmediate(shield.GetComponent<Collider>());
+                    UnityEngine.Object.DestroyImmediate(shield.GetComponent<MeshRenderer>());
+                    UnityEngine.Object.DestroyImmediate(shield.GetComponent<MeshFilter>());
+
+                    var system = shield.AddComponent<ParticleSystem>();
+                    var main = system.main;
+                    main.loop = true;
+                    main.playOnAwake = true;
+                    main.duration = 1f;
+                    main.simulationSpace = ParticleSystemSimulationSpace.Local;
+                    main.startLifetime = 1.05f;
+                    main.startSpeed = 0f;
+                    main.startSize = 1f;
+                    main.maxParticles = 2;
+                    var emission = system.emission;
+                    emission.rateOverTime = 0f;
+                    emission.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)1) });
+                    var shape = system.shape;
+                    shape.enabled = false;
+                    var renderer = shield.GetComponent<ParticleSystemRenderer>();
+                    renderer.renderMode = ParticleSystemRenderMode.Mesh;
+                    renderer.mesh = mesh;
+                    renderer.sharedMaterial = material;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    renderer.lightProbeUsage = LightProbeUsage.Off;
+                    renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    shield.SetActive(false);
+                    return shield;
+                }
+
                 internal static Mesh GetOrCreateShapeMesh(bool triangle)
                 {
                     var path = triangle ? RedTriangleCueMeshPath : BlueCircleCueMeshPath;
@@ -869,8 +917,8 @@ namespace RocketFooxball.Editor
                             ValidateLayerRecursively(worldVisual.gameObject, 0, "Player prefab WorldVisual");
                             ValidateShapeCue(Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue"), BlueCircleCueMeshPath, "Player prefab BlueCircleCue");
                             ValidateShapeCue(Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue"), RedTriangleCueMeshPath, "Player prefab RedTriangleCue");
-                            Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield");
-                            Require(root.transform.Find("ImmunityShield/RedImmunityShield"), "Player prefab RedImmunityShield");
+                            ValidateImmunityShield(Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield"), AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath), "Player prefab BlueImmunityShield");
+                            ValidateImmunityShield(Require(root.transform.Find("ImmunityShield/RedImmunityShield"), "Player prefab RedImmunityShield"), AssetDatabase.LoadAssetAtPath<Material>(TeamRedShieldMaterialPath), "Player prefab RedImmunityShield");
                         }
                         else if (path == BallPrefabPath)
                         {
@@ -963,6 +1011,14 @@ namespace RocketFooxball.Editor
                     var renderer = Require(cue.GetComponent<MeshRenderer>(), label + " MeshRenderer");
                     if (filter.sharedMesh == null || AssetDatabase.GetAssetPath(filter.sharedMesh) != meshPath || renderer.sharedMaterial == null)
                         throw new InvalidOperationException(label + " mesh/material provenance invalid.");
+                }
+
+                internal static void ValidateImmunityShield(Transform shield, Material expectedMaterial, string label)
+                {
+                    var system = Require(shield.GetComponent<ParticleSystem>(), label + " ParticleSystem");
+                    var renderer = Require(shield.GetComponent<ParticleSystemRenderer>(), label + " ParticleSystemRenderer");
+                    if (shield.GetComponent<MeshRenderer>() != null || renderer.renderMode != ParticleSystemRenderMode.Mesh || renderer.mesh == null || renderer.sharedMaterial != expectedMaterial || system.main.maxParticles != 2)
+                        throw new InvalidOperationException(label + " particle mesh/material contract invalid.");
                 }
 
                 internal static void ValidateRocketVisualForward(Transform rocketRoot, MeshFilter[] meshFilters)
