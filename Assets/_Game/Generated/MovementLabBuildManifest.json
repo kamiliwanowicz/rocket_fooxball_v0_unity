@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "86e90b722949f532fec720ef5636606d64a8e080",
+    "gitSha": "281238379b8ecc30ab1017d64ebeb778e5d08f89",
     "manifestStatus": "stale",
-    "sourceSignature": "82c74b00136b0459f44f4f5e8660792e24949d0fc2e41aeaadd4df383890d6da",
-    "generatedOutputFingerprint": "bb822a84f4635b5b21cf685d88416b7a4c253a1d48ebc491f16f844a57771c13",
+    "sourceSignature": "8dd53524066897a3ac4bbc3425d7edc649ce842f8180f22ab0335f27f8f6b46c",
+    "generatedOutputFingerprint": "1561e5e28a72656f373d1e6a5e43a421dc636f1158726075c0ee5050b3a14936",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "cf55158681ad521dab03e5086fbc062c8996077ae15391c917647502f93d8a35",
+    "lightingInputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
     "bakedProfile": "Production",
     "staleStages": [
         "Lighting",
@@ -80,6 +80,8 @@
         "Assets/_Game/Materials/GoalFrame.mat.meta",
         "Assets/_Game/Materials/Hazard.mat",
         "Assets/_Game/Materials/Hazard.mat.meta",
+        "Assets/_Game/Materials/HealthPickup.mat",
+        "Assets/_Game/Materials/HealthPickup.mat.meta",
         "Assets/_Game/Materials/Marking.mat",
         "Assets/_Game/Materials/Marking.mat.meta",
         "Assets/_Game/Materials/ProjectileGlow.mat",
@@ -129,6 +131,8 @@
         "Assets/_Game/Prefabs/Ball.prefab.meta",
         "Assets/_Game/Prefabs/ExplosionVfx.prefab",
         "Assets/_Game/Prefabs/ExplosionVfx.prefab.meta",
+        "Assets/_Game/Prefabs/HealthPickup.prefab",
+        "Assets/_Game/Prefabs/HealthPickup.prefab.meta",
         "Assets/_Game/Prefabs/Player.prefab",
         "Assets/_Game/Prefabs/Player.prefab.meta",
         "Assets/_Game/Prefabs/Rocket.prefab",
@@ -291,6 +295,8 @@
         "a256dce2cbc89e54f934981d48c00e70",
         "a96e9b211f493aeeded833db0c6d60295efc800f0277cf59d98da9136733a2f7",
         "a9585b86f9cc5194facf9bea6509a551",
+        "0b33578a3e44536a5fd07a28d082052a56c32d44ac85091777a5bb3dcc2439d5",
+        "26f953a18b358094290f33dd64b0c96d",
         "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
         "7d93bd4314658f643b0ec8cff4d8c226",
         "0051fc6fcad0dce28088dfcf24e72be37d519faf032fec5e4e6bf8c537cf293b",
@@ -340,7 +346,9 @@
         "f3c453663c6e3de4fbef8019e550c341",
         "405faee753e5817bbc491e2a8276dc7d1b80d75ee36b81980fdcb8c6519e6c9f",
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
-        "476a7183620ea6e45fa89278c52be38c8c06f83875466f444ddf482d5ee5a39d",
+        "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
+        "50df7b6af8a168d4c9e73b1c38864f37",
+        "82c23a4ade8cb36f716dccdc16d5e24b5ca87d4a516c1c0cd84590847c297d0d",
         "04f6dead4185c42458fce3ea760fc4b7",
         "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -703,16 +711,16 @@
         {
             "stage": "MaterialPrefab",
             "schemaVersion": 8,
-            "contractVersion": "material-prefab-contract:5;serialized:2",
+            "contractVersion": "material-prefab-contract:6;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "4f49e54401923450610d1f0240705e8610f7495069cebbd6e22a667276526892",
-            "repositoryInputDigest": "4e6b16618c00c4c7e0f2a268fd7e0629ef7dba07cb3b838191e490c706ae2317",
+            "inputDigest": "78c2a1d59e6b0542a6377669c338a3568358adbb2afe081d0f47e745f10abd9a",
+            "repositoryInputDigest": "5ab33fb4739f8571dbc315518d624b2e2eac67964f250a3d23f155cc0a895364",
             "dependencyDigest": "95abab14255263a990ecc66cb8b8e49e7a755da273322f772a082e29bea63606",
-            "outputDigest": "3f709986fc84d94fc42ddb7043f5afa452ae895fa7b768e29358212da8d4e539",
+            "outputDigest": "074a179a35b4c0eb3498491c1861ee6333b9799ff2cca2b8ed29a03492d8b7d8",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "4f49e54401923450610d1f0240705e8610f7495069cebbd6e22a667276526892",
-            "priorOutputDigest": "3f709986fc84d94fc42ddb7043f5afa452ae895fa7b768e29358212da8d4e539",
+            "priorInputDigest": "78c2a1d59e6b0542a6377669c338a3568358adbb2afe081d0f47e745f10abd9a",
+            "priorOutputDigest": "074a179a35b4c0eb3498491c1861ee6333b9799ff2cca2b8ed29a03492d8b7d8",
             "profile": "",
             "outputs": [
                 {
@@ -946,6 +954,16 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Materials/HealthPickup.mat",
+                    "digest": "0b33578a3e44536a5fd07a28d082052a56c32d44ac85091777a5bb3dcc2439d5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/HealthPickup.mat.meta",
+                    "digest": "26f953a18b358094290f33dd64b0c96d",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Materials/Marking.mat",
                     "digest": "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
                     "missing": false
@@ -1166,8 +1184,18 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Prefabs/HealthPickup.prefab",
+                    "digest": "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/HealthPickup.prefab.meta",
+                    "digest": "50df7b6af8a168d4c9e73b1c38864f37",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "476a7183620ea6e45fa89278c52be38c8c06f83875466f444ddf482d5ee5a39d",
+                    "digest": "82c23a4ade8cb36f716dccdc16d5e24b5ca87d4a516c1c0cd84590847c297d0d",
                     "missing": false
                 },
                 {
@@ -1190,21 +1218,21 @@
         {
             "stage": "GameplayScene",
             "schemaVersion": 8,
-            "contractVersion": "gameplay-scene-contract:11;serialized:2",
+            "contractVersion": "gameplay-scene-contract:12;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "2ace1b27dc18f1235fe435c37baea08e298aa2deb2294245223a5881fe5a3d03",
-            "repositoryInputDigest": "c36474a0b0024e4ace2148ce4e302160fc2a627042d8a6ee73284b99abe1c516",
-            "dependencyDigest": "159d9a332814f91858aee9bacc9e03d16a519ef9416362d6a718a139776882d3",
-            "outputDigest": "7477af75de054740399f4de071578316e2802582a4e1685a8504cddc1a69f306",
+            "inputDigest": "5a89d41ac3cc8254014d77658982a94c60c863803d930db9badfca5a94fccf5f",
+            "repositoryInputDigest": "d752c01d06bc7e35af7876a5c4016ac57086c13c09b8b920c7ab212d5dfb5203",
+            "dependencyDigest": "02c3f40492b1bfa6fbad745cfeeb1d01f3bc170ec2372bc3321d0d1002f2155d",
+            "outputDigest": "bf3533141d04552abd323c7c59c1de3f5993a4dd7b157414bb7637eb249f9521",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "2ace1b27dc18f1235fe435c37baea08e298aa2deb2294245223a5881fe5a3d03",
-            "priorOutputDigest": "7477af75de054740399f4de071578316e2802582a4e1685a8504cddc1a69f306",
+            "priorInputDigest": "5a89d41ac3cc8254014d77658982a94c60c863803d930db9badfca5a94fccf5f",
+            "priorOutputDigest": "bf3533141d04552abd323c7c59c1de3f5993a4dd7b157414bb7637eb249f9521",
             "profile": "",
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "6a0b0b03e935842b3f4e1f28551ea7c2e21ada4291bc72d0f59d28a269204570",
+                    "digest": "3180ae3b1eac7dea91e00b404e7077c2b1c06e795a7cd94357d31157afac455d",
                     "missing": false
                 },
                 {
@@ -1326,8 +1354,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "cf55158681ad521dab03e5086fbc062c8996077ae15391c917647502f93d8a35",
-            "repositoryInputDigest": "cf55158681ad521dab03e5086fbc062c8996077ae15391c917647502f93d8a35",
+            "inputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
+            "repositoryInputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "predecessorDigests": [],
@@ -1335,7 +1363,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "a49615d4c78e6db8f1acc7db4d315c8435805ef264c59d01fc348351798eaee4",
+            "priorInputDigest": "cf55158681ad521dab03e5086fbc062c8996077ae15391c917647502f93d8a35",
             "priorOutputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "profile": "",
             "outputs": [
@@ -1366,8 +1394,8 @@
             "schemaVersion": 8,
             "contractVersion": "baked-output-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "87a70a32d7d5430ce9a5dceeee2c246b223838eda7f7faa00cc8fc5e31c621d5",
-            "repositoryInputDigest": "a5e6235490367f46a30bf2f4f40bd23c7ade5a14e73795e86cad433d5acb75f1",
+            "inputDigest": "3c5779995d419122f8a16778c0e6250914f08139719183ad7a5248e895c952bc",
+            "repositoryInputDigest": "19c97979a85477d6c60c12a0812801e54509c9e4d97278dfcaa1c46f71073053",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "predecessorDigests": [
@@ -1377,7 +1405,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "43f55af3462eec29795e266ec993507cbd7e87671271155b007219b56c87c04c",
+            "priorInputDigest": "87a70a32d7d5430ce9a5dceeee2c246b223838eda7f7faa00cc8fc5e31c621d5",
             "priorOutputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "profile": "Production",
             "outputs": [
