@@ -1148,8 +1148,8 @@ namespace RocketFooxball.Editor
                 {
                     if (rocketPrefab == null) throw new InvalidOperationException("Rocket prefab unavailable for trail validation.");
                     var trail = Require(rocketPrefab.GetComponentInChildren<RocketTrailVfx>(true), "RocketTrailVfx");
-                    ValidateReference(trail, "blueImpactAccent", trail.transform.Find("BlueImpactRing"), "RocketTrailVfx.blueImpactAccent");
-                    ValidateReference(trail, "redImpactAccent", trail.transform.Find("RedImpactTriangle"), "RocketTrailVfx.redImpactAccent");
+                    ValidateReference(trail, "blueImpactAccent", trail.transform.Find("BlueImpactRing").gameObject, "RocketTrailVfx.blueImpactAccent");
+                    ValidateReference(trail, "redImpactAccent", trail.transform.Find("RedImpactTriangle").gameObject, "RocketTrailVfx.redImpactAccent");
                     var smokeSystems = trail.GetComponentsInChildren<ParticleSystem>(true);
                     if (smokeSystems.Length != 1) throw new InvalidOperationException("Rocket trail must contain one particle system.");
                     var serializedTrail = new SerializedObject(trail);
