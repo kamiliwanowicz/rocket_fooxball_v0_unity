@@ -413,6 +413,7 @@ namespace RocketFooxball.Editor
             {
                 var trigger = goals[i];
                 if (trigger == null) continue;
+                accumulator.Capture("scene/goals", trigger.name + ".identity", () => ValidatePersistentIdentity(trigger, trigger.name + " goal"));
                 var triggerCollider = CaptureRequired(accumulator, "scene/goals", trigger.name + ".collider", trigger.GetComponent<Collider>(), trigger.name + " goal collider");
                 if (triggerCollider != null)
                     accumulator.Capture("scene/goals", trigger.name + ".trigger", () =>
@@ -444,6 +445,11 @@ namespace RocketFooxball.Editor
                 });
                 CaptureSerializedVector(accumulator, "scene/goals", "NorthGoal.planeNormal", context.North, "planeNormal", Vector3.right);
                 CaptureSerializedVector(accumulator, "scene/goals", "SouthGoal.planeNormal", context.South, "planeNormal", Vector3.right);
+                accumulator.Capture("scene/goals", "defending-teams", () =>
+                {
+                    if (context.North.DefendingTeam != ParticipantTeam.Red || context.South.DefendingTeam != ParticipantTeam.Blue)
+                        throw new InvalidOperationException("North goal must defend Red and South goal must defend Blue.");
+                });
                 var northShieldTransform = CaptureRequired(accumulator, "scene/goals", "north-shield-transform", context.North.transform.Find("ShieldCollider"), "North goal ShieldCollider");
                 var southShieldTransform = CaptureRequired(accumulator, "scene/goals", "south-shield-transform", context.South.transform.Find("ShieldCollider"), "South goal ShieldCollider");
                 if (northShieldTransform != null)
@@ -466,6 +472,7 @@ namespace RocketFooxball.Editor
             if (context == null || !context.SceneReady) return;
             if (context.BallMotor != null)
             {
+                accumulator.Capture("gameplay/contract", "BallMotor.touch-roster", ValidateBallTouchRosterContract);
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.body", context.BallMotor, "body", context.BallBody);
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.ballCollider", context.BallMotor, "ballCollider", context.BallCollider);
                 CaptureObjectArray(accumulator, "gameplay/wiring", "BallMotor.participants", context.BallMotor, "participants", context.Participants.Cast<UnityEngine.Object>().ToArray());
@@ -549,6 +556,7 @@ namespace RocketFooxball.Editor
             }
             if (context.Match != null)
             {
+                accumulator.Capture("gameplay/contract", "MatchController.identity", () => ValidatePersistentIdentity(context.Match, "MatchController"));
                 CaptureObjectArray(accumulator, "gameplay/wiring", "MatchController.participants", context.Match, "participants", context.Participants.Cast<UnityEngine.Object>().ToArray());
                 CaptureReference(accumulator, "gameplay/wiring", "MatchController.localParticipant", context.Match, "localParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
                 CaptureReference(accumulator, "gameplay/wiring", "MatchController.spawnSet", context.Match, "spawnSet", context.SpawnSet);
@@ -561,12 +569,20 @@ namespace RocketFooxball.Editor
                 }
                 accumulator.Capture("gameplay/contract", "GoalTrigger.event-owner", () =>
                 {
-                    if (typeof(GoalTrigger).GetEvent("GoalCrossed") == null ||
-                        typeof(GoalTrigger).GetField("match", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic) != null)
+                    var goalType = typeof(GoalTrigger);
+                    var hasMatchReference = goalType.GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                        .Any(field => typeof(MatchController).IsAssignableFrom(field.FieldType)) ||
+                        goalType.GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                            .Any(property => typeof(MatchController).IsAssignableFrom(property.PropertyType));
+                    if (goalType.GetEvent("GoalCrossed") == null || hasMatchReference)
                         throw new InvalidOperationException("GoalTrigger event-owner contract invalid.");
                 });
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalFreezeDuration", context.Match, "goalFreezeDuration", GoalFreezeDuration);
+                accumulator.Capture("gameplay/contract", "MatchController.public-surface", ValidateMatchPublicContract);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabContract.MatchDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalSummaryDuration", context.Match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
             }
             if (context.Hud != null)
             {
@@ -576,6 +592,61 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.kick", context.Hud, "kick", context.Kick);
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.match", context.Hud, "match", context.Match);
             }
+        }
+
+        private static void ValidateBallTouchRosterContract()
+        {
+            var ballType = typeof(BallMotor);
+            var rosterProperty = ballType.GetProperty(nameof(BallMotor.Participants), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            var touchProperty = ballType.GetProperty(nameof(BallMotor.LastTouchParticipant), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            if (rosterProperty == null || !rosterProperty.CanRead || touchProperty == null || !touchProperty.CanRead)
+                throw new InvalidOperationException("BallMotor must expose participant roster and last-touch read references.");
+        }
+
+        private static void ValidateMatchPublicContract()
+        {
+            var matchType = typeof(MatchController);
+            var publicInstance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
+            var compatibilityProperties = new[]
+            {
+                nameof(MatchController.State),
+                nameof(MatchController.NorthScore),
+                nameof(MatchController.SouthScore),
+                nameof(MatchController.FreezeRemaining)
+            };
+            for (var i = 0; i < compatibilityProperties.Length; i++)
+            {
+                var property = matchType.GetProperty(compatibilityProperties[i], publicInstance);
+                if (property == null || !property.CanRead)
+                    throw new InvalidOperationException("MatchController diagnostics compatibility property missing: " + compatibilityProperties[i] + ".");
+            }
+
+            if (!Enum.IsDefined(typeof(MatchController.MatchState), MatchController.MatchState.GoalFreeze))
+                throw new InvalidOperationException("MatchController.MatchState.GoalFreeze compatibility value is missing.");
+
+            var teamReadProperties = new[]
+            {
+                nameof(MatchController.BlueGoals),
+                nameof(MatchController.RedGoals),
+                nameof(MatchController.BlueTeamFrags),
+                nameof(MatchController.RedTeamFrags)
+            };
+            for (var i = 0; i < teamReadProperties.Length; i++)
+            {
+                var property = matchType.GetProperty(teamReadProperties[i], publicInstance);
+                if (property == null || !property.CanRead)
+                    throw new InvalidOperationException("MatchController Blue/Red read property missing: " + teamReadProperties[i] + ".");
+            }
+
+            var resetEvent = matchType.GetEvent(nameof(MatchController.CoordinatedResetRequested), publicInstance);
+            if (resetEvent == null)
+                throw new InvalidOperationException("MatchController.CoordinatedResetRequested event is missing.");
+            var rematchMethod = matchType.GetMethod(nameof(MatchController.TryStartRematch), publicInstance, null, Type.EmptyTypes, null);
+            var exitMethod = matchType.GetMethod(nameof(MatchController.RequestExit), publicInstance, null, Type.EmptyTypes, null);
+            if (rematchMethod == null || rematchMethod.ReturnType != typeof(bool))
+                throw new InvalidOperationException("MatchController.TryStartRematch public method is missing.");
+            if (exitMethod == null || exitMethod.ReturnType != typeof(bool))
+                throw new InvalidOperationException("MatchController.RequestExit public method is missing.");
         }
 
         private static void ValidateParticipantRoster(ValidationContext context, MovementLabValidationAccumulator accumulator)
@@ -590,6 +661,9 @@ namespace RocketFooxball.Editor
             var participantLayer = LayerMask.NameToLayer(MovementLabContract.ParticipantsLayerName);
             var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
             var hiddenLayer = LayerMask.NameToLayer(MovementLabContract.LocalPlayerHiddenLayerName);
+            var blueCount = 0;
+            var redCount = 0;
+            var localCount = 0;
             accumulator.Capture("scene/layers", "names", () =>
             {
                 if (participantLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
@@ -605,8 +679,12 @@ namespace RocketFooxball.Editor
                 var participant = context.Participants[i];
                 var expected = ParticipantSlots[i];
                 if (participant == null) continue;
+                if (participant.Team == ParticipantTeam.Blue) blueCount++;
+                if (participant.Team == ParticipantTeam.Red) redCount++;
+                if (participant.IsLocalParticipant) localCount++;
                 accumulator.Capture("scene/roster", "identity:" + expected.SlotId, () =>
                 {
+                    ValidatePersistentIdentity(participant, expected.DisplayName);
                     if (participant.SlotId != expected.SlotId || participant.DisplayName != expected.DisplayName || participant.Team != expected.Team || participant.IsLocalParticipant != expected.IsLocal)
                         throw new InvalidOperationException("Participant slot identity mismatch: " + expected.SlotId);
                     if (Vector3.Distance(participant.transform.position, expected.Position) > 0.01f || Vector3.Dot(participant.transform.forward, expected.Rotation * Vector3.forward) < 0.999f)
@@ -654,6 +732,11 @@ namespace RocketFooxball.Editor
                     }
                 });
             }
+            accumulator.Capture("scene/roster", "team-balance", () =>
+            {
+                if (blueCount != 3 || redCount != 3 || localCount != 1 || context.Participants[0] == null || context.Participants[0].Team != ParticipantTeam.Blue)
+                    throw new InvalidOperationException("MovementLab roster must contain three Blue, three Red, and one local Blue participant.");
+            });
             accumulator.Capture("scene/roster", "local-camera-count", () => { if (localCameraCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay Camera is required."); });
             accumulator.Capture("scene/roster", "local-audio-count", () => { if (localAudioCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay AudioListener is required."); });
 

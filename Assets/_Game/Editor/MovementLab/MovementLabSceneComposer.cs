@@ -190,6 +190,8 @@ namespace RocketFooxball.Editor
                         SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
                         SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
                         SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
+                        SetEnum(arena.NorthGoal.Trigger, "defendingTeam", "Red");
+                        SetEnum(arena.SouthGoal.Trigger, "defendingTeam", "Blue");
                         var matchObject = new GameObject("MatchController");
                         var match = matchObject.AddComponent<MatchController>();
                         SetObjectArray(match, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
@@ -199,7 +201,9 @@ namespace RocketFooxball.Editor
                         SetObjectReference(match, "ball", ballMotor);
                         SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                        SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+                        SetFloat(match, "matchDuration", MovementLabContract.MatchDuration);
+                        SetFloat(match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
+                        SetFloat(match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
                         var hud = new GameObject("DebugHUD");
@@ -439,6 +443,8 @@ namespace RocketFooxball.Editor
                     SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
                     SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
                     SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
+                    SetEnum(arena.NorthGoal.Trigger, "defendingTeam", "Red");
+                    SetEnum(arena.SouthGoal.Trigger, "defendingTeam", "Blue");
 
                     var matchObject = new GameObject("MatchController");
                     var match = matchObject.AddComponent<MatchController>();
@@ -449,7 +455,9 @@ namespace RocketFooxball.Editor
                     SetObjectReference(match, "ball", ballMotor);
                     SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                     SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                    SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+                    SetFloat(match, "matchDuration", MovementLabContract.MatchDuration);
+                    SetFloat(match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
+                    SetFloat(match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
 

@@ -49,7 +49,12 @@ namespace RocketFooxball.Editor
         internal const float BlastVisualScale = 1.30f;
         internal const float GoalAxisPosition = 64f;
         internal const float PlayerSpawnOffset = 12f;
-        internal const float GoalFreezeDuration = 5f;
+        internal const float MatchDuration = 300f;
+        internal const float GoalSummaryDuration = 3f;
+        internal const float KickoffCountdownDuration = 3f;
+        // Compatibility alias for protected editor consumers. Match flow uses
+        // GoalSummaryDuration; no five-second authoring remains.
+        internal const float GoalFreezeDuration = GoalSummaryDuration;
         internal const float CelebrationOrbitRadius = 5.5f;
         internal const float CelebrationOrbitHeight = 2.5f;
         internal const float CelebrationLookHeight = 1.05f;
