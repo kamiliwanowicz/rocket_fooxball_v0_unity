@@ -757,7 +757,7 @@ namespace RocketFooxball.Editor
                 var east = context.HealthPickups.FirstOrDefault(pickup => pickup != null && pickup.name == HealthPickupEastSouthName);
                 var mirroredEast = west != null ? new Vector3(-west.transform.position.x, west.transform.position.y, -west.transform.position.z) : Vector3.zero;
                 if (west == null || east == null || Vector3.Distance(east.transform.position, mirroredEast) > 0.001f ||
-                    Quaternion.Angle(east.transform.rotation, HealthPickupEastSouthRotation) > 0.1f)
+                    Quaternion.Angle(east.transform.rotation, MovementLabContract.HealthPickupEastSouthRotation) > 0.1f)
                     throw new InvalidOperationException("Health pickup placements must be distinct point mirrors across the arena origin.");
             });
         }
