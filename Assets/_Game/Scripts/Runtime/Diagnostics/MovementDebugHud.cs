@@ -73,7 +73,8 @@ namespace RocketFooxball.Runtime.Diagnostics
             if (kick != null)
             {
                 text += $"Kick: {(kick.CooldownRemaining <= 0f ? "READY" : kick.CooldownRemaining.ToString("F2") + "s")}" +
-                        (kick.AttemptPending ? $" | Buffer {kick.BufferRemaining:F2}s" : "") + "\n";
+                        $" | Dash {(player.IsDashing ? player.DashRemaining.ToString("F2") + "s" : "OFF")}" +
+                        $" | Air {(player.AirDashAvailable ? "READY" : "USED")}\n";
             }
             if (match != null)
             {
@@ -85,7 +86,7 @@ namespace RocketFooxball.Runtime.Diagnostics
                 text += "\n";
             }
 
-            text += "WASD Move | Mouse Look | Space Jump | LMB Fire | RMB Kick | Esc Release Mouse";
+            text += "WASD Move | Mouse Look | Space Jump | LMB Fire | F Dash-Kick | Esc Release Mouse";
             GUI.Label(new Rect(16f, 16f, 700f, 260f), text, labelStyle);
         }
     }

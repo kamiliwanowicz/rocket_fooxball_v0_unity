@@ -14,6 +14,7 @@ namespace RocketFooxball.Runtime.Feedback
         [Header("References")]
         [SerializeField] private BallKick kick;
         [SerializeField] private PlayerMotor motor;
+        [SerializeField] private PlayerCameraFeedback cameraFeedback;
         [SerializeField] private RocketLauncher launcher;
         [SerializeField] private Animator worldAnimator;
         [SerializeField] private Animator fpsKickAnimator;
@@ -64,7 +65,7 @@ namespace RocketFooxball.Runtime.Feedback
 
             if (kick != null && !kickSubscribed)
             {
-                kick.KickAttempted += OnKickAttempted;
+                kick.DashStarted += OnDashStarted;
                 kickSubscribed = true;
             }
 
@@ -79,7 +80,7 @@ namespace RocketFooxball.Runtime.Feedback
         {
             if (kick != null && kickSubscribed)
             {
-                kick.KickAttempted -= OnKickAttempted;
+                kick.DashStarted -= OnDashStarted;
                 kickSubscribed = false;
             }
 
@@ -132,7 +133,7 @@ namespace RocketFooxball.Runtime.Feedback
             }
         }
 
-        private void OnKickAttempted()
+        private void OnDashStarted()
         {
             if (worldAnimator != null && worldAnimator.isActiveAndEnabled)
             {
@@ -143,6 +144,8 @@ namespace RocketFooxball.Runtime.Feedback
             {
                 fpsKickAnimator.SetTrigger(KickTrigger);
             }
+
+            cameraFeedback?.RequestDashKickImpulse(1f);
         }
 
         private void OnRocketLaunched()
@@ -173,6 +176,10 @@ namespace RocketFooxball.Runtime.Feedback
             if (motor == null)
             {
                 motor = GetComponent<PlayerMotor>();
+            }
+            if (cameraFeedback == null)
+            {
+                cameraFeedback = GetComponent<PlayerCameraFeedback>();
             }
             if (launcher == null)
             {

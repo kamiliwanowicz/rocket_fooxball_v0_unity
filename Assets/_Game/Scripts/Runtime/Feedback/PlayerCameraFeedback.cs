@@ -25,6 +25,10 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField, Min(0.01f)] private float shakeDuration = 0.18f;
         [SerializeField, Min(0f)] private float shakeFrequency = 28f;
 
+        [Header("Dash Kick Impulse")]
+        [SerializeField, Min(0f)] private float dashKickImpulse = 0.025f;
+        [SerializeField, Min(0.01f)] private float dashKickImpulseDuration = 0.12f;
+
         [Header("Goal Celebration Orbit")]
         [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = 5.5f;
         [SerializeField, Min(0f)] private float celebrationOrbitHeight = 2.5f;
@@ -57,6 +61,8 @@ namespace RocketFooxball.Runtime.Feedback
         private bool spectatorStateCaptured;
         private bool spectatorViewmodelsWasActive;
         private bool spectatorCrosshairWasActive;
+        private float dashKickImpulseElapsed;
+        private float dashKickImpulseStrength;
 
         public PlayerMotor Player => player;
         public ParticipantState Participant => participant;
@@ -108,7 +114,9 @@ namespace RocketFooxball.Runtime.Feedback
             var baseSpeed = player != null ? player.BaseSpeed : 0f;
             var hardCap = player != null ? player.HardCap : 0f;
             targetCamera.fieldOfView = SpeedFovModel.Evaluate(baseFov, maxFov, baseSpeed, hardCap, horizontalSpeed);
-            cameraTransform.localPosition = neutralLocalPosition + shakeModel.Step(Time.unscaledDeltaTime, shakeDuration, shakeAmplitude, shakeFrequency);
+            cameraTransform.localPosition = neutralLocalPosition +
+                                            shakeModel.Step(Time.unscaledDeltaTime, shakeDuration, shakeAmplitude, shakeFrequency) +
+                                            StepDashKickImpulse(Time.unscaledDeltaTime);
         }
 
         /// <summary>Detaches and orbits camera around frozen player for one goal celebration.</summary>
@@ -289,12 +297,26 @@ namespace RocketFooxball.Runtime.Feedback
             }
         }
 
+        /// <summary>Requests local down-and-back dash feedback without changing camera aim.</summary>
+        public void RequestDashKickImpulse(float normalizedStrength)
+        {
+            if (dashKickImpulse <= 0f || dashKickImpulseDuration <= 0f)
+            {
+                return;
+            }
+
+            dashKickImpulseStrength = Mathf.Clamp01(normalizedStrength);
+            dashKickImpulseElapsed = 0f;
+        }
+
         /// <summary>Ends celebration, restores neutral pose/FOV, and clears pending shake.</summary>
         public void ResetFeedback()
         {
             EndGoalCelebration();
             ExitSpectator();
             shakeModel.Reset();
+            dashKickImpulseElapsed = 0f;
+            dashKickImpulseStrength = 0f;
             if (cameraTransform != null)
             {
                 cameraTransform.localPosition = neutralLocalPosition;
@@ -313,6 +335,25 @@ namespace RocketFooxball.Runtime.Feedback
                 participant = GetComponent<ParticipantState>();
             }
             cameraTransform = targetCamera != null ? targetCamera.transform : null;
+        }
+
+        private Vector3 StepDashKickImpulse(float deltaTime)
+        {
+            if (dashKickImpulseStrength <= 0f || dashKickImpulseDuration <= 0f)
+            {
+                return Vector3.zero;
+            }
+
+            dashKickImpulseElapsed += Mathf.Max(deltaTime, 0f);
+            var normalized = Mathf.Clamp01(dashKickImpulseElapsed / dashKickImpulseDuration);
+            var envelope = Mathf.Sin(normalized * Mathf.PI) * dashKickImpulseStrength;
+            if (normalized >= 1f)
+            {
+                dashKickImpulseElapsed = 0f;
+                dashKickImpulseStrength = 0f;
+            }
+
+            return new Vector3(0f, -dashKickImpulse, -dashKickImpulse) * envelope;
         }
 
         private void CacheNeutralState()

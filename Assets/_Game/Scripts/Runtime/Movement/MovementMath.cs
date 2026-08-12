@@ -118,6 +118,57 @@ namespace RocketFooxball.Runtime.Movement
             return new Vector3(limited.x, velocity.y, limited.z);
         }
 
+        /// <summary>Combines a dash burst with existing momentum under a strict full-vector cap.</summary>
+        public static Vector3 ComposeDashVelocity(Vector3 currentVelocity, Vector3 direction, float burstSpeed, float speedCap)
+        {
+            if (!IsFinite(currentVelocity) || !IsFinite(direction) || direction.sqrMagnitude <= Epsilon || burstSpeed <= 0f || speedCap <= 0f)
+            {
+                return currentVelocity;
+            }
+
+            return Vector3.ClampMagnitude(currentVelocity + direction.normalized * burstSpeed, speedCap);
+        }
+
+        /// <summary>Turns a contribution without changing its magnitude when aim and step inputs are valid.</summary>
+        public static Vector3 SteerContribution(Vector3 contribution, Vector3 aimDirection, float turnRateDegrees, float deltaTime)
+        {
+            if (!IsFinite(contribution) || !IsFinite(aimDirection) || contribution.sqrMagnitude <= Epsilon || aimDirection.sqrMagnitude <= Epsilon || turnRateDegrees <= 0f || deltaTime <= 0f)
+            {
+                return contribution;
+            }
+
+            return Vector3.RotateTowards(
+                contribution,
+                aimDirection.normalized * contribution.magnitude,
+                turnRateDegrees * Mathf.Deg2Rad * deltaTime,
+                0f);
+        }
+
+        /// <summary>Removes a tracked contribution without reversing movement along that contribution.</summary>
+        public static Vector3 RemoveContributionWithoutReversal(Vector3 velocity, Vector3 contribution, float retainedFraction)
+        {
+            if (!IsFinite(velocity) || !IsFinite(contribution) || contribution.sqrMagnitude <= Epsilon)
+            {
+                return velocity;
+            }
+
+            var removal = contribution * (1f - Mathf.Clamp01(retainedFraction));
+            var removalMagnitude = removal.magnitude;
+            if (removalMagnitude <= Epsilon)
+            {
+                return velocity;
+            }
+
+            var removalDirection = removal / removalMagnitude;
+            var safeRemoval = Mathf.Min(removalMagnitude, Mathf.Max(Vector3.Dot(velocity, removalDirection), 0f));
+            return velocity - removalDirection * safeRemoval;
+        }
+
+        public static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
         /// <summary>Returns true when a contact normal is within a walkable slope limit.</summary>
         public static bool IsWalkableNormal(Vector3 normal, float slopeLimitDegrees)
         {
@@ -163,6 +214,11 @@ namespace RocketFooxball.Runtime.Movement
         public static Vector3 ProjectVelocityAlongGround(Vector3 velocity, Vector3 groundNormal)
         {
             return ProjectOnPlanePreserveMagnitude(velocity, groundNormal);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

@@ -412,7 +412,7 @@ namespace RocketFooxball.Runtime.Participants
 
             if (kick != null)
             {
-                kick.KickAttempted += OnKickAttempted;
+                kick.DashStarted += OnDashStarted;
             }
             if (launcher != null)
             {
@@ -430,7 +430,7 @@ namespace RocketFooxball.Runtime.Participants
 
             if (kick != null)
             {
-                kick.KickAttempted -= OnKickAttempted;
+                kick.DashStarted -= OnDashStarted;
             }
             if (launcher != null)
             {
@@ -439,7 +439,7 @@ namespace RocketFooxball.Runtime.Participants
             eventsSubscribed = false;
         }
 
-        private void OnKickAttempted() => CancelImmunity();
+        private void OnDashStarted() => CancelImmunity();
         private void OnRocketLaunched() => CancelImmunity();
 
         private void CacheReferences()

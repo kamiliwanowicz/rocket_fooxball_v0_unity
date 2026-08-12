@@ -1,12 +1,15 @@
 using System;
-using UnityEngine;
-using UnityEngine.Scripting.APIUpdating;
+using System.Collections.Generic;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
+using UnityEngine;
+using UnityEngine.Scripting.APIUpdating;
 
 namespace RocketFooxball.Runtime.Ball
 {
-    /// <summary>Fresh-press kick buffer and eligibility owner. BallMotor remains sole velocity owner.</summary>
+    /// <summary>Owns accepted dash-kick input, cooldown, and contact effects. PlayerMotor owns dash movement.</summary>
+    [DefaultExecutionOrder(-100)]
     [MovedFrom("RocketFooxball")]
     public sealed class BallKick : MonoBehaviour
     {
@@ -16,182 +19,242 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField] private PlayerLook look;
         [SerializeField] private Camera aimCamera;
         [SerializeField] private BallMotor ball;
+        [SerializeField] private ParticipantState ownerParticipant;
 
-        [Header("Kick")]
-        // Ball diameter is now 3x the prior POC size. Keep aim/contact reach
-        // forgiving enough for that larger surface without adding aim assist.
-        [SerializeField, Min(0.1f)] private float kickRange = 4.50f;
-        [SerializeField, Min(0f)] private float contactReachPadding = 1.00f;
-        [SerializeField, Min(1f)] private float contactReachScale = 1.50f;
-        [SerializeField, Range(1f, 89f)] private float coneTotalDegrees = 35f;
-        [SerializeField, Min(0.01f)] private float cooldown = 0.40f;
-        [SerializeField, Min(0.01f)] private float inputBuffer = 0.50f;
+        [Header("Dash Contact")]
+        [SerializeField, Min(0f)] private float dashContactStartDelay = 0.10f;
+        [SerializeField, Min(0.1f)] private float dashContactReach = 2f;
+        [SerializeField, Min(0f)] private float dashContactRadiusPadding = 0.35f;
+        [SerializeField, Min(0.01f)] private float cooldown = 3f;
         [SerializeField, Range(0f, 1f)] private float speedFraction = 0.91f;
         [SerializeField, Range(0f, 1f)] private float playerMomentumShare = 0.20f;
+        [SerializeField, Min(0f)] private float enemyContactDamage = 20f;
+        [SerializeField, Min(0f)] private float enemyShoveImpulse = 6f;
+        [SerializeField, Range(0f, 1f)] private float enemyDashRetention = 0.20f;
 
-        private float cooldownRemaining;
-        private float bufferRemaining;
-        private bool attemptPending;
-        private bool simulationEnabled = true;
         private const float Epsilon = 0.000001f;
+        private readonly Collider[] contactBuffer = new Collider[32];
+        private readonly HashSet<BallMotor> contactedBalls = new HashSet<BallMotor>();
+        private readonly HashSet<ParticipantState> contactedParticipants = new HashSet<ParticipantState>();
+        private CharacterController controller;
+        private float cooldownRemaining;
+        private bool simulationEnabled = true;
+        private bool collisionSubscribed;
 
         public float CooldownRemaining => Mathf.Max(cooldownRemaining, 0f);
-        public float BufferRemaining => Mathf.Max(bufferRemaining, 0f);
-        public bool AttemptPending => attemptPending;
         public bool SimulationEnabled => simulationEnabled;
+
+        /// <summary>Raised only when dash activation is accepted.</summary>
+        public event Action DashStarted;
+
+        /// <summary>Raised once when dash contact successfully applies ball velocity.</summary>
+        public event Action KickSucceeded;
 
         private void Awake()
         {
-            CacheReferences();
+            CacheSameObjectReferences();
+            controller = player != null ? player.GetComponent<CharacterController>() : null;
+            if (!ValidateComposition())
+            {
+                return;
+            }
+
+            SubscribeCollision();
+        }
+
+        private void OnEnable()
+        {
+            SubscribeCollision();
+        }
+
+        private void OnDisable()
+        {
+            UnsubscribeCollision();
         }
 
         private void FixedUpdate()
         {
-            if (!simulationEnabled)
+            if (!simulationEnabled || player == null)
             {
                 return;
             }
 
-            var deltaTime = Time.fixedDeltaTime;
-            cooldownRemaining = Mathf.Max(cooldownRemaining - deltaTime, 0f);
-
-            if (input != null && input.ConsumeKickPressed())
+            cooldownRemaining = DashKickRules.TickCooldown(cooldownRemaining, Time.fixedDeltaTime);
+            var aim = GetAimDirection();
+            if (player.IsDashing)
             {
-                // Animation represents the kick input itself. Contact remains
-                // conditional in TryKickNow and BallMotor.ApplyKick.
-                KickAttempted?.Invoke();
-                if (!attemptPending && cooldownRemaining <= 0f)
-                {
-                    attemptPending = true;
-                    bufferRemaining = inputBuffer;
-                    cooldownRemaining = cooldown;
-                }
+                player.SetDashAim(aim);
             }
 
-            if (!attemptPending)
+            if (input != null && input.ConsumeKickPressed() &&
+                DashKickRules.CanActivate(
+                    simulationEnabled,
+                    aim,
+                    player.IsDashing,
+                    cooldownRemaining,
+                    player.IsGrounded || player.HasGroundContact,
+                    player.AirDashAvailable) &&
+                player.TryStartDash(aim))
             {
-                return;
+                cooldownRemaining = cooldown;
+                contactedBalls.Clear();
+                contactedParticipants.Clear();
+                DashStarted?.Invoke();
             }
 
-            if (TryKickNow())
+            if (player.IsDashing)
             {
-                attemptPending = false;
-                bufferRemaining = 0f;
-                return;
-            }
-
-            bufferRemaining = Mathf.Max(bufferRemaining - deltaTime, 0f);
-            if (bufferRemaining <= 0f)
-            {
-                attemptPending = false;
+                player.SetDashAim(aim);
+                TryProcessContacts();
             }
         }
 
-        /// <summary>Enables or freezes kick state; match reset clears pending attempts separately.</summary>
+        /// <summary>Enables or freezes dash-kick input without changing cooldown ownership.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
             simulationEnabled = enabled;
             if (!enabled)
             {
-                attemptPending = false;
-                bufferRemaining = 0f;
+                contactedBalls.Clear();
+                contactedParticipants.Clear();
             }
         }
 
-        /// <summary>Clears cooldown and buffered attempt.</summary>
+        /// <summary>Clears cooldown and per-activation contact state for coordinated reset.</summary>
         public void ResetState()
         {
             cooldownRemaining = 0f;
-            bufferRemaining = 0f;
-            attemptPending = false;
+            contactedBalls.Clear();
+            contactedParticipants.Clear();
         }
 
-        /// <summary>Attempts immediate eligibility check; useful for deterministic integration probes.</summary>
-        public bool TryKickNow()
+        private void TryProcessContacts()
         {
-            if (!simulationEnabled || ball == null || ball.BallCollider == null)
+            if (controller == null || !DashKickRules.IsContactActive(player.DashElapsed, dashContactStartDelay))
             {
-                return false;
+                return;
             }
 
-            var origin = GetAimOrigin();
-            var direction = GetAimDirection();
-            var toBall = ball.transform.position - origin;
-            var distance = toBall.magnitude;
-            if (distance <= 0.0001f || !IsWithinPlayerReach())
+            var dashDirection = player.DashDirection;
+            if (dashDirection.sqrMagnitude <= Epsilon)
             {
-                return false;
+                return;
             }
 
-            // The camera is above and behind the physical player contact point.
-            // Gate the aim ray by ball-surface distance, then gate physical reach
-            // separately so ordinary grounded contact plus a small extension is
-            // eligible without adding aim assistance.
-            var ballSurfacePoint = ball.BallCollider.ClosestPoint(origin);
-            if (Vector3.Distance(origin, ballSurfacePoint) > kickRange)
-            {
-                return false;
-            }
+            var center = controller.transform.TransformPoint(controller.center);
+            var count = Physics.OverlapCapsuleNonAlloc(
+                center,
+                center + dashDirection * dashContactReach,
+                controller.radius + dashContactRadiusPadding,
+                contactBuffer,
+                ~0,
+                QueryTriggerInteraction.Ignore);
 
-            var coneHalfAngle = Mathf.Max(coneTotalDegrees * 0.5f, 0.5f);
-            if (Vector3.Angle(direction, toBall) > coneHalfAngle)
-            {
-                return false;
-            }
+            BallMotor contactedBall = null;
+            ParticipantState nearestParticipant = null;
+            var nearestDistance = float.PositiveInfinity;
+            var nearestInstanceId = 0;
 
-            // Unity raycasts do not report a collider that already contains the
-            // ray origin. At high player speed the camera can enter this large
-            // ball briefly, so treat that overlap as ball contact instead of
-            // leaving the buffered kick pending until the camera exits again.
-            var aimOriginInsideBall = (ballSurfacePoint - origin).sqrMagnitude <= Epsilon;
-            if (!aimOriginInsideBall && UnityEngine.Physics.Raycast(origin, direction, out var hit, kickRange, ~0, QueryTriggerInteraction.Ignore))
+            for (var i = 0; i < count; i++)
             {
-                var hitBall = hit.collider.GetComponentInParent<BallMotor>();
-                if (hitBall != ball)
+                var hit = contactBuffer[i];
+                contactBuffer[i] = null;
+                if (hit == null)
                 {
-                    return false;
+                    continue;
+                }
+
+                var hitBall = hit.GetComponentInParent<BallMotor>();
+                if (hitBall != null && hitBall == ball && DashKickRules.ShouldProcessContact(contactedBalls.Contains(hitBall)))
+                {
+                    contactedBall = hitBall;
+                }
+
+                var participant = hit.GetComponentInParent<ParticipantState>();
+                if (participant == null || !DashKickRules.ShouldProcessContact(contactedParticipants.Contains(participant)) || !DashKickRules.IsForward(center, dashDirection, participant.transform.position))
+                {
+                    continue;
+                }
+
+                var distance = Vector3.Distance(center, participant.transform.position);
+                var instanceId = participant.GetInstanceID();
+                if (nearestParticipant == null || DashKickRules.IsBetterContactCandidate(distance, instanceId, nearestDistance, nearestInstanceId))
+                {
+                    nearestParticipant = participant;
+                    nearestDistance = distance;
+                    nearestInstanceId = instanceId;
                 }
             }
-            else if (!aimOriginInsideBall)
+
+            if (contactedBall != null)
             {
-                return false;
+                contactedBalls.Add(contactedBall);
+                if (contactedBall.ApplyKick(dashDirection, player.Velocity, speedFraction, playerMomentumShare))
+                {
+                    KickSucceeded?.Invoke();
+                }
             }
 
-            var succeeded = ball.ApplyKick(direction, player != null ? player.Velocity : Vector3.zero, speedFraction, playerMomentumShare);
-            if (succeeded)
+            if (nearestParticipant == null)
             {
-                KickSucceeded?.Invoke();
+                return;
             }
 
-            return succeeded;
+            contactedParticipants.Add(nearestParticipant);
+            if (!nearestParticipant.TryApplyDamage(ownerParticipant, enemyContactDamage, ParticipantDamageCause.DashKick, "Dash Kick"))
+            {
+                return;
+            }
+
+            var shoveDirection = new Vector3(dashDirection.x, 0f, dashDirection.z) + Vector3.up * 0.15f;
+            if (shoveDirection.sqrMagnitude > Epsilon)
+            {
+                nearestParticipant.Motor?.AddExternalImpulse(shoveDirection.normalized * enemyShoveImpulse);
+            }
+            player.EndDash(DashEndReason.EnemyContact, enemyDashRetention);
         }
 
-        /// <summary>Raised once when a kick attempt successfully applies ball velocity.</summary>
-        public event Action KickSucceeded;
-
-        /// <summary>Raised for every fresh kick input, before contact eligibility is checked.</summary>
-        public event Action KickAttempted;
-
-        private bool IsWithinPlayerReach()
+        private void OnPlayerCollision(ControllerColliderHit hit)
         {
-            if (player == null || ball == null || ball.BallCollider == null)
+            if (hit == null || player == null || !player.IsDashing || hit.collider == null)
             {
-                return false;
+                return;
             }
 
-            var controller = player.GetComponent<CharacterController>();
-            var playerCenter = controller != null
-                ? controller.transform.TransformPoint(controller.center)
-                : player.transform.position;
-            var playerRadius = controller != null ? controller.radius : 0.4f;
-            var ballBounds = ball.BallCollider.bounds;
-            var ballRadius = Mathf.Max(ballBounds.extents.x, ballBounds.extents.y, ballBounds.extents.z);
-            var baseCenterDistance = playerRadius + ballRadius + Mathf.Max(contactReachPadding, 0f);
-            var maximumCenterDistance = baseCenterDistance * Mathf.Max(contactReachScale, 1f);
-            return Vector3.Distance(playerCenter, ball.transform.position) <= maximumCenterDistance;
+            if (hit.collider.GetComponentInParent<BallMotor>() != null || hit.collider.GetComponentInParent<ParticipantState>() != null)
+            {
+                return;
+            }
+
+            if (Vector3.Dot(player.DashDirection, hit.normal) < -Epsilon)
+            {
+                player.EndDash(DashEndReason.Wall, 0f);
+            }
         }
 
-        private void CacheReferences()
+        private void SubscribeCollision()
+        {
+            if (collisionSubscribed || player == null)
+            {
+                return;
+            }
+
+            player.CollisionHit += OnPlayerCollision;
+            collisionSubscribed = true;
+        }
+
+        private void UnsubscribeCollision()
+        {
+            if (!collisionSubscribed || player == null)
+            {
+                return;
+            }
+
+            player.CollisionHit -= OnPlayerCollision;
+            collisionSubscribed = false;
+        }
+
+        private void CacheSameObjectReferences()
         {
             if (input == null)
             {
@@ -205,23 +268,22 @@ namespace RocketFooxball.Runtime.Ball
             {
                 look = GetComponent<PlayerLook>();
             }
-            if (aimCamera == null)
+            if (ownerParticipant == null)
             {
-                aimCamera = GetComponentInChildren<Camera>(true);
+                ownerParticipant = GetComponent<ParticipantState>();
             }
         }
 
-        private Vector3 GetAimOrigin()
+        private bool ValidateComposition()
         {
-            if (aimCamera != null)
+            if (input != null && player != null && look != null && aimCamera != null && ownerParticipant != null && controller != null)
             {
-                return aimCamera.transform.position;
+                return true;
             }
-            if (look != null && look.Head != null)
-            {
-                return look.Head.position;
-            }
-            return transform.position + Vector3.up;
+
+            Debug.LogError("BallKick requires serialized references: input, player, look, aimCamera, ownerParticipant, and CharacterController.", this);
+            enabled = false;
+            return false;
         }
 
         private Vector3 GetAimDirection()
@@ -230,11 +292,8 @@ namespace RocketFooxball.Runtime.Ball
             {
                 return aimCamera.transform.forward;
             }
-            if (look != null && look.Head != null)
-            {
-                return look.Head.forward;
-            }
-            return transform.forward;
+
+            return look != null && look.Head != null ? look.Head.forward : transform.forward;
         }
     }
 }
