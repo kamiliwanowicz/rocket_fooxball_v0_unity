@@ -10,6 +10,7 @@ using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Hud;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
@@ -217,6 +218,11 @@ namespace RocketFooxball.Editor
                         SetObjectReference(hudComponent, "launcher", launcher);
                         SetObjectReference(hudComponent, "kick", kick);
                         SetObjectReference(hudComponent, "match", match);
+                        var matchHudObject = new GameObject("MatchHUD");
+                        var matchHud = matchHudObject.AddComponent<MatchHud>();
+                        SetObjectReference(matchHud, "match", match);
+                        SetObjectReference(matchHud, "localParticipant", localParticipant);
+                        SetObjectReference(matchHud, "input", playerInput);
                         new GameObject(GetBuildMarkerName(builderSignature));
                         BindSceneEnvironment(scene, arena);
                         EditorSceneManager.SaveScene(scene, ScenePath);
@@ -472,6 +478,11 @@ namespace RocketFooxball.Editor
                     SetObjectReference(hudComponent, "launcher", launcher);
                     SetObjectReference(hudComponent, "kick", kick);
                     SetObjectReference(hudComponent, "match", match);
+                    var matchHudObject = new GameObject("MatchHUD");
+                    var matchHud = matchHudObject.AddComponent<MatchHud>();
+                    SetObjectReference(matchHud, "match", match);
+                    SetObjectReference(matchHud, "localParticipant", localParticipant);
+                    SetObjectReference(matchHud, "input", playerInput);
 
                     new GameObject(GetBuildMarkerName(builderSignature));
 

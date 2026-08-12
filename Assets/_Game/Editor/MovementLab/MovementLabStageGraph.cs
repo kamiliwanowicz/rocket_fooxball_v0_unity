@@ -69,7 +69,7 @@ namespace RocketFooxball.Editor
         private const string MaterialContract = "material-prefab-contract:5";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:10";
+        private const string GameplayContract = "gameplay-scene-contract:11";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:4";

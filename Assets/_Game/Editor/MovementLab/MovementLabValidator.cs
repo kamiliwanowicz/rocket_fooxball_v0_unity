@@ -9,6 +9,7 @@ using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Hud;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
@@ -193,6 +194,7 @@ namespace RocketFooxball.Editor
             internal GameObject ExplosionObject;
             internal GameObject ShieldSetObject;
             internal GameObject HudObject;
+            internal GameObject MatchHudObject;
             internal PlayerMotor PlayerMotor;
             internal PlayerInputReader Input;
             internal PlayerLook Look;
@@ -210,6 +212,7 @@ namespace RocketFooxball.Editor
             internal GoalShieldSet GoalShieldSet;
             internal MatchController Match;
             internal MovementDebugHud Hud;
+            internal MatchHud MatchHud;
             internal GoalTrigger North;
             internal GoalTrigger South;
             internal Collider NorthShield;
@@ -312,6 +315,19 @@ namespace RocketFooxball.Editor
             context.ExplosionObject = CaptureRequired(accumulator, "scene/root", "ExplosionResolver", GameObject.Find("ExplosionResolver"), "ExplosionResolver root");
             context.ShieldSetObject = CaptureRequired(accumulator, "scene/root", "GoalShieldSet", GameObject.Find("GoalShieldSet"), "GoalShieldSet root");
             context.HudObject = CaptureRequired(accumulator, "scene/root", "DebugHUD", GameObject.Find("DebugHUD"), "DebugHUD root");
+            var matchHudRoots = context.Scene.GetRootGameObjects().Where(root => root != null && root.name == "MatchHUD").ToArray();
+            accumulator.Capture("scene/root", "MatchHUD.count", () =>
+            {
+                if (matchHudRoots.Length != 1) throw new InvalidOperationException("MovementLab must contain exactly one MatchHUD root.");
+            });
+            context.MatchHudObject = CaptureRequired(accumulator, "scene/root", "MatchHUD", matchHudRoots.Length == 1 ? matchHudRoots[0] : null, "MatchHUD root");
+            var matchHudComponents = UnityEngine.Object.FindObjectsByType<MatchHud>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            accumulator.Capture("scene/root", "MatchHUD.component-count", () =>
+            {
+                if (matchHudComponents.Length != 1) throw new InvalidOperationException("MovementLab must contain exactly one MatchHud component.");
+            });
+            if (context.MatchHudObject != null)
+                context.MatchHud = CaptureRequired(accumulator, "scene/gameplay-components", "MatchHud", context.MatchHudObject.GetComponent<MatchHud>(), "MatchHud");
             accumulator.Capture("scene/root", "build-marker", () => Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "MovementLab build marker"));
 
             ValidateParticipantRoster(context, accumulator);
@@ -471,6 +487,7 @@ namespace RocketFooxball.Editor
         {
             if (context == null || !context.SceneReady) return;
             accumulator.Capture("input", "dash-kick-binding", ValidateDashKickInputAsset);
+            accumulator.Capture("input", "match-table-binding", ValidateMatchTableInputAsset);
             accumulator.Capture("gameplay/contract", "dash-public-surface", ValidateDashPublicSurface);
             if (context.BallMotor != null)
             {
@@ -598,6 +615,16 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.kick", context.Hud, "kick", context.Kick);
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.match", context.Hud, "match", context.Match);
             }
+            if (context.MatchHud != null)
+            {
+                accumulator.Capture("gameplay/contract", "MatchHUD.identity", () => ValidatePersistentIdentity(context.MatchHudObject, "MatchHUD root"));
+                accumulator.Capture("gameplay/contract", "MatchHUD.component-identity", () => ValidatePersistentIdentity(context.MatchHud, "MatchHud component"));
+                CaptureReference(accumulator, "gameplay/wiring", "MatchHUD.match", context.MatchHud, "match", context.Match);
+                CaptureReference(accumulator, "gameplay/wiring", "MatchHUD.localParticipant", context.MatchHud, "localParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
+                CaptureReference(accumulator, "gameplay/wiring", "MatchHUD.input", context.MatchHud, "input", context.Input);
+                accumulator.Capture("gameplay/contract", "MatchHUD.serialized-surface", ValidateMatchHudSerializedSurface);
+                accumulator.Capture("gameplay/contract", "MatchHUD.screen-policy", ValidateMatchHudScreenPolicy);
+            }
         }
 
         private static void ValidateBallTouchRosterContract()
@@ -649,6 +676,81 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Player/Kick must contain exactly one preserved Keyboard F binding.");
             if (gamepadPathCount != 1 || gamepadBindingCount != 1)
                 throw new InvalidOperationException("Player/Kick must contain exactly one preserved Gamepad west binding.");
+        }
+
+        private static void ValidateMatchTableInputAsset()
+        {
+            var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
+            if (actions == null) throw new InvalidOperationException("Match-table input asset is missing: " + InputActionsPath);
+            var map = actions.FindActionMap("Player", false);
+            if (map == null) throw new InvalidOperationException("Player input map is missing.");
+
+            var matchingActions = map.actions.Where(action => action != null && action.name == "MatchTable").ToArray();
+            if (matchingActions.Length != 1) throw new InvalidOperationException("Player/MatchTable must exist exactly once.");
+            var action = matchingActions[0];
+            if (action.type != InputActionType.Button)
+                throw new InvalidOperationException("Player/MatchTable must be a Button action.");
+
+            var expectedActionId = Guid.Parse("c15f83ad-0f95-44f2-9f5e-4cfe9a0f2bd5");
+            if (action.id != expectedActionId)
+                throw new InvalidOperationException("Player/MatchTable action GUID changed.");
+
+            var tabPathBindings = map.bindings.Where(binding => string.Equals(binding.path, "<Keyboard>/tab", StringComparison.Ordinal)).ToArray();
+            if (tabPathBindings.Length != 1 || !string.Equals(tabPathBindings[0].groups, ";Keyboard&Mouse", StringComparison.Ordinal))
+                throw new InvalidOperationException("Player must contain exactly one Keyboard&Mouse Tab binding.");
+
+            var binding = tabPathBindings[0];
+            var expectedBindingId = Guid.Parse("b8a8bc7b-14f4-4c5c-bd8c-02c4cb726104");
+            if (binding.id != expectedBindingId || binding.action != "MatchTable")
+                throw new InvalidOperationException("Player/MatchTable Tab binding GUID or action changed.");
+
+            var readerProperty = typeof(PlayerInputReader).GetProperty(
+                nameof(PlayerInputReader.MatchTableHeld),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            if (readerProperty == null || !readerProperty.CanRead || readerProperty.PropertyType != typeof(bool))
+                throw new InvalidOperationException("PlayerInputReader.MatchTableHeld public bool read surface is missing.");
+        }
+
+        private static void ValidateMatchHudSerializedSurface()
+        {
+            var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            var fields = typeof(MatchHud).GetFields(flags)
+                .Where(field => field.IsDefined(typeof(SerializeField), true))
+                .ToArray();
+            var expected = new Dictionary<string, Type>
+            {
+                { "match", typeof(MatchController) },
+                { "localParticipant", typeof(ParticipantState) },
+                { "input", typeof(PlayerInputReader) }
+            };
+            if (fields.Length != expected.Count)
+                throw new InvalidOperationException("MatchHud serialized dependency surface must contain exactly match, localParticipant, and input.");
+            foreach (var field in fields)
+            {
+                if (!expected.TryGetValue(field.Name, out var expectedType) || field.FieldType != expectedType)
+                    throw new InvalidOperationException("MatchHud has an unexpected serialized dependency: " + field.Name + ".");
+            }
+        }
+
+        private static void ValidateMatchHudScreenPolicy()
+        {
+            ExpectMatchHudScreen("Final dominates all flags", MatchController.MatchState.Final, false, true, true, MatchHudScreen.Final);
+            ExpectMatchHudScreen("GoalFreeze dominates death/Tab/GO", MatchController.MatchState.GoalFreeze, false, true, true, MatchHudScreen.GoalSummary);
+            ExpectMatchHudScreen("OpeningCountdown dominates death/Tab/GO", MatchController.MatchState.OpeningCountdown, false, true, true, MatchHudScreen.OpeningRulesCountdown);
+            ExpectMatchHudScreen("KickoffCountdown dominates death/Tab/GO", MatchController.MatchState.KickoffCountdown, false, true, true, MatchHudScreen.KickoffCountdown);
+            ExpectMatchHudScreen("Reset dominates all flags", MatchController.MatchState.Reset, false, true, true, MatchHudScreen.Resetting);
+            ExpectMatchHudScreen("GO follows Playing", MatchController.MatchState.Playing, true, false, true, MatchHudScreen.Go);
+            ExpectMatchHudScreen("Local death dominates Tab", MatchController.MatchState.Playing, false, true, false, MatchHudScreen.LocalDeath);
+            ExpectMatchHudScreen("Alive Tab opens table", MatchController.MatchState.Playing, true, true, false, MatchHudScreen.MatchTable);
+            ExpectMatchHudScreen("Playing fallback is live", MatchController.MatchState.Playing, true, false, false, MatchHudScreen.Live);
+        }
+
+        private static void ExpectMatchHudScreen(string label, MatchController.MatchState state,
+            bool localAlive, bool matchTableHeld, bool goVisible, MatchHudScreen expected)
+        {
+            var actual = MatchHudScreenPolicy.Resolve(state, localAlive, matchTableHeld, goVisible);
+            if (actual != expected)
+                throw new InvalidOperationException("MatchHud screen policy row failed (" + label + "): expected " + expected + ", got " + actual + ".");
         }
 
         private static void ValidateDashPublicSurface()
