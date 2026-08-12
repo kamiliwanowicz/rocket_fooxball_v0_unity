@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Runtime.Ball
@@ -15,7 +17,7 @@ namespace RocketFooxball.Runtime.Ball
         [Header("References")]
         [SerializeField] private Rigidbody body;
         [SerializeField] private Collider ballCollider;
-        [SerializeField] private PlayerMotor player;
+        [SerializeField] private ParticipantState[] participants = new ParticipantState[6];
         [SerializeField] private GoalShieldSet goalShieldSet;
 
         [Header("Speed and Surface")]
@@ -25,6 +27,7 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField, Min(0f)] private float restSpeed = 0.08f;
         [SerializeField, Min(0f)] private float contactAssistStrength = 0.35f;
         [SerializeField, Min(0f)] private float contactAssistImpulseCap = 5f;
+        [SerializeField, Min(0f)] private float meaningfulContactSpeedThreshold = 1f;
 
         private const float Epsilon = 0.000001f;
         private Vector3 queuedContactAssistImpulse;
@@ -35,15 +38,18 @@ namespace RocketFooxball.Runtime.Ball
         private bool preFreezeKinematic;
         private Vector3 preFreezeVelocity;
         private Vector3 preFreezeAngularVelocity;
+        private Action<ControllerColliderHit>[] collisionHandlers;
 
         public Rigidbody Body => body;
         public Rigidbody Rigidbody => body;
         public Collider BallCollider => ballCollider;
         public Vector3 Velocity => body != null ? body.linearVelocity : Vector3.zero;
         public float Speed => Velocity.magnitude;
-        public float HardCap => Mathf.Max(1f, player != null ? player.BaseSpeed : baseSpeedReference) * speedCapMultiplier;
+        public float HardCap => Mathf.Max(1f, baseSpeedReference) * speedCapMultiplier;
         public bool IsGrounded => groundedContact;
         public bool SimulationEnabled => simulationEnabled;
+        public float MeaningfulContactSpeedThreshold => meaningfulContactSpeedThreshold;
+        public IReadOnlyList<ParticipantState> Participants => participants;
 
         private void Awake()
         {
@@ -65,17 +71,39 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
-            if (player != null)
+            if (participants != null)
             {
-                player.CollisionHit += OnPlayerCollisionHit;
+                collisionHandlers = new Action<ControllerColliderHit>[participants.Length];
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    var participant = participants[i];
+                    if (participant == null || participant.Motor == null)
+                    {
+                        continue;
+                    }
+
+                    var capturedParticipant = participant;
+                    Action<ControllerColliderHit> handler = hit => OnPlayerCollisionHit(capturedParticipant, hit);
+                    collisionHandlers[i] = handler;
+                    participant.Motor.CollisionHit += handler;
+                }
             }
         }
 
         private void OnDisable()
         {
-            if (player != null)
+            if (participants != null && collisionHandlers != null)
             {
-                player.CollisionHit -= OnPlayerCollisionHit;
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    var participant = participants[i];
+                    var handler = collisionHandlers[i];
+                    if (participant != null && participant.Motor != null && handler != null)
+                    {
+                        participant.Motor.CollisionHit -= handler;
+                    }
+                }
+                collisionHandlers = null;
             }
         }
 
@@ -218,9 +246,9 @@ namespace RocketFooxball.Runtime.Ball
 
         private bool ValidateComposition()
         {
-            if (body == null || ballCollider == null || player == null || goalShieldSet == null || goalShieldSet.Colliders == null)
+            if (body == null || ballCollider == null || participants == null || participants.Length == 0 || goalShieldSet == null || goalShieldSet.Colliders == null)
             {
-                Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldSet.", this);
+                Debug.LogError("BallMotor requires serialized references: body, ballCollider, participants, goalShieldSet.", this);
                 enabled = false;
                 return false;
             }
@@ -229,7 +257,17 @@ namespace RocketFooxball.Runtime.Ball
             {
                 if (goalShieldSet.Colliders[i] == null)
                 {
-                    Debug.LogError("BallMotor requires serialized references: body, ballCollider, player, goalShieldSet.", this);
+                    Debug.LogError("BallMotor requires serialized references: body, ballCollider, participants, goalShieldSet.", this);
+                    enabled = false;
+                    return false;
+                }
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                if (participants[i] == null || participants[i].Motor == null)
+                {
+                    Debug.LogError("BallMotor requires serialized references: each participants entry and its motor.", this);
                     enabled = false;
                     return false;
                 }
@@ -267,7 +305,7 @@ namespace RocketFooxball.Runtime.Ball
             }
         }
 
-        private void OnPlayerCollisionHit(ControllerColliderHit hit)
+        private void OnPlayerCollisionHit(ParticipantState participant, ControllerColliderHit hit)
         {
             if (!simulationEnabled || hit == null || hit.collider == null || body == null)
             {
@@ -278,15 +316,23 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
-            var playerVelocity = player != null ? player.Velocity : Vector3.zero;
-            var speed = new Vector3(playerVelocity.x, 0f, playerVelocity.z).magnitude;
-            if (speed <= Epsilon)
+            var playerVelocity = participant != null && participant.Motor != null ? participant.Motor.Velocity : Vector3.zero;
+            var relativeVelocity = playerVelocity - Velocity;
+            var relativeSpeed = relativeVelocity.magnitude;
+            if (participant != null && relativeSpeed >= meaningfulContactSpeedThreshold)
+            {
+                participant.NotifyMeaningfulBallContact();
+            }
+
+            var playerHorizontal = new Vector3(playerVelocity.x, 0f, playerVelocity.z);
+            var playerSpeed = playerHorizontal.magnitude;
+            if (playerSpeed <= Epsilon)
             {
                 return;
             }
 
-            var direction = playerVelocity.normalized;
-            var impulse = Mathf.Min(contactAssistImpulseCap, speed * contactAssistStrength);
+            var direction = playerHorizontal / playerSpeed;
+            var impulse = Mathf.Min(contactAssistImpulseCap, playerSpeed * contactAssistStrength);
             queuedContactAssistImpulse += direction * impulse;
         }
 

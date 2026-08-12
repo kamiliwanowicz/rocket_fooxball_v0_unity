@@ -155,7 +155,13 @@ MonoBehaviour:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Ball.BallMotor
   body: {fileID: 4392405790869560408}
   ballCollider: {fileID: 2975698619275137767}
-  player: {fileID: 0}
+  participants:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
   goalShieldSet: {fileID: 0}
   baseSpeedReference: 10
   speedCapMultiplier: 4
@@ -163,3 +169,4 @@ MonoBehaviour:
   restSpeed: 0.08
   contactAssistStrength: 0.35
   contactAssistImpulseCap: 5
+  meaningfulContactSpeedThreshold: 1

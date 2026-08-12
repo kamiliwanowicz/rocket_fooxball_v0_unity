@@ -12,6 +12,7 @@ using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
+using RocketFooxball.Runtime.Participants;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -185,6 +186,8 @@ namespace RocketFooxball.Editor
             internal bool SceneReady;
             internal GameObject Arena;
             internal GameObject Player;
+            internal ParticipantState[] Participants;
+            internal ParticipantSpawnSet SpawnSet;
             internal GameObject Ball;
             internal GameObject MatchObject;
             internal GameObject ExplosionObject;
@@ -266,7 +269,9 @@ namespace RocketFooxball.Editor
                 ShieldTexturePath, WorldControllerPath, FpsControllerPath, ExplosionPrefabPath, ScenePath, BallSurfacePath,
                 RocketHotMaterialPath, ProjectileGlowMaterialPath, ExplosionAdditiveMaterialPath, ExplosionSparksMaterialPath,
                 GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath, SkyMaterialPath,
-                VolumeProfilePath, LightingSettingsPath, LightingManifestPath
+                VolumeProfilePath, LightingSettingsPath, LightingManifestPath,
+                TeamBlueMaterialPath, TeamRedMaterialPath, TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath,
+                TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath, BlueCircleCueMeshPath, RedTriangleCueMeshPath
             };
             for (var i = 0; i < paths.Length; i++)
             {
@@ -293,13 +298,23 @@ namespace RocketFooxball.Editor
             if (!context.SceneReady) return context;
 
             context.Arena = CaptureRequired(accumulator, "scene/root", "Arena", GameObject.Find("Arena"), "Arena root");
-            context.Player = CaptureRequired(accumulator, "scene/root", "Player", GameObject.Find("Player"), "Player root");
+            context.Participants = new ParticipantState[ParticipantSlots.Length];
+            for (var slotIndex = 0; slotIndex < ParticipantSlots.Length; slotIndex++)
+            {
+                var slot = ParticipantSlots[slotIndex];
+                var participantObject = GameObject.Find(slot.DisplayName);
+                context.Participants[slotIndex] = CaptureRequired(accumulator, "scene/roster", "slot:" + slot.SlotId, participantObject != null ? participantObject.GetComponent<ParticipantState>() : null, "Participant slot " + slot.SlotId);
+            }
+            context.Player = context.Participants.Length > 0 && context.Participants[0] != null ? context.Participants[0].gameObject : null;
+            context.SpawnSet = CaptureRequired(accumulator, "scene/roster", "spawn-set", GameObject.Find("ParticipantSpawnSet")?.GetComponent<ParticipantSpawnSet>(), "ParticipantSpawnSet");
             context.Ball = CaptureRequired(accumulator, "scene/root", "Ball", GameObject.Find("Ball"), "Ball root");
             context.MatchObject = CaptureRequired(accumulator, "scene/root", "MatchController", GameObject.Find("MatchController"), "MatchController root");
             context.ExplosionObject = CaptureRequired(accumulator, "scene/root", "ExplosionResolver", GameObject.Find("ExplosionResolver"), "ExplosionResolver root");
             context.ShieldSetObject = CaptureRequired(accumulator, "scene/root", "GoalShieldSet", GameObject.Find("GoalShieldSet"), "GoalShieldSet root");
             context.HudObject = CaptureRequired(accumulator, "scene/root", "DebugHUD", GameObject.Find("DebugHUD"), "DebugHUD root");
-            accumulator.Capture("scene/root", "build-marker", () => Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "T5 build marker"));
+            accumulator.Capture("scene/root", "build-marker", () => Require(GameObject.Find(GetBuildMarkerName(builderSignature)), "MovementLab build marker"));
+
+            ValidateParticipantRoster(context, accumulator);
 
             if (context.Player != null)
             {
@@ -385,6 +400,8 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootForwardImpulseScale", context.Resolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootUpwardImpulseScale", context.Resolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootHighSpeedVerticalRedirect", context.Resolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", 50f);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", 0.5f);
             }
 
             var goals = UnityEngine.Object.FindObjectsByType<GoalTrigger>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -451,8 +468,20 @@ namespace RocketFooxball.Editor
             {
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.body", context.BallMotor, "body", context.BallBody);
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.ballCollider", context.BallMotor, "ballCollider", context.BallCollider);
-                CaptureReference(accumulator, "gameplay/wiring", "BallMotor.player", context.BallMotor, "player", context.PlayerMotor);
+                CaptureObjectArray(accumulator, "gameplay/wiring", "BallMotor.participants", context.BallMotor, "participants", context.Participants.Cast<UnityEngine.Object>().ToArray());
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.goalShieldSet", context.BallMotor, "goalShieldSet", context.GoalShieldSet);
+                CaptureSerialized(accumulator, "gameplay/serialized", "BallMotor.meaningfulContactSpeedThreshold", context.BallMotor, "meaningfulContactSpeedThreshold", 1f);
+            }
+            if (context.Participants != null)
+            {
+                for (var participantIndex = 0; participantIndex < context.Participants.Length; participantIndex++)
+                {
+                    var participant = context.Participants[participantIndex];
+                    if (participant == null) continue;
+                    CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.explosionResolver", participant.Launcher, "explosionResolver", context.Resolver);
+                    CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.projectilePrefab", participant.Launcher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath));
+                    CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Kick.ball", participant.Kick, "ball", context.BallMotor);
+                }
             }
             if (context.GoalShieldSet != null && context.NorthShield != null && context.SouthShield != null)
                 accumulator.Capture("gameplay/wiring", "GoalShieldSet.colliders", () => ValidateArrayContains(context.GoalShieldSet, "colliders", context.NorthShield, context.SouthShield, "GoalShieldSet.colliders"));
@@ -481,6 +510,7 @@ namespace RocketFooxball.Editor
                 var crosshairObject = context.Player != null ? context.Player.transform.Find("Head/Camera/CrosshairCanvas")?.gameObject : null;
                 CaptureReference(accumulator, "gameplay/wiring", "PlayerCameraFeedback.viewmodels", context.CameraFeedback, "viewmodels", viewmodelsObject);
                 CaptureReference(accumulator, "gameplay/wiring", "PlayerCameraFeedback.crosshairCanvas", context.CameraFeedback, "crosshairCanvas", crosshairObject);
+                CaptureReference(accumulator, "gameplay/wiring", "PlayerCameraFeedback.participant", context.CameraFeedback, "participant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitRadius", context.CameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitHeight", context.CameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationLookHeight", context.CameraFeedback, "celebrationLookHeight", CelebrationLookHeight);
@@ -519,13 +549,11 @@ namespace RocketFooxball.Editor
             }
             if (context.Match != null)
             {
-                CaptureReference(accumulator, "gameplay/wiring", "MatchController.input", context.Match, "input", context.Input);
-                CaptureReference(accumulator, "gameplay/wiring", "MatchController.player", context.Match, "player", context.PlayerMotor);
-                CaptureReference(accumulator, "gameplay/wiring", "MatchController.playerLook", context.Match, "playerLook", context.Look);
+                CaptureObjectArray(accumulator, "gameplay/wiring", "MatchController.participants", context.Match, "participants", context.Participants.Cast<UnityEngine.Object>().ToArray());
+                CaptureReference(accumulator, "gameplay/wiring", "MatchController.localParticipant", context.Match, "localParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
+                CaptureReference(accumulator, "gameplay/wiring", "MatchController.spawnSet", context.Match, "spawnSet", context.SpawnSet);
                 CaptureReference(accumulator, "gameplay/wiring", "MatchController.cameraFeedback", context.Match, "cameraFeedback", context.CameraFeedback);
                 CaptureReference(accumulator, "gameplay/wiring", "MatchController.ball", context.Match, "ball", context.BallMotor);
-                CaptureReference(accumulator, "gameplay/wiring", "MatchController.launcher", context.Match, "launcher", context.Launcher);
-                CaptureReference(accumulator, "gameplay/wiring", "MatchController.kick", context.Match, "kick", context.Kick);
                 if (context.North != null && context.South != null)
                 {
                     CaptureReference(accumulator, "gameplay/wiring", "MatchController.northGoal", context.Match, "northGoal", context.North);
@@ -539,7 +567,6 @@ namespace RocketFooxball.Editor
                 });
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalFreezeDuration", context.Match, "goalFreezeDuration", GoalFreezeDuration);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.playerResetPosition", context.Match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
             }
             if (context.Hud != null)
             {
@@ -549,6 +576,125 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.kick", context.Hud, "kick", context.Kick);
                 CaptureReference(accumulator, "gameplay/wiring", "HUD.match", context.Hud, "match", context.Match);
             }
+        }
+
+        private static void ValidateParticipantRoster(ValidationContext context, MovementLabValidationAccumulator accumulator)
+        {
+            if (context == null || !context.SceneReady || context.Participants == null) return;
+            accumulator.Capture("scene/roster", "count", () =>
+            {
+                var all = UnityEngine.Object.FindObjectsByType<ParticipantState>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+                if (all.Length != ParticipantSlots.Length) throw new InvalidOperationException("MovementLab must contain exactly six ParticipantState components.");
+            });
+
+            var participantLayer = LayerMask.NameToLayer(MovementLabContract.ParticipantsLayerName);
+            var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
+            var hiddenLayer = LayerMask.NameToLayer(MovementLabContract.LocalPlayerHiddenLayerName);
+            accumulator.Capture("scene/layers", "names", () =>
+            {
+                if (participantLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
+                    throw new InvalidOperationException("Participants, Projectiles, and LocalPlayerHidden layers are required.");
+                if (Physics.GetIgnoreLayerCollision(participantLayer, participantLayer) || Physics.GetIgnoreLayerCollision(participantLayer, projectilesLayer) || Physics.GetIgnoreLayerCollision(projectilesLayer, projectilesLayer))
+                    throw new InvalidOperationException("Participants/Projectiles collision matrix must remain enabled.");
+            });
+
+            var localCameraCount = 0;
+            var localAudioCount = 0;
+            for (var i = 0; i < context.Participants.Length; i++)
+            {
+                var participant = context.Participants[i];
+                var expected = ParticipantSlots[i];
+                if (participant == null) continue;
+                accumulator.Capture("scene/roster", "identity:" + expected.SlotId, () =>
+                {
+                    if (participant.SlotId != expected.SlotId || participant.DisplayName != expected.DisplayName || participant.Team != expected.Team || participant.IsLocalParticipant != expected.IsLocal)
+                        throw new InvalidOperationException("Participant slot identity mismatch: " + expected.SlotId);
+                    if (Vector3.Distance(participant.transform.position, expected.Position) > 0.01f || Vector3.Dot(participant.transform.forward, expected.Rotation * Vector3.forward) < 0.999f)
+                        throw new InvalidOperationException("Participant authored transform mismatch: " + expected.DisplayName);
+                    if (participantLayer < 0 || participant.gameObject.layer != participantLayer)
+                        throw new InvalidOperationException("Participant root must use Participants layer: " + expected.DisplayName);
+                    var source = PrefabUtility.GetCorrespondingObjectFromSource(participant.gameObject);
+                    if (source == null || AssetDatabase.GetAssetPath(source) != PrefabPath)
+                        throw new InvalidOperationException("Participant scene instance prefab provenance mismatch: " + expected.DisplayName);
+                });
+                accumulator.Capture("scene/roster", "refs:" + expected.SlotId, () =>
+                {
+                    ValidateReference(participant, "motor", participant.Motor, expected.DisplayName + ".motor");
+                    ValidateReference(participant, "characterController", participant.CharacterController, expected.DisplayName + ".characterController");
+                    ValidateReference(participant, "presentation", participant.Presentation, expected.DisplayName + ".presentation");
+                    ValidateReference(participant, "cameraFeedback", participant.CameraFeedback, expected.DisplayName + ".cameraFeedback");
+                    ValidateReference(participant.Launcher, "ownerParticipant", participant, expected.DisplayName + ".launcher.ownerParticipant");
+                    ValidateReference(participant.CameraFeedback, "participant", participant, expected.DisplayName + ".cameraFeedback.participant");
+                    ValidateReference(participant.Presentation, "participant", participant, expected.DisplayName + ".presentation.participant");
+                });
+                CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", 100f);
+                CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", 5f);
+                CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", 2f);
+                var camera = participant.GetComponentInChildren<Camera>(true);
+                var listener = participant.GetComponentInChildren<AudioListener>(true);
+                if (camera != null && camera.enabled) localCameraCount++;
+                if (listener != null && listener.enabled) localAudioCount++;
+                accumulator.Capture("scene/roster", "local-mode:" + expected.SlotId, () =>
+                {
+                    if (camera == null || listener == null || participant.Input == null || participant.Look == null || participant.CameraFeedback == null)
+                        throw new InvalidOperationException("Participant local-control references missing: " + expected.DisplayName);
+                    if (camera.enabled != expected.IsLocal || listener.enabled != expected.IsLocal || participant.Input.enabled != expected.IsLocal || participant.Look.enabled != expected.IsLocal || participant.CameraFeedback.enabled != expected.IsLocal)
+                        throw new InvalidOperationException("Participant local-control mode mismatch: " + expected.DisplayName);
+                    var viewmodels = participant.transform.Find("Head/Camera/Viewmodels");
+                    var crosshair = participant.transform.Find("Head/Camera/CrosshairCanvas");
+                    if (viewmodels == null || crosshair == null || viewmodels.gameObject.activeSelf != expected.IsLocal || crosshair.gameObject.activeSelf != expected.IsLocal)
+                        throw new InvalidOperationException("Participant FPS-only presentation mode mismatch: " + expected.DisplayName);
+                    var worldVisual = participant.transform.Find("WorldVisual");
+                    if (worldVisual == null) throw new InvalidOperationException("Participant WorldVisual missing: " + expected.DisplayName);
+                    var worldLayers = worldVisual.GetComponentsInChildren<Transform>(true);
+                    for (var layerIndex = 0; layerIndex < worldLayers.Length; layerIndex++)
+                    {
+                        var expectedLayer = expected.IsLocal ? hiddenLayer : 0;
+                        if (worldLayers[layerIndex].gameObject.layer != expectedLayer) throw new InvalidOperationException("Participant WorldVisual layer mismatch: " + expected.DisplayName);
+                    }
+                });
+            }
+            accumulator.Capture("scene/roster", "local-camera-count", () => { if (localCameraCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay Camera is required."); });
+            accumulator.Capture("scene/roster", "local-audio-count", () => { if (localAudioCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay AudioListener is required."); });
+
+            if (context.SpawnSet != null)
+            {
+                CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
+            }
+        }
+
+        private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
+        {
+            var spawnSet = context.SpawnSet;
+            accumulator.Capture("scene/spawn-set", "arrays", () =>
+            {
+                if (spawnSet.BlueCandidates == null || spawnSet.BlueCandidates.Count != 3 || spawnSet.RedCandidates == null || spawnSet.RedCandidates.Count != 3)
+                    throw new InvalidOperationException("ParticipantSpawnSet requires three Blue and three Red candidates.");
+                for (var i = 0; i < 3; i++)
+                {
+                    if (spawnSet.BlueCandidates[i] == null || spawnSet.RedCandidates[i] == null) throw new InvalidOperationException("ParticipantSpawnSet candidate is null.");
+                    if (Vector3.Distance(spawnSet.BlueCandidates[i].position, ParticipantSlots[i].Position) > 0.01f || Vector3.Distance(spawnSet.RedCandidates[i].position, ParticipantSlots[i + 3].Position) > 0.01f)
+                        throw new InvalidOperationException("ParticipantSpawnSet candidate transform mismatch.");
+                    var blueCue = spawnSet.BlueCandidates[i].Find("BlueCircleCue");
+                    var redCue = spawnSet.RedCandidates[i].Find("RedTriangleCue");
+                    if (blueCue == null || redCue == null || blueCue.GetComponent<MeshFilter>()?.sharedMesh == null || redCue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(blueCue.GetComponent<MeshFilter>().sharedMesh) != BlueCircleCueMeshPath || AssetDatabase.GetAssetPath(redCue.GetComponent<MeshFilter>().sharedMesh) != RedTriangleCueMeshPath)
+                        throw new InvalidOperationException("ParticipantSpawnSet shape cue missing.");
+                }
+                if (spawnSet.BlueEnemyGoal == null || spawnSet.RedEnemyGoal == null || spawnSet.BlueEnemyGoal.name != "NorthGoal" || spawnSet.RedEnemyGoal.name != "SouthGoal")
+                    throw new InvalidOperationException("ParticipantSpawnSet enemy-goal mapping mismatch.");
+                var expectedMask = ~(1 << participantLayer | 1 << projectilesLayer);
+                if (spawnSet.VisibilityMask.value != expectedMask) throw new InvalidOperationException("ParticipantSpawnSet visibility mask must exclude Participants and Projectiles.");
+            });
+            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", 2f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", 1f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", 0.5f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", 1f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "noVisibleEnemyBonus", spawnSet, "noVisibleEnemyBonus", 4f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "visibleEnemyCountPenalty", spawnSet, "visibleEnemyCountPenalty", 2f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedFallbackPenalty", spawnSet, "occupiedFallbackPenalty", 8f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", 30f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", 30f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", 30f);
         }
 
         private static void ValidateImportedVisualAndAnimatorContracts(ValidationContext context,
@@ -582,6 +728,14 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.worldAnimator", context.Presentation, "worldAnimator", context.WorldAnimator);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.fpsKickAnimator", context.Presentation, "fpsKickAnimator", context.FpsAnimator);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.weaponVisual", context.Presentation, "weaponVisual", context.WeaponVisual);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.gameplayCamera", context.Presentation, "gameplayCamera", context.Camera);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.audioListener", context.Presentation, "audioListener", context.Camera != null ? context.Camera.GetComponent<AudioListener>() : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.participant", context.Presentation, "participant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.blueTeamCue", context.Presentation, "blueTeamCue", context.Player != null ? context.Player.transform.Find("BlueCircleCue")?.gameObject : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.redTeamCue", context.Presentation, "redTeamCue", context.Player != null ? context.Player.transform.Find("RedTriangleCue")?.gameObject : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.immunityShield", context.Presentation, "immunityShield", context.Player != null ? context.Player.transform.Find("ImmunityShield")?.gameObject : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.blueImmunityShield", context.Presentation, "blueImmunityShield", context.Player != null ? context.Player.transform.Find("ImmunityShield/BlueImmunityShield")?.gameObject : null);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.redImmunityShield", context.Presentation, "redImmunityShield", context.Player != null ? context.Player.transform.Find("ImmunityShield/RedImmunityShield")?.gameObject : null);
             }
             if (context.WorldAnimator != null)
             {
@@ -656,6 +810,7 @@ namespace RocketFooxball.Editor
             accumulator.Capture("importer", "texture-contracts", () => MovementLabImportPipeline.ValidateTextureImporterContracts());
             accumulator.Capture("importer", "animator-contracts", () => MovementLabAnimatorPipeline.Validate());
             accumulator.Capture("material", "opaque-references", () => MovementLabMaterialPipeline.ValidateOpaqueMaterialReferences());
+            accumulator.Capture("material", "team-references", ValidateTeamMaterialContracts);
             if (context?.SceneReady == true)
                 accumulator.Capture("render", "pipeline-settings", () => MovementLabSceneComposer.ValidateRenderPipelineSettings());
         }
@@ -688,6 +843,40 @@ namespace RocketFooxball.Editor
             UnityEngine.Object target, string property, UnityEngine.Object expected)
         {
             accumulator.Capture(scope, check, () => ValidateReference(target, property, expected, check));
+        }
+
+        private static void ValidateTeamMaterialContracts()
+        {
+            var blue = AssetDatabase.LoadAssetAtPath<Material>(TeamBlueMaterialPath);
+            var red = AssetDatabase.LoadAssetAtPath<Material>(TeamRedMaterialPath);
+            var blueShield = AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath);
+            var redShield = AssetDatabase.LoadAssetAtPath<Material>(TeamRedShieldMaterialPath);
+            var blueTrail = AssetDatabase.LoadAssetAtPath<Material>(TeamBlueTrailMaterialPath);
+            var redTrail = AssetDatabase.LoadAssetAtPath<Material>(TeamRedTrailMaterialPath);
+            if (blue == null || red == null || blue.shader == null || red.shader == null || blue.shader.name != LitShaderName || red.shader.name != LitShaderName)
+                throw new InvalidOperationException("Team avatar materials must use URP Lit.");
+            if (blueShield == null || redShield == null || blueShield.shader == null || redShield.shader == null || blueShield.shader.name != "RocketFooxball/RetroShield" || redShield.shader.name != "RocketFooxball/RetroShield")
+                throw new InvalidOperationException("Team immunity shield materials must use RetroShield.");
+            if (blueTrail == null || redTrail == null || blueTrail.shader == null || redTrail.shader == null || blueTrail.shader.name != "RocketFooxball/RetroParticle" || redTrail.shader.name != "RocketFooxball/RetroParticle")
+                throw new InvalidOperationException("Team trail materials must use RetroParticle.");
+        }
+
+        private static void CaptureObjectArray(MovementLabValidationAccumulator accumulator, string scope, string check,
+            UnityEngine.Object target, string property, UnityEngine.Object[] expected)
+        {
+            accumulator.Capture(scope, check, () =>
+            {
+                var serialized = new SerializedObject(target);
+                var array = serialized.FindProperty(property);
+                if (array == null || !array.isArray || array.arraySize != (expected == null ? 0 : expected.Length))
+                    throw new InvalidOperationException(check + " array size mismatch.");
+                for (var i = 0; expected != null && i < expected.Length; i++)
+                {
+                    var actual = array.GetArrayElementAtIndex(i).objectReferenceValue;
+                    if (actual != expected[i]) throw new InvalidOperationException(check + " array reference mismatch at " + i + ".");
+                    ValidatePersistentIdentity(actual, check + "[" + i + "]");
+                }
+            });
         }
 
         private static void CaptureSerialized(MovementLabValidationAccumulator accumulator, string scope, string check,

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using RocketFooxball.Runtime.Participants;
 using UnityEngine;
 
 namespace RocketFooxball.Editor
@@ -26,6 +27,51 @@ namespace RocketFooxball.Editor
         internal const string ExplosionPrefabPath = MovementLabContract.ExplosionPrefabPath;
         internal const string WorldControllerPath = AnimationsPath + "/WorldCharacter.controller";
         internal const string FpsControllerPath = AnimationsPath + "/FpsKick.controller";
+        internal const string TeamBlueMaterialPath = MaterialsPath + "/TeamBlue.mat";
+        internal const string TeamRedMaterialPath = MaterialsPath + "/TeamRed.mat";
+        internal const string TeamBlueShieldMaterialPath = MaterialsPath + "/TeamBlueShield.mat";
+        internal const string TeamRedShieldMaterialPath = MaterialsPath + "/TeamRedShield.mat";
+        internal const string TeamBlueTrailMaterialPath = MaterialsPath + "/TeamBlueTrail.mat";
+        internal const string TeamRedTrailMaterialPath = MaterialsPath + "/TeamRedTrail.mat";
+        internal const string BlueCircleCueMeshPath = MovementLabContract.BlueCircleCueMeshPath;
+        internal const string RedTriangleCueMeshPath = MovementLabContract.RedTriangleCueMeshPath;
+
+        internal readonly struct ParticipantSlotDefinition
+        {
+            internal readonly int SlotId;
+            internal readonly string DisplayName;
+            internal readonly ParticipantTeam Team;
+            internal readonly bool IsLocal;
+            internal readonly Vector3 Position;
+            internal readonly Quaternion Rotation;
+
+            internal ParticipantSlotDefinition(int slotId, string displayName, ParticipantTeam team, bool isLocal,
+                Vector3 position, Quaternion rotation)
+            {
+                SlotId = slotId;
+                DisplayName = displayName;
+                Team = team;
+                IsLocal = isLocal;
+                Position = position;
+                Rotation = rotation;
+            }
+        }
+
+        // Stable six-slot composition. Blue owns positive-X/South goal; Red owns negative-X/North goal.
+        internal static readonly ParticipantSlotDefinition[] ParticipantSlots =
+        {
+            Slot(0, "Player", ParticipantTeam.Blue, true, new Vector3(12f, 0f, 0f), Vector3.left),
+            Slot(1, "Bolt", ParticipantTeam.Blue, false, new Vector3(12f, 0f, -10f), Vector3.left),
+            Slot(2, "Echo", ParticipantTeam.Blue, false, new Vector3(12f, 0f, 10f), Vector3.left),
+            Slot(3, "Rook", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 0f), Vector3.right),
+            Slot(4, "Nova", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 10f), Vector3.right),
+            Slot(5, "Vex", ParticipantTeam.Red, false, new Vector3(-12f, 0f, -10f), Vector3.right)
+        };
+
+        private static ParticipantSlotDefinition Slot(int id, string name, ParticipantTeam team, bool local, Vector3 position, Vector3 forward)
+        {
+            return new ParticipantSlotDefinition(id, name, team, local, position, Quaternion.LookRotation(forward, Vector3.up));
+        }
 
         internal const string GrassTexturePath = TexturesPath + "/RetroGrass.png";
         internal const string GrassNormalTexturePath = TexturesPath + "/RetroGrass_Normal.png";
@@ -142,7 +188,10 @@ namespace RocketFooxball.Editor
             ExplosionSparksMaterialPath, MaterialsPath + "/Smoke.mat", GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath,
             SkyMaterialPath, VolumeProfilePath, LightingSettingsPath, MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat", MaterialsPath + "/WeaponDark.mat",
-            MaterialsPath + "/WeaponAccent.mat", WorldControllerPath, FpsControllerPath, ExplosionPrefabPath
+            MaterialsPath + "/WeaponAccent.mat", TeamBlueMaterialPath, TeamRedMaterialPath,
+            TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath, TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath,
+            BlueCircleCueMeshPath, RedTriangleCueMeshPath,
+            WorldControllerPath, FpsControllerPath, ExplosionPrefabPath
         };
 
         internal static readonly string[] GeneratedBakedLightingPaths =
@@ -181,10 +230,11 @@ namespace RocketFooxball.Editor
         internal static readonly Color SunColor = new Color(1.0f, 0.8392157f, 0.6392157f, 1f);
         internal static readonly (string name, Vector3 position, Color color)[] AccentLightContract =
         {
-            ("GoalAccent_WestBlue_North", new Vector3(-58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_WestBlue_South", new Vector3(-58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_EastRed_North", new Vector3(58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_EastRed_South", new Vector3(58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f))
+            // Red owns negative-X/North; Blue owns positive-X/South.
+            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f))
         };
         internal static readonly (string name, Vector3 center, Vector3 size)[] ReflectionProbeContract =
         {
@@ -244,10 +294,10 @@ namespace RocketFooxball.Editor
             {
                 AddGeneratedFingerprintPath(paths, seen, GeneratedImporterMetadataPaths[i]);
             }
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/EditorBuildSettings.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/DynamicsManager.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TimeManager.asset");
-            AddGeneratedFingerprintPath(paths, seen, "ProjectSettings/TagManager.asset");
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.EditorBuildSettingsPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.DynamicsManagerPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TimeManagerPath);
+            AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TagManagerPath);
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath);
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath + ".meta");
             AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath);

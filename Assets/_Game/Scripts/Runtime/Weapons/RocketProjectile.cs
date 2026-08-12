@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Weapons
 {
@@ -23,6 +24,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private Collider projectileCollider;
         [SerializeField] private ExplosionResolver explosionResolver;
         [SerializeField] private RocketTrailVfx trailVfx;
+        [SerializeField] private ParticipantState ownerParticipant;
 
         private Transform ownerRoot;
         private RocketLauncher launcher;
@@ -31,10 +33,12 @@ namespace RocketFooxball.Runtime.Weapons
         private ProjectileState state;
         private bool simulationEnabled = true;
         private bool unregistered;
+        private readonly RaycastHit[] raycastBuffer = new RaycastHit[64];
 
         public Rigidbody Body => body;
         public Collider ProjectileCollider => projectileCollider;
         public Transform OwnerRoot => ownerRoot;
+        public ParticipantState OwnerParticipant => ownerParticipant;
         public Vector3 Velocity => flightDirection * speed;
         public float Speed => speed;
         public bool IsDetonated => state == ProjectileState.Detonated;
@@ -62,13 +66,10 @@ namespace RocketFooxball.Runtime.Weapons
             }
 
             var distance = speed * deltaTime;
-            if (distance > 0f && UnityEngine.Physics.Raycast(body.position, flightDirection, out var hit, distance + ColliderRadius(), ~0, QueryTriggerInteraction.Ignore))
+            if (distance > 0f && TryGetNearestValidHit(body.position, flightDirection, distance + ColliderRadius(), out var hit))
             {
-                if (!ShouldIgnore(hit.collider))
-                {
-                    TryDetonate(hit.collider, hit.point, true);
-                    return;
-                }
+                TryDetonate(hit.collider, hit.point, true);
+                return;
             }
 
             body.MovePosition(body.position + flightDirection * distance);
@@ -97,10 +98,11 @@ namespace RocketFooxball.Runtime.Weapons
         }
 
         /// <summary>Initializes owner collision filters, world direction, and explosion callback.</summary>
-        public void Initialize(Transform owner, RocketLauncher sourceLauncher, ExplosionResolver resolver, Vector3 direction)
+        public void Initialize(ParticipantState owner, Transform ownerTransform, RocketLauncher sourceLauncher, ExplosionResolver resolver, Vector3 direction)
         {
             CacheReferences();
-            ownerRoot = owner;
+            ownerParticipant = owner;
+            ownerRoot = ownerTransform != null ? ownerTransform : owner != null ? owner.transform : null;
             launcher = sourceLauncher;
             explosionResolver = resolver != null ? resolver : explosionResolver;
             flightDirection = direction.sqrMagnitude > 0.000001f ? direction.normalized : transform.forward;
@@ -110,6 +112,13 @@ namespace RocketFooxball.Runtime.Weapons
             unregistered = false;
             ConfigureBody();
             IgnoreOwnerCollisions();
+            trailVfx?.ConfigureTeam(ownerParticipant != null ? ownerParticipant.Team : ParticipantTeam.Blue);
+        }
+
+        /// <summary>Compatibility initializer for callers that only have owner transform.</summary>
+        public void Initialize(Transform owner, RocketLauncher sourceLauncher, ExplosionResolver resolver, Vector3 direction)
+        {
+            Initialize(owner != null ? owner.GetComponent<ParticipantState>() : null, owner, sourceLauncher, resolver, direction);
         }
 
         /// <summary>Registers a collision pair that must not detonate this rocket.</summary>
@@ -224,7 +233,35 @@ namespace RocketFooxball.Runtime.Weapons
             {
                 return true;
             }
-            return other.GetComponentInParent<RocketProjectile>() != null;
+            if (other.GetComponentInParent<RocketProjectile>() != null)
+            {
+                return true;
+            }
+
+            var participant = other.GetComponentInParent<ParticipantState>();
+            return participant != null && (!participant.IsAlive || participant.IsImmune);
+        }
+
+        private bool TryGetNearestValidHit(Vector3 origin, Vector3 direction, float distance, out RaycastHit nearest)
+        {
+            nearest = default;
+            var hitCount = UnityEngine.Physics.RaycastNonAlloc(origin, direction, raycastBuffer, distance, ~0, QueryTriggerInteraction.Ignore);
+            var found = false;
+            var nearestDistance = float.PositiveInfinity;
+            for (var i = 0; i < hitCount; i++)
+            {
+                var candidate = raycastBuffer[i];
+                if (candidate.collider == null || ShouldIgnore(candidate.collider) || candidate.distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearest = candidate;
+                nearestDistance = candidate.distance;
+                found = true;
+            }
+
+            return found;
         }
 
         private float ColliderRadius()

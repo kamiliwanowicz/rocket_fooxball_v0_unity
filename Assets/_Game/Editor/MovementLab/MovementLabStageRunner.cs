@@ -73,9 +73,14 @@ namespace RocketFooxball.Editor
             var initial = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
             var stages = MovementLabStageGraph.NonLightingGenerationOrder;
             var current = initial;
+            // Legacy manifests stay resumable until every initial non-lighting
+            // stage has persisted and reloaded its outputs. Upgrade manifest
+            // schema only after that uninterrupted pass completes.
+            var deferManifestMigrationUntilPassCompletes = initial.ManifestReadStatus != MovementLabManifestReadStatus.Current;
             var sawWork = false;
             var visitedStates = new HashSet<string>(StringComparer.Ordinal);
             var maxIterations = Math.Max(4, stages.Length * 4);
+            MovementLabManifestStore.EnsureWriteAuthorization();
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
                 var stale = stages.Where(current.IsStale).ToArray();
@@ -90,7 +95,6 @@ namespace RocketFooxball.Editor
                 }
 
                 var executedThisPass = false;
-                MovementLabManifestStore.EnsureWriteAuthorization();
                 for (var i = 0; i < stages.Length; i++)
                 {
                     var stage = stages[i];
@@ -100,16 +104,21 @@ namespace RocketFooxball.Editor
                         ExecuteStage(stage);
                     }
                     PersistAndReload(stage);
+
+                    if (deferManifestMigrationUntilPassCompletes)
+                    {
+                        executedThisPass = true;
+                        sawWork = true;
+                        continue;
+                    }
+
                     var merged = MovementLabStageGraph.MergeStageRecord(stage);
-                    // Intermediate merges preserve atomic recovery state; the
-                    // externally returned/probed state is written only after
-                    // the closure below proves no non-lighting stage remains.
+                    // Current manifests retain atomic recovery after each
+                    // stage; migration writes one complete live snapshot below.
                     MovementLabManifestStore.WriteAtomic(merged);
                     AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
 
-                    // Recompute immediately after every write. This closes
-                    // newly-stale downstream stages in topological order and
-                    // prevents returning a probe based only on the initial DAG.
+                    // Recompute immediately after every current-schema write.
                     current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
                     executedThisPass = true;
                     sawWork = true;
@@ -119,6 +128,15 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("MovementLab non-lighting stage closure made no progress; stale stages remain: " +
                         string.Join(",", stale.Select(stage => stage.ToString()).ToArray()));
+                }
+
+                if (deferManifestMigrationUntilPassCompletes)
+                {
+                    var migrationState = MovementLabStageGraph.MergeStageRecord(stages[stages.Length - 1]);
+                    MovementLabManifestStore.WriteAtomic(migrationState);
+                    AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
+                    current = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
+                    deferManifestMigrationUntilPassCompletes = false;
                 }
             }
 
