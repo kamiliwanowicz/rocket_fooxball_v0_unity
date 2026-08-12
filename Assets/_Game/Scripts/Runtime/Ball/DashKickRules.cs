@@ -42,7 +42,7 @@ namespace RocketFooxball.Runtime.Ball
             return Vector3.Dot(candidate - origin, direction.normalized) > 0f;
         }
 
-        public static bool IsBetterContactCandidate(float candidateDistance, int candidateInstanceId, float bestDistance, int bestInstanceId)
+        public static bool IsBetterContactCandidate(float candidateDistance, EntityId candidateEntityId, float bestDistance, EntityId bestEntityId)
         {
             if (candidateDistance < bestDistance - Epsilon)
             {
@@ -50,7 +50,7 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             return Mathf.Abs(candidateDistance - bestDistance) <= Epsilon &&
-                   (bestInstanceId == 0 || candidateInstanceId < bestInstanceId);
+                   (!bestEntityId.IsValid() || candidateEntityId.CompareTo(bestEntityId) < 0);
         }
 
         private static bool IsFinite(Vector3 value)

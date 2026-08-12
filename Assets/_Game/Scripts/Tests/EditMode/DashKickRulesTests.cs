@@ -94,9 +94,9 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(DashKickRules.IsContactActive(0.10f, 0.10f), Is.True);
             Assert.That(DashKickRules.IsForward(Vector3.zero, Vector3.forward, Vector3.forward), Is.True);
             Assert.That(DashKickRules.IsForward(Vector3.zero, Vector3.forward, Vector3.back), Is.False);
-            Assert.That(DashKickRules.IsBetterContactCandidate(1f, 20, 2f, 10), Is.True);
-            Assert.That(DashKickRules.IsBetterContactCandidate(2f, 5, 2f, 10), Is.True);
-            Assert.That(DashKickRules.IsBetterContactCandidate(2f, 15, 2f, 10), Is.False);
+            Assert.That(DashKickRules.IsBetterContactCandidate(1f, EntityId.FromULong(20UL), 2f, EntityId.FromULong(10UL)), Is.True);
+            Assert.That(DashKickRules.IsBetterContactCandidate(2f, EntityId.FromULong(5UL), 2f, EntityId.FromULong(10UL)), Is.True);
+            Assert.That(DashKickRules.IsBetterContactCandidate(2f, EntityId.FromULong(15UL), 2f, EntityId.FromULong(10UL)), Is.False);
             Assert.That(DashKickRules.ShouldProcessContact(false), Is.True);
             Assert.That(DashKickRules.ShouldProcessContact(true), Is.False);
         }

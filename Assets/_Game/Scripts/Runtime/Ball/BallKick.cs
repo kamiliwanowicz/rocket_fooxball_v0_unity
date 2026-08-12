@@ -142,7 +142,7 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             var center = controller.transform.TransformPoint(controller.center);
-            var count = Physics.OverlapCapsuleNonAlloc(
+            var count = UnityEngine.Physics.OverlapCapsuleNonAlloc(
                 center,
                 center + dashDirection * dashContactReach,
                 controller.radius + dashContactRadiusPadding,
@@ -153,7 +153,7 @@ namespace RocketFooxball.Runtime.Ball
             BallMotor contactedBall = null;
             ParticipantState nearestParticipant = null;
             var nearestDistance = float.PositiveInfinity;
-            var nearestInstanceId = 0;
+            var nearestEntityId = EntityId.None;
 
             for (var i = 0; i < count; i++)
             {
@@ -177,12 +177,12 @@ namespace RocketFooxball.Runtime.Ball
                 }
 
                 var distance = Vector3.Distance(center, participant.transform.position);
-                var instanceId = participant.GetInstanceID();
-                if (nearestParticipant == null || DashKickRules.IsBetterContactCandidate(distance, instanceId, nearestDistance, nearestInstanceId))
+                var entityId = participant.GetEntityId();
+                if (nearestParticipant == null || DashKickRules.IsBetterContactCandidate(distance, entityId, nearestDistance, nearestEntityId))
                 {
                     nearestParticipant = participant;
                     nearestDistance = distance;
-                    nearestInstanceId = instanceId;
+                    nearestEntityId = entityId;
                 }
             }
 
