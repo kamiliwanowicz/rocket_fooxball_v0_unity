@@ -470,6 +470,8 @@ namespace RocketFooxball.Editor
             MovementLabValidationAccumulator accumulator)
         {
             if (context == null || !context.SceneReady) return;
+            accumulator.Capture("input", "dash-kick-binding", ValidateDashKickInputAsset);
+            accumulator.Capture("gameplay/contract", "dash-public-surface", ValidateDashPublicSurface);
             if (context.BallMotor != null)
             {
                 accumulator.Capture("gameplay/contract", "BallMotor.touch-roster", ValidateBallTouchRosterContract);
@@ -488,6 +490,9 @@ namespace RocketFooxball.Editor
                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.explosionResolver", participant.Launcher, "explosionResolver", context.Resolver);
                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.projectilePrefab", participant.Launcher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath));
                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Kick.ball", participant.Kick, "ball", context.BallMotor);
+                    CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Kick.ownerParticipant", participant.Kick, "ownerParticipant", participant);
+                    CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Presentation.cameraFeedback", participant.Presentation, "cameraFeedback", participant.CameraFeedback);
+                    CaptureDashTuning(accumulator, participant, participantIndex);
                 }
             }
             if (context.GoalShieldSet != null && context.NorthShield != null && context.SouthShield != null)
@@ -533,6 +538,7 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "BallKick.look", context.Kick, "look", context.Look);
                 CaptureReference(accumulator, "gameplay/wiring", "BallKick.aimCamera", context.Kick, "aimCamera", context.Camera);
                 CaptureReference(accumulator, "gameplay/wiring", "BallKick.ball", context.Kick, "ball", context.BallMotor);
+                CaptureReference(accumulator, "gameplay/wiring", "BallKick.ownerParticipant", context.Kick, "ownerParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
             }
             if (context.Resolver != null)
             {
@@ -601,6 +607,90 @@ namespace RocketFooxball.Editor
             var touchProperty = ballType.GetProperty(nameof(BallMotor.LastTouchParticipant), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
             if (rosterProperty == null || !rosterProperty.CanRead || touchProperty == null || !touchProperty.CanRead)
                 throw new InvalidOperationException("BallMotor must expose participant roster and last-touch read references.");
+        }
+
+        private static void ValidateDashKickInputAsset()
+        {
+            var actions = AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath);
+            if (actions == null) throw new InvalidOperationException("Dash-kick input asset is missing: " + InputActionsPath);
+            var map = actions.FindActionMap("Player", false);
+            var action = map != null ? map.FindAction("Kick", false) : null;
+            if (action == null) throw new InvalidOperationException("Player/Kick input action is missing.");
+
+            const string keyboardBindingId = "e7a4b39f-0bf4-49a6-85be-d871f11eb875";
+            const string gamepadBindingId = "31f91925-cf1d-4aa2-b3ca-c7200dd7781c";
+            var keyboardPathCount = 0;
+            var gamepadPathCount = 0;
+            var keyboardBindingCount = 0;
+            var gamepadBindingCount = 0;
+            for (var i = 0; i < action.bindings.Count; i++)
+            {
+                var binding = action.bindings[i];
+                if (string.Equals(binding.path, "<Mouse>/rightButton", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Player/Kick must not retain the RMB binding.");
+                if (string.Equals(binding.path, "<Keyboard>/f", StringComparison.Ordinal)) keyboardPathCount++;
+                if (string.Equals(binding.path, "<Gamepad>/buttonWest", StringComparison.Ordinal)) gamepadPathCount++;
+                if (string.Equals(binding.id, keyboardBindingId, StringComparison.Ordinal))
+                {
+                    keyboardBindingCount++;
+                    if (binding.path != "<Keyboard>/f" || binding.groups != ";Keyboard&Mouse" || binding.action != "Kick")
+                        throw new InvalidOperationException("Player/Kick keyboard binding contract changed.");
+                }
+                if (string.Equals(binding.id, gamepadBindingId, StringComparison.Ordinal))
+                {
+                    gamepadBindingCount++;
+                    if (binding.path != "<Gamepad>/buttonWest" || binding.groups != ";Gamepad" || binding.action != "Kick")
+                        throw new InvalidOperationException("Player/Kick gamepad binding contract changed.");
+                }
+            }
+            if (keyboardPathCount != 1 || keyboardBindingCount != 1)
+                throw new InvalidOperationException("Player/Kick must contain exactly one preserved Keyboard F binding.");
+            if (gamepadPathCount != 1 || gamepadBindingCount != 1)
+                throw new InvalidOperationException("Player/Kick must contain exactly one preserved Gamepad west binding.");
+        }
+
+        private static void ValidateDashPublicSurface()
+        {
+            const System.Reflection.BindingFlags publicInstance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
+            var motorType = typeof(PlayerMotor);
+            var requiredProperties = new[]
+            {
+                nameof(PlayerMotor.IsDashing), nameof(PlayerMotor.DashRemaining), nameof(PlayerMotor.DashElapsed),
+                nameof(PlayerMotor.DashDirection), nameof(PlayerMotor.AirDashAvailable)
+            };
+            for (var i = 0; i < requiredProperties.Length; i++)
+            {
+                var property = motorType.GetProperty(requiredProperties[i], publicInstance);
+                if (property == null || !property.CanRead) throw new InvalidOperationException("PlayerMotor dash diagnostic is missing: " + requiredProperties[i]);
+            }
+            var requiredMethods = new[] { nameof(PlayerMotor.TryStartDash), nameof(PlayerMotor.SetDashAim), nameof(PlayerMotor.EndDash) };
+            for (var i = 0; i < requiredMethods.Length; i++)
+                if (motorType.GetMethod(requiredMethods[i], publicInstance) == null) throw new InvalidOperationException("PlayerMotor dash operation is missing: " + requiredMethods[i]);
+            if (typeof(BallKick).GetEvent(nameof(BallKick.DashStarted), publicInstance) == null)
+                throw new InvalidOperationException("BallKick.DashStarted event is missing.");
+        }
+
+        private static void CaptureDashTuning(MovementLabValidationAccumulator accumulator, ParticipantState participant, int participantIndex)
+        {
+            if (participant == null || participant.Motor == null || participant.Kick == null || participant.CameraFeedback == null)
+                return;
+
+            var label = "Participant[" + participantIndex + "]";
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashBurstSpeed", participant.Motor, "dashBurstSpeed", 12f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashDuration", participant.Motor, "dashDuration", 0.33f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSteerRateDegrees", participant.Motor, "dashSteerRateDegrees", 180f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSpeedCap", participant.Motor, "dashSpeedCap", 30f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactStartDelay", participant.Kick, "dashContactStartDelay", 0.10f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactReach", participant.Kick, "dashContactReach", 2f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactRadiusPadding", participant.Kick, "dashContactRadiusPadding", 0.35f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.cooldown", participant.Kick, "cooldown", 3f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.speedFraction", participant.Kick, "speedFraction", 0.91f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.playerMomentumShare", participant.Kick, "playerMomentumShare", 0.20f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyContactDamage", participant.Kick, "enemyContactDamage", 20f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyShoveImpulse", participant.Kick, "enemyShoveImpulse", 6f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyDashRetention", participant.Kick, "enemyDashRetention", 0.20f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulse", participant.CameraFeedback, "dashKickImpulse", 0.025f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", 0.12f);
         }
 
         private static void ValidateMatchPublicContract()
@@ -704,6 +794,10 @@ namespace RocketFooxball.Editor
                     ValidateReference(participant.Launcher, "ownerParticipant", participant, expected.DisplayName + ".launcher.ownerParticipant");
                     ValidateReference(participant.CameraFeedback, "participant", participant, expected.DisplayName + ".cameraFeedback.participant");
                     ValidateReference(participant.Presentation, "participant", participant, expected.DisplayName + ".presentation.participant");
+                    var participantCamera = participant.GetComponentInChildren<Camera>(true);
+                    ValidateReference(participant.Kick, "aimCamera", participantCamera, expected.DisplayName + ".kick.aimCamera");
+                    ValidateReference(participant.Presentation, "gameplayCamera", participantCamera, expected.DisplayName + ".presentation.gameplayCamera");
+                    ValidateReference(participant.CameraFeedback, "targetCamera", participantCamera, expected.DisplayName + ".cameraFeedback.targetCamera");
                 });
                 CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", 100f);
                 CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", 5f);
@@ -807,6 +901,7 @@ namespace RocketFooxball.Editor
             {
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.kick", context.Presentation, "kick", context.Kick);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.motor", context.Presentation, "motor", context.PlayerMotor);
+                CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.cameraFeedback", context.Presentation, "cameraFeedback", context.CameraFeedback);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.launcher", context.Presentation, "launcher", context.Launcher);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.worldAnimator", context.Presentation, "worldAnimator", context.WorldAnimator);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.fpsKickAnimator", context.Presentation, "fpsKickAnimator", context.FpsAnimator);
@@ -861,6 +956,9 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("visual/physics", "FpsKickVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.FpsVisual.gameObject, "FpsKickVisual"));
                 if (availableAssets != null && availableAssets.Contains(FpsControllerPath) && availableAssets.Contains(FpsKickModelPath))
                     accumulator.Capture("visual/animator", "FpsController", () => MovementLabPrefabPipeline.ValidateAnimatorController(context.FpsAnimator, FpsControllerPath, FpsKickModelPath));
+                if (availableAssets != null && availableAssets.Contains(FpsControllerPath) && availableAssets.Contains(FpsKickModelPath) &&
+                    availableAssets.Contains(WorldControllerPath) && availableAssets.Contains(CharacterModelPath))
+                    accumulator.Capture("visual/animator", "dash-kick-compatibility", MovementLabPrefabPipeline.ValidateDashAnimationCompatibility);
             }
             if (context.Camera != null)
             {

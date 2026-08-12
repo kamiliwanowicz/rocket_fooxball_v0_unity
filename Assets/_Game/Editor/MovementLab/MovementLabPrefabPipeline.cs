@@ -188,6 +188,10 @@ namespace RocketFooxball.Editor
                     // changes must not silently retune movement or ball control.
                     SetFloat(motor, "jumpVelocity", JumpVelocity);
                     SetInteger(motor, "jumpsToHardCap", 4);
+                    SetFloat(motor, "dashBurstSpeed", 12f);
+                    SetFloat(motor, "dashDuration", 0.33f);
+                    SetFloat(motor, "dashSteerRateDegrees", 180f);
+                    SetFloat(motor, "dashSpeedCap", 30f);
                     SetObjectReference(look, "input", input);
                     SetObjectReference(look, "head", head);
                     SetObjectReference(feedback, "player", motor);
@@ -205,15 +209,20 @@ namespace RocketFooxball.Editor
                     SetObjectReference(kick, "player", motor);
                     SetObjectReference(kick, "look", look);
                     SetObjectReference(kick, "aimCamera", camera);
-                    SetFloat(kick, "kickRange", 3.00f);
-                    SetFloat(kick, "contactReachPadding", 1.00f);
-                    SetFloat(kick, "coneTotalDegrees", 35f);
-                    SetFloat(kick, "cooldown", 0.40f);
-                    SetFloat(kick, "inputBuffer", 0.50f);
+                    SetObjectReference(kick, "ownerParticipant", participant);
+                    SetFloat(kick, "dashContactStartDelay", 0.10f);
+                    SetFloat(kick, "dashContactReach", 2f);
+                    SetFloat(kick, "dashContactRadiusPadding", 0.35f);
+                    SetFloat(kick, "cooldown", 3f);
                     SetFloat(kick, "speedFraction", 0.91f);
                     SetFloat(kick, "playerMomentumShare", 0.20f);
+                    SetFloat(kick, "enemyContactDamage", 20f);
+                    SetFloat(kick, "enemyShoveImpulse", 6f);
+                    SetFloat(kick, "enemyDashRetention", 0.20f);
                     SetFloat(feedback, "baseFov", 75f);
                     SetFloat(feedback, "maxFov", 84f);
+                    SetFloat(feedback, "dashKickImpulse", 0.025f);
+                    SetFloat(feedback, "dashKickImpulseDuration", 0.12f);
                     SetFloat(feedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
                     SetFloat(feedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
                     SetFloat(feedback, "celebrationLookHeight", CelebrationLookHeight);
@@ -224,6 +233,7 @@ namespace RocketFooxball.Editor
                     SetObjectReference(presentation, "launcher", launcher);
                     SetObjectReference(presentation, "worldAnimator", worldAnimator);
                     SetObjectReference(presentation, "fpsKickAnimator", fpsAnimator);
+                    SetObjectReference(presentation, "cameraFeedback", feedback);
                     SetObjectReference(presentation, "weaponVisual", weaponVisual.transform);
                     SetObjectReference(presentation, "gameplayCamera", camera);
                     SetObjectReference(presentation, "audioListener", camera.GetComponent<AudioListener>());
@@ -869,6 +879,7 @@ namespace RocketFooxball.Editor
                             var input = Require(root.GetComponent<PlayerInputReader>(), "Player prefab PlayerInputReader");
                             var prefabMotor = Require(root.GetComponent<PlayerMotor>(), "Player prefab PlayerMotor");
                             ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
+                            var prefabLook = Require(root.GetComponent<PlayerLook>(), "Player prefab PlayerLook");
                             var prefabLauncher = Require(root.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
                             var prefabKick = Require(root.GetComponent<BallKick>(), "Player prefab BallKick");
                             var prefabFeedback = Require(root.GetComponent<PlayerCameraFeedback>(), "Player prefab PlayerCameraFeedback");
@@ -877,12 +888,20 @@ namespace RocketFooxball.Editor
                             var prefabParticipant = Require(root.GetComponent<ParticipantState>(), "Player prefab ParticipantState");
                             ValidateReference(prefabLauncher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath), "Player prefab RocketLauncher.projectilePrefab");
                             ValidateReference(prefabLauncher, "spawnPoint", root.transform.Find("Head/Camera/RocketMuzzle"), "Player prefab RocketLauncher.spawnPoint");
+                            ValidateReference(prefabMotor, "input", input, "Player prefab PlayerMotor.input");
+                            ValidateReference(prefabLook, "input", input, "Player prefab PlayerLook.input");
+                            ValidateReference(prefabLook, "head", root.transform.Find("Head"), "Player prefab PlayerLook.head");
                             ValidateReference(prefabFeedback, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerCameraFeedback.targetCamera");
                             ValidateReference(prefabFeedback, "viewmodels", root.transform.Find("Head/Camera/Viewmodels").gameObject, "Player prefab PlayerCameraFeedback.viewmodels");
                             ValidateReference(prefabFeedback, "crosshairCanvas", root.transform.Find("Head/Camera/CrosshairCanvas").gameObject, "Player prefab PlayerCameraFeedback.crosshairCanvas");
                             ValidateReference(prefabQualityRuntime, "targetCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab GraphicsQualityRuntime.targetCamera");
+                            ValidateReference(prefabKick, "input", input, "Player prefab BallKick.input");
+                            ValidateReference(prefabKick, "player", prefabMotor, "Player prefab BallKick.player");
+                            ValidateReference(prefabKick, "look", prefabLook, "Player prefab BallKick.look");
                             ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
+                            ValidateReference(prefabKick, "ownerParticipant", prefabParticipant, "Player prefab BallKick.ownerParticipant");
                             ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
+                            ValidateReference(prefabPresentation, "cameraFeedback", prefabFeedback, "Player prefab PlayerPresentation.cameraFeedback");
                             ValidateReference(prefabPresentation, "participant", prefabParticipant, "Player prefab PlayerPresentation.participant");
                             ValidateReference(prefabPresentation, "gameplayCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerPresentation.gameplayCamera");
                             ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
@@ -903,11 +922,23 @@ namespace RocketFooxball.Editor
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
                             ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
                             ValidateSerializedFloat(prefabMotor, "jumpVelocity", JumpVelocity, "Player prefab PlayerMotor.jumpVelocity");
-                            ValidateSerializedFloat(prefabKick, "kickRange", 3.00f, "Player prefab BallKick.kickRange");
-                            ValidateSerializedFloat(prefabKick, "contactReachPadding", 1.00f, "Player prefab BallKick.contactReachPadding");
+                            ValidateSerializedFloat(prefabMotor, "dashBurstSpeed", 12f, "Player prefab PlayerMotor.dashBurstSpeed");
+                            ValidateSerializedFloat(prefabMotor, "dashDuration", 0.33f, "Player prefab PlayerMotor.dashDuration");
+                            ValidateSerializedFloat(prefabMotor, "dashSteerRateDegrees", 180f, "Player prefab PlayerMotor.dashSteerRateDegrees");
+                            ValidateSerializedFloat(prefabMotor, "dashSpeedCap", 30f, "Player prefab PlayerMotor.dashSpeedCap");
                             ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", 4, "Player prefab PlayerMotor.jumpsToHardCap");
-                             ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
-                             var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
+                            ValidateSerializedFloat(prefabKick, "dashContactStartDelay", 0.10f, "Player prefab BallKick.dashContactStartDelay");
+                            ValidateSerializedFloat(prefabKick, "dashContactReach", 2f, "Player prefab BallKick.dashContactReach");
+                            ValidateSerializedFloat(prefabKick, "dashContactRadiusPadding", 0.35f, "Player prefab BallKick.dashContactRadiusPadding");
+                            ValidateSerializedFloat(prefabKick, "cooldown", 3f, "Player prefab BallKick.cooldown");
+                            ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
+                            ValidateSerializedFloat(prefabKick, "playerMomentumShare", 0.20f, "Player prefab BallKick.playerMomentumShare");
+                            ValidateSerializedFloat(prefabKick, "enemyContactDamage", 20f, "Player prefab BallKick.enemyContactDamage");
+                            ValidateSerializedFloat(prefabKick, "enemyShoveImpulse", 6f, "Player prefab BallKick.enemyShoveImpulse");
+                            ValidateSerializedFloat(prefabKick, "enemyDashRetention", 0.20f, "Player prefab BallKick.enemyDashRetention");
+                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulse", 0.025f, "Player prefab PlayerCameraFeedback.dashKickImpulse");
+                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulseDuration", 0.12f, "Player prefab PlayerCameraFeedback.dashKickImpulseDuration");
+                            var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
                              ValidateCrosshair(prefabCamera);
                              var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
                              ValidateWeaponMaterials(prefabWeaponVisual.gameObject);
@@ -1126,6 +1157,89 @@ namespace RocketFooxball.Editor
                     var hasReturn = false;
                     for (var i = 0; i < kickToIdle.Length; i++) hasReturn |= kickToIdle[i].destinationState == idleState && kickToIdle[i].hasExitTime && Mathf.Abs(kickToIdle[i].exitTime - 1f) < 0.001f && kickToIdle[i].duration <= 0.03f;
                     if (!hasReturn) throw new InvalidOperationException("Animator Kick->Idle transition invalid: " + path);
+                }
+
+                internal static void ValidateDashAnimationCompatibility()
+                {
+                    var fpsImporter = AssetImporter.GetAtPath(FpsKickModelPath) as ModelImporter;
+                    var worldImporter = AssetImporter.GetAtPath(CharacterModelPath) as ModelImporter;
+                    if (fpsImporter == null || worldImporter == null)
+                        throw new InvalidOperationException("Dash animation importers are missing.");
+
+                    ModelImporterClipAnimation fpsKickSettings = null;
+                    for (var i = 0; fpsImporter.clipAnimations != null && i < fpsImporter.clipAnimations.Length; i++)
+                    {
+                        if (fpsImporter.clipAnimations[i].name == "Kick")
+                        {
+                            fpsKickSettings = fpsImporter.clipAnimations[i];
+                            break;
+                        }
+                    }
+                    if (fpsKickSettings == null || Mathf.Abs(fpsKickSettings.firstFrame - 1f) > 0.001f || Mathf.Abs(fpsKickSettings.lastFrame - 11f) > 0.001f)
+                        throw new InvalidOperationException("FPS Kick import must use frames 1..11.");
+
+                    ModelImporterClipAnimation worldKickSettings = null;
+                    for (var i = 0; worldImporter.clipAnimations != null && i < worldImporter.clipAnimations.Length; i++)
+                    {
+                        if (worldImporter.clipAnimations[i].name == "Kick")
+                        {
+                            worldKickSettings = worldImporter.clipAnimations[i];
+                            break;
+                        }
+                    }
+                    if (worldKickSettings == null || Mathf.Abs(worldKickSettings.firstFrame - 1f) > 0.001f || Mathf.Abs(worldKickSettings.lastFrame - 12f) > 0.001f)
+                        throw new InvalidOperationException("World Kick import must use distinct frames 1..12.");
+
+                    var fpsKickClip = FindImportedClip(FpsKickModelPath, "Kick");
+                    var worldKickClip = FindImportedClip(CharacterModelPath, "Kick");
+                    if (fpsKickClip == null || worldKickClip == null || fpsKickClip == worldKickClip || Mathf.Abs(fpsKickClip.frameRate - 30f) > 0.001f || Mathf.Abs(fpsKickClip.length - (1f / 3f)) > 0.01f)
+                        throw new InvalidOperationException("FPS Kick clip must be distinct, 30 FPS, and near 0.333 seconds.");
+
+                    var fpsController = AssetDatabase.LoadAssetAtPath<AnimatorController>(FpsControllerPath);
+                    if (fpsController == null || fpsController.layers.Length == 0)
+                        throw new InvalidOperationException("FPS Kick controller is missing.");
+                    var fpsStateMachine = fpsController.layers[0].stateMachine;
+                    AnimatorState fpsKickState = null;
+                    for (var i = 0; i < fpsStateMachine.states.Length; i++)
+                    {
+                        if (fpsStateMachine.states[i].state != null && fpsStateMachine.states[i].state.name == "Kick")
+                        {
+                            fpsKickState = fpsStateMachine.states[i].state;
+                            break;
+                        }
+                    }
+                    if (fpsKickState == null || fpsKickState.motion != fpsKickClip || Mathf.Abs(fpsKickState.speed - 1f) > 0.001f)
+                        throw new InvalidOperationException("FPS Kick controller must bind Kick clip at speed 1.");
+                    var hasFpsTriggerPath = false;
+                    for (var i = 0; i < fpsStateMachine.anyStateTransitions.Length; i++)
+                    {
+                        var transition = fpsStateMachine.anyStateTransitions[i];
+                        var conditions = transition.conditions;
+                        if (transition.destinationState == fpsKickState && conditions != null && conditions.Length == 1 &&
+                            conditions[0].mode == AnimatorConditionMode.If && conditions[0].parameter == "Kick")
+                        {
+                            hasFpsTriggerPath = true;
+                            break;
+                        }
+                    }
+                    if (!hasFpsTriggerPath)
+                        throw new InvalidOperationException("FPS Kick controller trigger path must be AnyState -> Kick via Kick trigger.");
+
+                    var worldController = AssetDatabase.LoadAssetAtPath<AnimatorController>(WorldControllerPath);
+                    if (worldController == null || worldController.layers.Length == 0)
+                        throw new InvalidOperationException("World character controller is missing.");
+                    var worldStateMachine = worldController.layers[0].stateMachine;
+                    AnimatorState worldKickState = null;
+                    for (var i = 0; i < worldStateMachine.states.Length; i++)
+                    {
+                        if (worldStateMachine.states[i].state != null && worldStateMachine.states[i].state.name == "Kick")
+                        {
+                            worldKickState = worldStateMachine.states[i].state;
+                            break;
+                        }
+                    }
+                    if (worldKickState == null || worldKickState.motion != worldKickClip || worldKickState.motion == fpsKickClip)
+                        throw new InvalidOperationException("World Kick controller must retain distinct imported motion.");
                 }
 
                 internal static void ValidateCrosshair(Camera camera)
