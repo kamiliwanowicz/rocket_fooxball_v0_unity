@@ -619,6 +619,8 @@ namespace RocketFooxball.Editor
 
             const string keyboardBindingId = "e7a4b39f-0bf4-49a6-85be-d871f11eb875";
             const string gamepadBindingId = "31f91925-cf1d-4aa2-b3ca-c7200dd7781c";
+            var keyboardBindingGuid = Guid.Parse(keyboardBindingId);
+            var gamepadBindingGuid = Guid.Parse(gamepadBindingId);
             var keyboardPathCount = 0;
             var gamepadPathCount = 0;
             var keyboardBindingCount = 0;
@@ -630,13 +632,13 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Player/Kick must not retain the RMB binding.");
                 if (string.Equals(binding.path, "<Keyboard>/f", StringComparison.Ordinal)) keyboardPathCount++;
                 if (string.Equals(binding.path, "<Gamepad>/buttonWest", StringComparison.Ordinal)) gamepadPathCount++;
-                if (string.Equals(binding.id, keyboardBindingId, StringComparison.Ordinal))
+                if (binding.id == keyboardBindingGuid)
                 {
                     keyboardBindingCount++;
                     if (binding.path != "<Keyboard>/f" || binding.groups != ";Keyboard&Mouse" || binding.action != "Kick")
                         throw new InvalidOperationException("Player/Kick keyboard binding contract changed.");
                 }
-                if (string.Equals(binding.id, gamepadBindingId, StringComparison.Ordinal))
+                if (binding.id == gamepadBindingGuid)
                 {
                     gamepadBindingCount++;
                     if (binding.path != "<Gamepad>/buttonWest" || binding.groups != ";Gamepad" || binding.action != "Kick")
