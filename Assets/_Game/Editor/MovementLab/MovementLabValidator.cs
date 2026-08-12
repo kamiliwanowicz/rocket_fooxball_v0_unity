@@ -14,6 +14,7 @@ using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -213,6 +214,8 @@ namespace RocketFooxball.Editor
             internal MatchController Match;
             internal MovementDebugHud Hud;
             internal MatchHud MatchHud;
+            internal GameObject HealthPickupsRoot;
+            internal HealthPickup[] HealthPickups;
             internal GoalTrigger North;
             internal GoalTrigger South;
             internal Collider NorthShield;
@@ -270,6 +273,7 @@ namespace RocketFooxball.Editor
                 SkyShaderPath, DetailNormalTexturePath, ToonShaderPath, ParticleShaderPath, AdditiveParticleShaderPath,
                 PowerGridShaderPath, ShieldShaderPath, WallTexturePath, TrimTexturePath, HazardTexturePath,
                 ShieldTexturePath, WorldControllerPath, FpsControllerPath, ExplosionPrefabPath, ScenePath, BallSurfacePath,
+                HealthPickupPrefabPath, HealthPickupMaterialPath,
                 RocketHotMaterialPath, ProjectileGlowMaterialPath, ExplosionAdditiveMaterialPath, ExplosionSparksMaterialPath,
                 GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath, SkyMaterialPath,
                 VolumeProfilePath, LightingSettingsPath, LightingManifestPath,
@@ -312,6 +316,22 @@ namespace RocketFooxball.Editor
             context.SpawnSet = CaptureRequired(accumulator, "scene/roster", "spawn-set", GameObject.Find("ParticipantSpawnSet")?.GetComponent<ParticipantSpawnSet>(), "ParticipantSpawnSet");
             context.Ball = CaptureRequired(accumulator, "scene/root", "Ball", GameObject.Find("Ball"), "Ball root");
             context.MatchObject = CaptureRequired(accumulator, "scene/root", "MatchController", GameObject.Find("MatchController"), "MatchController root");
+            var healthPickupRoots = context.Scene.GetRootGameObjects().Where(root => root != null && root.name == HealthPickupsRootName).ToArray();
+            accumulator.Capture("scene/health-pickups", "root-count", () =>
+            {
+                if (healthPickupRoots.Length != 1) throw new InvalidOperationException("MovementLab must contain exactly one HealthPickups root.");
+            });
+            context.HealthPickupsRoot = healthPickupRoots.Length == 1 ? healthPickupRoots[0] : null;
+            context.HealthPickups = UnityEngine.Object.FindObjectsByType<HealthPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            accumulator.Capture("scene/health-pickups", "component-count", () =>
+            {
+                if (context.HealthPickups.Length != HealthPickupSpawns.Length) throw new InvalidOperationException("MovementLab must contain exactly two HealthPickup components, including inactive instances.");
+            });
+            if (context.HealthPickupsRoot != null && context.Arena != null)
+                accumulator.Capture("scene/health-pickups", "root-parent", () =>
+                {
+                    if (context.HealthPickupsRoot.isStatic || context.HealthPickupsRoot.transform.IsChildOf(context.Arena.transform)) throw new InvalidOperationException("HealthPickups root must remain dynamic and outside static Arena hierarchy.");
+                });
             context.ExplosionObject = CaptureRequired(accumulator, "scene/root", "ExplosionResolver", GameObject.Find("ExplosionResolver"), "ExplosionResolver root");
             context.ShieldSetObject = CaptureRequired(accumulator, "scene/root", "GoalShieldSet", GameObject.Find("GoalShieldSet"), "GoalShieldSet root");
             context.HudObject = CaptureRequired(accumulator, "scene/root", "DebugHUD", GameObject.Find("DebugHUD"), "DebugHUD root");
@@ -625,6 +645,121 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("gameplay/contract", "MatchHUD.serialized-surface", ValidateMatchHudSerializedSurface);
                 accumulator.Capture("gameplay/contract", "MatchHUD.screen-policy", ValidateMatchHudScreenPolicy);
             }
+            accumulator.Capture("gameplay/contract", "health-pickup-runtime-surface", ValidateHealthPickupRuntimeSurface);
+            ValidateHealthPickupSceneContracts(context, accumulator);
+        }
+
+        private static void ValidateHealthPickupRuntimeSurface()
+        {
+            var restore = typeof(ParticipantState).GetMethod("TryRestoreHealth", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+                null, new[] { typeof(float) }, null);
+            var readModel = typeof(ParticipantState).GetProperty("ReadModel", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            if (restore == null || restore.ReturnType != typeof(bool) || readModel == null || readModel.PropertyType != typeof(ParticipantReadModel) || !readModel.CanRead)
+                throw new InvalidOperationException("Participant health restore/read-model surface is missing or changed.");
+
+            var resetEvent = typeof(MatchController).GetEvent("CoordinatedResetRequested", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
+            if (resetEvent == null || resetEvent.EventHandlerType != typeof(Action<MatchResetReason>))
+                throw new InvalidOperationException("Match coordinated reset event surface is missing or changed.");
+            var pickupTypes = new[] { typeof(ArenaPickup), typeof(HealthPickup) };
+            var hasPickupField = typeof(MatchController).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                .Any(field => pickupTypes.Any(type => type.IsAssignableFrom(field.FieldType)));
+            var hasPickupProperty = typeof(MatchController).GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+                .Any(property => pickupTypes.Any(type => type.IsAssignableFrom(property.PropertyType)));
+            if (hasPickupField || hasPickupProperty)
+                throw new InvalidOperationException("MatchController must not own health pickup references.");
+        }
+
+        private static void ValidateHealthPickupSceneContracts(ValidationContext context,
+            MovementLabValidationAccumulator accumulator)
+        {
+            if (context == null || !context.SceneReady || context.HealthPickupsRoot == null || context.HealthPickups == null) return;
+            accumulator.Capture("scene/health-pickups", "root-children", () =>
+            {
+                if (context.HealthPickupsRoot.transform.childCount != HealthPickupSpawns.Length)
+                    throw new InvalidOperationException("HealthPickups root must contain exactly two pickup instances.");
+            });
+            var expected = new HashSet<string>(HealthPickupSpawns.Select(definition => definition.Name), StringComparer.Ordinal);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            GameObject firstPrefabSource = null;
+            HealthPickup firstComponentSource = null;
+            for (var i = 0; i < context.HealthPickups.Length; i++)
+            {
+                var pickup = context.HealthPickups[i];
+                if (pickup == null) continue;
+                var definition = HealthPickupSpawns.FirstOrDefault(item => item.Name == pickup.name);
+                accumulator.Capture("scene/health-pickups", pickup.name + ".name", () =>
+                {
+                    if (!expected.Contains(pickup.name) || !seen.Add(pickup.name)) throw new InvalidOperationException("Health pickup names must be unique and match the two authored definitions.");
+                });
+                accumulator.Capture("scene/health-pickups", pickup.name + ".identity", () => ValidatePersistentIdentity(pickup, pickup.name + " HealthPickup"));
+                accumulator.Capture("scene/health-pickups", pickup.name + ".parent", () =>
+                {
+                    if (pickup.transform.parent != context.HealthPickupsRoot.transform || !pickup.gameObject.activeSelf)
+                        throw new InvalidOperationException(pickup.name + " must be an active direct child of HealthPickups.");
+                });
+                accumulator.Capture("scene/health-pickups", pickup.name + ".transform", () =>
+                {
+                    if (Vector3.Distance(pickup.transform.position, definition.Position) > 0.001f ||
+                        Quaternion.Angle(pickup.transform.rotation, definition.Rotation) > 0.1f ||
+                        Vector3.Distance(pickup.transform.lossyScale, Vector3.one) > 0.001f)
+                        throw new InvalidOperationException(pickup.name + " transform does not match the authored spawn definition.");
+                });
+                var sourceRoot = PrefabUtility.GetCorrespondingObjectFromSource(pickup.gameObject);
+                var sourceComponent = PrefabUtility.GetCorrespondingObjectFromSource(pickup);
+                accumulator.Capture("scene/health-pickups", pickup.name + ".prefab-provenance", () =>
+                {
+                    if (sourceRoot == null || AssetDatabase.GetAssetPath(sourceRoot) != HealthPickupPrefabPath ||
+                        sourceComponent == null || AssetDatabase.GetAssetPath(sourceComponent) != HealthPickupPrefabPath)
+                        throw new InvalidOperationException(pickup.name + " must remain connected to HealthPickup.prefab.");
+                    if (firstPrefabSource == null)
+                    {
+                        firstPrefabSource = sourceRoot;
+                        firstComponentSource = sourceComponent;
+                    }
+                    else if (sourceRoot != firstPrefabSource || sourceComponent != firstComponentSource)
+                    {
+                        throw new InvalidOperationException("Health pickup instances must share one prefab root/component source.");
+                    }
+                    ValidatePersistentIdentity(sourceRoot, pickup.name + " prefab source");
+                    ValidatePersistentIdentity(sourceComponent, pickup.name + " prefab component source");
+                });
+                var trigger = pickup.GetComponent<SphereCollider>();
+                var body = pickup.GetComponent<Rigidbody>();
+                var visualRoot = pickup.transform.Find("VisualRoot");
+                CaptureReference(accumulator, "gameplay/wiring", pickup.name + ".pickupTrigger", pickup, "pickupTrigger", trigger);
+                CaptureReference(accumulator, "gameplay/wiring", pickup.name + ".visualRoot", pickup, "visualRoot", visualRoot != null ? visualRoot.gameObject : null);
+                CaptureReference(accumulator, "gameplay/wiring", pickup.name + ".match", pickup, "match", context.Match);
+                CaptureSerialized(accumulator, "gameplay/serialized", pickup.name + ".respawnDelay", pickup, "respawnDelay", MovementLabContract.HealthPickupRespawnDelay);
+                CaptureSerialized(accumulator, "gameplay/serialized", pickup.name + ".restoreFraction", pickup, "restoreFraction", MovementLabContract.HealthPickupRestoreFraction);
+                accumulator.Capture("scene/health-pickups", pickup.name + ".physics", () =>
+                {
+                    if (trigger == null || !trigger.enabled || !trigger.isTrigger || Mathf.Abs(trigger.radius - MovementLabContract.HealthPickupTriggerRadius) > 0.001f ||
+                        body == null || !body.isKinematic || body.useGravity || body.constraints != RigidbodyConstraints.FreezeAll ||
+                        pickup.GetComponentsInChildren<Collider>(true).Length != 1 || pickup.GetComponentsInChildren<Rigidbody>(true).Length != 1)
+                        throw new InvalidOperationException(pickup.name + " collider/body contract invalid.");
+                });
+                accumulator.Capture("scene/health-pickups", pickup.name + ".visual", () =>
+                {
+                    if (visualRoot == null || visualRoot.parent != pickup.transform || visualRoot.childCount != 3 || visualRoot.GetComponentsInChildren<Collider>(true).Length != 0)
+                        throw new InvalidOperationException(pickup.name + " visual hierarchy contract invalid.");
+                    var material = AssetDatabase.LoadAssetAtPath<Material>(HealthPickupMaterialPath);
+                    var renderers = visualRoot.GetComponentsInChildren<MeshRenderer>(true);
+                    if (renderers.Length != 3 || renderers.Any(renderer => renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 1 || renderer.sharedMaterial != material ||
+                        renderer.lightProbeUsage != LightProbeUsage.BlendProbes || renderer.reflectionProbeUsage != ReflectionProbeUsage.BlendProbes))
+                        throw new InvalidOperationException(pickup.name + " visual render/material contract invalid.");
+                    foreach (var transform in pickup.GetComponentsInChildren<Transform>(true))
+                        if (transform.gameObject.isStatic) throw new InvalidOperationException(pickup.name + " pickup hierarchy must remain nonstatic.");
+                });
+            }
+            accumulator.Capture("scene/health-pickups", "point-mirror", () =>
+            {
+                var west = context.HealthPickups.FirstOrDefault(pickup => pickup != null && pickup.name == HealthPickupWestNorthName);
+                var east = context.HealthPickups.FirstOrDefault(pickup => pickup != null && pickup.name == HealthPickupEastSouthName);
+                var mirroredEast = west != null ? new Vector3(-west.transform.position.x, west.transform.position.y, -west.transform.position.z) : Vector3.zero;
+                if (west == null || east == null || Vector3.Distance(east.transform.position, mirroredEast) > 0.001f ||
+                    Quaternion.Angle(east.transform.rotation, HealthPickupEastSouthRotation) > 0.1f)
+                    throw new InvalidOperationException("Health pickup placements must be distinct point mirrors across the arena origin.");
+            });
         }
 
         private static void ValidateBallTouchRosterContract()
@@ -1089,12 +1224,16 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("prefab", "Ball", () => MovementLabPrefabPipeline.ValidatePrefab(BallPrefabPath, "Ball", true, context?.BallSurface));
             if (availableAssets != null && availableAssets.Contains(RocketPrefabPath))
                 accumulator.Capture("prefab", "Rocket", () => MovementLabPrefabPipeline.ValidatePrefab(RocketPrefabPath, "Rocket", false, null));
+            if (availableAssets != null && availableAssets.Contains(HealthPickupPrefabPath))
+                accumulator.Capture("prefab", "HealthPickup", () => MovementLabPrefabPipeline.ValidatePrefab(HealthPickupPrefabPath, "HealthPickup", false, null));
             if (availableAssets != null && availableAssets.Contains(PrefabPath) &&
-                availableAssets.Contains(BallPrefabPath) && availableAssets.Contains(ExplosionPrefabPath))
+                availableAssets.Contains(BallPrefabPath) && availableAssets.Contains(ExplosionPrefabPath) &&
+                availableAssets.Contains(HealthPickupPrefabPath))
                 accumulator.Capture("prefab", "required-components", () => MovementLabPrefabPipeline.Validate());
             accumulator.Capture("importer", "texture-contracts", () => MovementLabImportPipeline.ValidateTextureImporterContracts());
             accumulator.Capture("importer", "animator-contracts", () => MovementLabAnimatorPipeline.Validate());
             accumulator.Capture("material", "opaque-references", () => MovementLabMaterialPipeline.ValidateOpaqueMaterialReferences());
+            accumulator.Capture("material", "health-pickup", () => MovementLabMaterialPipeline.ValidateHealthPickupMaterial(AssetDatabase.LoadAssetAtPath<Material>(HealthPickupMaterialPath)));
             accumulator.Capture("material", "team-references", ValidateTeamMaterialContracts);
             if (context?.SceneReady == true)
                 accumulator.Capture("render", "pipeline-settings", () => MovementLabSceneComposer.ValidateRenderPipelineSettings());

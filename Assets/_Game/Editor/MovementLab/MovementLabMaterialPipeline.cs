@@ -134,6 +134,27 @@ namespace RocketFooxball.Editor
                     return material;
                 }
 
+                internal static Material GetOrCreateHealthPickupMaterial()
+                {
+                    var material = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "HealthPickup", null, null, null, null, null, null, Vector2.one,
+                        new Color(0.10f, 0.85f, 0.25f, 1f),
+                        new Color(0.18f, 1.00f, 0.35f, 1f), 2.50f,
+                        0.10f, 0.65f, 1f, 1f));
+                    // Health pickup visuals are opaque URP Lit geometry; keep
+                    // the surface contract explicit even when Unity defaults
+                    // happen to match it.
+                    material.SetFloat("_Surface", 0f);
+                    material.SetFloat("_Blend", 0f);
+                    material.SetFloat("_AlphaClip", 0f);
+                    material.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    material.DisableKeyword("_ALPHATEST_ON");
+                    material.renderQueue = (int)RenderQueue.Geometry;
+                    EditorUtility.SetDirty(material);
+                    return material;
+                }
+
                 internal static void SetDetailNormalKeyword(Material material, bool enabled)
                 {
                     material.DisableKeyword("_DETAIL");
@@ -241,7 +262,7 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateOpaqueMaterialReferences()
                 {
-                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccent.mat", "TeamBlue.mat", "TeamRed.mat" };
+                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "HealthPickup.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccent.mat", "TeamBlue.mat", "TeamRed.mat" };
                     for (var i = 0; i < paths.Length; i++)
                     {
                         var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/" + paths[i]);
@@ -286,6 +307,21 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException(label + " PBR scalar contract mismatch.");
                     }
+                }
+
+                internal static void ValidateHealthPickupMaterial(Material material)
+                {
+                    ValidatePbrMaterial(material, null, null, null, null, null, null, Vector2.one, "HealthPickup");
+                    ValidatePbrScalars(material, 0.10f, 0.65f, 1f, 1f, 2.50f, "HealthPickup");
+                    ValidateEmission(material, new Color(0.18f, 1.00f, 0.35f, 1f), 2.50f, "HealthPickup");
+                    if (material == null || Mathf.Abs(material.GetFloat("_Surface")) > 0.001f || Mathf.Abs(material.GetFloat("_Blend")) > 0.001f ||
+                        Mathf.Abs(material.GetFloat("_AlphaClip")) > 0.001f || material.IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT") ||
+                        material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON") || material.IsKeywordEnabled("_ALPHATEST_ON") ||
+                        material.renderQueue != (int)RenderQueue.Geometry)
+                        throw new InvalidOperationException("HealthPickup material must be opaque URP Lit geometry.");
+                    var baseColor = material.GetColor("_BaseColor");
+                    if (Vector4.Distance(baseColor, new Color(0.10f, 0.85f, 0.25f, 1f)) > 0.001f)
+                        throw new InvalidOperationException("HealthPickup base color contract mismatch.");
                 }
 
                 internal static void ValidateEmission(Material material, Color baseColor, float strength, string label)

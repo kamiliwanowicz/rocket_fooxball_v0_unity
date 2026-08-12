@@ -66,10 +66,10 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:2";
-        private const string MaterialContract = "material-prefab-contract:5";
+        private const string MaterialContract = "material-prefab-contract:6";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:11";
+        private const string GameplayContract = "gameplay-scene-contract:12";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:4";
@@ -107,7 +107,8 @@ namespace RocketFooxball.Editor
                     MovementLabContract.InputActionsPath,
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
                     MovementLabContract.ShadersPath + "/RetroAdditiveParticle.shader", MovementLabContract.ShadersPath + "/RetroPowerGrid.shader",
-                    MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
+                     MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
+                     "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
@@ -115,7 +116,12 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
                      "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
-                     "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs"
+                     "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/PickupRespawnState.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickupRules.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
+                     "Assets/_Game/Scripts/Tests/EditMode/HealthPickupRulesTests.cs"
                  }), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
@@ -135,11 +141,19 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
                      "Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs",
                      "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
-                 }, Array.Empty<string>()),
+                 }, WithMetas(new[]
+                 {
+                     "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/PickupRespawnState.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickupRules.cs",
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
+                     "Assets/_Game/Scripts/Tests/EditMode/HealthPickupRulesTests.cs"
+                 })),
                 new[]
                 {
                     MovementLabContract.PlayerPrefabPath, MovementLabContract.BallPrefabPath,
-                    MovementLabContract.RocketPrefabPath, MovementLabContract.ExplosionPrefabPath
+                    MovementLabContract.RocketPrefabPath, MovementLabContract.ExplosionPrefabPath,
+                    MovementLabContract.HealthPickupPrefabPath
                 },
                 WithAssetMetasOnly(MovementLabContract.GameplaySceneOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.Quality, Array.Empty<MovementLabStage>(), Array.Empty<MovementLabStage>(), QualityContract,

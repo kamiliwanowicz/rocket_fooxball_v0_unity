@@ -15,6 +15,7 @@ using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -85,6 +86,7 @@ namespace RocketFooxball.Editor
                     var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
                     var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
+                    var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
                     GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
@@ -102,6 +104,9 @@ namespace RocketFooxball.Editor
                     var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    BuildHealthPickupPrefab(healthPickupMaterial);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
                 }
 
@@ -211,6 +216,7 @@ namespace RocketFooxball.Editor
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
+                        BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
                         var hud = new GameObject("DebugHUD");
                         var hudComponent = hud.AddComponent<MovementDebugHud>();
                         SetObjectReference(hudComponent, "player", playerMotor);
@@ -328,6 +334,25 @@ namespace RocketFooxball.Editor
                     return asset;
                 }
 
+                private static void BuildHealthPickupInstances(GameObject healthPickupPrefab, MatchController match)
+                {
+                    if (healthPickupPrefab == null) throw new InvalidOperationException("Health pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for health pickup scene wiring.");
+                    var root = new GameObject(HealthPickupsRootName);
+                    for (var i = 0; i < HealthPickupSpawns.Length; i++)
+                    {
+                        var definition = HealthPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(healthPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate health pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<HealthPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Health pickup prefab has no HealthPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
+                }
+
                 internal static void AssembleMovementLabUnstaged()
                 {
                     var builderSignature = ComputeBuilderSignature();
@@ -364,6 +389,7 @@ namespace RocketFooxball.Editor
                     var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
                     var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
+                    var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
                     GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
@@ -381,6 +407,9 @@ namespace RocketFooxball.Editor
                     var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    BuildHealthPickupPrefab(healthPickupMaterial);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
 
                     RegisterBuildScene();
                     UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
@@ -470,6 +499,7 @@ namespace RocketFooxball.Editor
                     SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
+                    BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
 
                     var hud = new GameObject("DebugHUD");
                     var hudComponent = hud.AddComponent<MovementDebugHud>();

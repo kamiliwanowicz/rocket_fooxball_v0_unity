@@ -25,6 +25,11 @@ namespace RocketFooxball.Editor
         internal const string ShadersPath = MovementLabContract.ShadersPath;
         internal const string AnimationsPath = MovementLabContract.AnimationsPath;
         internal const string ExplosionPrefabPath = MovementLabContract.ExplosionPrefabPath;
+        internal const string HealthPickupPrefabPath = MovementLabContract.HealthPickupPrefabPath;
+        internal const string HealthPickupMaterialPath = MovementLabContract.HealthPickupMaterialPath;
+        internal const string HealthPickupsRootName = MovementLabContract.HealthPickupsRootName;
+        internal const string HealthPickupWestNorthName = MovementLabContract.HealthPickupWestNorthName;
+        internal const string HealthPickupEastSouthName = MovementLabContract.HealthPickupEastSouthName;
         internal const string WorldControllerPath = AnimationsPath + "/WorldCharacter.controller";
         internal const string FpsControllerPath = AnimationsPath + "/FpsKick.controller";
         internal const string TeamBlueMaterialPath = MaterialsPath + "/TeamBlue.mat";
@@ -56,6 +61,26 @@ namespace RocketFooxball.Editor
                 Rotation = rotation;
             }
         }
+
+        internal readonly struct HealthPickupSpawnDefinition
+        {
+            internal readonly string Name;
+            internal readonly Vector3 Position;
+            internal readonly Quaternion Rotation;
+
+            internal HealthPickupSpawnDefinition(string name, Vector3 position, Quaternion rotation)
+            {
+                Name = name;
+                Position = position;
+                Rotation = rotation;
+            }
+        }
+
+        internal static readonly HealthPickupSpawnDefinition[] HealthPickupSpawns =
+        {
+            new HealthPickupSpawnDefinition(HealthPickupWestNorthName, MovementLabContract.HealthPickupWestNorthPosition, MovementLabContract.HealthPickupWestNorthRotation),
+            new HealthPickupSpawnDefinition(HealthPickupEastSouthName, MovementLabContract.HealthPickupEastSouthPosition, MovementLabContract.HealthPickupEastSouthRotation)
+        };
 
         // Stable six-slot composition. Blue owns positive-X/South goal; Red owns negative-X/North goal.
         internal static readonly ParticipantSlotDefinition[] ParticipantSlots =
@@ -179,7 +204,8 @@ namespace RocketFooxball.Editor
 
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
-            PrefabPath, BallPrefabPath, RocketPrefabPath, ScenePath,
+            PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ScenePath,
+            HealthPickupMaterialPath,
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", RocketHotMaterialPath,
             ProjectileGlowMaterialPath, MaterialsPath + "/GoalFrame.mat", MaterialsPath + "/Shield.mat", MaterialsPath + "/ShieldBlue.mat",
@@ -191,7 +217,7 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/WeaponAccent.mat", TeamBlueMaterialPath, TeamRedMaterialPath,
             TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath, TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath,
             BlueCircleCueMeshPath, RedTriangleCueMeshPath,
-            WorldControllerPath, FpsControllerPath, ExplosionPrefabPath
+            WorldControllerPath, FpsControllerPath
         };
 
         internal static readonly string[] GeneratedBakedLightingPaths =

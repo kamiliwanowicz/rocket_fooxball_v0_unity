@@ -13,6 +13,7 @@ using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -43,6 +44,7 @@ namespace RocketFooxball.Editor
             RequireComponent<RocketFooxball.Runtime.Weapons.RocketLauncher>(MovementLabContract.PlayerPrefabPath, "RocketLauncher");
             RequireComponent<RocketFooxball.Runtime.Participants.ParticipantState>(MovementLabContract.PlayerPrefabPath, "ParticipantState");
             RequireComponent<RocketFooxball.Runtime.Feedback.ExplosionVfx>(MovementLabContract.ExplosionPrefabPath, "ExplosionVfx");
+            RequireComponent<RocketFooxball.Runtime.Pickups.HealthPickup>(MovementLabContract.HealthPickupPrefabPath, "HealthPickup");
         }
         internal static void RequireComponent<T>(string path, string label) where T : UnityEngine.Component
         {
@@ -299,6 +301,68 @@ namespace RocketFooxball.Editor
                     SetFloat(motor, "contactAssistImpulseCap", 5f);
                     SetFloat(motor, "meaningfulContactSpeedThreshold", 1f);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, BallPrefabPath);
+                    UnityEngine.Object.DestroyImmediate(root);
+                    return prefab;
+                }
+
+                internal static GameObject BuildHealthPickupPrefab(Material healthMaterial)
+                {
+                    if (healthMaterial == null) throw new InvalidOperationException("Health pickup material is required before prefab build.");
+
+                    var root = new GameObject("HealthPickup");
+                    root.transform.localScale = Vector3.one;
+                    var trigger = root.AddComponent<SphereCollider>();
+                    trigger.isTrigger = true;
+                    trigger.radius = MovementLabContract.HealthPickupTriggerRadius;
+                    var body = root.AddComponent<Rigidbody>();
+                    body.isKinematic = true;
+                    body.useGravity = false;
+                    body.constraints = RigidbodyConstraints.FreezeAll;
+                    body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                    body.interpolation = RigidbodyInterpolation.None;
+
+                    var visualRoot = new GameObject("VisualRoot");
+                    visualRoot.transform.SetParent(root.transform, false);
+                    var horizontal = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    horizontal.name = "BarHorizontal";
+                    horizontal.transform.SetParent(visualRoot.transform, false);
+                    horizontal.transform.localScale = MovementLabContract.HealthCrossHorizontalScale;
+                    UnityEngine.Object.DestroyImmediate(horizontal.GetComponent<Collider>());
+                    var horizontalRenderer = horizontal.GetComponent<MeshRenderer>();
+                    horizontalRenderer.sharedMaterial = healthMaterial;
+                    horizontalRenderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+                    horizontalRenderer.reflectionProbeUsage = ReflectionProbeUsage.BlendProbes;
+
+                    var vertical = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    vertical.name = "BarVertical";
+                    vertical.transform.SetParent(visualRoot.transform, false);
+                    vertical.transform.localScale = MovementLabContract.HealthCrossVerticalScale;
+                    UnityEngine.Object.DestroyImmediate(vertical.GetComponent<Collider>());
+                    var verticalRenderer = vertical.GetComponent<MeshRenderer>();
+                    verticalRenderer.sharedMaterial = healthMaterial;
+                    verticalRenderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+                    verticalRenderer.reflectionProbeUsage = ReflectionProbeUsage.BlendProbes;
+
+                    var core = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                    core.name = "Core";
+                    core.transform.SetParent(visualRoot.transform, false);
+                    core.transform.localScale = MovementLabContract.HealthCrossCoreScale;
+                    core.transform.localPosition = new Vector3(0f, 0f, -0.05f);
+                    UnityEngine.Object.DestroyImmediate(core.GetComponent<Collider>());
+                    var coreRenderer = core.GetComponent<MeshRenderer>();
+                    coreRenderer.sharedMaterial = healthMaterial;
+                    coreRenderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+                    coreRenderer.reflectionProbeUsage = ReflectionProbeUsage.BlendProbes;
+
+                    var pickup = root.AddComponent<HealthPickup>();
+                    SetObjectReference(pickup, "pickupTrigger", trigger);
+                    SetObjectReference(pickup, "visualRoot", visualRoot);
+                    SetFloat(pickup, "respawnDelay", MovementLabContract.HealthPickupRespawnDelay);
+                    SetFloat(pickup, "restoreFraction", MovementLabContract.HealthPickupRestoreFraction);
+
+                    var transforms = root.GetComponentsInChildren<Transform>(true);
+                    for (var i = 0; i < transforms.Length; i++) transforms[i].gameObject.isStatic = false;
+                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, HealthPickupPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
                     return prefab;
                 }
@@ -971,6 +1035,10 @@ namespace RocketFooxball.Editor
                             var ballFilter = Require(root.GetComponent<MeshFilter>(), "Ball prefab MeshFilter");
                             ValidateBallMesh(ballFilter.sharedMesh);
                         }
+                        else if (path == HealthPickupPrefabPath)
+                        {
+                            ValidateHealthPickupPrefab(root);
+                        }
                         else if (path == RocketPrefabPath)
                         {
                             if (root.layer != LayerMask.NameToLayer("Projectiles")) throw new InvalidOperationException("Rocket prefab root must use Projectiles layer.");
@@ -1020,6 +1088,48 @@ namespace RocketFooxball.Editor
                     {
                         PrefabUtility.UnloadPrefabContents(root);
                     }
+                }
+
+                internal static void ValidateHealthPickupPrefab(GameObject root)
+                {
+                    if (root == null || root.name != "HealthPickup" || root.transform.localScale != Vector3.one || root.isStatic)
+                        throw new InvalidOperationException("Health pickup prefab root contract invalid.");
+                    var trigger = Require(root.GetComponent<SphereCollider>(), "Health pickup trigger collider");
+                    var body = Require(root.GetComponent<Rigidbody>(), "Health pickup Rigidbody");
+                    var pickup = Require(root.GetComponent<HealthPickup>(), "Health pickup HealthPickup component");
+                    var visualRoot = Require(root.transform.Find("VisualRoot"), "Health pickup VisualRoot");
+                    if (!trigger.enabled || !trigger.isTrigger || Mathf.Abs(trigger.radius - MovementLabContract.HealthPickupTriggerRadius) > 0.001f ||
+                        body.isKinematic == false || body.useGravity || body.constraints != RigidbodyConstraints.FreezeAll ||
+                        root.GetComponents<Collider>().Length != 1 || root.GetComponents<Rigidbody>().Length != 1)
+                        throw new InvalidOperationException("Health pickup trigger/body contract invalid.");
+                    ValidateReference(pickup, "pickupTrigger", trigger, "Health pickup pickupTrigger");
+                    ValidateReference(pickup, "visualRoot", visualRoot.gameObject, "Health pickup visualRoot");
+                    ValidateSerializedFloat(pickup, "respawnDelay", MovementLabContract.HealthPickupRespawnDelay, "Health pickup respawnDelay");
+                    ValidateSerializedFloat(pickup, "restoreFraction", MovementLabContract.HealthPickupRestoreFraction, "Health pickup restoreFraction");
+                    var matchProperty = new SerializedObject(pickup).FindProperty("match");
+                    if (matchProperty == null || matchProperty.propertyType != SerializedPropertyType.ObjectReference || matchProperty.objectReferenceValue != null)
+                        throw new InvalidOperationException("Health pickup prefab match reference must remain null.");
+
+                    var cross = new[] { "BarHorizontal", "BarVertical", "Core" };
+                    if (visualRoot.childCount != cross.Length) throw new InvalidOperationException("Health pickup VisualRoot must contain exactly three cross primitives.");
+                    for (var i = 0; i < cross.Length; i++)
+                    {
+                        var child = visualRoot.Find(cross[i]);
+                        if (child == null || child.GetComponents<Collider>().Length != 0 || child.GetComponents<Rigidbody>().Length != 0 ||
+                            child.GetComponents<MonoBehaviour>().Length != 0 || child.gameObject.isStatic)
+                            throw new InvalidOperationException("Health pickup cross visual contract invalid: " + cross[i]);
+                        var expectedScale = i == 0 ? MovementLabContract.HealthCrossHorizontalScale : i == 1 ? MovementLabContract.HealthCrossVerticalScale : MovementLabContract.HealthCrossCoreScale;
+                        var expectedPosition = i == 2 ? new Vector3(0f, 0f, -0.05f) : Vector3.zero;
+                        if (Vector3.Distance(child.localScale, expectedScale) > 0.001f || Vector3.Distance(child.localPosition, expectedPosition) > 0.001f)
+                            throw new InvalidOperationException("Health pickup cross transform contract invalid: " + cross[i]);
+                        var renderer = Require(child.GetComponent<MeshRenderer>(), "Health pickup cross renderer " + cross[i]);
+                        if (renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 1 || renderer.sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(HealthPickupMaterialPath) ||
+                            renderer.lightProbeUsage != LightProbeUsage.BlendProbes || renderer.reflectionProbeUsage != ReflectionProbeUsage.BlendProbes)
+                            throw new InvalidOperationException("Health pickup cross material contract invalid: " + cross[i]);
+                    }
+                    if (root.GetComponentsInChildren<Light>(true).Length != 0 || root.GetComponentsInChildren<ParticleSystem>(true).Length != 0 ||
+                        root.GetComponentsInChildren<Animator>(true).Length != 0)
+                        throw new InvalidOperationException("Health pickup prefab must not contain lights, particles, or animation.");
                 }
 
                 internal static void ValidateBallMesh(Mesh mesh)

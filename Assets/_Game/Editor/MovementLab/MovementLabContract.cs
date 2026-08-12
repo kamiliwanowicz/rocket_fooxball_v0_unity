@@ -9,15 +9,17 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 2;
+        internal const int SerializedContractVersion = 3;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
         internal const string BallPrefabPath = "Assets/_Game/Prefabs/Ball.prefab";
         internal const string RocketPrefabPath = "Assets/_Game/Prefabs/Rocket.prefab";
         internal const string ExplosionPrefabPath = "Assets/_Game/Prefabs/ExplosionVfx.prefab";
+        internal const string HealthPickupPrefabPath = "Assets/_Game/Prefabs/HealthPickup.prefab";
         internal const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         internal const string MaterialsPath = "Assets/_Game/Materials";
+        internal const string HealthPickupMaterialPath = MaterialsPath + "/HealthPickup.mat";
         internal const string TexturesPath = "Assets/_Game/Textures";
         internal const string ShadersPath = "Assets/_Game/Shaders";
         internal const string AnimationsPath = "Assets/_Game/Animations";
@@ -34,6 +36,20 @@ namespace RocketFooxball.Editor
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
         internal const string TimeManagerPath = "ProjectSettings/TimeManager.asset";
         internal const string TagManagerPath = "ProjectSettings/TagManager.asset";
+
+        internal const string HealthPickupsRootName = "HealthPickups";
+        internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
+        internal const string HealthPickupEastSouthName = "HealthPickup_EastSouth";
+        internal const float HealthPickupRespawnDelay = 15f;
+        internal const float HealthPickupRestoreFraction = 0.33f;
+        internal const float HealthPickupTriggerRadius = 1.50f;
+        internal static readonly Vector3 HealthPickupWestNorthPosition = new Vector3(-36f, 1.10f, -28f);
+        internal static readonly Vector3 HealthPickupEastSouthPosition = new Vector3(36f, 1.10f, 28f);
+        internal static readonly Quaternion HealthPickupWestNorthRotation = Quaternion.identity;
+        internal static readonly Quaternion HealthPickupEastSouthRotation = Quaternion.Euler(0f, 180f, 0f);
+        internal static readonly Vector3 HealthCrossHorizontalScale = new Vector3(1.40f, 0.30f, 0.30f);
+        internal static readonly Vector3 HealthCrossVerticalScale = new Vector3(0.30f, 1.40f, 0.30f);
+        internal static readonly Vector3 HealthCrossCoreScale = new Vector3(0.45f, 0.45f, 0.45f);
 
         // GameplayScene owns these project-level physics names and collision
         // settings. MaterialPrefab may bootstrap names needed by prefab roots;
@@ -100,6 +116,7 @@ namespace RocketFooxball.Editor
         internal static readonly string[] MaterialPrefabOutputs =
         {
             PlayerPrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath,
+            HealthPickupPrefabPath,
             AnimationsPath + "/WorldCharacter.controller", AnimationsPath + "/FpsKick.controller",
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", MaterialsPath + "/RocketHot.mat",
@@ -114,6 +131,7 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/TeamBlue.mat", MaterialsPath + "/TeamRed.mat",
             MaterialsPath + "/TeamBlueShield.mat", MaterialsPath + "/TeamRedShield.mat",
             MaterialsPath + "/TeamBlueTrail.mat", MaterialsPath + "/TeamRedTrail.mat",
+            HealthPickupMaterialPath,
             BlueCircleCueMeshPath, RedTriangleCueMeshPath
         };
 
