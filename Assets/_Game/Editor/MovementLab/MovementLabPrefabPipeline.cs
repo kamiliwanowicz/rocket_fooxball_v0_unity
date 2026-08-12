@@ -764,7 +764,7 @@ namespace RocketFooxball.Editor
                 {
                     var serialized = new SerializedObject(target);
                     var property = serialized.FindProperty(propertyName);
-                    if (property == null || property.propertyType != SerializedPropertyType.Integer) throw new InvalidOperationException(target.GetType().Name + " has no serialized layer mask '" + propertyName + "'.");
+                    if (property == null || property.propertyType != SerializedPropertyType.LayerMask) throw new InvalidOperationException(target.GetType().Name + " has no serialized layer mask '" + propertyName + "'.");
                     property.intValue = value;
                     serialized.ApplyModifiedPropertiesWithoutUndo();
                 }
