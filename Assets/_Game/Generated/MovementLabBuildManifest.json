@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "281238379b8ecc30ab1017d64ebeb778e5d08f89",
+    "gitSha": "1cce54782b56ca24175317c627bf76e1157db225",
     "manifestStatus": "stale",
-    "sourceSignature": "8dd53524066897a3ac4bbc3425d7edc649ce842f8180f22ab0335f27f8f6b46c",
-    "generatedOutputFingerprint": "1561e5e28a72656f373d1e6a5e43a421dc636f1158726075c0ee5050b3a14936",
+    "sourceSignature": "8b8b186f234d1460abae9de890431b36146373caefb83aabb4da65d8dbf11af8",
+    "generatedOutputFingerprint": "a8646779f2eb763c171b53d13f8c7f873f1946a2ca0c8ee32ad09e5b68ba4ec9",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
+    "lightingInputDigest": "3378d1b6f688046f215f727e6975abdaea89e6db2aead3f6add31add57ba8372",
     "bakedProfile": "Production",
     "staleStages": [
         "Lighting",
@@ -295,7 +295,7 @@
         "a256dce2cbc89e54f934981d48c00e70",
         "a96e9b211f493aeeded833db0c6d60295efc800f0277cf59d98da9136733a2f7",
         "a9585b86f9cc5194facf9bea6509a551",
-        "0b33578a3e44536a5fd07a28d082052a56c32d44ac85091777a5bb3dcc2439d5",
+        "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
         "26f953a18b358094290f33dd64b0c96d",
         "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
         "7d93bd4314658f643b0ec8cff4d8c226",
@@ -348,7 +348,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "82c23a4ade8cb36f716dccdc16d5e24b5ca87d4a516c1c0cd84590847c297d0d",
+        "c065bef3186e9b2626915e5fcf2e3340dba07b1c1a0c2620acbb33fcdd699344",
         "04f6dead4185c42458fce3ea760fc4b7",
         "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -713,14 +713,14 @@
             "schemaVersion": 8,
             "contractVersion": "material-prefab-contract:6;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "78c2a1d59e6b0542a6377669c338a3568358adbb2afe081d0f47e745f10abd9a",
-            "repositoryInputDigest": "5ab33fb4739f8571dbc315518d624b2e2eac67964f250a3d23f155cc0a895364",
+            "inputDigest": "6f9c5523c3b205f09d71841fd2e05da9860eababd5df847677f475ba3136f11e",
+            "repositoryInputDigest": "b8b7e21824bfb4a63a616a821f35652406dbb1ec93b4665a5a319d0b94ed009a",
             "dependencyDigest": "95abab14255263a990ecc66cb8b8e49e7a755da273322f772a082e29bea63606",
-            "outputDigest": "074a179a35b4c0eb3498491c1861ee6333b9799ff2cca2b8ed29a03492d8b7d8",
+            "outputDigest": "af7391dc56b99f13867bc6a3df73bc0a928f37cab84cc189ab37945081404600",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "78c2a1d59e6b0542a6377669c338a3568358adbb2afe081d0f47e745f10abd9a",
-            "priorOutputDigest": "074a179a35b4c0eb3498491c1861ee6333b9799ff2cca2b8ed29a03492d8b7d8",
+            "priorInputDigest": "6f9c5523c3b205f09d71841fd2e05da9860eababd5df847677f475ba3136f11e",
+            "priorOutputDigest": "af7391dc56b99f13867bc6a3df73bc0a928f37cab84cc189ab37945081404600",
             "profile": "",
             "outputs": [
                 {
@@ -955,7 +955,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/HealthPickup.mat",
-                    "digest": "0b33578a3e44536a5fd07a28d082052a56c32d44ac85091777a5bb3dcc2439d5",
+                    "digest": "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
                     "missing": false
                 },
                 {
@@ -1195,7 +1195,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "82c23a4ade8cb36f716dccdc16d5e24b5ca87d4a516c1c0cd84590847c297d0d",
+                    "digest": "c065bef3186e9b2626915e5fcf2e3340dba07b1c1a0c2620acbb33fcdd699344",
                     "missing": false
                 },
                 {
@@ -1220,19 +1220,19 @@
             "schemaVersion": 8,
             "contractVersion": "gameplay-scene-contract:12;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "5a89d41ac3cc8254014d77658982a94c60c863803d930db9badfca5a94fccf5f",
-            "repositoryInputDigest": "d752c01d06bc7e35af7876a5c4016ac57086c13c09b8b920c7ab212d5dfb5203",
-            "dependencyDigest": "02c3f40492b1bfa6fbad745cfeeb1d01f3bc170ec2372bc3321d0d1002f2155d",
-            "outputDigest": "bf3533141d04552abd323c7c59c1de3f5993a4dd7b157414bb7637eb249f9521",
+            "inputDigest": "e7bc7d9eac48678313ffc1aa654f339cc9cb27e962758bba110b5b1e19a3abab",
+            "repositoryInputDigest": "0056c86539c72cd49cc01dde77da19d423b265773f51fab33334573779e8d804",
+            "dependencyDigest": "4ef1c9f623b3f5dd66613eb1a9ad46c5f0054fb2c652e8900b5e8ad76b32e06b",
+            "outputDigest": "0ff1385984ae1ff502798c873fc84907715079b425c4c786248cb6ada8ec98df",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "5a89d41ac3cc8254014d77658982a94c60c863803d930db9badfca5a94fccf5f",
-            "priorOutputDigest": "bf3533141d04552abd323c7c59c1de3f5993a4dd7b157414bb7637eb249f9521",
+            "priorInputDigest": "e7bc7d9eac48678313ffc1aa654f339cc9cb27e962758bba110b5b1e19a3abab",
+            "priorOutputDigest": "0ff1385984ae1ff502798c873fc84907715079b425c4c786248cb6ada8ec98df",
             "profile": "",
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "3180ae3b1eac7dea91e00b404e7077c2b1c06e795a7cd94357d31157afac455d",
+                    "digest": "e36499064f67ff15e1f56d502bdb95372cb11a5a6fd2b11371f9c1a035fc4550",
                     "missing": false
                 },
                 {
@@ -1354,8 +1354,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
-            "repositoryInputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
+            "inputDigest": "3378d1b6f688046f215f727e6975abdaea89e6db2aead3f6add31add57ba8372",
+            "repositoryInputDigest": "3378d1b6f688046f215f727e6975abdaea89e6db2aead3f6add31add57ba8372",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "predecessorDigests": [],
@@ -1363,7 +1363,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "cf55158681ad521dab03e5086fbc062c8996077ae15391c917647502f93d8a35",
+            "priorInputDigest": "5fa1a5bf734312aa03abae32c56cc262fd7742c772ae24381aa5c7229eb7225a",
             "priorOutputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "profile": "",
             "outputs": [
@@ -1394,8 +1394,8 @@
             "schemaVersion": 8,
             "contractVersion": "baked-output-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "3c5779995d419122f8a16778c0e6250914f08139719183ad7a5248e895c952bc",
-            "repositoryInputDigest": "19c97979a85477d6c60c12a0812801e54509c9e4d97278dfcaa1c46f71073053",
+            "inputDigest": "5a67395102a14fb6de2581eb76bf98328f42af9b2dd3af06b90bd72fa3ab2cce",
+            "repositoryInputDigest": "e4e8c67e1556faeabcb613c98f0f930741ac7ed8682cd0127b287587f39a0ea3",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "predecessorDigests": [
@@ -1405,7 +1405,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "87a70a32d7d5430ce9a5dceeee2c246b223838eda7f7faa00cc8fc5e31c621d5",
+            "priorInputDigest": "3c5779995d419122f8a16778c0e6250914f08139719183ad7a5248e895c952bc",
             "priorOutputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "profile": "Production",
             "outputs": [
