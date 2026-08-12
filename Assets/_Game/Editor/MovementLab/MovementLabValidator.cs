@@ -578,9 +578,9 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("GoalTrigger event-owner contract invalid.");
                 });
                 accumulator.Capture("gameplay/contract", "MatchController.public-surface", ValidateMatchPublicContract);
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabContract.MatchDuration);
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalSummaryDuration", context.Match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabSceneComposer.MatchDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalSummaryDuration", context.Match, "goalSummaryDuration", MovementLabSceneComposer.GoalSummaryDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
             }

@@ -38,6 +38,10 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabSceneComposer
     {
+                internal const float MatchDuration = 300f;
+                internal const float GoalSummaryDuration = 3f;
+                internal const float KickoffCountdownDuration = 3f;
+
                 // Stage-local entry points. The legacy monolithic method below is
                 // retained for compatibility/forced comparison; normal assembly
                 // uses these bounded operations through MovementLabStageRunner.
@@ -201,9 +205,9 @@ namespace RocketFooxball.Editor
                         SetObjectReference(match, "ball", ballMotor);
                         SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                        SetFloat(match, "matchDuration", MovementLabContract.MatchDuration);
-                        SetFloat(match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
-                        SetFloat(match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
+                        SetFloat(match, "matchDuration", MatchDuration);
+                        SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                        SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
                         var hud = new GameObject("DebugHUD");
@@ -455,9 +459,9 @@ namespace RocketFooxball.Editor
                     SetObjectReference(match, "ball", ballMotor);
                     SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                     SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                    SetFloat(match, "matchDuration", MovementLabContract.MatchDuration);
-                    SetFloat(match, "goalSummaryDuration", MovementLabContract.GoalSummaryDuration);
-                    SetFloat(match, "kickoffCountdownDuration", MovementLabContract.KickoffCountdownDuration);
+                    SetFloat(match, "matchDuration", MatchDuration);
+                    SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                    SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
 
