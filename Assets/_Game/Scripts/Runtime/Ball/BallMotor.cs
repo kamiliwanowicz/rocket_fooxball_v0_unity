@@ -39,6 +39,8 @@ namespace RocketFooxball.Runtime.Ball
         private Vector3 preFreezeVelocity;
         private Vector3 preFreezeAngularVelocity;
         private Action<ControllerColliderHit>[] collisionHandlers;
+        private Action[] kickHandlers;
+        private ParticipantState lastTouchParticipant;
 
         public Rigidbody Body => body;
         public Rigidbody Rigidbody => body;
@@ -50,6 +52,8 @@ namespace RocketFooxball.Runtime.Ball
         public bool SimulationEnabled => simulationEnabled;
         public float MeaningfulContactSpeedThreshold => meaningfulContactSpeedThreshold;
         public IReadOnlyList<ParticipantState> Participants => participants;
+        /// <summary>Last valid roster participant to physically touch or kick the ball.</summary>
+        public ParticipantState LastTouchParticipant => lastTouchParticipant;
 
         private void Awake()
         {
@@ -71,40 +75,39 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
+            UnsubscribeParticipantHandlers();
             if (participants != null)
             {
                 collisionHandlers = new Action<ControllerColliderHit>[participants.Length];
+                kickHandlers = new Action[participants.Length];
                 for (var i = 0; i < participants.Length; i++)
                 {
                     var participant = participants[i];
-                    if (participant == null || participant.Motor == null)
+                    if (participant == null)
                     {
                         continue;
                     }
 
                     var capturedParticipant = participant;
-                    Action<ControllerColliderHit> handler = hit => OnPlayerCollisionHit(capturedParticipant, hit);
-                    collisionHandlers[i] = handler;
-                    participant.Motor.CollisionHit += handler;
+                    if (participant.Motor != null)
+                    {
+                        Action<ControllerColliderHit> handler = hit => OnPlayerCollisionHit(capturedParticipant, hit);
+                        collisionHandlers[i] = handler;
+                        participant.Motor.CollisionHit += handler;
+                    }
+                    if (participant.Kick != null)
+                    {
+                        Action kickHandler = () => OnKickSucceeded(capturedParticipant);
+                        kickHandlers[i] = kickHandler;
+                        participant.Kick.KickSucceeded += kickHandler;
+                    }
                 }
             }
         }
 
         private void OnDisable()
         {
-            if (participants != null && collisionHandlers != null)
-            {
-                for (var i = 0; i < participants.Length; i++)
-                {
-                    var participant = participants[i];
-                    var handler = collisionHandlers[i];
-                    if (participant != null && participant.Motor != null && handler != null)
-                    {
-                        participant.Motor.CollisionHit -= handler;
-                    }
-                }
-                collisionHandlers = null;
-            }
+            UnsubscribeParticipantHandlers();
         }
 
         private void FixedUpdate()
@@ -212,6 +215,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Resets body position and both velocity channels.</summary>
         public void ResetState(Vector3 worldPosition, Quaternion worldRotation)
         {
+            lastTouchParticipant = null;
             if (body == null)
             {
                 transform.SetPositionAndRotation(worldPosition, worldRotation);
@@ -230,6 +234,18 @@ namespace RocketFooxball.Runtime.Ball
             preFreezeVelocity = Vector3.zero;
             preFreezeAngularVelocity = Vector3.zero;
             ClearQueuedState();
+        }
+
+        /// <summary>Records a valid roster participant as ball touch owner for goal attribution.</summary>
+        public bool RecordParticipantTouch(ParticipantState participant)
+        {
+            if (participant == null || !IsRosterParticipant(participant))
+            {
+                return false;
+            }
+
+            lastTouchParticipant = participant;
+            return true;
         }
 
         private void CacheReferences()
@@ -316,6 +332,8 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
+            RecordParticipantTouch(participant);
+
             var playerVelocity = participant != null && participant.Motor != null ? participant.Motor.Velocity : Vector3.zero;
             var relativeVelocity = playerVelocity - Velocity;
             var relativeSpeed = relativeVelocity.magnitude;
@@ -334,6 +352,59 @@ namespace RocketFooxball.Runtime.Ball
             var direction = playerHorizontal / playerSpeed;
             var impulse = Mathf.Min(contactAssistImpulseCap, playerSpeed * contactAssistStrength);
             queuedContactAssistImpulse += direction * impulse;
+        }
+
+        private void OnKickSucceeded(ParticipantState participant)
+        {
+            RecordParticipantTouch(participant);
+        }
+
+        private bool IsRosterParticipant(ParticipantState participant)
+        {
+            if (participants == null)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                if (participants[i] == participant)
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void UnsubscribeParticipantHandlers()
+        {
+            if (participants == null)
+            {
+                collisionHandlers = null;
+                kickHandlers = null;
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var participant = participants[i];
+                if (participant == null)
+                {
+                    continue;
+                }
+
+                if (collisionHandlers != null && i < collisionHandlers.Length && collisionHandlers[i] != null && participant.Motor != null)
+                {
+                    participant.Motor.CollisionHit -= collisionHandlers[i];
+                }
+                if (kickHandlers != null && i < kickHandlers.Length && kickHandlers[i] != null && participant.Kick != null)
+                {
+                    participant.Kick.KickSucceeded -= kickHandlers[i];
+                }
+            }
+
+            collisionHandlers = null;
+            kickHandlers = null;
         }
 
         private void RecordGroundContact(Collision collision)

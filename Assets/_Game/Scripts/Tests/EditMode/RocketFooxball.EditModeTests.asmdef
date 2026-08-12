@@ -1,0 +1,21 @@
+{
+  "name": "RocketFooxball.EditModeTests",
+  "rootNamespace": "RocketFooxball.Tests.EditMode",
+  "references": [
+    "RocketFooxball.Runtime"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": false,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
