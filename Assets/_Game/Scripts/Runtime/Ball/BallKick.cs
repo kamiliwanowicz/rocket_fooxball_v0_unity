@@ -226,6 +226,11 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
+            if (controller != null && MovementMath.IsWalkableNormal(hit.normal, controller.slopeLimit))
+            {
+                return;
+            }
+
             if (Vector3.Dot(player.DashDirection, hit.normal) < -Epsilon)
             {
                 player.EndDash(DashEndReason.Wall, 0f);
