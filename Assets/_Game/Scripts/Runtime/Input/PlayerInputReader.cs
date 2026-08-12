@@ -23,10 +23,13 @@ namespace RocketFooxball.Runtime.Input
         private InputAction kickAction;
         private InputAction releaseCursorAction;
         private InputAction captureCursorAction;
+        private InputAction matchTableAction;
 
         public Vector2 Move => gameplayInputEnabled && moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
         public Vector2 Look => gameplayInputEnabled && lookAction != null ? lookAction.ReadValue<Vector2>() : Vector2.zero;
         public bool FireHeld => gameplayInputEnabled && fireHeld;
+        /// <summary>Returns held match-table intent while this reader/action is active.</summary>
+        public bool MatchTableHeld => isActiveAndEnabled && matchTableAction != null && matchTableAction.enabled && matchTableAction.IsPressed();
         public bool CursorCaptured => Cursor.lockState == CursorLockMode.Locked;
         public bool GameplayInputEnabled => gameplayInputEnabled;
 
@@ -45,6 +48,7 @@ namespace RocketFooxball.Runtime.Input
             kickAction = actions.FindAction("Player/Kick", true);
             releaseCursorAction = actions.FindAction("Player/ReleaseCursor", true);
             captureCursorAction = actions.FindAction("Player/CaptureCursor", true);
+            matchTableAction = actions.FindAction("Player/MatchTable", true);
         }
 
         private void OnEnable()
@@ -56,6 +60,7 @@ namespace RocketFooxball.Runtime.Input
             Enable(kickAction);
             Enable(releaseCursorAction);
             Enable(captureCursorAction);
+            Enable(matchTableAction);
             if (jumpAction != null)
             {
                 jumpAction.started += OnJumpStarted;
@@ -99,6 +104,7 @@ namespace RocketFooxball.Runtime.Input
             Disable(kickAction);
             Disable(releaseCursorAction);
             Disable(captureCursorAction);
+            Disable(matchTableAction);
             ClearGameplayState();
             releaseCursorRequested = false;
             captureCursorRequested = false;
