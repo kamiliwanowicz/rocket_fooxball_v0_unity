@@ -76,7 +76,7 @@ Baseline SHA: [exact 40-character lowercase SHA or None]
 - `expensive_proof_run_point`: `[checkpoint/final boundary or None]`
 - `proof_invalidation_paths`: `[exact paths]`
 - validation boundary: [checks and evidence scope]
-- size check: [why candidate passes size test]
+- size check: [S|M|L|XL per forecast worker; worker count]
 
 ## Integration
 - order: [plan_id sequence or None]

@@ -70,11 +70,25 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
-- Size by reasoning and proof load, never lines/files: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary.
+- Size primarily by reasoning and proof load: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary. Volume is coarse tripwire, not the rule.
 - Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
-- Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
+- Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. Task obviously containing two separable builds -> prefer split. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
+- New gameplay mechanic default seam: `pure logic + types -> lifecycle/integration -> scene/prefab composition`. Default, not mandatory.
 - Execution graph and checkpoints must satisfy [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md#review-checkpoints). Encode named tasks/workers, dependencies, serial/parallel lanes, joins, review gates, and any grouped-review rationale.
 - Candidate dependencies: accepted SHAs supplied by LP.
+
+### Size buckets
+
+Read bucket, never compute. Pick in one pass after writing task `implementation`; no recompute, no designing to fit bucket. No justification, rationale, or explanation.
+
+- S -> under ~150 source LOC; wiring, fix, single-file edit
+- M -> ~150-400; one new behavior in one place; default
+- L -> ~400-700
+- XL -> 700+; legitimate for bulk/repetitive work one worker does better -> Blender projects, asset/config generation, copy-over, declarative data tables
+
+Ballpark only; ±200 fine; nothing audits it. Size never blocks plan; planner keeps final call; large single worker allowed when splitting would hurt. Real question bucket serves: task contains two separable builds -> split; otherwise one worker.
+
+Anchors: prefab/scene wiring, few call sites -> S; new MonoBehaviour + integration into one existing system -> M; full mechanic (state + lifecycle + integration) -> L, usually two workers; entire subsystem in one task -> split; bulk repetitive generation/config -> XL, one worker fine.
 
 ## Implementation design gate
 
@@ -149,6 +163,7 @@ Dependencies: [accepted full SHAs or None]
 ### T1: [coherent result]
 - objective: [single bounded implementation outcome]
 - slice_boundary: [dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
+- size: S | M | L | XL
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
 - depends_on: [accepted SHA or None]
@@ -186,7 +201,7 @@ Dependencies: [accepted full SHAs or None]
 
 ## Done Criteria
 - template fields complete; every covered requirement maps to task, owner, check, proof;
-- tasks meet `Plan shape` and `Implementation design gate`;
+- tasks meet `Plan shape` and `Implementation design gate`; `size` present per task;
 - Execution Graph includes every task/checkpoint once; all dependencies, parallel lanes, joins explicit;
 - exact baseline and dependencies are factual;
 - execution route uses immutable attempt-bound snapshot and `$orchestrate-implementation`;
