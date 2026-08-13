@@ -112,7 +112,7 @@ Production bake gate -> [loop-orchestrator/references/state-and-recovery.md#prod
 
 ## Child dispatch contract
 
-Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer/investigator), checks, proof/evidence boundary, candidate read paths, validation environment, Unity mutation flag, expensive-proof owner/run point, proof invalidation paths, and bound snapshot identity/path/digest.
+Each child dispatch carries unique `execution_id`, invocation mode, assigned identity/profile/role, bounded task/done condition, objective/exclusions, `start_sha`, exact branch/worktree, initial unrelated-status exclusions, owned/protected paths, accepted dependencies, allowed Git operations (`None` for writers; read-only for reviewer/investigator), checks, proof/evidence boundary, candidate read paths, validation environment, Unity mutation flag, expensive-proof owner/run point, proof invalidation paths, and bound snapshot identity/path/digest. Worker dispatch carries exact assigned files/symbols and bounded task only; never full plan dump.
 
 Reviewer dispatch also binds `checkpoint_id`, unique `review_cycle_id`, review kind (`initial | fix-re-review`), covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds originating `review_cycle_id`, `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria. Investigator dispatch binds recurring issue evidence, attempted orchestrator fixes, failed verification, affected task/path slice, and decision contract `fix_found | no_reasonable_fix`.
 
@@ -133,6 +133,7 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 - Terminal return: collaboration runtime reports child turn finished and child is no longer running. Messages, commentary, partial reports, filesystem changes, or apparent task completion while child remains running -> progress evidence only.
 - Returned child: capture immutable report, mark `returned`, then retire immediately. Result acceptance, Git verification, and checkpoint work use captured report; returned agent stays retired.
 - Replaced, restarted, cancelled, or no-longer-needed running child: call `interrupt_agent`, wait for terminal state, capture late output as evidence only, then mark `retired`. Finish retirement before replacement dispatch or lane-barrier close.
+- Hung child: no terminal return and no new progress evidence within bounded wait -> inspect worktree directly, preserve verified task-owned edits, `interrupt_agent`, wait for terminal state, retire, restore writer boundary, then dispatch fresh child. Never stack second writer over same paths while first still running.
 - Exit drain: before any `complete` or `blocked` return, call `list_agents`; interrupt every running descendant, wait for terminal states, then call `list_agents` again. `complete` requires zero running descendants and every registry entry `retired`. Unresolved descendant -> `blocked` with exact agent ID, role, state, and cleanup attempts.
 
 - Quiet reporting: update user only on kickoff, material checkpoint/fix/validation/blocker/completion change, or required one-line heartbeat; unchanged waits and routine child state -> silent; batch concurrent changes; full roster only on request or final return.
@@ -142,7 +143,7 @@ Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inc
 Reviewer dispatch requires all checkpoint-covered implementation workers through this sequence:
 
 1. Receive terminal return from collaboration runtime; confirm covered child no longer running.
-2. Capture final report; require `status: complete`; verify identity, scope, files, checks, and Git boundary.
+2. Capture final report; require `status: complete` plus terminal changed-path list; verify identity, checks, and Git boundary; compare reported paths against `git diff --name-only` for worker slice. Path outside owned set -> reject report as evidence only, keep barrier open.
 3. Mark child `returned`, then `retired`. Covered worker registry contains zero `running` entries.
 4. Close writer barrier; stage only checkpoint paths; commit; resolve exact `frozen_sha`; verify scope and unrelated status.
 5. Dispatch reviewer bound to committed `review_base_sha..frozen_sha`.
@@ -161,7 +162,7 @@ Plan fan-out -> launch every ready sibling after shared predecessors. Worker ter
 
 Review scope: checkpoint task/path slice from `review_base_sha` to `frozen_sha`, plus material Critical/High integration risks visible at frozen SHA. Finding qualifies only with concrete trigger, harmful outcome, and code/evidence showing realistic risk. Harmful outcome must break scoped behavior, correctness, safety, security, data/asset integrity, required contract, build/integration/validation, or materially slow runtime or team iteration.
 
-PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists.
+PoC review filter: prioritize failures blocking playtest learning or reliable iteration. Omit style, naming, formatting, comment preference, optional cleanup, speculative refactor, production hardening, theoretical out-of-scope edge case, and test-coverage suggestion without demonstrated material failure risk. Reviewer returns `no findings` when no qualifying issue exists. Builder-owned generated-YAML reserialization — `fileID` reorder, whitespace, imported-model records — is not a finding; qualify only through canonical object/reference-graph change.
 
 Fix re-review gate: after fix commit, calculate `fix_loc` from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>` by summing added+deleted counts for text rows. Binary rows add zero LOC but remain in review scope. Count all Critical/High findings reported by originating review before disposition. `fix_loc > 200` or reported finding count `> 3` -> mandatory fresh exact `sol_high` re-review. Bind `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, kind `fix-re-review`, and same checkpoint task/path slice. Apply normal review scope, materiality, and PoC filters. Otherwise fix advances accepted head without re-review. Re-review findings -> fresh fix worker, then apply gate again to that review/fix cycle. Next lane or wave uses accepted post-fix head as `review_base_sha`.
 

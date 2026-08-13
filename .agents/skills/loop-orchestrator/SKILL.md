@@ -73,13 +73,15 @@ Accepted source artifact remains pre-execution input only. Execution binding per
 
 ## EXECUTION
 
-For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Read accepted source once into unique create-once execution snapshot:
+For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Read accepted source once into unique create-once execution snapshot:
 
 `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/executions/<attempt-id>.md`
 
 Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
+
+Path authority derives from bound snapshot; LP never restates it by hand. Before execution dispatch, regenerate owned/protected/`read_paths` sets from snapshot, normalize (repo-relative, sorted, deduped), and compare against state. Missing or extra path authority -> plan `blocked`; no worker creation, no mutation. Reconcile state to exact snapshot sets atomically, then dispatch fresh `attempt_id`.
 
 Execution orchestrator builds declared checks before worker dispatch. Workflow writes sole executed `check-ledger.json`; harness writes `harness-summary.json`; state stores only ledger pointer plus SHA-256. Workers run compact fast/local proof; production-final rows retain full contract. Apply [workflow harness precondition](references/state-and-recovery.md#workflow-harness-precondition) before every workflow or Unity invocation. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; carry previous accepted `-LedgerPath`; never pass workflow arguments to test runner. Production-final order: zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes -> `ProductionPrepare` bake -> `ProductionValidate` semantic pass. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate).
 

@@ -152,7 +152,7 @@ Dependencies: [accepted full SHAs or None]
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
 - depends_on: [accepted SHA or None]
-- owns: `[exact paths]`
+- owns: `[exact paths; include every generated output any owned stage can make stale, including transitive outputs]`
 - protected: `[exact paths/symbols]`
 - read_paths: `[exact paths/symbols]`
 - validation_environment: `[bounded environment and lease]`
