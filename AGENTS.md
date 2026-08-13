@@ -91,7 +91,8 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Movement, input, generated-lab, or other builder-generated change -> run builder protocol.
 - Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process proves references persisted to disk. Do not require second builds.
 - Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
-- Validator scope matches owner scope: budget and contract assertions run against owning subtree (renderer budget -> `Arena/Architecture`); whole-scene aggregates log without failing. New presentation object never invalidates unrelated owner's budget.
+- Validator scope matches owner scope: contract assertions run against owning subtree. New presentation object never invalidates unrelated owner's contract.
+- Render budgets are report-only. Renderer counts, triangle counts, opaque passes, transparent statics, and texture memory are measured and logged/manifested, never enforced. No build, import, validate, or Blender generate step fails on a budget. Do not reintroduce a budget throw without explicit user instruction.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.

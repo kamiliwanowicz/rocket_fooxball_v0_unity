@@ -454,9 +454,6 @@ def audit_asset(profile, objects, part_bounds, imported=False):
     counts = [audit_mesh(obj) for obj in objects]
     total_vertices = sum(count[0] for count in counts)
     total_triangles = sum(count[1] for count in counts)
-    triangle_min, triangle_max = profile["triangle_budget"]
-    if not triangle_min <= total_triangles <= triangle_max:
-        raise RuntimeError(f"Triangle budget failed: {total_triangles} not in {triangle_min}-{triangle_max}")
     minimum, maximum = combined_bounds(objects)
     dimensions = maximum - minimum
     if any(dimensions[i] > profile["hard_envelope"][i] + 1.0e-6 for i in range(3)):

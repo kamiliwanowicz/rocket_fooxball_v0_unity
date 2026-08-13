@@ -290,8 +290,6 @@ def audit_asset(objects, part_bounds):
     counts = [audit_mesh(obj) for obj in objects]
     total_vertices = sum(count[0] for count in counts)
     total_triangles = sum(count[1] for count in counts)
-    if not TRIANGLE_MIN <= total_triangles <= TRIANGLE_MAX:
-        raise RuntimeError(f"Triangle budget failed: {total_triangles} not in {TRIANGLE_MIN}-{TRIANGLE_MAX}")
 
     minimum, maximum = combined_bounds(objects)
     dimensions = maximum - minimum
