@@ -18,9 +18,9 @@ Inspect request, repository instructions, Git status, full baseline SHA, cited f
 - `hybrid`: parallel independent wave followed by ordered dependent candidates.
 - `None`: status `needs_user` or `blocked`.
 
-Default to smallest coherent candidate planner can fully design and worker set can execute without choosing architecture, algorithm, state ownership, lifecycle order, or edge-case policy. Candidate may contain multiple workers when ownership and validation environments remain disjoint; keep one coherent recovery and expensive-proof boundary. Use `single_plan` only when request forms one bounded behavior cluster with one integrated proof boundary.
+Default to smallest coherent candidate planner can fully design and worker set can execute without choosing architecture, algorithm, state ownership, lifecycle order, or edge-case policy. Candidate may contain multiple workers when ownership and validation boundaries remain disjoint; keep one coherent recovery and expensive-proof boundary. Use `single_plan` only when request forms one bounded behavior cluster with one integrated proof boundary.
 
-Split when candidate combines several independently reasoned mechanics or would force planner to compress important algorithms, state transitions, wiring, and proofs into broad summaries. Size test: planner can pre-think full candidate in one focused attempt; worker can implement it without inventing non-local design.
+Split when candidate combines several independently reasoned mechanics or would force planner to compress important algorithms, state transitions, wiring, and proofs into broad summaries. Candidate must be designable in one focused planner attempt and executable without worker-owned non-local decisions.
 
 Sequential candidates may modify same path after accepted upstream integration. Each candidate owns only its bounded delta against supplied baseline and names contract produced for next candidate. Keep tightly coupled helper + consumer, one atomic migration, or one generated asset + authority together. Avoid fragments whose only result cannot compile, validate, or provide stable downstream contract.
 
@@ -30,7 +30,7 @@ Candidates provide planner scope plus design obligations. Breakdown identifies m
 
 1. Inspect cited sources and relevant repository paths. Record exact branch, dirty paths, full baseline SHA, checks, and evidence.
    - complete when each claim has exact evidence or explicit `proposed` label.
-2. Group requirements by one dominant behavior/proof boundary. For each candidate, record bounded design scope planner must resolve. Apply size test before ownership optimization.
+2. Group requirements by one dominant behavior/proof boundary. For each candidate, record bounded design scope planner must resolve.
    - complete when each candidate is implementation-designable in one planner attempt and executable without worker-owned non-local decisions.
 3. Forecast owned/protected paths. Define dependencies, produced downstream contracts, waves, validation boundary, and integration order.
    - complete when requirement coverage is complete/non-overlapping, graph acyclic, parallel owned paths disjoint, sequential path reuse baseline-bound, and order deterministic.
@@ -53,14 +53,9 @@ Baseline SHA: [exact 40-character lowercase SHA or None]
 ## Requirements
 - REQ-[stable ID]: [requirement] -> [evidence path/symbol or proposed] -> [plan_id candidate or None]
 
-## Evidence
-- observed: `[exact path or Git command]` -> [fact]
-- proposed: `[exact path or tight glob]` -> [forecast]
-
 ## Plan Candidates
 ### [stable plan_id]
-- objective: [planner-level outcome]
-- done condition: [observable accepted plan boundary]
+- objective: [planner-level outcome and observable accepted plan boundary]
 - covered requirements: [REQ-* list]
 - design scope: [bounded mechanisms and decisions planner must settle]
 - depends on: [plan_id list or None]
@@ -69,19 +64,11 @@ Baseline SHA: [exact 40-character lowercase SHA or None]
 - baseline rule: [accepted run baseline or accepted upstream integration SHA]
 - owned paths: `[exact paths or tight globs]`
 - protected paths: `[exact paths/symbols]`
-- `read_paths`: `[exact paths/symbols]`
-- `validation_environment`: `[bounded environment and lease]`
-- `unity_mutation`: `true | false`
-- `expensive_proof_owner`: `[one identity or None]`
-- `expensive_proof_run_point`: `[checkpoint/final boundary or None]`
-- `proof_invalidation_paths`: `[exact paths]`
-- validation boundary: [checks and evidence scope]
-- size check: [S|M|L|XL per forecast worker; worker count]
+- validation boundary: [bounded environment and lease; checks and evidence scope]
 
 ## Integration
 - order: [plan_id sequence or None]
 - parallel waves: [wave -> plan_id list or None]
-- split rationale: [independence/dependency/elapsed-time reason or coherent single-plan reason]
 
 ## Question
 - material question: [one question when needs_user; otherwise None]
@@ -95,8 +82,8 @@ Baseline SHA: [exact 40-character lowercase SHA or None]
 
 ## Status rules
 
-- `ready`: `Decision` is not `None`; baseline present; every requirement maps once; every candidate field complete; each size check passes; question/blocker fields `None`.
+- `ready`: `Decision` is not `None`; baseline present; every requirement maps once; every candidate field complete; question/blocker fields `None`.
 - `needs_user`: `Decision: None` unless safe accepted decomposition already exists; one material question; blocker fields `None`. User response starts fresh attempt ID.
 - `blocked`: `Decision: None`; exact blocker, evidence, and observable needed action/recheck; question `None`. Resolved blocker starts fresh attempt ID.
 
-Small coherent request -> exactly one candidate. Parallel decision -> disjoint candidate ownership plus deterministic merge order. Sequential shared-path reuse -> accepted upstream integration SHA. Oversized candidate, unstable fragment, invented baseline, or ambiguous coverage -> result not `ready`.
+Small coherent request -> exactly one candidate. Parallel decision -> disjoint candidate ownership plus deterministic merge order. Sequential shared-path reuse -> accepted upstream integration SHA. Unstable fragment, invented baseline, or ambiguous coverage -> result not `ready`.

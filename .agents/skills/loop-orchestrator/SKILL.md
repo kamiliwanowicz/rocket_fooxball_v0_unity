@@ -40,7 +40,7 @@ Worktree scope is closed: current run's plan worktrees plus multi-plan integrati
 
 Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
-Candidate records bind `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`, and `proof_invalidation_paths`. One production-final owner runs proof after source fan-in and accepted fixes. Candidate may contain multiple workers only with disjoint paths and stable validation environments.
+Candidate has one production-final owner after source fan-in and accepted fixes. Multi-worker candidate -> disjoint writable paths + stable validation environments.
 
 ## BREAKDOWN
 
@@ -60,7 +60,7 @@ For each ready candidate, LP reserves unique create-once artifact path:
 
 `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/<attempt-id>.md`
 
-Dispatch exact `sol_high` planner with `run_id`, `plan_id`, `attempt_id`, covered requirement IDs, accepted baseline SHA, dependencies, owned/protected paths, reserved artifact path, checks, state path, and objective. Independent disjoint candidates may plan in parallel. Dependent candidate waits until prerequisite merger records accepted integration SHA; that observed SHA becomes planning baseline.
+Dispatch exact `sol_high` planner with `run_id`, `plan_id`, `attempt_id`, covered requirement IDs, accepted baseline SHA, dependencies, design scope, produces, owned/protected paths, reserved artifact path, checks, candidate validation boundary, state path, and objective. Independent disjoint candidates may plan in parallel. Dependent candidate waits until prerequisite merger records accepted integration SHA; that observed SHA becomes planning baseline.
 
 Planner result handling:
 
@@ -69,21 +69,21 @@ Planner result handling:
 - `blocked`: record blocker and recheck condition. Resolution -> fresh planner attempt and new reserved path.
 - decomposition change: route candidate revision through fresh task-breakdown attempt; planner never splits candidates.
 
-Accepted source artifact remains pre-execution input only. Execution binding performs one source read into attempt snapshot, then verifies snapshot against accepted digest/size.
+Accepted source artifact remains pre-execution input only. Execution binding creates one attempt snapshot through [state acceptance contract](references/state-and-recovery.md#dispatch-and-acceptance-writes), then verifies snapshot digest/size.
 
 ## EXECUTION
 
-For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Read accepted source once into unique create-once execution snapshot:
+For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Create unique create-once execution snapshot through [state acceptance contract](references/state-and-recovery.md#dispatch-and-acceptance-writes):
 
 `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/executions/<attempt-id>.md`
 
-Reopen snapshot; verify accepted digest and size. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
+For `$p = $snapshotPath`, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to the accepted digest and size without loading snapshot bytes or context. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
 Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Path authority derives from bound snapshot; LP never restates it by hand. Before execution dispatch, regenerate owned/protected/`read_paths` sets from snapshot, normalize (repo-relative, sorted, deduped), and compare against state. Missing or extra path authority -> plan `blocked`; no worker creation, no mutation. Reconcile state to exact snapshot sets atomically, then dispatch fresh `attempt_id`.
+Path authority derives from bound snapshot; LP never restates it by hand. Before execution dispatch, regenerate owned/protected sets from snapshot, normalize repo-relative/sorted/deduped, compare against state, then store exact sets atomically. Missing or extra authority -> plan `blocked`; no worker creation or mutation. Reconciliation -> fresh `attempt_id`.
 
-Execution orchestrator builds declared checks before worker dispatch. Workflow writes sole executed `check-ledger.json`; harness writes `harness-summary.json`; state stores only ledger pointer plus SHA-256. Workers run compact fast/local proof; production-final rows retain full contract. Apply [workflow harness precondition](references/state-and-recovery.md#workflow-harness-precondition) before every workflow or Unity invocation. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; carry previous accepted `-LedgerPath`; never pass workflow arguments to test runner. Production-final order: zero writers, clean exact source SHA, one Unity lease, accepted reviews/fixes -> `ProductionPrepare` bake -> `ProductionValidate` semantic pass. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate).
+Execution orchestrator builds declared checks before worker dispatch. Workflow owns `check-ledger.json`; harness owns `harness-summary.json`; state stores ledger pointer + SHA-256 only. Workers run compact fast/local proof; production-final rows retain full contract. Workflow/Unity invocation -> [Workflow Harness Precondition](references/state-and-recovery.md#workflow-harness-precondition). Production-final proof -> [Production Bake Gate](references/state-and-recovery.md#production-bake-gate).
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 

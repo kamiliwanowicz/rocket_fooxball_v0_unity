@@ -19,9 +19,9 @@ Dispatch binds:
 - ordered accepted execution SHAs from breakdown integration order;
 - requirement and plan IDs for each SHA;
 - owned/protected paths, dependencies, exact allowed Git operations;
-- integration checks/evidence locations and LP state path.
+- integration pending/blocked check IDs and LP state path.
 
-Dispatch carries workflow-owned executed-ledger pointer `check-ledger.json` plus SHA-256, row owners/tier/run points, input and environment digests, mutation flags, invalidation paths, and subsumption. Harness writes `harness-summary.json`. State carries pointer plus digest only; merging agent verifies ledger digest before reads and never broadens proof scope.
+Dispatch carries workflow-owned `check-ledger.json` path + SHA-256 only. Harness writes `harness-summary.json`. State carries pointer + digest only; merging agent verifies ledger digest before reads and never broadens proof scope.
 
 Each accepted execution SHA must be clean, committed, scope-verified, and accepted by LP. Missing/mismatched input -> `blocked` before mutation.
 
@@ -34,12 +34,12 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
    - Post-merge SHA may equal execution SHA when fast-forward applies.
    - Otherwise merge exact candidate SHA only when dispatch permits merge commit.
 4. Conflict -> stop and report files/candidate SHAs. Resolve only dispatch-owned integration text. Product choice or protected-path change -> `blocked` before resolution.
-5. Run required boundary checks after declared merge boundaries and final integration. Apply [workflow harness precondition](../references/state-and-recovery.md#workflow-harness-precondition) before every workflow or Unity invocation. Then run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`; never pass workflow arguments to test runner. Carry prior accepted `-LedgerPath`. Merge/fix invalidates affected checks.
+5. Run required boundary checks after declared merge boundaries and final integration. Workflow/Unity invocation -> [Workflow Harness Precondition](../references/state-and-recovery.md#workflow-harness-precondition). Merge/fix invalidates affected checks.
    - Intermediate wave -> Git/scope/downstream-contract rows.
    - Final wave -> union pending or invalidated production-final rows once.
    - Unchanged multi-plan fast-forward -> verify `check-ledger.json` SHA-256; reuse non-bake evidence after SHA/content attestation; production bake requires builder-gate reattest.
-   - Production bake -> apply [production bake gate](../references/state-and-recovery.md#production-bake-gate). Lighting inputs -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Other render/material/prefab/scene/arena/quality/input/package/version paths do not reopen bake.
-   - Post-proof fix -> invalidate rows whose declared paths intersect changed paths; apply production bake gate when lighting inputs intersect.
+   - Production bake -> [Production Bake Gate](../references/state-and-recovery.md#production-bake-gate) + workflow inputs decide reopening.
+   - Post-proof fix -> invalidate intersecting rows; production bake -> [Production Bake Gate](../references/state-and-recovery.md#production-bake-gate).
 6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged multi-plan integration head with still-valid checks and no integration edit. Report Critical/High findings only.
 7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, then apply [fix re-review gate](../../orchestrate-implementation/SKILL.md#review-checkpoints).
 8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, `check-ledger.json` pointer/digest, checks, and no active writer.
@@ -80,7 +80,7 @@ Pre-Merge Head: expected [full SHA] -> observed [full SHA]
 Inputs: [accepted input SHAs in processed order]
 Last Completed Input: [full SHA or None]
 Final SHA: [observed final full SHA or None]
-Changed Paths: [exact paths or None]
+Changed Path Count: [n]
 Conflicts: [files -> candidate SHAs or None]
 Clean Status: true | false
 Review or Fix Disposition: [combined review verdict and fix outcome, or None]

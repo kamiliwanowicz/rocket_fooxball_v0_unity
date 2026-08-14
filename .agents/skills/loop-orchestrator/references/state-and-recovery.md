@@ -20,16 +20,15 @@ State routes work; it never overrides Git ancestry, HEAD, branch/worktree identi
 
 ## Atomic write
 
-Before every dispatch and after every accepted result, LP:
+Before every dispatch and after every accepted result, LP writes state.
 
-1. Build complete next state bytes in unique temporary file inside run directory.
-2. Flush and close temporary file.
-3. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
-4. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
-5. Keep backup until verification passes.
-6. Reopen `state.md`; verify readable run ID and intended phase/status before continuing.
+Field update -> default scripted targeted patch into unique temporary file. Match target section + exact field key once. Zero/multiple matches -> stop. Full rebuild -> structural or phase change only.
 
-State field change -> build complete next document. Targeted text patch must match section plus exact field key exactly once. Zero or multiple matches -> stop. After replacement, verify intended field, expected phase, and unchanged neighboring identifiers.
+1. Flush and close temporary file.
+2. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
+3. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
+4. Keep backup until verification passes.
+5. Fully reopen `state.md`; verify readable full state, run ID, intended field/phase/status, unchanged neighboring identifiers.
 
 Partial write, rename failure, or verification mismatch -> no dispatch. Preserve old readable state and return blocker evidence. Never let another agent repair state.
 
@@ -69,12 +68,6 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
-- `read_paths`: [exact paths]
-- `validation_environment`: [bounded environment and lease]
-- `unity_mutation`: true | false
-- `expensive_proof_owner`: [identity or None]
-- `expensive_proof_run_point`: [boundary or None]
-- `proof_invalidation_paths`: [exact paths]
 - source artifact: [absolute path or None]
 - source artifact sha256: [lowercase digest or None]
 - source artifact bytes: [integer or None]
@@ -86,7 +79,7 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - accepted execution SHA: [full SHA or None]
 - merge wave/status: [wave + pending | merged | blocked]
 - accepted integration SHA: [full SHA or None]
-- checks: [check -> result/evidence/SHA or pending]
+- checks: [pending | blocked check IDs]
 - executed ledger: [absolute `check-ledger.json` path or None]
 - executed ledger sha256: [lowercase digest or None]
 - question: [one question or None]
@@ -104,25 +97,34 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - drift: [expected/observed full SHAs + rejected | pending_acceptance | accepted + evidence/authority or None]
 - merge status: pending | active | blocked | complete
 - final SHA: [full SHA or None]
-- checks: [check -> result/evidence/SHA or pending]
+- checks: [pending | blocked check IDs]
+- executed ledger: [absolute `check-ledger.json` path or None]
+- executed ledger sha256: [lowercase digest or None]
 - clean: true | false | unknown
 ```
 
 ## Executed Ledger Pointer
 
-Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harness-summary.json`. State stores only absolute ledger path plus SHA-256 in plan fields above; LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows and evidence only after digest verification. Full row contract stays in producer/consumer policy.
+Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harness-summary.json`. Plan/integration `checks` store pending/blocked IDs only. Results, evidence, and SHAs -> absolute ledger pointer + lowercase SHA-256. LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows/evidence after digest verification. Full row contract stays in producer/consumer policy.
 
 ## Workflow Harness Precondition
 
-Run harness pre-gate before every `Tools/Validation/Invoke-MovementLabWorkflow.ps1` or Unity invocation. Command, exit code, runtime limit, process and lock requirements -> [`AGENTS.md`](../../../../AGENTS.md) `Unity execution`.
+Harness pre-gate -> [`AGENTS.md`](../../../../AGENTS.md) `Unity execution` command, exit code, runtime limit, process, lock requirements. Run before every workflow/Unity invocation; applies `-PlanOnly` + read-only validation. Nonzero, timeout, Unity process, or project lock -> `blocked`.
 
-Nonzero, timeout, Unity process, or project lock -> `blocked`. Repair affected tooling; rerun harness to green before any workflow or Unity command, including `-PlanOnly` and read-only validation. Editing `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs` makes gate stale; rerun harness before next workflow or Unity command.
+Harness stale after edits under `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs`. Repair/rerun green before next workflow/Unity invocation.
+
+Workflow command only:
+
+`Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>`
+
+Apply `-PlanOnly`, `-LedgerPath`, `-EvidenceRoot` when applicable. Carry prior accepted `-LedgerPath` across retries/dependencies. Never pass workflow arguments to test runner.
+
+Production-final order: zero writers -> clean exact SHA -> lease -> accepted reviews/fixes -> `ProductionPrepare` -> `ProductionValidate` semantic pass.
 
 ## Production Bake Gate
 
-- Order: production-final preconditions -> `ProductionPrepare` -> `ProductionValidate` semantic pass. Never require `ValidateMovementLab()` before production bake.
 - Budget: rehash bound `workflow-result.json` where `mode == 'ProductionPrepare'`; sum `bakeCount`. Cumulative `>=2` -> `blocked` before `ProductionPrepare`. Postflight `>2` -> evidence-corruption/contract violation; observed total never exceeds `2`.
-- Reattest: lighting-input intersection invalidates production-final proof. Current lighting-input digest unchanged -> builder skip expected; rerun needs no authority. Exact current-lighting skip marker -> `reused`, `bakeCount=0`; absent marker -> one bake, `bakeCount=1`; invalid/duplicate marker -> `blocked`.
+- Marker/skip/input semantics: [`AGENTS.md`](../../../../AGENTS.md) `Unity execution` production bake gate sole owner. Lighting-input intersection invalidates production-final proof.
 - Replacement bake: current lighting-input digest changed after prior production-final attempt -> predicted real rebuild; explicit user authority required before dispatch. Missing authority -> `blocked`; never force rerun. With authority, `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
@@ -170,12 +172,12 @@ After result, stop role when required; verify result against live identity, Git/
 
 Planner acceptance:
 
-1. Stop planner.
-2. Verify reserved artifact exists and was create-once.
-3. Compute SHA-256 and byte size.
-4. Record source artifact path/digest/size and status `planned` atomically.
-5. Read source once into create-once execution snapshot. Reopen snapshot and compare accepted digest/size; mismatch follows pre-bind source-digest transition.
-6. Record matching snapshot path/digest/size before execution dispatch.
+1. Stop planner. Verify reserved artifact exists + create-once.
+2. For `$p`, compute exact values: `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()`; `(Get-Item $p).Length`.
+3. Record source artifact path/digest/size + `planned` atomically.
+4. Verify destination absent: `if (Test-Path -LiteralPath $snapshotPath) { throw 'snapshot destination exists' }`. Create snapshot only with `Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop`.
+5. For `$p = $snapshotPath`, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to accepted values without loading snapshot bytes or context. Mismatch -> pre-bind source-digest transition.
+6. Record matching snapshot path/digest/size before execution dispatch. Never read/write artifact bytes through agent.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 

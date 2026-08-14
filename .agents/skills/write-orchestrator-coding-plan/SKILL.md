@@ -27,7 +27,7 @@ Required dispatch fields:
 - covered `REQ-*` IDs and objective;
 - exact accepted 40-character `baseline_sha`;
 - dependencies: accepted upstream integration SHAs or `None`;
-- candidate design scope, produced downstream contract, and size check;
+- candidate design scope and produced downstream contract;
 - forecast owned/protected paths;
 - checks and validation boundary;
 - reserved artifact path under `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/<attempt-id>.md`;
@@ -39,7 +39,7 @@ Reserved artifact path is create-once. Confirm destination absent. Write complet
 
 Result status:
 
-- `ready`: artifact created at exact reserved path; return path, run/plan/attempt IDs, baseline, covered requirements, dependencies, and owned/protected paths.
+- `ready`: artifact created at exact reserved path; return path, run/plan/attempt IDs, and owned/protected paths.
 - `needs_user`: return one material question and safe facts; create no accepted artifact. User response requires fresh attempt ID and reserved path.
 - `blocked`: return exact blocker, evidence, and one needed LP action/recheck; create no accepted artifact.
 - decomposition mismatch: return `blocked` with needed LP action `fresh task-breakdown`; planner never creates/splits candidates.
@@ -90,18 +90,7 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 - Execution graph and checkpoints must satisfy [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md#review-checkpoints). Encode named tasks/workers, dependencies, serial/parallel lanes, joins, review gates, and any grouped-review rationale.
 - Candidate dependencies: accepted SHAs supplied by LP.
 
-### Size buckets
-
-Read bucket, never compute. Pick in one pass after writing task `implementation`; no recompute, no designing to fit bucket. No justification, rationale, or explanation.
-
-- S -> under ~150 source LOC; wiring, fix, single-file edit
-- M -> ~150-400; one new behavior in one place; default
-- L -> ~400-700
-- XL -> 700+; legitimate for bulk/repetitive work one worker does better -> Blender projects, asset/config generation, copy-over, declarative data tables
-
-Ballpark only; ±200 fine; nothing audits it. Size never blocks plan; planner keeps final call; large single worker allowed when splitting would hurt. Real question bucket serves: task contains two separable builds -> split; otherwise one worker.
-
-Anchors: prefab/scene wiring, few call sites -> S; new MonoBehaviour + integration into one existing system -> M; full mechanic (state + lifecycle + integration) -> L, usually two workers; entire subsystem in one task -> split; bulk repetitive generation/config -> XL, one worker fine.
+Split anchors: prefab/scene wiring + few call sites -> usually one task; new MonoBehaviour + one-system integration -> cohesive task; full mechanic with separable state/lifecycle/integration -> split; whole subsystem -> split; bulk repetitive generation/config -> one task when split harms execution.
 
 ## Implementation design gate
 
@@ -109,7 +98,7 @@ Before writing artifact, ask what worker would still need to figure out. Resolve
 
 Ready task lets worker follow recorded design using only local coding judgment. Product/architecture choice missing from repository -> `needs_user`. Repository evidence gap -> LP `blocked`. Excess design surface -> decomposition mismatch.
 
-After design detail, apply `Plan shape` sizing/splitting rules. Record slice boundary in template. No meaningful independent acceptance -> fold.
+After design detail, apply `Plan shape` splitting rules. No meaningful independent acceptance -> fold.
 
 Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan explains concrete contact state, projection/order, ramp-exit handling, and separation from wall handling.
 
@@ -119,7 +108,7 @@ Example: `record walkable hit normal, project velocity along ramp, preserve laun
 
 ### Check contract
 
-Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
+Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected discriminatory evidence>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
 
 ### Validation authoring rules
 
@@ -155,12 +144,6 @@ Dependencies: [accepted full SHAs or None]
 - in: [behavior/files]
 - out: [non-goal]
 
-## Repository Findings
-- observed: `[path]` -> [symbol/fact]
-- gap: [missing behavior]
-- constraint: [repository rule]
-- proposed: `[path]` -> [purpose]
-
 ## Decisions
 - assumption: [minor assumption]
 - decision: [chosen approach and reason]
@@ -174,28 +157,21 @@ Dependencies: [accepted full SHAs or None]
 
 ## Tasks
 ### T1: [coherent result]
-- objective: [single bounded implementation outcome]
-- slice_boundary: [dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
-- size: S | M | L | XL
+- objective: [single bounded implementation outcome; dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
-- depends_on: [accepted SHA or None]
-- owns: `[exact paths; include every generated output any owned stage can make stale, including transitive outputs]`
+- owns: `[exact paths or tight globs]`
 - protected: `[exact paths/symbols]`
-- read_paths: `[exact paths/symbols]`
+- read_paths: `[exact path/symbol -> reason]`
 - validation_environment: `[bounded environment and lease]`
 - unity_mutation: `true | false`
 - expensive_proof_owner: `[one identity or None]`
 - expensive_proof_run_point: `[checkpoint/final boundary or None]`
-- proof_invalidation_paths: `[paths that invalidate proof]`
-- focused_reads: `[exact paths/symbols and reason]`
 - implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
 - done when: [observable acceptance]
-- checks: ordinary -> `proof: <command> -> <expected>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
-- proof: [discriminatory evidence]
+- checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
 - review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
-- return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
 ## Execution Assignments
 - workers: [task ID -> worker identity -> bounded outcome; parallel lane when any]
@@ -208,17 +184,8 @@ Dependencies: [accepted full SHAs or None]
 - invalidation: [edits requiring rerun]
 
 ## Handoff
-- changed paths: [list]
 - residual risks: [list or None]
 - authority: [integration and user-branch approval]
-
-## Done Criteria
-- template fields complete; every covered requirement maps to task, owner, check, proof;
-- tasks meet `Plan shape` and `Implementation design gate`; `size` present per task;
-- Execution Graph includes every task/checkpoint once; all dependencies, parallel lanes, joins explicit;
-- exact baseline and dependencies are factual;
-- execution route uses immutable attempt-bound snapshot and `$orchestrate-implementation`;
-- final checks bind clean committed head or blocker names needed action.
 ```
 
 ## LP result template
@@ -232,10 +199,6 @@ Run ID: [run_id]
 Plan ID: [plan_id]
 Attempt ID: [attempt_id]
 Assigned Agent: [exact identity]
-Profile: sol_high
-Baseline SHA: [full SHA]
-Covered Requirements: [REQ-* list]
-Dependencies: [full SHA list or None]
 Owned Paths: [exact paths]
 Protected Paths: [exact paths]
 Artifact Path: [exact path or None]
