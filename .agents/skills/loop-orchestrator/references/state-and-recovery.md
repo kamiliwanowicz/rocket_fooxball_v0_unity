@@ -114,7 +114,7 @@ Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harn
 
 ## Workflow Harness Precondition
 
-Before every `Tools/Validation/Invoke-MovementLabWorkflow.ps1` or Unity invocation, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`. Require exit `0`, `<10s`, no Unity process, and no project lock.
+Run harness pre-gate before every `Tools/Validation/Invoke-MovementLabWorkflow.ps1` or Unity invocation. Command, exit code, runtime limit, process and lock requirements -> [`AGENTS.md`](../../../../AGENTS.md) `Unity execution`.
 
 Nonzero, timeout, Unity process, or project lock -> `blocked`. Repair affected tooling; rerun harness to green before any workflow or Unity command, including `-PlanOnly` and read-only validation. Editing `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs` makes gate stale; rerun harness before next workflow or Unity command.
 

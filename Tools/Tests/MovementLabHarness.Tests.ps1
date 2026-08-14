@@ -716,6 +716,22 @@ function Test-HookSettings {
         }
     }
 
+    # Nested hook failures otherwise surface as a bare exit code; the real child error is only
+    # reachable from -EvidenceRoot JSON. Fold the child's own output into the fail message.
+    function Get-HookFailureDetail {
+        param([Parameter(Mandatory = $true)]$Result)
+        $label = 'stderr'
+        $detail = [string]$Result.stderr
+        if ([string]::IsNullOrWhiteSpace($detail)) {
+            $label = 'stdout'
+            $detail = (@($Result.stdout) -join ' ')
+        }
+        $detail = (($detail -replace '\s+', ' ')).Trim()
+        if ([string]::IsNullOrWhiteSpace($detail)) { return '; child output empty' }
+        if ($detail.Length -gt 200) { $detail = $detail.Substring(0, 197) + '...' }
+        return ('; ' + $label + '=' + $detail)
+    }
+
     $postTestsTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
     $postValidationTarget = '{"tool_name":"Write","tool_input":{"file_path":"Tools/Validation/Invoke-MovementLabWorkflow.ps1"}}'
     $postEditorTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs"}}'
@@ -774,15 +790,15 @@ function Test-HookSettings {
         [pscustomobject]@{ Name = 'workflow PreToolUse'; Result = $preWorkflowResult },
         [pscustomobject]@{ Name = 'Unity PreToolUse'; Result = $preUnityResult }
     )) {
-        if ($fixture.Result.exitCode -ne 0) { return New-HarnessFail ($fixture.Name + ' target hook exited ' + $fixture.Result.exitCode) }
-        if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout') }
-        if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness') }
+        if ($fixture.Result.exitCode -ne 0) { return New-HarnessFail ($fixture.Name + ' target hook exited ' + $fixture.Result.exitCode + (Get-HookFailureDetail $fixture.Result)) }
+        if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout' + (Get-HookFailureDetail $fixture.Result)) }
+        if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness' + (Get-HookFailureDetail $fixture.Result)) }
     }
-    if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode) }
-    if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode) }
-    if ($postUnrelatedResult.stdout.Count -ne 0 -or $postUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PostToolUse event did not skip cleanly' }
-    if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PreToolUse event did not skip cleanly' }
-    if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2') }
-    if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail 'forced PreToolUse fixture lacked concise stderr failure' }
+    if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode + (Get-HookFailureDetail $postUnrelatedResult)) }
+    if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode + (Get-HookFailureDetail $preUnrelatedResult)) }
+    if ($postUnrelatedResult.stdout.Count -ne 0 -or $postUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail ('unrelated PostToolUse event did not skip cleanly' + (Get-HookFailureDetail $postUnrelatedResult)) }
+    if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail ('unrelated PreToolUse event did not skip cleanly' + (Get-HookFailureDetail $preUnrelatedResult)) }
+    if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2' + (Get-HookFailureDetail $preForcedResult)) }
+    if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail ('forced PreToolUse fixture lacked concise stderr failure' + (Get-HookFailureDetail $preForcedResult)) }
     return New-HarnessPass 'exec-form hooks; three PostToolUse targets; workflow/Unity PreToolUse targets; skips and exit-2 failure'
 }

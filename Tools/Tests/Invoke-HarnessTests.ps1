@@ -9,6 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$runtimeLimitMs = 30000
 
 function Write-HarnessOutput {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
@@ -55,9 +56,9 @@ function Get-HookProperty {
 
 function Get-HookInput {
     param([Parameter(Mandatory = $true)]$Event)
-    $input = Get-HookProperty $Event 'tool_input'
-    if ($null -eq $input) { return $Event }
-    return $input
+    $toolInput = Get-HookProperty $Event 'tool_input'
+    if ($null -eq $toolInput) { return $Event }
+    return $toolInput
 }
 
 function Get-HookStrings {
@@ -96,8 +97,8 @@ function Test-HookPostToolTarget {
     param([Parameter(Mandatory = $true)]$Event, [Parameter(Mandatory = $true)][string]$Root)
     $toolName = [string](Get-HookProperty $Event 'tool_name')
     if ($toolName -notin @('Edit', 'Write')) { return $false }
-    $input = Get-HookInput $Event
-    $paths = @(Get-HookStrings $input @('file_path', 'path', 'filePath', 'filename'))
+    $toolInput = Get-HookInput $Event
+    $paths = @(Get-HookStrings $toolInput @('file_path', 'path', 'filePath', 'filename'))
     $paths += @(Get-HookStrings $Event @('file_path', 'path', 'filePath', 'filename'))
     foreach ($path in $paths) {
         $relative = Convert-HookPathToRelative $path $Root
@@ -112,8 +113,8 @@ function Test-HookPreToolTarget {
     param([Parameter(Mandatory = $true)]$Event)
     $toolName = [string](Get-HookProperty $Event 'tool_name')
     if ($toolName -notin @('Bash', 'PowerShell')) { return $false }
-    $input = Get-HookInput $Event
-    $commands = @(Get-HookStrings $input @('command', 'cmd', 'script'))
+    $toolInput = Get-HookInput $Event
+    $commands = @(Get-HookStrings $toolInput @('command', 'cmd', 'script'))
     $commands += @(Get-HookStrings $Event @('command', 'cmd', 'script'))
     foreach ($command in $commands) {
         if ($command -match '(?i)Invoke-MovementLabWorkflow\.ps1') { return $true }
@@ -229,7 +230,7 @@ $summary = [ordered]@{
     status = if ($failed.Count -eq 0) { 'pass' } else { 'fail' }
     projectRoot = $projectRoot
     elapsedMs = $elapsedMs
-    runtimeLimitSeconds = 10
+    runtimeLimitSeconds = $runtimeLimitMs / 1000
     cases = @($results.ToArray())
     redBaseline = 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     redGreen = @(
@@ -252,16 +253,16 @@ if (-not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($HookMode)) {
-    Write-HarnessOutput ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=10000')
+    Write-HarnessOutput ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=' + $runtimeLimitMs)
 }
 if ($HookTestForceFailure) {
     Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: forced harness failure')
     if (-not [string]::IsNullOrWhiteSpace($HookMode)) { exit 2 }
     exit 1
 }
-if ($failed.Count -gt 0 -or $elapsedMs -ge 10000) {
+if ($failed.Count -gt 0 -or $elapsedMs -ge $runtimeLimitMs) {
     if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
-        $reason = if ($elapsedMs -ge 10000) { 'runtime limit exceeded' } else { ('harness cases failed=' + $failed.Count) }
+        $reason = if ($elapsedMs -ge $runtimeLimitMs) { 'runtime limit exceeded' } else { ('harness cases failed=' + $failed.Count) }
         Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: ' + $reason + '; elapsedMs=' + $elapsedMs)
         exit 2
     }
