@@ -180,6 +180,22 @@ function Assert-DurableEvidencePath {
     return $full
 }
 
+function Assert-EvidencePathBudget {
+    param([Parameter(Mandatory = $true)][string]$EvidenceDirectory)
+    $deepest = Join-Path (Join-Path $EvidenceDirectory 'logs') 'movement-lab-stage-probe.json'
+    if ($deepest.Length -ge 260) {
+        throw ('Evidence path exceeds Windows 260-character limit (' + $deepest.Length + ' chars); use a shorter evidence root: ' + $deepest)
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $deepest) | Out-Null
+    try {
+        [IO.File]::WriteAllText($deepest, 'probe')
+        Remove-Item -LiteralPath $deepest -Force
+    } catch {
+        throw ('Evidence path not writable at deepest expected path: ' + $deepest + ' -> ' + $_.Exception.Message)
+    }
+    return $deepest
+}
+
 function Assert-OneLineValue {
     param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)][string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
@@ -1396,7 +1412,7 @@ $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { Add-WorkflowViolation $preflightViolations 'preflight.repository.dirtyScope' ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Complete-WorkflowValidationPhase 'preflight' $preflightViolations
 
-New-Item -ItemType Directory -Force -Path $script:EvidenceDirectory | Out-Null
+Assert-EvidencePathBudget $script:EvidenceDirectory | Out-Null
 $evidenceItem = Get-Item -LiteralPath $script:EvidenceDirectory -Force
 if (($evidenceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Evidence invocation path may not be a junction or alias: ' + $script:EvidenceDirectory) }
 $canonicalEvidenceParent = Get-CanonicalPath (Split-Path -Parent $script:EvidenceDirectory)

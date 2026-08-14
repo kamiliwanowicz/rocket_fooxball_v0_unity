@@ -389,6 +389,27 @@ function Test-PathIntersects {
     }
 }
 
+function Test-EvidencePathBudget {
+    param([Parameter(Mandatory = $true)]$State)
+    $module = $null
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('harness-evidence-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $module = & $State.ShimCommand $State.CurrentSource @('Assert-EvidencePathBudget') @()
+        $deepest = [string](Invoke-HarnessModuleFunction $module 'Assert-EvidencePathBudget' @{ EvidenceDirectory = $root })
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { return New-HarnessFail 'short evidence directory not provisioned' }
+        if (Test-Path -LiteralPath $deepest) { return New-HarnessFail ('probe file left behind: ' + $deepest) }
+        $long = Join-Path $root ('x' * [Math]::Max(1, 260 - $root.Length))
+        $threw = $false
+        try { Invoke-HarnessModuleFunction $module 'Assert-EvidencePathBudget' @{ EvidenceDirectory = $long } | Out-Null } catch { $threw = $true }
+        if (-not $threw) { return New-HarnessFail 'over-long evidence directory accepted' }
+        if (Test-Path -LiteralPath $long) { return New-HarnessFail 'over-long evidence directory was created before the budget check' }
+        return New-HarnessPass 'deepest-path budget rejected before mkdir; short root probed and cleaned'
+    } finally {
+        if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Test-StringSetNull {
     param([Parameter(Mandatory = $true)]$State)
     $module = $null
@@ -702,6 +723,16 @@ function Test-HookSettings {
     $preWorkflowTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly"}}'
     $preUnityTarget = '{"tool_name":"PowerShell","tool_input":{"command":"C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
     $preUnrelated = '{"tool_name":"PowerShell","tool_input":{"command":"Get-Date"}}'
+    # Process.StandardInput inherits [Console]::InputEncoding and flushes that encoding's preamble
+    # when Start() sets AutoFlush. Under an active UTF-8 console (chcp 65001) the preamble is a
+    # 3-byte BOM that lands ahead of the event JSON and makes every nested hook reject stdin.
+    # Swapping in a preamble-free UTF-8 keeps code page 65001 unchanged; other code pages already
+    # report an empty preamble and are left alone.
+    $previousInputEncoding = $null
+    if ([Console]::InputEncoding.GetPreamble().Length -gt 0) {
+        $previousInputEncoding = [Console]::InputEncoding
+        [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+    }
     try {
         $postTestsPending = Start-HookFixture $postHook $postTestsTarget
         $postValidationPending = Start-HookFixture $postHook $postValidationTarget
@@ -721,6 +752,8 @@ function Test-HookSettings {
         $preForcedResult = Complete-HookFixture $preForcedPending
     } catch {
         return New-HarnessFail $_.Exception.Message
+    } finally {
+        if ($null -ne $previousInputEncoding) { [Console]::InputEncoding = $previousInputEncoding }
     }
     $State.HookExecution = [ordered]@{
         postTestsExit = $postTestsResult.exitCode

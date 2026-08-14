@@ -41,7 +41,7 @@ Each accepted execution SHA must be clean, committed, scope-verified, and accept
    - Production bake -> apply [production bake gate](../references/state-and-recovery.md#production-bake-gate). Lighting inputs -> `Assets/_Game/Lighting`; `Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs`; `Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs`; `Assets/_Game/Lighting/MovementLabLightingSettings.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset[.meta]`; `Assets/_Game/Lighting/MovementLabVolumeProfile.asset[.meta]`; `Assets/_Game/Lighting/MovementLabLightingManifest.json[.meta]`. Other render/material/prefab/scene/arena/quality/input/package/version paths do not reopen bake.
    - Post-proof fix -> invalidate rows whose declared paths intersect changed paths; apply production bake gate when lighting inputs intersect.
 6. Run independent combined exact-SHA review when wave has multiple plans, conflict resolution, or integration-owned edits. Reuse existing review evidence only for unchanged multi-plan integration head with still-valid checks and no integration edit. Report Critical/High findings only.
-7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, and do not re-review fix.
+7. Accepted integration finding -> one fresh narrow fix worker. Close writer barrier, verify scope, stage/commit, freeze new clean SHA, rerun invalidated checks/final validation, then apply [fix re-review gate](../../orchestrate-implementation/SKILL.md#review-checkpoints).
 8. Reread integration branch/worktree and HEAD before return. Verify clean status, every input SHA ancestry, exact changed-path scope, `check-ledger.json` pointer/digest, checks, and no active writer.
 
 Sequential flow: complete prerequisite wave merge first. LP accepts observed integration SHA, records it, then uses it as factual baseline for dependent planner/execution. Merging agent never plans or dispatches dependent work.
@@ -60,20 +60,39 @@ LP provisions fresh isolated integration branch/worktree from bound retry baseli
 
 Never mutate original, default, or user branch. Documentation-only changes do not relax this boundary.
 
-## Return facts
+## Strict result
 
-Return concise facts:
+Terse AI-to-AI text: exact paths/commands/SHAs, no prose, no narration, no recap. Return exactly this template; no text before or after.
 
-- same `run_id`, wave ID, `attempt_id`, assigned identity, role/profile;
-- `status: complete | blocked`;
-- observed integration branch/worktree;
-- expected pre-merge head and observed pre-merge head;
-- accepted input SHAs in processed order and last completed input;
-- observed final full SHA;
-- changed paths, conflicts, and clean status;
-- checks: command/workflow, result, evidence path, exact SHA;
-- combined review/fix disposition when required;
-- blocker plus one needed LP action/recheck when blocked.
+```markdown
+# Merging Result
+
+Status: complete | blocked
+Run ID: [run_id]
+Wave ID: [wave_id]
+Attempt ID: [attempt_id]
+Assigned Agent: [exact agent identity]
+Role: merging agent
+Profile: sol_high
+Branch: [observed integration branch]
+Worktree: [observed integration worktree]
+Pre-Merge Head: expected [full SHA] -> observed [full SHA]
+Inputs: [accepted input SHAs in processed order]
+Last Completed Input: [full SHA or None]
+Final SHA: [observed final full SHA or None]
+Changed Paths: [exact paths or None]
+Conflicts: [files -> candidate SHAs or None]
+Clean Status: true | false
+Review or Fix Disposition: [combined review verdict and fix outcome, or None]
+
+## Checks
+- [command/workflow] -> [observed result] -> [evidence path] -> [exact SHA]
+
+## Blocker
+- blocker: [exact blocker when blocked; otherwise None]
+- evidence: [observable evidence or None]
+- needed LP action or recheck: [one action/fact or None]
+```
 
 LP rejects result when identity, branch, worktree, expected head, input SHA, final head, scope, or clean status differs from observed facts. Late/replaced result remains evidence only.
 

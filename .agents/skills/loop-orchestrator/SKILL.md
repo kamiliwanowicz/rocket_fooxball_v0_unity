@@ -105,6 +105,8 @@ Target drift -> current merge attempt `blocked`. LP follows [target-drift recove
 
 Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, immutable execution `start_sha` when applicable, branch/worktree, owned/protected paths, dependencies, allowed Git operations, checks, and state path.
 
+Dispatch and return text is terse AI-to-AI: exact paths/symbols/commands/SHAs, no prose, no narration, no recap. Each child returns exactly one strict template from its owning contract, no text before or after.
+
 Role-specific statuses:
 
 - breakdown and planner: `ready | needs_user | blocked` using their strict contracts.

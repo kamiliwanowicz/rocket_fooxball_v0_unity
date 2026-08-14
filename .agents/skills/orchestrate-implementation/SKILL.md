@@ -99,7 +99,7 @@ Probe contract -> consume current workflow `schemaVersion: 1`; missing or invali
 
 Workflow result contract -> modes `Fast`, `Development`, `ProductionPrepare`, `ProductionValidate`; `ProductionValidate` runs repository semantic validator. Durable evidence stays under Git-common destination outside product worktree. JSON fields: `exactSha`, command arguments/exits/logs/elapsed times, probe records, bake count, same-run generated inventory/hashes as provenance, changed generated paths, check ledger, evidence-manifest SHA-256, lock-release proof. Wrapper pins Unity `6000.5.6f1`, verifies `ProjectSettings/ProjectVersion.txt`, satisfies `AGENTS.md` path/cache/process/lock rules, and performs no Git mutation.
 
-Invocation contract -> after satisfying `AGENTS.md` pre-gate, run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`. Carry prior accepted `-LedgerPath` across retries and dependent invocations. Never pass workflow arguments to test runner.
+Invocation contract -> after satisfying `AGENTS.md` pre-gate, run `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>` with applicable `-PlanOnly`, `-LedgerPath`, and `-EvidenceRoot`. `-EvidenceRoot` -> short probed root per [`AGENTS.md`](../../../AGENTS.md) `Unity execution`; workflow rejects over-long evidence path at preflight. Carry prior accepted `-LedgerPath` across retries and dependent invocations. Never pass workflow arguments to test runner.
 
 Production bake gate -> [loop-orchestrator/references/state-and-recovery.md#production-bake-gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate). `bakeCount` budget applies only to `ProductionPrepare`.
 
@@ -116,13 +116,49 @@ Each child dispatch carries unique `execution_id`, invocation mode, assigned ide
 
 Reviewer dispatch also binds `checkpoint_id`, unique `review_cycle_id`, review kind (`initial | fix-re-review`), covered worker/task execution IDs, checkpoint task/path slice, `review_base_sha`, and `frozen_sha`. Fix dispatch binds originating `review_cycle_id`, `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, and acceptance criteria. Investigator dispatch binds recurring issue evidence, attempted orchestrator fixes, failed verification, affected task/path slice, and decision contract `fix_found | no_reasonable_fix`.
 
-Child return repeats identity and role unchanged:
+### Child return contract
 
-- `status`: `complete | blocked`;
-- implementation/fix: changed paths, checks, evidence, finding disposition when applicable;
-- reviewer: [`code-reviewer`](agents/code-reviewer.md) strict result;
-- investigator: decision, reproduced evidence, hypotheses checked, and either precise worker fix contract or reason no reasonable fix remains;
-- blocked: exact blocker plus one needed action/recheck.
+Dispatch and return text is terse AI-to-AI: exact paths/symbols/commands/SHAs, no prose, no narration, no progress commentary, no recap of dispatch, no self-summary.
+
+Child returns exactly one strict template below, repeating identity and role unchanged. No text before or after template. Reviewer uses [`code-reviewer`](agents/code-reviewer.md) result instead. Unrepresentable fact goes in `Blocker`.
+
+Implementation worker and fix worker:
+
+```markdown
+# Worker Result
+
+Status: complete | blocked
+Execution ID: [execution_id]
+Assigned Agent: [exact agent identity]
+Role: implementation worker | fix worker
+Profile: [exact profile]
+Changed Paths: [exact paths or None]
+Checks: [command -> observed result -> evidence path or None]
+Findings Fixed: [finding IDs or None]
+Blocker: [exact blocker when blocked; otherwise None]
+Evidence: [observable evidence or None]
+Needed Action or Recheck: [one action/fact or None]
+```
+
+Investigator:
+
+```markdown
+# Investigator Result
+
+Status: complete | blocked
+Execution ID: [execution_id]
+Assigned Agent: [exact agent identity]
+Role: investigator
+Profile: [exact profile]
+Decision: fix_found | no_reasonable_fix
+Reproduced: [exact command/path -> observed failure]
+Hypotheses Checked: [hypothesis -> ruled in | ruled out -> evidence]
+Fix Contract: [exact paths/symbols and required change when fix_found; otherwise None]
+No-Fix Reason: [reason when no_reasonable_fix; otherwise None]
+Blocker: [exact blocker when blocked; otherwise None]
+Evidence: [observable evidence or None]
+Needed Action or Recheck: [one action/fact or None]
+```
 
 Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, or Git-inconsistent result. Preserve as evidence only.
 
@@ -162,7 +198,14 @@ Accepted plan may group multiple implementation workers into one checkpoint only
 
 Plan fan-out -> launch every ready sibling after shared predecessors. Worker terminal return -> satisfy worker -> reviewer barrier for declared per-worker checkpoint immediately; unrelated disjoint workers continue. Grouped checkpoint waits only for terminal returns from all named members plus join condition. Branch checkpoint gates fan-in. Cross-lane dependency, overlapping paths, or shared validation environment -> serialize.
 
-Fix re-review gate: after fix commit, calculate `fix_loc` from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>` by summing added+deleted counts for text rows. Binary rows add zero LOC but remain in review scope. Count all Critical/High findings reported by originating review before disposition. `fix_loc > 200` or reported finding count `> 3` -> mandatory fresh exact `sol_high` re-review. Bind `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, kind `fix-re-review`, and same checkpoint task/path slice. Apply normal review scope, materiality, and PoC filters. Otherwise fix advances accepted head without re-review. Re-review findings -> fresh fix worker, then apply gate again to that review/fix cycle. Next lane or wave uses accepted post-fix head as `review_base_sha`.
+Fix re-review gate: sole re-review rule for whole repository, including integration fixes. Never restate thresholds anywhere else; link this section instead.
+
+- `fix_loc` -> sum added+deleted text rows of `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>`; binary rows count zero LOC but stay in review scope.
+- `finding_count` -> all Critical/High findings reported by originating review before disposition.
+- `fix_loc > 200` or `finding_count > 3` -> mandatory fresh exact `sol_high` re-review; otherwise fix advances accepted head without re-review.
+- Triggered re-review binds `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, kind `fix-re-review`, same checkpoint task/path slice, normal scope/materiality/PoC filters.
+- Re-review findings -> fresh fix worker -> apply gate again to that cycle.
+- Next lane or wave uses accepted post-fix head as `review_base_sha`.
 
 Orchestrator assigns checkpoint-scoped finding IDs during disposition.
 
@@ -195,20 +238,44 @@ Required unowned edit, plan decomposition change, dependency drift, bound snapsh
 
 ## Completion routing
 
-Return common facts:
+Return exactly this template; no text before or after:
 
-- invocation mode, `plan_id`, `attempt_id`, active-agent identity, role `execution orchestrator`, profile;
-- `status: complete | blocked`;
-- source plan path as provenance; bound snapshot path, accepted digest/size, observed final digest/size;
-- exact `start_sha`, dependency SHAs, branch, worktree, initial unrelated-status snapshot;
-- clean committed exact plan SHA when complete;
-- changed paths and scope proof from exact `start_sha..final_sha`;
-- each checkpoint ID, covered executions, each review cycle/kind/base/frozen SHA, verdict, reported finding count, fix LOC, re-review decision, and accepted finding dispositions;
-- checks: command/workflow, working directory, observed result, evidence, exact SHA;
-- blocker, evidence, and one needed authority action/recheck when blocked.
+```markdown
+# Execution Orchestrator Result
 
-`lp-dispatched` also returns same `run_id` and LP-bound identity fields to LP. LP verifies Git/artifact facts and dispatches merging agent. Active agent returns plan SHA only.
+Status: complete | blocked
+Mode: lp-dispatched | user-direct
+Run ID: [run_id or None]
+Plan ID: [plan_id]
+Attempt ID: [attempt_id]
+Assigned Agent: [exact agent identity]
+Role: execution orchestrator
+Profile: [exact profile]
+Source Plan Path: [exact path]
+Snapshot: [exact path] -> accepted [digest]/[bytes] -> observed [digest]/[bytes]
+Start SHA: [exact 40-character lowercase SHA]
+Dependencies: [full SHA list or None]
+Branch: [exact branch]
+Worktree: [exact path]
+Launch Checkout: [path -> branch -> status snapshot in user-direct; otherwise None]
+Initial Unrelated Status: [paths or None]
+Final SHA: [clean committed exact SHA when complete; otherwise None]
+Changed Paths: [exact `start_sha..final_sha` paths or None]
 
-`user-direct` returns facts directly to user, including launch checkout path/branch/status snapshot and created branch/worktree. Result remains isolated unless user explicitly authorized integration.
+## Checkpoints
+- [checkpoint_id] -> covered [execution IDs] -> [review_cycle_id] [initial | fix-re-review] [review_base_sha]..[frozen_sha] -> [verdict] -> findings [count] -> fix LOC [n] -> re-review [yes | no] -> [accepted finding dispositions or None]
+
+## Checks
+- [command/workflow] -> [working directory] -> [observed result] -> [evidence path] -> [exact SHA]
+
+## Blocker
+- blocker: [exact blocker when blocked; otherwise None]
+- evidence: [observable evidence or None]
+- needed authority action or recheck: [one action/fact or None]
+```
+
+`lp-dispatched` returns template to LP. LP verifies Git/artifact facts and dispatches merging agent. Active agent returns plan SHA only.
+
+`user-direct` returns template directly to user. Result remains isolated unless user explicitly authorized integration.
 
 `complete` requires bound snapshot match, exact committed head descending from `start_sha`, owned paths clean, initial unrelated status preserved, owned-only `start_sha..final_sha` diff, every worker covered by completed checkpoint review/fix/re-review flow, every triggered re-review resolved, passing final checks, and satisfied child lifecycle gate.

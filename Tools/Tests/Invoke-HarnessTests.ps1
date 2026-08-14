@@ -125,6 +125,7 @@ function Test-HookPreToolTarget {
 if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
     if ($HookTestForceFailure -and $HookMode -ne 'PreToolUse') { throw 'HookTestForceFailure is valid only for PreToolUse test dispatch.' }
     $eventText = [Console]::In.ReadToEnd()
+    if ($null -ne $eventText) { $eventText = $eventText.TrimStart([char]0xFEFF) }
     if ([string]::IsNullOrWhiteSpace($eventText)) { throw ($HookMode + ' hook event JSON missing on stdin.') }
     try { $hookEvent = $eventText | ConvertFrom-Json -ErrorAction Stop } catch { throw ($HookMode + ' hook event JSON invalid: ' + $_.Exception.Message) }
     $target = if ($HookMode -eq 'PostToolUse') { Test-HookPostToolTarget $hookEvent $projectRoot } else { Test-HookPreToolTarget $hookEvent }
@@ -185,6 +186,7 @@ $cases = @(
     [pscustomobject]@{ Id = 'bake-inputs-asymmetry'; Function = ${function:Test-BakeInputsAsymmetry} },
     [pscustomobject]@{ Id = 'bake-count-production-method'; Function = ${function:Test-BakeCountProductionMethod} },
     [pscustomobject]@{ Id = 'path-intersects'; Function = ${function:Test-PathIntersects} },
+    [pscustomobject]@{ Id = 'evidence-path-budget'; Function = ${function:Test-EvidencePathBudget} },
     [pscustomobject]@{ Id = 'stringset-null'; Function = ${function:Test-StringSetNull} },
     [pscustomobject]@{ Id = 'planonly-pending-only'; Function = ${function:Test-PlanOnlyPendingOnly} },
     [pscustomobject]@{ Id = 'guard-g1'; Function = ${function:Test-GuardG1} },

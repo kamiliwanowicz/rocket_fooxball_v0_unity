@@ -1,5 +1,5 @@
-# Claude Instructions
+# Claude Code info only - other harnesses should ignore
 
-Read sibling `AGENTS.md` before work. Treat it as authoritative project scope, Unity workflow, asset-safety, and validation policy.
+Read sibling `AGENTS.md` before any work. This is a mandatory read.  
 
-Scan .agents/skills for available skills descriptions
+Scan .agents/skills for available skills descriptions.

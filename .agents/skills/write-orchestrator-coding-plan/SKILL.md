@@ -62,9 +62,22 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 - Dispatch with `fork_turns: "none"`. Give each subagent one self-contained, bounded question with relevant paths, symbols, constraints, and required evidence.
 - Require read-only analysis: no edits, implementation, plan drafting, staging, commits, branch/worktree mutation, or project-mutating validation.
-- Prompt and result use `$llm-oriented-markdowns`: terse facts, exact paths/symbols/commands, observed gaps, no speculative plan content.
+- Prompt and result are terse AI-to-AI text: exact paths/symbols/commands, observed gaps, no prose, no narration, no speculative plan content.
 - Parallel dispatch only for independent questions. Planner owns synthesis and plan claims.
 - Conflicting or consequential subagent evidence -> planner inspects source directly before recording claim.
+- Subagent returns exactly this template; no text before or after:
+
+```markdown
+# Analysis Result
+
+Status: complete | blocked
+Assigned Agent: [exact agent identity]
+Profile: sol_medium
+Question: [bounded dispatched question]
+Findings: [`exact path/symbol` -> observed fact]
+Gaps: [missing evidence or None]
+Blocker: [exact blocker when blocked; otherwise None]
+```
 
 ## Plan shape
 
@@ -117,7 +130,7 @@ Execution route:
 
 `accepted source artifact -> LP-bound attempt snapshot + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
 
-Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates.
+Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates. Reference review/fix gates by link only; never copy thresholds or numeric constants into plan.
 
 ## Output shape
 
