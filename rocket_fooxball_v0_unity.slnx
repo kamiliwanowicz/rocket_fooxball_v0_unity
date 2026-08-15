@@ -1,6 +1,0 @@
-﻿<Solution>
-  <Project Path="RocketFooxball.Runtime.csproj" />
-  <Project Path="RocketFooxball.Editor.csproj" />
-  <Project Path="Assembly-CSharp.csproj" />
-  <Project Path="Assembly-CSharp-Editor.csproj" />
-</Solution>

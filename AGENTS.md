@@ -59,7 +59,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
 - Generated YAML stays in Unity-native serialization form. Unity writes empty scalars as `key: ` (trailing space); never post-process generated asset or `.meta` bytes to strip it. A counter-normalizer has no fixed point — Unity re-adds the space on the next import/save, so every run dirties unrelated generated files in both directions. Comparators already `TrimEnd()` each line, so the trailing space carries no semantic weight.
 - Atomic generated-file replacement: one helper owns it — `File.Replace(` may appear only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`, and every `Tools/Validation/*.ps1` must parse clean. Harness guards enforce both; a partially written generated asset corrupts the import cache, so scattering raw replaces is a hard no.
-- Capture pre/post Git status. Classify changed generated output from authoritative inventory + exact task declaration; ownership affects scope only. Every changed authoritative output needs exact coverage: comparator path/output, `SEMANTIC:`, `DANGLING:`, GUID stability, asset/`.meta` pairing; attach at checkpoint/reviewer even when separate regeneration commit excludes raw diff. Comparator-unsupported output -> exact path + reason -> reject until supported evidence exists. `DANGLING:` increase, GUID churn, broken pair, missing coverage -> reject. Other unowned reserialization -> reject. Keep generated churn in separate `chore: regenerate MovementLab outputs` commit. Remove only newly generated IDE files.
+- Capture pre/post Git status. Classify changed generated output from authoritative inventory + exact task declaration; ownership affects scope only. Every changed authoritative output needs exact coverage: comparator path/output, `SEMANTIC:`, `DANGLING:`, GUID stability, asset/`.meta` pairing; attach at checkpoint/reviewer even when separate regeneration commit excludes raw diff. Changed bytes -> run comparator -> accept only canonical-equal + no `DANGLING:` increase + no GUID churn + intact asset/`.meta` pairing; comparator-unsupported -> reject until supported; otherwise reject. Keep generated churn in separate `chore: regenerate MovementLab outputs` commit. Remove only newly generated IDE files.
 
 ## Unity execution
 
@@ -81,8 +81,8 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 
 ## Unity tests direction
 
-- `com.unity.test-framework` already installed; no project test assemblies yet.
-- Target: EditMode NUnit tests for deterministic pure runtime logic only (bot decisions, match state machine, scoring, cooldown math). First test assembly -> `Assets/_Game/Scripts/Tests/EditMode/` + test asmdef referencing `RocketFooxball.Runtime`; create when next touching pure gameplay logic.
+- `com.unity.test-framework` already installed; project EditMode test assembly: `Assets/_Game/Scripts/Tests/EditMode/RocketFooxball.EditModeTests.asmdef`.
+- Target: EditMode NUnit tests for deterministic pure runtime logic only (bot decisions, match state machine, scoring, cooldown math). The test assembly references `RocketFooxball.Runtime`.
 - Skip: PlayMode tests, coverage goals, feel/physics assertions (playtests own feel), MonoBehaviour wiring tests (builder validator owns wiring).
 - Tests grow only where regression would break playtests.
 

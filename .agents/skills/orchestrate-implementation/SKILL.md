@@ -99,9 +99,9 @@ Recovery preserves bound objective, requirements, ownership, dependencies, Git a
 
 ### Repeated-struggle takeover
 
-Same material issue survives two failed approaches/rechecks by current child -> orchestrator diagnoses repository/evidence, reproduces failure, gives targeted guidance. Guided recheck fails -> interrupt child, wait terminal, retire result, close lane barrier, restore only verified task-owned edits to dispatch snapshot, dispatch fresh role-appropriate child with new `execution_id`.
+Same material issue survives two failed approaches/rechecks by current child -> orchestrator diagnoses repository/evidence, reproduces failure, gives targeted guidance. Guided recheck fails -> interrupt child, wait terminal, retire result, close lane barrier, restore only verified task-owned edits outside `protected_paths` and every slice in `bound_concurrent_fanout_peer_owned_paths` with `git restore --source=<dispatch_snapshot_sha> -- <exact task-owned paths>`, dispatch fresh role-appropriate child with new `execution_id`.
 
-Current child stays assigned for isolated blocker, rescue, scope correction, confusion, large task/context. Wider recurring issue -> investigator; `fix_found` -> fresh standard writer from its contract; exposed wider in-scope recovery -> fresh exact `sol_high` recovery writer. `no_reasonable_fix`, failed/out-of-bounds recovery -> `blocked`.
+Current child stays assigned for isolated blocker, rescue, scope correction, confusion, large task/context. Wider recurring issue -> investigator; same unowned-churn path set across two dispatches is a repository defect -> dispatch investigator directly, never retire and replace the writer; `fix_found` -> fresh standard writer from its contract; exposed wider in-scope recovery -> fresh exact `sol_high` recovery writer. `no_reasonable_fix`, failed/out-of-bounds recovery -> `blocked`.
 
 ## Proof environment
 
@@ -126,9 +126,7 @@ Success extraction only: `status`, `exactSha`, evidence `result`/`path`, `eviden
 
 ## Generated output gate
 
-Classifier inputs -> current authoritative builder inventory + exact task-declared generated outputs in `owns`, each traced to builder source. Normalize union. Classify each changed generated output: source `inventory | declared-new | both`; scope `owned | inventory-exception`. Ownership changes scope decision only; every class needs same evidence. Changed generated-looking path outside union, declaration without builder-source evidence, or inventory-unknown unowned path -> reject/`blocked`.
-
-Coverage evidence -> exact changed-output set, source/scope class per path, comparator-selected path set, comparator output path headers, `SEMANTIC:`, `DANGLING:`, GUID-stability result, asset/`.meta` pairing result. Every changed authoritative generated output must have exact path coverage at writer self-check, checkpoint barrier, reviewer dispatch, final verification. Comparator-supported path -> run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <writer-slice-base-sha> -Head WORKTREE -FailOnDangling` with exact coverage; require matching output header. Comparator-unsupported path -> record exact path + unsupported reason; `blocked` until supported evidence exists. Never omit, infer coverage from broad glob, or treat raw-diff exclusion/separate regeneration commit as evidence. Comparator failure, incomplete coverage, increased dangling, GUID churn, or broken pairing -> reject/`blocked`.
+Classifier -> union current inventory + task-declared outputs, each builder-traced; source `inventory | declared-new | both`, scope `owned | inventory-exception`, same evidence. Outside union, untraced declaration, or inventory-unknown unowned -> reject/`blocked`. Coverage -> exact changed set; per-path source/scope; selected set, headers, `SEMANTIC:`, `DANGLING:`, GUID/pair results. Every changed authoritative output needs exact coverage at self-check, barrier, review, final. Supported -> run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <writer-slice-base-sha> -Head WORKTREE -FailOnDangling`, exact coverage + matching header; accept changed bytes only if canonical-equal, no `DANGLING:` increase, stable GUIDs, intact asset/`.meta` pairs. Unsupported -> exact reason, `blocked` until supported evidence. Never infer coverage from glob, raw-diff exclusion, or separate-regeneration commit. Failure, non-canonical result, incomplete coverage, dangling increase, GUID churn, or broken pair -> reject/`blocked`.
 
 ## Child dispatch contract
 
@@ -136,13 +134,18 @@ Every dispatch gets unique `execution_id`. Dispatch/return text: terse AI-to-AI,
 
 ### Writer
 
-Implementation/fix writer contract:
+Every implementation/fix writer contract carries:
 
 - `execution_id`; identity/profile/role
+- `dispatch_snapshot_sha`; exact immutable full SHA captured immediately before this writer dispatch, used for writer-scope restoration
+- `pre_dispatch_tracked_dirty_paths`; exact repo-relative tracked path set already dirty against `dispatch_snapshot_sha`, captured immediately before dispatch
+- `bound_concurrent_fanout_peer_owned_paths`; exact `execution_id -> owned/generated-output path set` for every peer that can run concurrently with this writer: all already-active potentially overlapping writers plus every sibling in this ready fan-out group. Before the group's first writer dispatch, bind that complete map into every sibling contract, including later-dispatched siblings; `None` only when no such peer exists. Protected paths remain an exact bound set
+- `protected_paths`; exact repo-relative protected path set bound at dispatch
+- `prior_unowned_churn_path_sets`; exact `execution_id -> sorted unowned-churn path set` from every earlier writer dispatch in this run, or `None`
 - bounded task + done condition; objective + exclusions
-- exact worktree; files/symbols; owned/protected paths
+- exact worktree; files/symbols; owned paths
 - product writes: owned paths; builder-generated outputs -> generated output gate
-- scope self-check before every expensive proof: `git status --porcelain` -> each changed path inside owned set or [generated output gate](#generated-output-gate). Other unowned path -> revert it or return `blocked`; never spend Unity/workflow proof on out-of-scope tree
+- scope self-check before every expensive proof: `git status --porcelain` -> each changed path inside owned set or [generated output gate](#generated-output-gate). For other unowned paths, first record the exact path set, changed-line count, and recurrence against bound `prior_unowned_churn_path_sets` before any restore or proof. Restore only exact paths proven newly introduced by this writer since the pre-dispatch baseline: proof requires the path absent from `pre_dispatch_tracked_dirty_paths` and recorded in this writer's change ledger when it first wrote the path; missing or ambiguous proof fails. It must also be outside `protected_paths` and every slice in `bound_concurrent_fanout_peer_owned_paths`. Revert only when that eligible set is small and non-recurring: no more than 10 paths, no file above 200 changed lines, and no identical path set in a prior dispatch; use `git restore --source=<dispatch_snapshot_sha> -- <exact unowned paths>`. Any unproven, pre-existing, protected, concurrent/fan-out-peer-owned, oversized, or recurring path -> stop and return `blocked` as `systemic-repo-defect`; never restore it. Phantom churn is a repository defect surfaced through the worker, never a worker scope error. Always report it; never silently absorb it or spend Unity/workflow proof on the out-of-scope tree
 - Git/state: `None`
 - applicable checks; proof boundary; `read_paths`; `validation_environment`; `unity_mutation`; `expensive_proof_owner`; `expensive_proof_execution`; `orchestrator_phase` -> exact plan-check trigger + declared producer/output set; source-only `unity_mutation: true` -> compile-proof command/result/evidence
 
@@ -194,6 +197,7 @@ Assigned Agent: [exact agent identity]
 Role: implementation worker | fix worker
 Profile: [exact profile]
 Changed Paths: [exact paths or None]
+Unowned Churn: [path count -> line count -> action taken -> recurrence] or None
 Checks: [command -> observed result -> evidence path or None]
 Findings Fixed: [finding IDs or None]
 Blocker: [exact blocker when blocked; otherwise None]
@@ -249,7 +253,7 @@ Per-worker checkpoint -> one writer. Grouped checkpoint -> every named writer + 
 
 Default -> one checkpoint/implementation worker. Worker -> reviewer barrier before dependent work. Grouped checkpoint permitted only when plan names covered writers, join, rationale: producer/consumer contract, coordinated code/serialized wiring, or state impossible to review partially. Throughput never rationale. Missing grouping -> per-worker.
 
-Fan-out ready disjoint siblings. Per-worker terminal -> [Worker -> reviewer barrier](#worker---reviewer-barrier) immediately; unrelated lanes continue. Grouped waits named returns + join. Cross-lane dependency, overlapping path, shared validation environment -> serialize.
+Fan-out ready disjoint siblings. Before the first writer dispatch, create each sibling's immutable contract and bind the complete `bound_concurrent_fanout_peer_owned_paths` map into all of them, including siblings dispatched later. Before any later sibling dispatch, verify every already-running writer that can potentially overlap its paths already has that sibling's exact owned/generated-output path slice in its bound map; if not, wait for those writers or serialize the lane. Per-worker terminal -> [Worker -> reviewer barrier](#worker---reviewer-barrier) immediately; unrelated lanes continue. Grouped waits named returns + join. Cross-lane dependency, overlapping path, shared validation environment -> serialize.
 
 Fix re-review sole repository rule:
 
@@ -270,8 +274,8 @@ Final verification runs pending/invalidated rows only; exact-SHA evidence reusab
 
 ## Execution loop
 
-1. Parse graph/tasks/checkpoints; dispatch every ready disjoint sibling, otherwise next serial writer.
-2. Process terminal writer -> verify report/files/Git/scope/checks/identity -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
+1. Parse graph/tasks/checkpoints; for each ready disjoint fan-out group, bind the complete concurrent/fan-out ownership/generated-output map into every sibling contract before its first writer dispatch. Dispatch a later sibling only after every already-running potentially overlapping writer is already bound to protect that sibling's exact paths; otherwise wait or serialize. Then dispatch every ready disjoint sibling, otherwise next serial writer.
+2. Process every terminal writer -> inspect `Unowned Churn`, then verify report/files/Git/scope/checks/identity. Handle recurrence before next writer dispatch; same unowned-churn path set across two dispatches -> investigator directly, not writer replacement. Eligible complete writer -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
 3. Reviewer result -> verify reviewer return acceptance; accept verdict + qualifying Critical/High only. No accepted finding -> checkpoint accepted. Accepted finding -> fresh narrow fix writer.
 4. Fix -> barrier -> scope verify -> commit/freeze -> rerun invalidated rows -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
 5. Final exact committed `HEAD`: pending/invalidated checks, plan artifact integrity, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
