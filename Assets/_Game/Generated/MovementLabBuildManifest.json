@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "1a8b4d3bb5aeb87e317ce6ae1e5087dbd37dc41c",
+    "gitSha": "768cc8e9cbb12bd7ff0a1205b4330fbfd45c0a43",
     "manifestStatus": "stale",
-    "sourceSignature": "dd0da308ad14ae7134d0082345e55ac010278cf5661463ce194cc9ee3e8602df",
-    "generatedOutputFingerprint": "fe15231b62e2c34714efdb131d37f2d06e67dd568295395386c72c5c8efce697",
+    "sourceSignature": "9a61a517dcf6b2f55201e1d61c4783cb642269f5ead486f67d3a391f3e2bf4ff",
+    "generatedOutputFingerprint": "3baa45b3989e51a79066945c228a6c2559fd238996cbc78a1b3bfce409348558",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "bb9ce38db5ac0d698f924f7cb752bfd7b0dd34f18490cb04b5108e2412ab2717",
+    "lightingInputDigest": "0bfff28b0640a1c8fec51affc8e74fab3bc10a2d997c228115e75fe7aa75bc06",
     "bakedProfile": "Production",
     "staleStages": [
         "Lighting",
@@ -243,7 +243,7 @@
         "4b83569d67af61e458304325a23e5dfd",
         "5c32532003d5d56c9afecc4d7405072a2caa5fc06c21083553c5747297c80496",
         "f288ae1f4751b564a96ac7587541f7a2",
-        "bf0be86e5293d6566e90ca91ddd790e0fd877ee30d40d56825592bc2a34c6db3",
+        "c1d793decc9c2c5394e42d1c52206fe89edb6cf92fc4492698944a2b7e4e4702",
         "3967b0aa6dbb9934c81a677b4334347d",
         "b1bb8c8e1f3a45be77a6b074391e83d70e0a67b7bf798fde6246326427bd18b4",
         "f4486ef35b81d5a4dabd43be4ff31777",
@@ -257,100 +257,100 @@
         "9de7bc27372189346b95e51479e6c8c9",
         "eacf1c8be6632a1ee8b9c883da0dd26ee16081e381ffe7c43eff399ff5f8319c",
         "c6e7eaf4bbc0468459bebe71e809eeda",
-        "4965f5835dbc69ab674fde221e863b35c42872458c79351facb4462ab902e12e",
+        "e3b5aa6d8180e4844a084c9e6e7818e362a52668de33adc7f935c9cf7126a422",
         "49c4dabbadbd02d41b80191f94645307",
-        "debadd02cc3af2cb0e15fbd0e05bf973ce8851c66e58b1b568ab03fedcf8f109",
+        "9095429b8b1744dedfbf6801c0b9f708d88b9e2fba203e8447e6e5c0a5b2d42c",
         "6391b7c8c608aff43bb6322c026feb67",
-        "32252ad53b62253cffe9fba7bdd65e872cc69adc619bfab2024fecac4f09ae42",
+        "d1325260eb42f9de59e289c574a0ed1bd1ea25c2a83e8cffe1ce4e44c6034916",
         "180678f372fc13a4caeadb4e6fa9a084",
-        "67b1c7907e9a09f4c530a4ab2b221658c735faeb3a86a82707a7494d61c5ab58",
+        "733b8fe6cf7d32f2d5957dd24a0cc2541d7cadcc64159878b6a225b2a212f38c",
         "d14fb7c67f2006c46bc0d9177df4b143",
-        "fea58b3d87d4b38947e0caf1b2a83b1031ffca0f7d4fa1759a6eb1f2112ed55b",
+        "ab1ecb7428b2d69ebf251d68883893feea51071098a58b7e93d059474828466e",
         "a7ae45ca3ba510d4fa2900abebc2e680",
         "df79a4dcb848176114714b86ff150d71f55a044c06608343e0d87353b7669746",
         "9a08ae12ec4612d4db8f2266b6f08645",
-        "058159f1340ad72af045ea137adb3deadcd3e218bcfed94d6c0945ef42ae1116",
+        "4a13d1b0e5ded21b64679dd10ae7c0b55183bb4003801aae2196dadcd0d2626a",
         "59b36276bc5539e42b83de882dde427c",
-        "33d58384a6afef7abf8b87e6018e0e380531fabfd71c87eec0a58b5cc57a714e",
+        "146ca5f8c37d1e4fc43f06bef90c4ddd4ae429c1bdd1e36bf10f91ffa548ca26",
         "5678dd2ce101e1b42b62c3ba94ef6a04",
-        "c87e0905e592ba3a16202be76166f74ed12b1d401692e8e682148fc3a0a615f3",
+        "7770bc3eb4d7c9116a998a13f4a796f7441c2476df5bd689203320b5fb381ad3",
         "e225006765e25794d88e8a593d837459",
-        "0919f53f51b2405cf8c7a2c1fb81bffe2b659db6ab2395d8d436eb69eb5cff06",
+        "23accd84b1700be2e72c25326b7cbb4012fab6f598197b5f46085f104997bff2",
         "4ce3a7d9ce6ff6544888d425dc7055d6",
-        "a69600a7f056d67f36755662d8bc0536c4463fd0eecacf79a7b674f44e4f35a8",
+        "3f537a59df7fb8fc399a15105d3ae55393e8352259e6a33e174db9473f2068bf",
         "ff277262b50864c4cb2ad307cb36c7ec",
-        "1d29e7b1dd24be28cbdc25d48b73e50ba27382e3f5290d6368aef20ceee1b1b8",
+        "4e16a31b263269f166789e1f7eda2892a15755bcf884e8e79ec9f1390251a0ae",
         "6a8c3aa9677e72c4282bb061b376a257",
-        "5b2592300e3a38f994931aa1994a95403521bb7a231a2b1e5c7e0de3cde6d5a1",
+        "69030696ed9f27325d664200e0f9bb6e826686b8ee4a7989dc57748d067df198",
         "ea104a6db22ba3d41a3e83a9a61d92e7",
-        "545e9986e81dbd8a343bd9d0bc699d58bde249de9c2183ce9270e40967fd7bbb",
+        "53c94e4ce9f09914b5b1c9f799a62cf490de41e9112e9e13997a6da465ea39a1",
         "a7a4dc0727924ab468b5a90e7f40e3f1",
-        "3f2dd7141c441f857cdcb45fa55096869567e037da729364bee3b0508d799f0e",
+        "f2615e6d3229d85625acad36879a42f6b0e1dd17bba652a333612dddf32f2078",
         "b5a9e54c0b5ca6f48b28b4a1cd30592f",
-        "9ecb92d9f79cb380afd3ba7a72888563db09e551f21d346cd261cc67f3b95a55",
+        "f672ece41db74921f1cde6c428e859ba0efe3ef28ed662c165c8b9ceffbf14e8",
         "ce405be7ddf242646991074551e65d6c",
-        "405ea06112bce3f764cdf83ed9605075d736ba10331ddb77b9e712e8fddbc126",
+        "ee0b6bd39b639ff389290c7a07d9cbc913a2deeb4cad054265e02ca4138a40f8",
         "e693f4f10592518419e679a3c1266cfd",
         "b1331bc80ceb40c14bcba76c2ae4c86a5d12d825c12351d1626721142c9d7330",
         "a256dce2cbc89e54f934981d48c00e70",
-        "5991cc7a10893925605858302df96833ec955995d4968e069fd63329a9bdc077",
+        "a96e9b211f493aeeded833db0c6d60295efc800f0277cf59d98da9136733a2f7",
         "a9585b86f9cc5194facf9bea6509a551",
-        "320799a467ed9df38607575526b5feb2ecb2a23c9a7be19da7f0c195479587d3",
+        "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
         "26f953a18b358094290f33dd64b0c96d",
-        "2b83ceeafdac1a127185f0056252ede8e4106840f0c0af82544dc90e0e88c4ce",
+        "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
         "7d93bd4314658f643b0ec8cff4d8c226",
-        "fb77aaa2ebd103e1180356fa5c27b016461bcbbe7d261cb4907987c35662b998",
+        "0051fc6fcad0dce28088dfcf24e72be37d519faf032fec5e4e6bf8c537cf293b",
         "77e865abd335f6c4b8ff8052fc61c34a",
         "3bfb62edc74893963da070df0bb2de0a108b2e135e38d076e6d10da1e9fd2e94",
         "ddd0f5d96b665d24d8a3de304c8c82b8",
-        "f039f18390a18948aab037a76a30d684838af531b9453db2530de93c155bda91",
+        "fb1c96722f4856a983fa9b2d515cf9d1cf20ae76a12e1aaf6fa5192846bceff0",
         "750dfb9a8aee53843991150e295e40c2",
-        "b83d37d9e3819bef0a907d40d7c67a7b7a1afb90be89917f03cf452618835fad",
+        "8bc83a582a1fac49ce17d32c1c971104aa346e27ae3f420e9bac417848aece7d",
         "a261b9c508061db4a89c7ff13704ef55",
-        "40fdd8a23262eb749079adb06f777a73cd50e39dd98c005e4071475489506c31",
+        "574c88cb620ed1066d347507132748e85ddf5af8d597e12a6bc8a4d33e31cd70",
         "4160eb33500f4be428cd7702a555b3b6",
-        "0647ec611d9992b7e0c545465431ddb1a882053c61b052835245677cb98caa21",
+        "27b86207e5248d59b62864ca91c73aefcfe330e802daeb706761ffad4355ba2c",
         "599476c8be31fcf469fa8827cac41190",
-        "2cdd525200fa665f6467e56b9ccdd9246afa6a0e3f5815c411d9254e44f49e5b",
+        "f680bd850ea46ac222451a76fa7ea7a2d47908e67b9ccd2b488ff1b04a49c346",
         "86c38d84feb12604dbd759c3dcb3b785",
-        "3aba6fceca7e29a90ffd86c63caf86cef9cb2980c482186fd09b41d064086c0d",
+        "0427cb964fafb830791cd897770b3cd44e345f8faaad5a1c705be0b58522e88f",
         "5d840820311370a4fa91db22124cbe77",
-        "ca7cf12922959cb8e48aadae4090e1fb5d543ffb9643611063d5cee8295098e8",
+        "6243afee3c6666156bf93de8073163cbe92d660d754838e71b151ab09dea3165",
         "efc98e472707b364993cbc83c9edd174",
-        "35dea67efec8205e9d913a924d03ecd74665223a6f308141ecb74cf7a087cec4",
+        "0c0a8545bfa0964dfcc8c0e6b8017539e8affd6dd4da0598360923746db43589",
         "c0171e54fdc0f64499578d0b7e5fe701",
-        "5d2300aa5b47b2d9fbcf01da559bfffc01c2f70d280eef7f93c5c9d67f002a9f",
+        "3f92c904232c1e5987032a0a947a6583ecaa2d7ef0817c2d6262dc6201277487",
         "b0ab9e80406efa54babc0af0f8b05345",
-        "da1f3c910d046edb66f68856580fe17b00e1e49b4b35533e24451ccec542b3f6",
+        "e3ead20cef3aa9d57db1b4496d7b61302f150acca0081bc5e14db99b0bbf6c26",
         "6db7e0e75cd59f046a95e3ca56691b74",
-        "dde47852728340a2a74b1e3c4ec97e610ac24a6e6549e44e6d3a0e01503e3eaa",
+        "586eb1bed180d19fa08320bca41f93b2789a38c4d09e50f10f0a55987ab64ce4",
         "5f69566535bcedd408a67f22179a2b91",
-        "d0b5796155a90d69ed05123033b0768f4c90faa92dc8cf83bc281b3aa0945bd4",
+        "4a1e08b1055a5a7efabf4a8356d3325c20cac43deaae86dfdd6c79223a28db8a",
         "5a702ad7e41f9b04aa188c268a09fc5e",
-        "d4ce3012e07655aab87b7d7ef4acb59ec92dbc448c9acdcb7a8e5813500566b2",
+        "66541b81a7d342c320634642c6406365133fa21a38f69a6e064a5b158203d5ef",
         "fcdd2739449183b48aedb5cba5a1f8b9",
-        "66d7ab2f346b088d7343cafc941be62cfa86c24de979c002587714d0f9cdbc45",
+        "33b3b33578848b118a531f135cbdf4a8562ddfc4f21173c72dd16e369fe8366d",
         "7a152a4b7f543df41a4721a78ffd259a",
-        "0973e9475a3ae3ce543cc4afb60ea6b1628f651abd81ca02b94dbc98ae673aa9",
+        "fa045e16562e6fb1b17be506ef9d9e3c0d60751b511968b3bb273f9c2abcd7f7",
         "8f518237f01f0174899ae335f094f6bf",
-        "07407bef37fc1f039dbb433788a24e96398cbd76686949d4277445d20d028ea2",
+        "3dc8c3147050655c33b78b82e039cd19c8d92bd7a51ac93698c2616202e60cff",
         "d228f595a03728c458f807a169c1e510",
-        "d375e32d94852bccc71f73a09c1376830ce57fa5c9828f598562f381c4c46ea8",
+        "463031758b272ca13d2386006160da166396ebd050ccf31a7be9205c63ad69d9",
         "95a08e83329145446913507a91e610ed",
         "5979bda68030bdf4e9475ce7c370ffb4",
         "a5b342686133f6f4b9d5dc96fcbac238",
         "2e879bd5e76d0f942866c9c5071f66eb",
         "4cb50b0e4144f234a9ff0bb7e1c358d6",
         "7a94b566aedb5b1469c8eda27577dd64",
-        "187a3b9cdd3166cd35c6edcc3418b9e155e34c0cda74c1b7af38e751a1fd6591",
+        "9b7f62c6ee07118d1363b95676706e5778a3ab62689dcf078b36daf633096381",
         "f3c453663c6e3de4fbef8019e550c341",
-        "ff3bb0b405d34703ba93269f09456aab4444ac347a918c42ca47754dddf58ceb",
+        "405faee753e5817bbc491e2a8276dc7d1b80d75ee36b81980fdcb8c6519e6c9f",
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
-        "fc1242280449600742ad56b46fcf12ca2cb63268648145cbf5f40590640ab2e0",
+        "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "19614ee21a95a7a37de9586ee75de9b7a524d235bf80cd3e938d1d71cd5bc8ce",
+        "5265d2630635297ffb68cc1452eac8e4e1c00e63b2fd54a17e1f0d7770834342",
         "04f6dead4185c42458fce3ea760fc4b7",
-        "193aab70177e7bde3a349f7bb66c264ea1df4f3985209416c2066a10d9b7de7e",
+        "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
         "8cf33930ca4c1194a8901597f06610c0",
         "215bf30c053a6315825a1042db57ed0efad4e1e2f6f47ccbad4d0ac36c2325da",
         "4f646a78eaba1c2409e9bb3fce837175",
@@ -713,19 +713,19 @@
             "schemaVersion": 8,
             "contractVersion": "material-prefab-contract:6;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "1e303493e7ce29862c3b341d6c6cc8377a1274d1e9dca692a3499f13868fcb2c",
-            "repositoryInputDigest": "b656cde30168638af3b62414daf9731a1cb50e6e92f66b998ace0e11120ac102",
+            "inputDigest": "e799fbc84f01cd2d9a939e7a236dc95f36af2998aaed4e54d5695ee81081cc19",
+            "repositoryInputDigest": "ca47113b068e10b57fb8c079cc3e9f4a951eb2e8af36db71e93ea835a11f942d",
             "dependencyDigest": "95abab14255263a990ecc66cb8b8e49e7a755da273322f772a082e29bea63606",
-            "outputDigest": "5665bdad81c6e02a3e5c31bbdcc197a97171491f3edbc913e45d5dda21bc0da6",
+            "outputDigest": "6dc9250e1763d3e49c5318ab6ad8c0b75854245b42499a1c9a28950f48324391",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "1e303493e7ce29862c3b341d6c6cc8377a1274d1e9dca692a3499f13868fcb2c",
-            "priorOutputDigest": "5665bdad81c6e02a3e5c31bbdcc197a97171491f3edbc913e45d5dda21bc0da6",
+            "priorInputDigest": "e799fbc84f01cd2d9a939e7a236dc95f36af2998aaed4e54d5695ee81081cc19",
+            "priorOutputDigest": "6dc9250e1763d3e49c5318ab6ad8c0b75854245b42499a1c9a28950f48324391",
             "profile": "",
             "outputs": [
                 {
                     "path": "Assets/_Game/Animations/FpsKick.controller",
-                    "digest": "bf0be86e5293d6566e90ca91ddd790e0fd877ee30d40d56825592bc2a34c6db3",
+                    "digest": "c1d793decc9c2c5394e42d1c52206fe89edb6cf92fc4492698944a2b7e4e4702",
                     "missing": false
                 },
                 {
@@ -765,7 +765,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaGlow.mat",
-                    "digest": "4965f5835dbc69ab674fde221e863b35c42872458c79351facb4462ab902e12e",
+                    "digest": "e3b5aa6d8180e4844a084c9e6e7818e362a52668de33adc7f935c9cf7126a422",
                     "missing": false
                 },
                 {
@@ -775,7 +775,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaHazard.mat",
-                    "digest": "debadd02cc3af2cb0e15fbd0e05bf973ce8851c66e58b1b568ab03fedcf8f109",
+                    "digest": "9095429b8b1744dedfbf6801c0b9f708d88b9e2fba203e8447e6e5c0a5b2d42c",
                     "missing": false
                 },
                 {
@@ -785,7 +785,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaPrimary.mat",
-                    "digest": "32252ad53b62253cffe9fba7bdd65e872cc69adc619bfab2024fecac4f09ae42",
+                    "digest": "d1325260eb42f9de59e289c574a0ed1bd1ea25c2a83e8cffe1ce4e44c6034916",
                     "missing": false
                 },
                 {
@@ -795,7 +795,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaTrim.mat",
-                    "digest": "67b1c7907e9a09f4c530a4ab2b221658c735faeb3a86a82707a7494d61c5ab58",
+                    "digest": "733b8fe6cf7d32f2d5957dd24a0cc2541d7cadcc64159878b6a225b2a212f38c",
                     "missing": false
                 },
                 {
@@ -805,7 +805,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Ball.mat",
-                    "digest": "fea58b3d87d4b38947e0caf1b2a83b1031ffca0f7d4fa1759a6eb1f2112ed55b",
+                    "digest": "ab1ecb7428b2d69ebf251d68883893feea51071098a58b7e93d059474828466e",
                     "missing": false
                 },
                 {
@@ -825,7 +825,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterBlack.mat",
-                    "digest": "058159f1340ad72af045ea137adb3deadcd3e218bcfed94d6c0945ef42ae1116",
+                    "digest": "4a13d1b0e5ded21b64679dd10ae7c0b55183bb4003801aae2196dadcd0d2626a",
                     "missing": false
                 },
                 {
@@ -835,7 +835,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterCream.mat",
-                    "digest": "33d58384a6afef7abf8b87e6018e0e380531fabfd71c87eec0a58b5cc57a714e",
+                    "digest": "146ca5f8c37d1e4fc43f06bef90c4ddd4ae429c1bdd1e36bf10f91ffa548ca26",
                     "missing": false
                 },
                 {
@@ -845,7 +845,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterEye.mat",
-                    "digest": "c87e0905e592ba3a16202be76166f74ed12b1d401692e8e682148fc3a0a615f3",
+                    "digest": "7770bc3eb4d7c9116a998a13f4a796f7441c2476df5bd689203320b5fb381ad3",
                     "missing": false
                 },
                 {
@@ -855,7 +855,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterRed.mat",
-                    "digest": "0919f53f51b2405cf8c7a2c1fb81bffe2b659db6ab2395d8d436eb69eb5cff06",
+                    "digest": "23accd84b1700be2e72c25326b7cbb4012fab6f598197b5f46085f104997bff2",
                     "missing": false
                 },
                 {
@@ -865,7 +865,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ContainmentGridCeiling.mat",
-                    "digest": "a69600a7f056d67f36755662d8bc0536c4463fd0eecacf79a7b674f44e4f35a8",
+                    "digest": "3f537a59df7fb8fc399a15105d3ae55393e8352259e6a33e174db9473f2068bf",
                     "missing": false
                 },
                 {
@@ -875,7 +875,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ContainmentGridEndWall.mat",
-                    "digest": "1d29e7b1dd24be28cbdc25d48b73e50ba27382e3f5290d6368aef20ceee1b1b8",
+                    "digest": "4e16a31b263269f166789e1f7eda2892a15755bcf884e8e79ec9f1390251a0ae",
                     "missing": false
                 },
                 {
@@ -885,7 +885,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ContainmentGridLongWall.mat",
-                    "digest": "5b2592300e3a38f994931aa1994a95403521bb7a231a2b1e5c7e0de3cde6d5a1",
+                    "digest": "69030696ed9f27325d664200e0f9bb6e826686b8ee4a7989dc57748d067df198",
                     "missing": false
                 },
                 {
@@ -895,7 +895,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Explosion.mat",
-                    "digest": "545e9986e81dbd8a343bd9d0bc699d58bde249de9c2183ce9270e40967fd7bbb",
+                    "digest": "53c94e4ce9f09914b5b1c9f799a62cf490de41e9112e9e13997a6da465ea39a1",
                     "missing": false
                 },
                 {
@@ -905,7 +905,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ExplosionAdditive.mat",
-                    "digest": "3f2dd7141c441f857cdcb45fa55096869567e037da729364bee3b0508d799f0e",
+                    "digest": "f2615e6d3229d85625acad36879a42f6b0e1dd17bba652a333612dddf32f2078",
                     "missing": false
                 },
                 {
@@ -915,7 +915,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ExplosionSparks.mat",
-                    "digest": "9ecb92d9f79cb380afd3ba7a72888563db09e551f21d346cd261cc67f3b95a55",
+                    "digest": "f672ece41db74921f1cde6c428e859ba0efe3ef28ed662c165c8b9ceffbf14e8",
                     "missing": false
                 },
                 {
@@ -925,7 +925,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Floor.mat",
-                    "digest": "405ea06112bce3f764cdf83ed9605075d736ba10331ddb77b9e712e8fddbc126",
+                    "digest": "ee0b6bd39b639ff389290c7a07d9cbc913a2deeb4cad054265e02ca4138a40f8",
                     "missing": false
                 },
                 {
@@ -945,7 +945,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Hazard.mat",
-                    "digest": "5991cc7a10893925605858302df96833ec955995d4968e069fd63329a9bdc077",
+                    "digest": "a96e9b211f493aeeded833db0c6d60295efc800f0277cf59d98da9136733a2f7",
                     "missing": false
                 },
                 {
@@ -955,7 +955,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/HealthPickup.mat",
-                    "digest": "320799a467ed9df38607575526b5feb2ecb2a23c9a7be19da7f0c195479587d3",
+                    "digest": "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
                     "missing": false
                 },
                 {
@@ -965,7 +965,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Marking.mat",
-                    "digest": "2b83ceeafdac1a127185f0056252ede8e4106840f0c0af82544dc90e0e88c4ce",
+                    "digest": "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
                     "missing": false
                 },
                 {
@@ -975,7 +975,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ProjectileGlow.mat",
-                    "digest": "fb77aaa2ebd103e1180356fa5c27b016461bcbbe7d261cb4907987c35662b998",
+                    "digest": "0051fc6fcad0dce28088dfcf24e72be37d519faf032fec5e4e6bf8c537cf293b",
                     "missing": false
                 },
                 {
@@ -995,7 +995,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Rocket.mat",
-                    "digest": "f039f18390a18948aab037a76a30d684838af531b9453db2530de93c155bda91",
+                    "digest": "fb1c96722f4856a983fa9b2d515cf9d1cf20ae76a12e1aaf6fa5192846bceff0",
                     "missing": false
                 },
                 {
@@ -1005,7 +1005,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/RocketHot.mat",
-                    "digest": "b83d37d9e3819bef0a907d40d7c67a7b7a1afb90be89917f03cf452618835fad",
+                    "digest": "8bc83a582a1fac49ce17d32c1c971104aa346e27ae3f420e9bac417848aece7d",
                     "missing": false
                 },
                 {
@@ -1015,7 +1015,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Shield.mat",
-                    "digest": "40fdd8a23262eb749079adb06f777a73cd50e39dd98c005e4071475489506c31",
+                    "digest": "574c88cb620ed1066d347507132748e85ddf5af8d597e12a6bc8a4d33e31cd70",
                     "missing": false
                 },
                 {
@@ -1025,7 +1025,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShieldBlue.mat",
-                    "digest": "0647ec611d9992b7e0c545465431ddb1a882053c61b052835245677cb98caa21",
+                    "digest": "27b86207e5248d59b62864ca91c73aefcfe330e802daeb706761ffad4355ba2c",
                     "missing": false
                 },
                 {
@@ -1035,7 +1035,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShieldRed.mat",
-                    "digest": "2cdd525200fa665f6467e56b9ccdd9246afa6a0e3f5815c411d9254e44f49e5b",
+                    "digest": "f680bd850ea46ac222451a76fa7ea7a2d47908e67b9ccd2b488ff1b04a49c346",
                     "missing": false
                 },
                 {
@@ -1045,7 +1045,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Smoke.mat",
-                    "digest": "3aba6fceca7e29a90ffd86c63caf86cef9cb2980c482186fd09b41d064086c0d",
+                    "digest": "0427cb964fafb830791cd897770b3cd44e345f8faaad5a1c705be0b58522e88f",
                     "missing": false
                 },
                 {
@@ -1055,7 +1055,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamBlue.mat",
-                    "digest": "ca7cf12922959cb8e48aadae4090e1fb5d543ffb9643611063d5cee8295098e8",
+                    "digest": "6243afee3c6666156bf93de8073163cbe92d660d754838e71b151ab09dea3165",
                     "missing": false
                 },
                 {
@@ -1065,7 +1065,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamBlueShield.mat",
-                    "digest": "35dea67efec8205e9d913a924d03ecd74665223a6f308141ecb74cf7a087cec4",
+                    "digest": "0c0a8545bfa0964dfcc8c0e6b8017539e8affd6dd4da0598360923746db43589",
                     "missing": false
                 },
                 {
@@ -1075,7 +1075,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamBlueTrail.mat",
-                    "digest": "5d2300aa5b47b2d9fbcf01da559bfffc01c2f70d280eef7f93c5c9d67f002a9f",
+                    "digest": "3f92c904232c1e5987032a0a947a6583ecaa2d7ef0817c2d6262dc6201277487",
                     "missing": false
                 },
                 {
@@ -1085,7 +1085,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamRed.mat",
-                    "digest": "da1f3c910d046edb66f68856580fe17b00e1e49b4b35533e24451ccec542b3f6",
+                    "digest": "e3ead20cef3aa9d57db1b4496d7b61302f150acca0081bc5e14db99b0bbf6c26",
                     "missing": false
                 },
                 {
@@ -1095,7 +1095,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamRedShield.mat",
-                    "digest": "dde47852728340a2a74b1e3c4ec97e610ac24a6e6549e44e6d3a0e01503e3eaa",
+                    "digest": "586eb1bed180d19fa08320bca41f93b2789a38c4d09e50f10f0a55987ab64ce4",
                     "missing": false
                 },
                 {
@@ -1105,7 +1105,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/TeamRedTrail.mat",
-                    "digest": "d0b5796155a90d69ed05123033b0768f4c90faa92dc8cf83bc281b3aa0945bd4",
+                    "digest": "4a1e08b1055a5a7efabf4a8356d3325c20cac43deaae86dfdd6c79223a28db8a",
                     "missing": false
                 },
                 {
@@ -1115,7 +1115,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Trim.mat",
-                    "digest": "d4ce3012e07655aab87b7d7ef4acb59ec92dbc448c9acdcb7a8e5813500566b2",
+                    "digest": "66541b81a7d342c320634642c6406365133fa21a38f69a6e064a5b158203d5ef",
                     "missing": false
                 },
                 {
@@ -1125,7 +1125,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Wall.mat",
-                    "digest": "66d7ab2f346b088d7343cafc941be62cfa86c24de979c002587714d0f9cdbc45",
+                    "digest": "33b3b33578848b118a531f135cbdf4a8562ddfc4f21173c72dd16e369fe8366d",
                     "missing": false
                 },
                 {
@@ -1135,7 +1135,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponAccent.mat",
-                    "digest": "0973e9475a3ae3ce543cc4afb60ea6b1628f651abd81ca02b94dbc98ae673aa9",
+                    "digest": "fa045e16562e6fb1b17be506ef9d9e3c0d60751b511968b3bb273f9c2abcd7f7",
                     "missing": false
                 },
                 {
@@ -1145,7 +1145,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponDark.mat",
-                    "digest": "07407bef37fc1f039dbb433788a24e96398cbd76686949d4277445d20d028ea2",
+                    "digest": "3dc8c3147050655c33b78b82e039cd19c8d92bd7a51ac93698c2616202e60cff",
                     "missing": false
                 },
                 {
@@ -1155,7 +1155,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponMetal.mat",
-                    "digest": "d375e32d94852bccc71f73a09c1376830ce57fa5c9828f598562f381c4c46ea8",
+                    "digest": "463031758b272ca13d2386006160da166396ebd050ccf31a7be9205c63ad69d9",
                     "missing": false
                 },
                 {
@@ -1165,7 +1165,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Ball.prefab",
-                    "digest": "187a3b9cdd3166cd35c6edcc3418b9e155e34c0cda74c1b7af38e751a1fd6591",
+                    "digest": "9b7f62c6ee07118d1363b95676706e5778a3ab62689dcf078b36daf633096381",
                     "missing": false
                 },
                 {
@@ -1175,7 +1175,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/ExplosionVfx.prefab",
-                    "digest": "ff3bb0b405d34703ba93269f09456aab4444ac347a918c42ca47754dddf58ceb",
+                    "digest": "405faee753e5817bbc491e2a8276dc7d1b80d75ee36b81980fdcb8c6519e6c9f",
                     "missing": false
                 },
                 {
@@ -1185,7 +1185,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/HealthPickup.prefab",
-                    "digest": "fc1242280449600742ad56b46fcf12ca2cb63268648145cbf5f40590640ab2e0",
+                    "digest": "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
                     "missing": false
                 },
                 {
@@ -1195,7 +1195,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "19614ee21a95a7a37de9586ee75de9b7a524d235bf80cd3e938d1d71cd5bc8ce",
+                    "digest": "5265d2630635297ffb68cc1452eac8e4e1c00e63b2fd54a17e1f0d7770834342",
                     "missing": false
                 },
                 {
@@ -1205,7 +1205,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Rocket.prefab",
-                    "digest": "193aab70177e7bde3a349f7bb66c264ea1df4f3985209416c2066a10d9b7de7e",
+                    "digest": "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
                     "missing": false
                 },
                 {
@@ -1220,19 +1220,19 @@
             "schemaVersion": 8,
             "contractVersion": "gameplay-scene-contract:12;serialized:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "098cf14e7ee1f350cf6bc71c384f2ae25e06d51df661a082d47c88da7b43158f",
-            "repositoryInputDigest": "878fc26d8470a90e8343f78d244d7f395420d8f906f0aaf45db728bf2c9ddb9c",
-            "dependencyDigest": "c0bc8b47b76ac83d39efaabb3eea47400757d903f252602ae4d48c6186a835cf",
-            "outputDigest": "f86832587985ea33a6b303ad4821d2c398e22daa3fd25830b85083ef48862657",
+            "inputDigest": "accad52f96d0756f1deeb63b1d7c737735bcbf944db395005ee69680953aa20e",
+            "repositoryInputDigest": "9679d1bc969d850898155b35de432dc99059966566a018962ac2c4a1332f8e6a",
+            "dependencyDigest": "873f9e93a874efa7f337e529a6abd9ecc900668df5d45821114d27cd7c25b8fa",
+            "outputDigest": "6e51a6c274b73723ed9b8dee86551514085f0a30ba7c36e13fb76af573d47910",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "098cf14e7ee1f350cf6bc71c384f2ae25e06d51df661a082d47c88da7b43158f",
-            "priorOutputDigest": "f86832587985ea33a6b303ad4821d2c398e22daa3fd25830b85083ef48862657",
+            "priorInputDigest": "accad52f96d0756f1deeb63b1d7c737735bcbf944db395005ee69680953aa20e",
+            "priorOutputDigest": "6e51a6c274b73723ed9b8dee86551514085f0a30ba7c36e13fb76af573d47910",
             "profile": "",
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "28d2c754da850242a71f079b27e8c08e2cb9d40b3afdbd8588ca02033799355f",
+                    "digest": "3aa80d9d2874a8122e029ea7a2fbb0f1f5841cf37efca468d19cf967c381ec11",
                     "missing": false
                 },
                 {
@@ -1354,8 +1354,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "bb9ce38db5ac0d698f924f7cb752bfd7b0dd34f18490cb04b5108e2412ab2717",
-            "repositoryInputDigest": "bb9ce38db5ac0d698f924f7cb752bfd7b0dd34f18490cb04b5108e2412ab2717",
+            "inputDigest": "0bfff28b0640a1c8fec51affc8e74fab3bc10a2d997c228115e75fe7aa75bc06",
+            "repositoryInputDigest": "0bfff28b0640a1c8fec51affc8e74fab3bc10a2d997c228115e75fe7aa75bc06",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "predecessorDigests": [],
@@ -1363,7 +1363,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "d424b3d20e5f890f96af271a75820de6427d0c31fe5348fa2595eb796d628e47",
+            "priorInputDigest": "bb9ce38db5ac0d698f924f7cb752bfd7b0dd34f18490cb04b5108e2412ab2717",
             "priorOutputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "profile": "",
             "outputs": [
@@ -1394,8 +1394,8 @@
             "schemaVersion": 8,
             "contractVersion": "baked-output-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "4827f30be6adfc4dd36a0615144b6315a8336087ed5cdbef6992648412aabfad",
-            "repositoryInputDigest": "a9bee915bcec4cb37b2fccf5ed97fc4a32eb92e73b8f4d53d27016923b08d6d8",
+            "inputDigest": "16054c11f315033afeda4a68b02f12e952ffec161cc1c050c9b110b70bfe4c3a",
+            "repositoryInputDigest": "5b152636800f83ef816fe80cdc920f029779ceb2ae83c020c058fb355804ee96",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "predecessorDigests": [
@@ -1405,7 +1405,7 @@
                 "input-source-changed",
                 "input-changed"
             ],
-            "priorInputDigest": "cbd5de56fb4c12867194f190646f60653e28a61be20d0f92a343d20302eaf135",
+            "priorInputDigest": "4827f30be6adfc4dd36a0615144b6315a8336087ed5cdbef6992648412aabfad",
             "priorOutputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "profile": "Production",
             "outputs": [

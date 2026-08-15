@@ -4940,7 +4940,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c69a3987ad844f2c91881b630fc0f9b3, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Feedback.ExplosionVfx
   particleSystems:
   - {fileID: 4973854349265653679}
