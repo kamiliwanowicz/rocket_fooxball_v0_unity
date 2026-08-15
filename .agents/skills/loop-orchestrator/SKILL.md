@@ -157,3 +157,5 @@ Final handoff requires:
 - explicit authority request binding user target branch and exact integration SHA.
 
 Missing or drifted fact -> `blocked` with evidence and one needed action.
+
+`READY_FOR_USER_MERGE` retains run worktrees, private `Library/` caches, branches, durable evidence, and `C:\wt` aliases. Cleanup starts only after [state-and-recovery cleanup gate](references/state-and-recovery.md#cleanup-and-completion) verifies target branch merged exact final SHA. Preserve aliases referenced by retained state, ledger, workflow result, or evidence pointer; no pointer canonicalization/migration. Never clean a blocked, paused, failed, resumable, or unmerged run.

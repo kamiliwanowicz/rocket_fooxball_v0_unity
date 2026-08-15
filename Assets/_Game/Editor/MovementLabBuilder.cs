@@ -11,6 +11,7 @@ namespace RocketFooxball.Editor
     public static class MovementLabBuilder
     {
         internal const string ProductionBakeSkippedMarker = "[MovementLab] production bake skipped: lighting inputs current (digest ";
+        private const string PrepareProductionArgument = "-movementLabPrepareProduction";
 
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
@@ -77,6 +78,12 @@ namespace RocketFooxball.Editor
         public static void BakeMovementLabLighting()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            if (IsProductionPreparationRequested())
+            {
+                // The workflow keeps this with the bake in one batch Editor
+                // process; the later validation process still proves reload.
+                AssembleMovementLab();
+            }
             var probe = MovementLabStageGraph.Probe(false);
             var productionProfile = string.Equals(probe.CurrentState?.bakedProfile ?? "none", MovementLabLightingProfiles.Production.Tag, StringComparison.OrdinalIgnoreCase);
             if (productionProfile &&
@@ -109,6 +116,12 @@ namespace RocketFooxball.Editor
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true));
             Debug.Log("Rocket Fooxball Movement Lab lighting baked explicitly: " + MovementLabContract.ScenePath);
+        }
+
+        private static bool IsProductionPreparationRequested()
+        {
+            return Environment.GetCommandLineArgs().Any(argument =>
+                string.Equals(argument, PrepareProductionArgument, StringComparison.Ordinal));
         }
 
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]

@@ -108,6 +108,13 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - executed ledger: [absolute `check-ledger.json` path or None]
 - executed ledger sha256: [lowercase digest or None]
 - clean: true | false | unknown
+
+## Cleanup
+- status: pending | complete | blocked | not_eligible
+- removed worktrees: [exact absolute run paths or None]
+- removed aliases: [exact `C:\wt` reparse-point paths or None]
+- prune evidence: [dry-run and completion evidence or None]
+- blocker: [evidence + needed action/recheck or None]
 ```
 
 ## Executed Ledger Pointer
@@ -251,6 +258,20 @@ Bound plan artifact digest/size mismatch blocks execution; the plan artifact is 
 
 ## Cleanup and completion
 
-Stop/verify writers before cleanup. Remove current run's temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
+`READY_FOR_USER_MERGE` is handoff, not cleanup eligibility. Automatic cleanup only after all gates pass:
+
+- state: phase `READY_FOR_USER_MERGE`; final handoff facts, state, accepted artifacts, and ledger pointers/digests readable.
+- merge: recorded target branch from explicit authority exists; observed target ref contains exact recorded final SHA (`git merge-base --is-ancestor <final-sha> <target-ref>` succeeds). Authority request, candidate availability, or target observation alone fail gate.
+- quiescence: no live run agent/writer; every bound run worktree exact-path registered, branch-bound, clean, and no operation/lock remains.
+- scope: candidate paths are only exact plan worktrees plus exact integration worktree recorded for this run. Never discover by name, prefix, glob, or repository-wide inventory.
+
+Gate failure -> `not_eligible` for unmerged handoff; otherwise `blocked` with evidence. Preserve worktrees, private `Library/`, aliases, branches, and durable evidence. Never retry cleanup by deleting paths directly.
+
+Eligible cleanup:
+
+1. Reverify each exact recorded worktree immediately before removal. Run `git worktree remove <exact-path>` without `--force`; removal failure -> `blocked`, stop. Never delete branches, primary checkout, Git-common evidence, or any unrecorded worktree.
+2. Run `git worktree prune --dry-run`. Continue with `git worktree prune` only when every reported stale registration is proven to belong to an exact removed current-run worktree; unrelated or unprovable registration -> `blocked`, no prune. Requery `git worktree list --porcelain`; removed paths must be absent.
+3. Remove only exact recorded `C:\wt` aliases after worktree cleanup: path remains under `C:\wt`; item is a junction/symlink reparse point; recorded target matches current-run removed worktree or durable evidence root. Before unlink, preserve every alias referenced by retained `state.md`, `check-ledger.json`, `workflow-result.json`, or evidence pointer. No pointer canonicalization/migration. Unlink only unreferenced reparse points; no recursive delete. Regular directory, changed/missing target, or unrecorded alias -> preserve and record blocker.
+4. Atomically record exact removed worktrees/aliases and prune evidence as `complete`. Retain run state, artifacts, ledgers, and Git-common durable evidence for recovery/audit.
 
 Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged or accepted through `single_plan`, required `check-ledger.json` pointers/digests match, final checks bind final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.

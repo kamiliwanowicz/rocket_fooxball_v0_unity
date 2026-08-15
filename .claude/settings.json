@@ -1,25 +1,5 @@
 {
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/Tools/Tests/Invoke-HarnessTests.ps1",
-              "-HookMode",
-              "PostToolUse"
-            ]
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash|PowerShell",

@@ -797,11 +797,10 @@ function Test-HookSettings {
         return $hook
     }
 
-    $postHook = $null
     $preHook = $null
     try {
-        $postHook = Get-ConfiguredHook 'PostToolUse' 'Edit|Write' 'PostToolUse'
         $preHook = Get-ConfiguredHook 'PreToolUse' 'Bash|PowerShell' 'PreToolUse'
+        if ($settings.hooks.PSObject.Properties.Name -contains 'PostToolUse') { throw 'PostToolUse harness hook must be absent' }
     } catch {
         return New-HarnessFail $_.Exception.Message
     }
@@ -888,10 +887,6 @@ function Test-HookSettings {
         return ('; ' + $label + '=' + $detail)
     }
 
-    $postTestsTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
-    $postValidationTarget = '{"tool_name":"Write","tool_input":{"file_path":"Tools/Validation/Invoke-MovementLabWorkflow.ps1"}}'
-    $postEditorTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs"}}'
-    $postUnrelated = '{"tool_name":"Edit","tool_input":{"file_path":"README.md"}}'
     $preWorkflowTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly"}}'
     $preUnityTarget = '{"tool_name":"PowerShell","tool_input":{"command":"C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
     $preUnrelated = '{"tool_name":"PowerShell","tool_input":{"command":"Get-Date"}}'
@@ -906,18 +901,10 @@ function Test-HookSettings {
         [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
     }
     try {
-        $postTestsPending = Start-HookFixture $postHook $postTestsTarget
-        $postValidationPending = Start-HookFixture $postHook $postValidationTarget
-        $postEditorPending = Start-HookFixture $postHook $postEditorTarget
-        $postUnrelatedPending = Start-HookFixture $postHook $postUnrelated
         $preWorkflowPending = Start-HookFixture $preHook $preWorkflowTarget
         $preUnityPending = Start-HookFixture $preHook $preUnityTarget
         $preUnrelatedPending = Start-HookFixture $preHook $preUnrelated
         $preForcedPending = Start-HookFixture $preHook $preWorkflowTarget -ForceFailure
-        $postTestsResult = Complete-HookFixture $postTestsPending
-        $postValidationResult = Complete-HookFixture $postValidationPending
-        $postEditorResult = Complete-HookFixture $postEditorPending
-        $postUnrelatedResult = Complete-HookFixture $postUnrelatedPending
         $preWorkflowResult = Complete-HookFixture $preWorkflowPending
         $preUnityResult = Complete-HookFixture $preUnityPending
         $preUnrelatedResult = Complete-HookFixture $preUnrelatedPending
@@ -928,21 +915,13 @@ function Test-HookSettings {
         if ($null -ne $previousInputEncoding) { [Console]::InputEncoding = $previousInputEncoding }
     }
     $State.HookExecution = [ordered]@{
-        postTestsExit = $postTestsResult.exitCode
-        postValidationExit = $postValidationResult.exitCode
-        postEditorExit = $postEditorResult.exitCode
-        postUnrelatedExit = $postUnrelatedResult.exitCode
         preWorkflowExit = $preWorkflowResult.exitCode
         preUnityExit = $preUnityResult.exitCode
         preUnrelatedExit = $preUnrelatedResult.exitCode
         preForcedExit = $preForcedResult.exitCode
-        postTestsStderr = $postTestsResult.stderr.Trim()
         preForcedStderr = $preForcedResult.stderr.Trim()
     }
     foreach ($fixture in @(
-        [pscustomobject]@{ Name = 'Tools/Tests'; Result = $postTestsResult },
-        [pscustomobject]@{ Name = 'Tools/Validation'; Result = $postValidationResult },
-        [pscustomobject]@{ Name = 'MovementLab C#'; Result = $postEditorResult },
         [pscustomobject]@{ Name = 'workflow PreToolUse'; Result = $preWorkflowResult },
         [pscustomobject]@{ Name = 'Unity PreToolUse'; Result = $preUnityResult }
     )) {
@@ -950,11 +929,9 @@ function Test-HookSettings {
         if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout' + (Get-HookFailureDetail $fixture.Result)) }
         if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness' + (Get-HookFailureDetail $fixture.Result)) }
     }
-    if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode + (Get-HookFailureDetail $postUnrelatedResult)) }
     if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode + (Get-HookFailureDetail $preUnrelatedResult)) }
-    if ($postUnrelatedResult.stdout.Count -ne 0 -or $postUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail ('unrelated PostToolUse event did not skip cleanly' + (Get-HookFailureDetail $postUnrelatedResult)) }
     if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail ('unrelated PreToolUse event did not skip cleanly' + (Get-HookFailureDetail $preUnrelatedResult)) }
     if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2' + (Get-HookFailureDetail $preForcedResult)) }
     if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail ('forced PreToolUse fixture lacked concise stderr failure' + (Get-HookFailureDetail $preForcedResult)) }
-    return New-HarnessPass 'exec-form hooks; three PostToolUse targets; workflow/Unity PreToolUse targets; skips and exit-2 failure'
+    return New-HarnessPass 'one PreToolUse hook; workflow/Unity targets; nested hook check skipped; unrelated skip and exit-2 failure'
 }

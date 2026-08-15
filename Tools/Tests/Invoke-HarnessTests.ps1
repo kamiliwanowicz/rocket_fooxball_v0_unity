@@ -2,7 +2,7 @@
 param(
     [string]$EvidenceRoot,
     [switch]$SkipHookCheck,
-    [ValidateSet('PostToolUse', 'PreToolUse')][string]$HookMode,
+    [ValidateSet('PreToolUse')][string]$HookMode,
     [Alias('ForceFailure')][switch]$HookTestForceFailure
 )
 
@@ -80,37 +80,6 @@ function Get-HookStrings {
     return $values.ToArray()
 }
 
-function Convert-HookPathToRelative {
-    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Root)
-    $value = $Path.Trim().Trim('"').Replace('\', '/')
-    $rootValue = $Root.TrimEnd('\').Replace('\', '/')
-    if ([System.IO.Path]::IsPathRooted($Path)) {
-        try { $value = ([System.IO.Path]::GetFullPath($Path)).Replace('\', '/') } catch { return $value.TrimStart('/') }
-        if ($value.StartsWith($rootValue + '/', [StringComparison]::OrdinalIgnoreCase)) {
-            return $value.Substring($rootValue.Length + 1).TrimStart('/')
-        }
-        return $value.TrimStart('/')
-    }
-    while ($value.StartsWith('./', [StringComparison]::Ordinal)) { $value = $value.Substring(2) }
-    return $value.TrimStart('/')
-}
-
-function Test-HookPostToolTarget {
-    param([Parameter(Mandatory = $true)]$Event, [Parameter(Mandatory = $true)][string]$Root)
-    $toolName = [string](Get-HookProperty $Event 'tool_name')
-    if ($toolName -notin @('Edit', 'Write')) { return $false }
-    $toolInput = Get-HookInput $Event
-    $paths = @(Get-HookStrings $toolInput @('file_path', 'path', 'filePath', 'filename'))
-    $paths += @(Get-HookStrings $Event @('file_path', 'path', 'filePath', 'filename'))
-    foreach ($path in $paths) {
-        $relative = Convert-HookPathToRelative $path $Root
-        if ($relative -match '(?i)^Tools/Tests(?:/|$)') { return $true }
-        if ($relative -match '(?i)^Tools/Validation/[^/]+\.ps1$') { return $true }
-        if ($relative -match '(?i)^Assets/_Game/Editor/MovementLab/[^/]+\.cs$') { return $true }
-    }
-    return $false
-}
-
 function Test-HookPreToolTarget {
     param([Parameter(Mandatory = $true)]$Event)
     $toolName = [string](Get-HookProperty $Event 'tool_name')
@@ -126,12 +95,11 @@ function Test-HookPreToolTarget {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
-    if ($HookTestForceFailure -and $HookMode -ne 'PreToolUse') { throw 'HookTestForceFailure is valid only for PreToolUse test dispatch.' }
     $eventText = [Console]::In.ReadToEnd()
     if ($null -ne $eventText) { $eventText = $eventText.TrimStart([char]0xFEFF) }
     if ([string]::IsNullOrWhiteSpace($eventText)) { throw ($HookMode + ' hook event JSON missing on stdin.') }
     try { $hookEvent = $eventText | ConvertFrom-Json -ErrorAction Stop } catch { throw ($HookMode + ' hook event JSON invalid: ' + $_.Exception.Message) }
-    $target = if ($HookMode -eq 'PostToolUse') { Test-HookPostToolTarget $hookEvent $projectRoot } else { Test-HookPreToolTarget $hookEvent }
+    $target = Test-HookPreToolTarget $hookEvent
     if (-not $target) {
         Write-HarnessOutput ('HOOK ' + $HookMode + ' SKIP unrelated event')
         exit 0

@@ -118,10 +118,7 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
                      "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/PickupRespawnState.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickupRules.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
-                     "Assets/_Game/Scripts/Tests/EditMode/HealthPickupRulesTests.cs"
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs"
                  }), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
@@ -144,10 +141,7 @@ namespace RocketFooxball.Editor
                  }, WithMetas(new[]
                  {
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/PickupRespawnState.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickupRules.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
-                     "Assets/_Game/Scripts/Tests/EditMode/HealthPickupRulesTests.cs"
+                     "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs"
                  })),
                 new[]
                 {

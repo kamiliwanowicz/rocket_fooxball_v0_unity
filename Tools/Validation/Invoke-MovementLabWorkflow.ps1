@@ -1437,20 +1437,14 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
-            # PlanOnly can validate an existing probe before recording any skipped Unity step.
-            # Executing runs keep probe generation order unchanged.
+            # PlanOnly can validate an existing probe before recording the
+            # single combined prepare/bake Unity step.
             if ($PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath -PathType Leaf)) {
                 $probeRecord = Read-ProbeContract
                 Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
             }
-            if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
-            if ($null -eq $probeRecord) {
-                $probeRecord = Read-ProbeContract
-                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
-            }
-            Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
-            if ($script:BakeCount -gt 0) { throw 'ProductionPrepare attempted a bake before production bake step.' }
-            Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabProbePath', $script:ProbeOutputPath) $true
+            Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabPrepareProduction', '-movementLabProbePath', $script:ProbeOutputPath) $true
+            if (Test-CheckPending 'stage-probe') { Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
             Mark-CheckExecuted 'production-bake'
             $productionBakeOutcome = Resolve-ProductionBakeOutcome
             $productionBakeRow = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1
