@@ -3,7 +3,6 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
 using RocketFooxball.Runtime.Feedback;
@@ -515,7 +514,6 @@ namespace RocketFooxball.Editor
                     }
                     AssetDatabase.SaveAssets();
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
-                    NormalizeGeneratedYamlWhitespace();
                 }
 
                 private static ParticipantState[] BuildParticipantRoster(GameObject playerPrefab)
@@ -731,93 +729,6 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("High quality camera state contract invalid.");
                     }
-                }
-
-                internal static void NormalizeGeneratedYamlWhitespace()
-                {
-                    NormalizeGeneratedYamlWhitespace(GeneratedYamlAssetPaths);
-                }
-
-                internal static void NormalizeGeneratedYamlWhitespace(IEnumerable<string> assetPaths)
-                {
-                    // Unity emits empty serialized fields as `key: `; trim
-                    // trailing spaces while preserving YAML structure/GUIDs.
-                    var normalizedPaths = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var assetPath in assetPaths ?? Enumerable.Empty<string>())
-                    {
-                        if (string.IsNullOrWhiteSpace(assetPath)) continue;
-                        var isMetaPath = assetPath.EndsWith(".meta", StringComparison.Ordinal);
-                        var path = isMetaPath ? assetPath.Substring(0, assetPath.Length - ".meta".Length) : assetPath;
-                        if (!normalizedPaths.Add(path)) continue;
-                        if (isMetaPath)
-                        {
-                            NormalizeYamlFile(assetPath);
-                            continue;
-                        }
-                        NormalizeYamlFile(path);
-                        if (path.StartsWith("Assets/", StringComparison.Ordinal)) NormalizeYamlFile(path + ".meta");
-                    }
-                    // Importer metadata is protected input/output state. Do
-                    // not canonicalize it during bake/preview lifecycle work;
-                    // Unity may rewrite empty fields and create false drift.
-                }
-
-                internal static void NormalizeYamlFile(string path)
-                {
-                    if (!File.Exists(path)) return;
-                    if (!HasRecognizedTextYamlHeader(path))
-                    {
-                        Debug.LogWarning("Skipping YAML whitespace normalization for binary or unrecognized file: " + path);
-                        return;
-                    }
-
-                    var source = File.ReadAllText(path, Encoding.UTF8);
-                    // Empty YAML sequence entries are serialized as an indented
-                    // `- ` line. Keep that marker (and its indentation) intact;
-                    // trimming it makes Unity's YAML parser reject the document.
-                    var normalized = Regex.Replace(source, @"^(?![ \t]*-[ \t]*\r?$)(.*?)[ \t]+(?=\r?$)", match => match.Groups[1].Value, RegexOptions.Multiline);
-                    if (!string.Equals(source, normalized, StringComparison.Ordinal))
-                    {
-                        File.WriteAllText(path, normalized, new UTF8Encoding(false));
-                    }
-                }
-
-                private static bool HasRecognizedTextYamlHeader(string path)
-                {
-                    var yamlHeader = new byte[] { (byte)'%', (byte)'Y', (byte)'A', (byte)'M', (byte)'L' };
-                    var metaHeader = new byte[]
-                    {
-                        (byte)'f', (byte)'i', (byte)'l', (byte)'e', (byte)'F', (byte)'o', (byte)'r', (byte)'m',
-                        (byte)'a', (byte)'t', (byte)'V', (byte)'e', (byte)'r', (byte)'s', (byte)'i', (byte)'o',
-                        (byte)'n', (byte)':'
-                    };
-                    var probe = new byte[3 + metaHeader.Length];
-                    int bytesRead;
-                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    {
-                        bytesRead = 0;
-                        while (bytesRead < probe.Length)
-                        {
-                            var read = stream.Read(probe, bytesRead, probe.Length - bytesRead);
-                            if (read == 0) break;
-                            bytesRead += read;
-                        }
-                    }
-
-                    var offset = bytesRead >= 3 && probe[0] == 0xef && probe[1] == 0xbb && probe[2] == 0xbf ? 3 : 0;
-                    if (HasBytePrefix(probe, bytesRead, offset, yamlHeader)) return true;
-                    return path.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) &&
-                           HasBytePrefix(probe, bytesRead, offset, metaHeader);
-                }
-
-                private static bool HasBytePrefix(byte[] source, int sourceLength, int offset, byte[] expected)
-                {
-                    if (sourceLength - offset < expected.Length) return false;
-                    for (var i = 0; i < expected.Length; i++)
-                    {
-                        if (source[offset + i] != expected[i]) return false;
-                    }
-                    return true;
                 }
 
                 internal static void EnsureFolders()

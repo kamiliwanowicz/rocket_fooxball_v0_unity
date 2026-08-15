@@ -220,11 +220,6 @@ namespace RocketFooxball.Editor
                 if (path.EndsWith(".meta", StringComparison.Ordinal) || !path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
                 AssetDatabase.LoadMainAssetAtPath(path);
             }
-
-            // This must be the final operation on generated YAML for the
-            // stage. Any later save/import can restore Unity's trailing
-            // whitespace serialization and create fresh output drift.
-            MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace(owned);
         }
 
         private static void SaveOwnedAssets(string[] owned)

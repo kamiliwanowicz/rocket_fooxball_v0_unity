@@ -366,13 +366,6 @@ namespace RocketFooxball.Editor
                     return revalidatedScene;
                 }
 
-                internal static void NormalizePostBakeYamlWhitespace()
-                {
-                    // The scene is text YAML. LightingData.asset is a native
-                    // binary asset and must never pass through text normalization.
-                    MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.ScenePath);
-                }
-
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
                 {
                     var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();

@@ -103,7 +103,6 @@ namespace RocketFooxball.Editor
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Production);
             scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
-            MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Production, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
@@ -201,7 +200,6 @@ namespace RocketFooxball.Editor
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
             scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
-            MovementLabLightingPipeline.NormalizePostBakeYamlWhitespace();
             MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
