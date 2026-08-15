@@ -2,7 +2,7 @@
 
 Role: `code-reviewer`
 
-Profile: exact `sol_high`
+Profile: exact `sol_medium`
 
 Invocation: execution orchestrator only; fresh child per bounded review
 
@@ -47,7 +47,7 @@ One block/finding, exactly three fields; zero qualifying findings -> literal `no
 Status: complete | blocked
 Assigned Agent: [exact agent identity]
 Role: code-reviewer
-Profile: sol_high
+Profile: sol_medium
 Checkpoint ID: [checkpoint_id]
 Review Cycle ID: [review_cycle_id]
 Review Kind: initial | fix-re-review

@@ -92,7 +92,7 @@ After creation all Git checks use bound worktree/branch/exact SHA. Moving source
 - reviewer: read-only frozen Git inspection; findings only; [`code-reviewer`](agents/code-reviewer.md)
 - investigator: read-only recurring-issue diagnosis
 - one writer/path; disjoint writers parallel only with stable inputs. Shared contract, generated asset, migration, validation environment -> serialize
-- writer profile -> exact plan/user/`AGENTS.md` requirement; otherwise `luna_max`. Reviewer -> fresh exact `sol_high`
+- writer profile -> exact plan/user/`AGENTS.md` requirement; otherwise `luna_max`. Reviewer -> fresh exact `sol_medium`
 - required profile unavailable, unresolved ownership, authority, or product decision -> `blocked`
 
 Recovery preserves bound objective, requirements, ownership, dependencies, Git authority. Production bake authority -> [production-bake gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate). Out-of-bounds recovery -> `blocked`.
@@ -134,6 +134,7 @@ Implementation/fix writer contract:
 - bounded task + done condition; objective + exclusions
 - exact worktree; files/symbols; owned/protected paths
 - product writes: owned paths only
+- scope self-check before every expensive proof: `git status --porcelain` -> each changed path inside owned set. Unowned path -> revert it or return `blocked`; never spend Unity/workflow proof on out-of-scope tree
 - Git/state: `None`
 - applicable checks; proof boundary; `read_paths`; `validation_environment`; `unity_mutation`; `expensive_proof_owner`; `expensive_proof_run_point`
 
@@ -243,9 +244,10 @@ Fan-out ready disjoint siblings. Per-worker terminal -> [Worker -> reviewer barr
 
 Fix re-review sole repository rule:
 
-- `fix_loc` -> added + deleted text rows from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>`; binary rows zero LOC, stay scope
+- `fix_loc` -> added + deleted text rows from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>`, source rows only; binary rows and builder-generated outputs zero LOC, stay scope
+- builder-generated output -> any path the covered task declares generated (task `checks` `-GeneratedPath`, builder-owned scenes/prefabs/materials/manifests). Regeneration reserialization is semantic review surface, never line count -> [`AGENTS.md`](../../../AGENTS.md) `Unity asset safety`
 - `finding_count` -> originating review Critical/High findings before disposition
-- `fix_loc > 200` or `finding_count > 3` -> fresh exact `sol_high` `fix-re-review`; otherwise advance accepted head
+- `fix_loc > 200` or `finding_count > 3` -> fresh exact `sol_medium` `fix-re-review`; otherwise advance accepted head
 - re-review -> same slice, `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, normal reviewer scope
 - re-review finding -> fresh fix writer -> apply gate again
 
