@@ -83,7 +83,11 @@ namespace RocketFooxball.Editor
             MovementLabManifestStore.EnsureWriteAuthorization();
             for (var iteration = 0; iteration < maxIterations; iteration++)
             {
-                var stale = stages.Where(current.IsStale).ToArray();
+                // Output hashes provide provenance, not a rebuild trigger.
+                // `missing:` and every non-output-drift reason still execute
+                // their owning stage; only changed-output-only records remain
+                // informational until a real stage input changes.
+                var stale = stages.Where(stage => current.IsStale(stage) && !current.IsRawOutputDriftOnly(stage)).ToArray();
                 if (stale.Length == 0) break;
 
                 var stateKey = string.Join(",", stale.Select(stage => stage.ToString()).ToArray()) + ":" +
@@ -98,7 +102,7 @@ namespace RocketFooxball.Editor
                 for (var i = 0; i < stages.Length; i++)
                 {
                     var stage = stages[i];
-                    if (!current.IsStale(stage)) continue;
+                    if (!current.IsStale(stage) || current.IsRawOutputDriftOnly(stage)) continue;
                     if (!ShouldSkipPrefabOnlyGameplayRefresh(stage, current))
                     {
                         ExecuteStage(stage);
@@ -141,7 +145,7 @@ namespace RocketFooxball.Editor
             }
 
             var final = MovementLabStageGraph.Probe(stopOnOutputDrift: true, allowBakedOutputDrift: true);
-            var unresolved = stages.Where(final.IsStale).ToArray();
+            var unresolved = stages.Where(stage => final.IsStale(stage) && !final.IsRawOutputDriftOnly(stage)).ToArray();
             if (unresolved.Length > 0)
             {
                 throw new InvalidOperationException("MovementLab non-lighting stage closure did not converge: " +
@@ -216,6 +220,11 @@ namespace RocketFooxball.Editor
                 if (path.EndsWith(".meta", StringComparison.Ordinal) || !path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
                 AssetDatabase.LoadMainAssetAtPath(path);
             }
+
+            // This must be the final operation on generated YAML for the
+            // stage. Any later save/import can restore Unity's trailing
+            // whitespace serialization and create fresh output drift.
+            MovementLabSceneComposer.NormalizeGeneratedYamlWhitespace(owned);
         }
 
         private static void SaveOwnedAssets(string[] owned)

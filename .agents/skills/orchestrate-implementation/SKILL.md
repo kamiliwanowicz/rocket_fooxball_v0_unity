@@ -88,7 +88,7 @@ After creation all Git checks use bound worktree/branch/exact SHA. Moving source
 ## Ownership and recovery
 
 - orchestrator: sole Git owner; creates no extra plan/integration worktrees
-- writer: implementation/fix product writes only inside assigned owned paths; no Git/state/worktree/branch operations
+- writer: implementation/fix product writes inside assigned owned paths; builder-generated outputs -> generated output gate; no Git/state/worktree/branch operations
 - reviewer: read-only frozen Git inspection; findings only; [`code-reviewer`](agents/code-reviewer.md)
 - investigator: read-only recurring-issue diagnosis
 - one writer/path; disjoint writers parallel only with stable inputs. Shared contract, generated asset, migration, validation environment -> serialize
@@ -105,7 +105,9 @@ Current child stays assigned for isolated blocker, rescue, scope correction, con
 
 ## Proof environment
 
-Writer contract carries `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_run_point`. Planner names one production-final owner after source fan-in, review, fixes. Worker checks default fast/local unless task owns development proof. Expensive-proof reduction never relaxes review.
+Writer contract carries `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_execution`. Enum: `same_dispatch | orchestrator_phase | None`. `same_dispatch` -> named task owner runs proof before return. `orchestrator_phase` -> execution orchestrator runs shared proof only after plan `checks` names checkpoint/final trigger, every declared source producer reaches trigger, generated outputs reach generated-output gate, checkpoint review/fixes accepted. `None` -> no expensive proof. Trigger derives from plan checks plus exact declared outputs; never narrative run-point or workflow path-selection flag. Planner names one production-final owner after source fan-in, review, fixes. Worker checks default fast/local unless task owns development proof. Expensive-proof reduction never relaxes review.
+
+Source-only writer for `unity_mutation: true` -> return Unity compile proof before terminal return. Source/proof split without this proof -> prohibited. Relevant Unity test/import or compile-only Unity batch qualifies; `dotnet build` does not.
 
 Production-final gate: declare `expected_status`; compare observed status. Two consecutive mismatches -> `blocked`, comparator suspect, no further Unity. Probe requires valid workflow `schemaVersion: 1`; failure follows workflow failure contract.
 
@@ -122,6 +124,12 @@ Success extraction only: `status`, `exactSha`, evidence `result`/`path`, `eviden
 - second correction to same family -> delete family wholesale; retain named authority-required invariant only: GUID/meta, path, process/lease, atomic write, source/input digest, orchestration artifact/evidence integrity
 - source/input and artifact/evidence hashes allowed integrity checks; generated-output byte/hash equality never gates
 
+## Generated output gate
+
+Classifier inputs -> current authoritative builder inventory + exact task-declared generated outputs in `owns`, each traced to builder source. Normalize union. Classify each changed generated output: source `inventory | declared-new | both`; scope `owned | inventory-exception`. Ownership changes scope decision only; every class needs same evidence. Changed generated-looking path outside union, declaration without builder-source evidence, or inventory-unknown unowned path -> reject/`blocked`.
+
+Coverage evidence -> exact changed-output set, source/scope class per path, comparator-selected path set, comparator output path headers, `SEMANTIC:`, `DANGLING:`, GUID-stability result, asset/`.meta` pairing result. Every changed authoritative generated output must have exact path coverage at writer self-check, checkpoint barrier, reviewer dispatch, final verification. Comparator-supported path -> run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <writer-slice-base-sha> -Head WORKTREE -FailOnDangling` with exact coverage; require matching output header. Comparator-unsupported path -> record exact path + unsupported reason; `blocked` until supported evidence exists. Never omit, infer coverage from broad glob, or treat raw-diff exclusion/separate regeneration commit as evidence. Comparator failure, incomplete coverage, increased dangling, GUID churn, or broken pairing -> reject/`blocked`.
+
 ## Child dispatch contract
 
 Every dispatch gets unique `execution_id`. Dispatch/return text: terse AI-to-AI, exact paths/symbols/commands/SHAs, no narration. Worker receives bounded task only; never full plan dump.
@@ -133,10 +141,10 @@ Implementation/fix writer contract:
 - `execution_id`; identity/profile/role
 - bounded task + done condition; objective + exclusions
 - exact worktree; files/symbols; owned/protected paths
-- product writes: owned paths only
-- scope self-check before every expensive proof: `git status --porcelain` -> each changed path inside owned set. Unowned path -> revert it or return `blocked`; never spend Unity/workflow proof on out-of-scope tree
+- product writes: owned paths; builder-generated outputs -> generated output gate
+- scope self-check before every expensive proof: `git status --porcelain` -> each changed path inside owned set or [generated output gate](#generated-output-gate). Other unowned path -> revert it or return `blocked`; never spend Unity/workflow proof on out-of-scope tree
 - Git/state: `None`
-- applicable checks; proof boundary; `read_paths`; `validation_environment`; `unity_mutation`; `expensive_proof_owner`; `expensive_proof_run_point`
+- applicable checks; proof boundary; `read_paths`; `validation_environment`; `unity_mutation`; `expensive_proof_owner`; `expensive_proof_execution`; `orchestrator_phase` -> exact plan-check trigger + declared producer/output set; source-only `unity_mutation: true` -> compile-proof command/result/evidence
 
 Fix adds: `review_cycle_id`, `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, acceptance criteria.
 
@@ -149,6 +157,7 @@ Reviewer contract:
 - `execution_id`; identity/profile/role; repository + exact worktree; read-only Git
 - `checkpoint_id`, `review_cycle_id`, kind `initial | fix-re-review`, covered execution IDs, task/path slice, `review_base_sha`, `frozen_sha`
 - bound plan artifact path + exact covered-task `implementation` locator
+- generated review: `separate-commit` or `excluded-slice`; exact changed generated-output coverage evidence always attached; excluded raw slice -> exact paths + same evidence
 - unique scratch root outside product worktree + scratch rules
 
 Omit plan artifact digest and unrelated fields. Reviewer behavior/result -> [`code-reviewer`](agents/code-reviewer.md).
@@ -166,13 +175,13 @@ Omit plan artifact and unrelated fields.
 
 ### Scratch rules
 
-Scratch root unique/outside product worktree per reviewer/investigator. Allow temporary scripts only in root + non-mutating commands against frozen SHA. Bar product writes, test/build outputs, Git mutation, branches, worktrees, state edits, Unity, `Library`, lease. Unity reproduction -> request orchestrator; requires zero writers + one lease.
+Scratch root unique under `C:\wt` and outside product worktree per reviewer/investigator. No `C:\<name>` root or Windows temp path. Allow temporary scripts only in root + non-mutating commands against frozen SHA. Bar product writes, test/build outputs, Git mutation, branches, worktrees, state edits, Unity, `Library`, lease. Unity reproduction -> request orchestrator; requires zero writers + one lease.
 
 Reviewer/investigator return acceptance -> verify exact `frozen_sha` object still resolves; reviewer also verifies bound `review_base_sha..frozen_sha` range. Inspect covered task/path slice at `frozen_sha`; verify role made no product/Git mutation. Do not require globally clean status or current `HEAD == frozen_sha`; unrelated parallel lanes may write/commit. Reserve global clean/current-`HEAD` checks for final barrier.
 
 ## Child return contract
 
-Child returns exact template only; unrepresentable fact -> `Blocker`. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result; preserve evidence only. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
+Child returns exact template only; unrepresentable fact -> `Blocker`. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result; preserve evidence only. Sole correction: reported writer `Execution ID` mismatch -> correct only when live registry agent ID matches `Assigned Agent` and reported `Changed Paths` exactly match its bound Git writer slice. All other mismatch -> fatal. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
 
 Writer:
 
@@ -229,9 +238,9 @@ Repeated struggle -> [Repeated-struggle takeover](#repeated-struggle-takeover). 
 Reviewer dispatch requires every covered writer:
 
 1. Terminal return; child not running.
-2. Capture `status: complete`, identity, checks, `Changed Paths:`; compare exact reported path list to `git diff --name-only` for writer slice. Outside owned set -> reject, barrier open.
+2. Capture `status: complete`, identity, checks, `Changed Paths:`; compare exact report to `git diff --name-only` for writer slice. Apply [generated output gate](#generated-output-gate); outside owned set otherwise -> reject, barrier open.
 3. Mark `returned`, retire; covered registry has zero running.
-4. Close writer barrier; stage checkpoint paths only; commit; resolve exact `frozen_sha`; verify scope + unrelated status.
+4. Close writer barrier. Build generated-output coverage evidence from every changed authoritative output, owned or inventory-exception. Regeneration -> separate commit before `review_base_sha`; stage/commit reviewed source paths only; resolve exact `frozen_sha`; attach coverage evidence to reviewer; verify scope + unrelated status. If separation impossible, declare exact builder-generated excluded slice; raw generated slice stays outside raw review, never semantic-evidence review.
 5. Dispatch reviewer bound to `review_base_sha..frozen_sha`.
 
 Per-worker checkpoint -> one writer. Grouped checkpoint -> every named writer + join condition. Fix re-review uses same barrier. Timing/group rules -> [Review checkpoints](#review-checkpoints).
@@ -245,7 +254,7 @@ Fan-out ready disjoint siblings. Per-worker terminal -> [Worker -> reviewer barr
 Fix re-review sole repository rule:
 
 - `fix_loc` -> added + deleted text rows from `git diff --numstat <pre_fix_frozen_sha>..<post_fix_frozen_sha>`, source rows only; binary rows and builder-generated outputs zero LOC, stay scope
-- builder-generated output -> any path the covered task declares generated (task `checks` `-GeneratedPath`, builder-owned scenes/prefabs/materials/manifests). Regeneration reserialization is semantic review surface, never line count -> [`AGENTS.md`](../../../AGENTS.md) `Unity asset safety`
+- builder-generated output -> generated-output classifier result from authoritative inventory + exact task declarations. Regeneration reserialization is semantic review surface, never line count -> [`AGENTS.md`](../../../AGENTS.md) `Unity asset safety`
 - `finding_count` -> originating review Critical/High findings before disposition
 - `fix_loc > 200` or `finding_count > 3` -> fresh exact `sol_medium` `fix-re-review`; otherwise advance accepted head
 - re-review -> same slice, `review_base_sha = pre_fix_frozen_sha`, `frozen_sha = post_fix_frozen_sha`, normal reviewer scope
@@ -265,9 +274,9 @@ Final verification runs pending/invalidated rows only; exact-SHA evidence reusab
 2. Process terminal writer -> verify report/files/Git/scope/checks/identity -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
 3. Reviewer result -> verify reviewer return acceptance; accept verdict + qualifying Critical/High only. No accepted finding -> checkpoint accepted. Accepted finding -> fresh narrow fix writer.
 4. Fix -> barrier -> scope verify -> commit/freeze -> rerun invalidated rows -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
-5. Final exact committed `HEAD`: pending/invalidated checks, plan artifact integrity, ancestry, owned-only `start_sha..HEAD` diff, clean status, initial unrelated status, branch, dependencies, requirements.
+5. Final exact committed `HEAD`: pending/invalidated checks, plan artifact integrity, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
 
-Required unowned edit, decomposition change, dependency drift, plan artifact mismatch, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
+Required unowned non-generated edit, decomposition change, dependency drift, plan artifact mismatch, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
 
 ## Completion routing
 
@@ -309,4 +318,4 @@ Changed Path Count: [n]
 
 `lp-dispatched` -> LP verifies facts, derives final changed-path set/count, dispatches merger. `user-direct` -> user; integration remains explicit authority.
 
-`complete` requires matching plan artifact, committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned-only diff, every writer through checkpoint review/fix/re-review, final checks passing, lifecycle gate satisfied.
+`complete` requires matching plan artifact, committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned diff plus generated-output gate, every writer through checkpoint review/fix/re-review, final checks passing, lifecycle gate satisfied.

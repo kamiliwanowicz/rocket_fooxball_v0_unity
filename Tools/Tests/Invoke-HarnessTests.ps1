@@ -9,7 +9,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-$runtimeLimitMs = 30000
+$runtimeLimitMs = 90000
 
 function Write-HarnessOutput {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
@@ -37,6 +37,8 @@ $shimPath = Join-Path $testsRoot 'HarnessShim.psm1'
 $testsPath = Join-Path $testsRoot 'MovementLabHarness.Tests.ps1'
 $redFixturePath = Join-Path $testsRoot 'Fixtures/red-workflow.ps1.txt'
 $workflowPath = Join-Path $projectRoot 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+$comparatorPath = Join-Path $projectRoot 'Tools/Validation/Compare-GeneratedYaml.ps1'
+$comparatorRedFixturePath = Join-Path $testsRoot 'Fixtures/red-generated-yaml-comparator.ps1.txt'
 $hookSettingsPath = Join-Path $projectRoot '.claude/settings.json'
 
 Import-Module -Name $shimPath -Force
@@ -153,6 +155,10 @@ function Get-RedSource {
 function Assert-EvidenceRoot {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Root)
     $full = [System.IO.Path]::GetFullPath($Path)
+    $workspaceRoot = 'C:\wt'
+    if (-not $full.StartsWith($workspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ('EvidenceRoot must be under C:\wt: ' + $full)
+    }
     $prefix = $Root.TrimEnd('\') + '\'
     if ($full.Equals($Root, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw ('EvidenceRoot must be outside project: ' + $full)
@@ -166,6 +172,8 @@ function Assert-EvidenceRoot {
 $state = [pscustomobject]@{
     ProjectRoot = $projectRoot
     WorkflowPath = $workflowPath
+    ComparatorPath = $comparatorPath
+    ComparatorRedFixturePath = $comparatorRedFixturePath
     HookSettingsPath = $hookSettingsPath
     ShimCommand = $shimInvoker
     CurrentSource = [System.IO.File]::ReadAllText($workflowPath)
@@ -180,6 +188,9 @@ $cases = @(
     [pscustomobject]@{ Id = 'gopv-json'; Function = ${function:Test-GopvJson} },
     [pscustomobject]@{ Id = 'gopv-absent'; Function = ${function:Test-GopvAbsent} },
     [pscustomobject]@{ Id = 'ledger-row-ordered-literal'; Function = ${function:Test-LedgerRowOrderedLiteral} },
+    [pscustomobject]@{ Id = 'generated-path-surface-removed'; Function = ${function:Test-GeneratedPathSurfaceRemoved} },
+    [pscustomobject]@{ Id = 'generated-yaml-comparator-coverage'; Function = ${function:Test-GeneratedYamlComparatorCoverage} },
+    [pscustomobject]@{ Id = 'generated-yaml-comparator-default-meta-coverage'; Function = ${function:Test-GeneratedYamlComparatorDefaultMetaCoverage} },
     [pscustomobject]@{ Id = 'row-reuse-equal'; Function = ${function:Test-RowReuseEqual} },
     [pscustomobject]@{ Id = 'row-reuse-diff'; Function = ${function:Test-RowReuseDiff} },
     [pscustomobject]@{ Id = 'row-field-sweep'; Function = ${function:Test-RowFieldSweep} },
@@ -188,6 +199,7 @@ $cases = @(
     [pscustomobject]@{ Id = 'bake-count-production-method'; Function = ${function:Test-BakeCountProductionMethod} },
     [pscustomobject]@{ Id = 'path-intersects'; Function = ${function:Test-PathIntersects} },
     [pscustomobject]@{ Id = 'evidence-path-budget'; Function = ${function:Test-EvidencePathBudget} },
+    [pscustomobject]@{ Id = 'short-workspace-path'; Function = ${function:Test-ShortWorkspacePath} },
     [pscustomobject]@{ Id = 'stringset-null'; Function = ${function:Test-StringSetNull} },
     [pscustomobject]@{ Id = 'planonly-pending-only'; Function = ${function:Test-PlanOnlyPendingOnly} },
     [pscustomobject]@{ Id = 'guard-g1'; Function = ${function:Test-GuardG1} },
@@ -235,6 +247,9 @@ $summary = [ordered]@{
     redBaseline = 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     redGreen = @(
         [ordered]@{ case = 'gopv-ordered'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'generated-path-surface-removed'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'generated-yaml-comparator-default-meta-coverage'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'short-workspace-path'; head = 'pass'; redBaseline = 'fail' }
         [ordered]@{ case = 'row-reuse-equal'; head = 'pass'; redBaseline = 'fail' }
     )
     scratchDrill = @($results | Where-Object { $_.id -eq 'scratch-drill' })

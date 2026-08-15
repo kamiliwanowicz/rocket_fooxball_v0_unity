@@ -47,6 +47,13 @@ Authority: [allowed operations; user target branch/candidate approval or None]
 Question: [material active question or None]
 Blocker: [active blocker + evidence + recheck/action or None]
 
+## Rule Set
+- active manifest sha256: [lowercase digest]
+- active sources: [exact rule source paths + lowercase SHA-256]
+- pending manifest sha256: [lowercase digest or None]
+- pending sources: [exact rule source paths + lowercase SHA-256 or None]
+- reconciliations: [checkpoint ID -> old/new digest -> compatible | blocked -> affected rules/tasks/checks -> evidence; or None]
+
 ## Requirements
 - REQ-[stable ID]: [requirement] -> [plan_id or unassigned] -> [pending | covered | accepted]
 
@@ -181,6 +188,14 @@ Planner acceptance:
 4. Bind that path as sole plan authority for execution dispatch. Never read artifact bytes through agent.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
+
+## Rule hot-swap
+
+Rule manifest: exact source paths + SHA-256 for instructions, skills, profiles, templates, repository rules used by bound plan/execution dispatch. LP records active manifest before planner/execution dispatch. Plan artifact remains immutable across rule revision.
+
+Hot-swap gate: accepted review checkpoint; covered children retired; writer barrier closed; frozen checkpoint SHA clean; no active child. LP detects revision -> records pending manifest -> same live execution orchestrator rereads changed sources + bound plan -> LP records reconciliation. No orchestrator retirement solely for rule revision.
+
+Reconciliation: changed sources, old/new manifests, checkpoint, affected task/check/profile/ownership/check rules, accepted-checkpoint invalidation, evidence, `compatible | blocked` verdict. `compatible` -> plan satisfies new rules; no authority/product-scope expansion; recheck every invalidated accepted checkpoint before next writer. LP promotes pending manifest atomically; same execution orchestrator continues. `blocked` -> exact conflict + fresh planner action; no plan rewrite, mixed-rule checkpoint, or new dispatch.
 
 ## Target-drift recovery
 

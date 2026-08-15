@@ -234,7 +234,6 @@ namespace RocketFooxball.Editor
                         EditorSceneManager.SaveScene(scene, ScenePath);
                         RestoreLightmapSettingsDocument(preservedLightmapSettings);
                         SaveGameplayProjectSettings();
-                        NormalizeGameplayYamlWhitespace();
                     }
                     finally
                     {
@@ -302,18 +301,6 @@ namespace RocketFooxball.Editor
                     if (!replaced) output.Add(preservedDocument);
                     var restored = string.Join("\n", output) + (trailingNewline ? "\n" : string.Empty);
                     File.WriteAllText(path, restored, new UTF8Encoding(false));
-                }
-
-                private static void NormalizeGameplayYamlWhitespace()
-                {
-                    // Gameplay owns only the scene and its wiring-related
-                    // project settings. Do not normalize lighting/material
-                    // assets here: even byte-level cleanup would violate the
-                    // gameplay stage's read-only asset contract.
-                    for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
-                    {
-                        NormalizeYamlFile(MovementLabContract.GameplaySceneOutputs[i]);
-                    }
                 }
 
                 private static void SaveGameplayProjectSettings()
@@ -527,11 +514,8 @@ namespace RocketFooxball.Editor
                         }
                     }
                     AssetDatabase.SaveAssets();
-                    NormalizeGeneratedYamlWhitespace();
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
                     NormalizeGeneratedYamlWhitespace();
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                 }
 
                 private static ParticipantState[] BuildParticipantRoster(GameObject playerPrefab)
@@ -751,12 +735,27 @@ namespace RocketFooxball.Editor
 
                 internal static void NormalizeGeneratedYamlWhitespace()
                 {
+                    NormalizeGeneratedYamlWhitespace(GeneratedYamlAssetPaths);
+                }
+
+                internal static void NormalizeGeneratedYamlWhitespace(IEnumerable<string> assetPaths)
+                {
                     // Unity emits empty serialized fields as `key: `; trim
                     // trailing spaces while preserving YAML structure/GUIDs.
-                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
+                    var normalizedPaths = new HashSet<string>(StringComparer.Ordinal);
+                    foreach (var assetPath in assetPaths ?? Enumerable.Empty<string>())
                     {
-                        NormalizeYamlFile(GeneratedYamlAssetPaths[i]);
-                        NormalizeYamlFile(GeneratedYamlAssetPaths[i] + ".meta");
+                        if (string.IsNullOrWhiteSpace(assetPath)) continue;
+                        var isMetaPath = assetPath.EndsWith(".meta", StringComparison.Ordinal);
+                        var path = isMetaPath ? assetPath.Substring(0, assetPath.Length - ".meta".Length) : assetPath;
+                        if (!normalizedPaths.Add(path)) continue;
+                        if (isMetaPath)
+                        {
+                            NormalizeYamlFile(assetPath);
+                            continue;
+                        }
+                        NormalizeYamlFile(path);
+                        if (path.StartsWith("Assets/", StringComparison.Ordinal)) NormalizeYamlFile(path + ".meta");
                     }
                     // Importer metadata is protected input/output state. Do
                     // not canonicalize it during bake/preview lifecycle work;

@@ -9,7 +9,6 @@ param(
     [string]$AttemptId,
     [string]$LedgerPath,
     [string]$ProbePath,
-    [string[]]$GeneratedPath = @(),
     [switch]$PlanOnly,
     [int]$TimeoutSeconds = 900
 )
@@ -31,7 +30,6 @@ $script:LeaseReleaseProofPath = $null
 $script:InvocationId = $null
 $script:PriorLedgerHistory = New-Object System.Collections.Generic.List[object]
 $script:PriorManifestHistory = New-Object System.Collections.Generic.List[object]
-$script:RequestedInventoryPaths = @()
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
@@ -180,6 +178,16 @@ function Assert-DurableEvidencePath {
     return $full
 }
 
+function Assert-ShortWorkspacePath {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+    $full = Get-FullPath $Path
+    $workspaceRoot = 'C:\wt'
+    if (-not $full.StartsWith($workspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ($Label + ' must be under C:\wt: ' + $full)
+    }
+    return $full
+}
+
 function Assert-EvidencePathBudget {
     param([Parameter(Mandatory = $true)][string]$EvidenceDirectory)
     $deepest = Join-Path (Join-Path $EvidenceDirectory 'logs') 'movement-lab-stage-probe.json'
@@ -229,7 +237,6 @@ function Test-ProbeInventoryMember {
 
 function Get-AuthoritativeGeneratedInventory {
     $paths = New-Object System.Collections.Generic.List[string]
-    $requestedSelection = New-Object System.Collections.Generic.List[string]
     foreach ($root in $script:AuthoritativeInventory) {
         $full = Join-Path $script:ProjectRoot $root
         if (Test-Path -LiteralPath $full -PathType Leaf) {
@@ -249,16 +256,6 @@ function Get-AuthoritativeGeneratedInventory {
         if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
         elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
     }
-    foreach ($requested in @($GeneratedPath)) {
-        $value = Assert-OneLineValue 'GeneratedPath' ([string]$requested)
-        if ([IO.Path]::IsPathRooted($value) -or -not (Test-InventoryMember $value)) { throw ('GeneratedPath is outside authoritative inventory: ' + $value) }
-        $normalized = $value.Replace('\', '/').TrimStart('/')
-        if (-not $requestedSelection.Contains($normalized)) { $requestedSelection.Add($normalized) }
-        $full = Join-Path $script:ProjectRoot $normalized
-        if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($normalized)) { $paths.Add($normalized) }
-        elseif (-not (Test-Path -LiteralPath $full) -and -not $paths.Contains($normalized + '=__MISSING__')) { $paths.Add($normalized + '=__MISSING__') }
-    }
-    $script:RequestedInventoryPaths = @($requestedSelection.ToArray())
     return @($paths.ToArray() | Sort-Object -Unique)
 }
 
@@ -739,7 +736,6 @@ function New-LedgerRow {
     $invalidationPathArray = [string[]]@($InvalidationPaths)
     $subsumesArray = [string[]]@($Subsumes)
     $generatedInventoryArray = [string[]]@(Get-AuthoritativeGeneratedInventory)
-    $requestedInventoryArray = [string[]]@($script:RequestedInventoryPaths)
     $generatedHashes = Get-GeneratedHashes
     [ordered]@{
         invocation_id = $script:InvocationId
@@ -753,7 +749,6 @@ function New-LedgerRow {
         input_digest = Get-InputDigest -Paths $inputPathArray
         environment_fingerprint = Get-EnvironmentFingerprint
         generated_inventory = $generatedInventoryArray
-        requested_inventory = $requestedInventoryArray
         generated_hashes = $generatedHashes
         generated_hash_digest = Get-GeneratedHashDigest $generatedHashes
         working_tree_digest = Get-WorkingTreeDigest
@@ -1384,15 +1379,10 @@ foreach ($pathArgument in @(
         elseif ($pathArgument.name -eq 'LedgerPath') { $ledgerPathPathSafe = $false }
     }
 }
-for ($generatedIndex = 0; $generatedIndex -lt @($GeneratedPath).Count; $generatedIndex++) {
-    $generatedValue = [string]$GeneratedPath[$generatedIndex]
-    if ([string]::IsNullOrWhiteSpace($generatedValue) -or $generatedValue.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { Add-WorkflowViolation $preflightViolations ('preflight.argument.GeneratedPath[' + $generatedIndex + '].shape') 'GeneratedPath must be non-empty and one line.' }
-    elseif ([IO.Path]::IsPathRooted($generatedValue) -or -not (Test-InventoryMember $generatedValue)) { Add-WorkflowViolation $preflightViolations ('preflight.repository.GeneratedPath[' + $generatedIndex + '].scope') ('GeneratedPath is outside authoritative inventory: ' + $generatedValue) }
-}
 $evidenceBase = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
     Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
 } elseif ($evidenceRootPathSafe) {
-    Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot'
+    Assert-DurableEvidencePath (Assert-ShortWorkspacePath $EvidenceRoot 'EvidenceRoot') 'EvidenceRoot'
 } else {
     Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
 }

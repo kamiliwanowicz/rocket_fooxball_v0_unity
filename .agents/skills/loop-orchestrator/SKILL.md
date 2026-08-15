@@ -73,19 +73,37 @@ Accepted plan artifact at reserved create-once path binds directly as execution 
 
 ## EXECUTION
 
-For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only.
+For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: worktree, evidence alias, scratch, fixture, and temporary directories under `C:\wt`; private `Library/`; evidence root probed at deepest path; zero Unity process; zero project lock; zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only.
 
 For `$p` = bound plan artifact path, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to the accepted digest and size without loading artifact bytes or context. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> proceed. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries plan artifact as sole authority; no separate provenance copy. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
 Plan artifact digest and `start_sha` binding close source boundary. Target/launch checkout and source branch leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Path authority derives from bound plan artifact; LP never restates it by hand. Before execution dispatch, regenerate owned/protected sets from plan artifact, normalize repo-relative/sorted/deduped, compare against state, then store exact sets atomically. Missing or extra authority -> plan `blocked`; no worker creation or mutation. Reconciliation -> fresh `attempt_id`.
+Path authority derives from bound plan artifact; LP never restates it by hand. Before execution dispatch, regenerate owned/protected sets from plan artifact, normalize repo-relative/sorted/deduped, compare against state, then store exact sets atomically. Missing or extra authority -> plan `blocked`; no worker creation or mutation. Path-authority reconciliation -> fresh `attempt_id`.
+
+### Builder-generated output evidence
+
+Classifier inputs -> current authoritative MovementLab builder-generated inventory + exact plan task-generated outputs in `owns`, each traced to builder source. Normalize union. Classify every changed generated output: source `inventory | declared-new | both`; scope `owned | inventory-exception`. Ownership affects normal scope only. Source, hand-authored, untracked, generated-looking path outside union, or declaration lacking builder-source evidence -> reject.
+
+Every changed authoritative output, owned or inventory-exception, requires exact-SHA coverage evidence at checkpoint and final acceptance: changed-path set; source/scope class per path; comparator-selected/output path sets; `SEMANTIC:` + `DANGLING:`; GUID stability; asset/`.meta` pairing. Comparator-supported outputs -> `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <start_sha> -Head <plan_head> -FailOnDangling` covers each exact path. Comparator-unsupported output -> exact path + unsupported reason -> reject until supported evidence exists. Separate regeneration commit or excluded raw slice never removes semantic-evidence review. Missing, stale, incomplete, unsupported, failing comparator, dangling increase, GUID churn, or broken pairing -> reject complete result.
 
 Execution orchestrator builds declared checks before worker dispatch. Workflow owns `check-ledger.json`; harness owns `harness-summary.json`; state stores ledger pointer + SHA-256 only. Workers run compact fast/local proof; production-final rows retain full contract. Workflow/Unity invocation -> [Workflow Harness Precondition](references/state-and-recovery.md#workflow-harness-precondition). Production-final proof -> [Production Bake Gate](references/state-and-recovery.md#production-bake-gate).
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
-Accept `complete` only when exact execution identity matches, bound plan artifact digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, exact `start_sha..plan_head` changed paths stay owned, required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
+Accept `complete` only when exact execution identity matches, bound plan artifact digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, every exact `start_sha..plan_head` changed path stays owned or is allowed `inventory-exception`, every classified generated output passes [builder-generated output evidence](#builder-generated-output-evidence), required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
+
+## Rule hot-swap
+
+Rule binding: source path + SHA-256 manifest. Initial manifest covers every instruction, skill, profile, template, repository rule used for current plan/execution dispatch. LP records manifest digest before planner/execution dispatch.
+
+Hot-swap gate: accepted review checkpoint; covered writers/reviewers/fixes retired; writer barrier closed; checkpoint frozen SHA clean; no active child. LP never retires live execution orchestrator solely because rules changed.
+
+1. Detect changed manifest -> stop next dispatch -> record candidate rule manifest.
+2. Same live execution orchestrator rereads changed rules + bound plan. LP records plan/rule reconciliation: changed sources, old/new digest, affected task/checkpoint/check/profile/ownership rules, accepted-checkpoint impact, compatibility verdict.
+3. Compatibility -> immutable plan already satisfies each new task-field, ownership, check, profile, checkpoint rule; no authority/product scope expansion; recheck invalidated accepted checkpoints before new writer dispatch.
+4. Compatible -> atomically record active manifest + reconciliation -> same execution orchestrator resumes next dispatch under new rules.
+5. Incompatible -> plan `blocked` with rule/plan conflict + fresh planner action. Never mutate accepted plan artifact, mix rule sets inside checkpoint, or continue new work without reconciliation.
 
 ## MERGING
 

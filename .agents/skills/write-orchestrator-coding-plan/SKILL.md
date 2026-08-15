@@ -114,6 +114,8 @@ Ordinary task checks (`fast|development`) use exactly one line: `proof: <command
 
 - Plans follow `AGENTS.md` visual-proof policy. Task-specific source-asset previews required by applicable skills, including [`$use-blender`](../use-blender/SKILL.md), remain allowed as supplementary proof.
 - Plan Unity checks from [`AGENTS.md`](../../../AGENTS.md) -> `Unity execution`; `Validation`, including required pre-gates and generated-output proof policy.
+- Builder task -> trace authoritative builder inventory before plan write. Task `owns` lists each produced builder output, exact path per output; include derived outputs such as cue-mesh assets. Do not hide produced outputs behind broad inventory glob. Unknown output path -> `blocked` in LP mode, unresolved evidence in direct mode. Classifier combines inventory + exact task declarations; declaration absent inventory requires builder-source evidence as `declared-new`.
+- Expensive proof contract: `same_dispatch` -> named task owner runs proof before return; `orchestrator_phase` -> execution orchestrator runs shared proof after `checks` names exact checkpoint/final trigger, declared source fan-in, declared outputs, accepted review/fixes; `None` -> no expensive proof. Every non-`None` mode names one `expensive_proof_owner`; `orchestrator_phase` names trigger checkpoint/final boundary in `checks`. Never use narrative run-point wording or workflow path-selection flag.
 
 Execution route:
 
@@ -166,7 +168,7 @@ Dependencies: [accepted full SHAs or None]
 - validation_environment: `[bounded environment and lease]`
 - unity_mutation: `true | false`
 - expensive_proof_owner: `[one identity or None]`
-- expensive_proof_run_point: `[checkpoint/final boundary or None]`
+- expensive_proof_execution: `same_dispatch | orchestrator_phase | None`
 - implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
 - done when: [observable acceptance]
 - checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields

@@ -5,12 +5,9 @@
 param(
     [string]$Base,
     [string]$Head,
-    [string[]]$Path = @(
-        'Assets/_Game/Scenes/MovementLab.unity',
-        'Assets/_Game/Prefabs/*.prefab',
-        'Assets/_Game/Materials/*.mat',
-        'Assets/_Game/Generated/MovementLabBuildManifest.json'
-    ),
+    # Empty means every path in the workflow's authoritative generated inventory.  Explicit
+    # paths remain useful for a narrow review, but are rejected unless that inventory owns them.
+    [string[]]$Path = @(),
     [switch]$FailOnDangling,
     [switch]$SelfTest
 )
@@ -85,6 +82,113 @@ function Get-RevisionPaths {
         $paths = Invoke-GitNullDelimitedCapture -Arguments @('ls-tree', '-rz', '--name-only', $Revision)
     }
     return ,@($paths | ForEach-Object { ([string]$_).Replace('\', '/') } | Where-Object { $_ })
+}
+
+function Get-ChangedPaths {
+    param([Parameter(Mandatory = $true)][string]$BaseRevision, [Parameter(Mandatory = $true)][string]$HeadRevision)
+
+    # Git can identify changed tracked files without loading every generated lightmap or
+    # ProjectSettings YAML into the semantic graph comparer.  Presence changes are added below
+    # so untracked WORKTREE additions remain covered too.
+    if ($HeadRevision -ceq 'WORKTREE') {
+        return Invoke-GitNullDelimitedCapture -Arguments @('diff', '--name-only', '-z', $BaseRevision)
+    }
+    if ($BaseRevision -ceq 'WORKTREE') {
+        return Invoke-GitNullDelimitedCapture -Arguments @('diff', '--name-only', '-z', $HeadRevision)
+    }
+    return Invoke-GitNullDelimitedCapture -Arguments @('diff', '--name-only', '-z', $BaseRevision, $HeadRevision)
+}
+
+function Get-AuthoritativeInventoryRoots {
+    param([Parameter(Mandatory = $true)][string]$Revision)
+
+    # The workflow owns the generated-inventory contract.  Parse its literal root array from
+    # each revision instead of maintaining a second comparator-specific path list that can drift.
+    $workflowPath = 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+    $lines = Get-BlobLines $Revision $workflowPath
+    if ($null -eq $lines) { throw ('Authoritative inventory source is missing in ' + $Revision + ': ' + $workflowPath) }
+
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(($lines -join "`n"), [ref]$tokens, [ref]$errors)
+    if (@($errors).Count -gt 0) {
+        throw ('Authoritative inventory source failed to parse in ' + $Revision + ': ' + (@($errors | ForEach-Object { $_.Message }) -join ' | '))
+    }
+    $assignments = @($ast.FindAll({
+        param($node)
+        return $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            $node.Left.VariablePath.UserPath -ceq 'script:AuthoritativeInventory'
+    }, $true))
+    if ($assignments.Count -ne 1) { throw ('Expected one $script:AuthoritativeInventory assignment in ' + $Revision + ', found ' + $assignments.Count + '.') }
+
+    $roots = @($assignments[0].Right.FindAll({
+        param($node)
+        return $node -is [System.Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { ([string]$_.Value).Trim().Replace('\\', '/') } | Where-Object { $_ })
+    if ($roots.Count -eq 0) { throw ('Authoritative inventory is empty in ' + $Revision + '.') }
+    return @($roots | Sort-Object -Unique)
+}
+
+function Test-AuthoritativeInventoryMember {
+    param(
+        [Parameter(Mandatory = $true)][string]$RelativePath,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots
+    )
+
+    $candidate = $RelativePath.Replace('\\', '/').TrimStart('/')
+    foreach ($root in $InventoryRoots) {
+        $normalizedRoot = ([string]$root).Replace('\\', '/').Trim('/')
+        if ($candidate.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            $candidate.StartsWith($normalizedRoot + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
+function Get-PathCoverageKind {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+
+    switch ([IO.Path]::GetExtension($RelativePath).ToLowerInvariant()) {
+        '.unity' { return 'supported text' }
+        '.prefab' { return 'supported text' }
+        '.mat' { return 'supported text' }
+        '.controller' { return 'supported text' }
+        '.asset' { return 'supported text' }
+        '.json' { return 'supported text' }
+        '.meta' { return 'unsupported metadata' }
+        default { return 'unsupported binary' }
+    }
+}
+
+function Resolve-SelectedPaths {
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Candidates,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$RequestedPaths
+    )
+
+    $authoritative = @($Candidates | Where-Object {
+        Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots
+    } | Sort-Object -Unique)
+    if ($RequestedPaths.Count -eq 0) { return $authoritative }
+
+    $selected = New-Object System.Collections.Generic.List[string]
+    foreach ($pattern in $RequestedPaths) {
+        $normalized = ([string]$pattern).Trim().Replace('\\', '/')
+        if ([string]::IsNullOrWhiteSpace($normalized)) { throw 'Requested path patterns must be non-empty.' }
+        $matches = @($Candidates | Where-Object { $_ -like $normalized } | Sort-Object -Unique)
+        if ($matches.Count -eq 0) { throw ('Requested path is uncovered by both revisions: ' + $normalized) }
+        $uncovered = @($matches | Where-Object {
+            -not (Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots)
+        })
+        if ($uncovered.Count -gt 0) {
+            throw ('Requested path is outside the authoritative generated inventory: ' + ($uncovered -join ', '))
+        }
+        foreach ($match in $matches) {
+            if (-not $selected.Contains($match)) { $selected.Add($match) | Out-Null }
+        }
+    }
+    return @($selected.ToArray() | Sort-Object)
 }
 
 function Get-BlobLines {
@@ -592,13 +696,29 @@ if ([string]::IsNullOrWhiteSpace($Base) -or [string]::IsNullOrWhiteSpace($Head))
 $basePaths = Get-RevisionPaths $Base
 $headPaths = Get-RevisionPaths $Head
 $candidates = @($basePaths + $headPaths | Sort-Object -Unique)
-$selected = New-Object System.Collections.Generic.List[string]
-foreach ($pattern in @($Path)) {
-    $normalized = ([string]$pattern).Trim().Replace('\', '/')
-    foreach ($candidate in $candidates) { if ($candidate -like $normalized -and -not $selected.Contains($candidate)) { $selected.Add($candidate) | Out-Null } }
+$inventoryRoots = @(
+    (Get-AuthoritativeInventoryRoots $Base) +
+    (Get-AuthoritativeInventoryRoots $Head) |
+    Sort-Object -Unique
+)
+$selected = @(Resolve-SelectedPaths -Candidates $candidates -InventoryRoots $inventoryRoots -RequestedPaths @($Path))
+$explicitPathRequest = @($Path).Count -gt 0
+$basePathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$headPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($relative in $basePaths) { [void]$basePathSet.Add($relative) }
+foreach ($relative in $headPaths) { [void]$headPathSet.Add($relative) }
+$changedPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$changedPaths = Get-ChangedPaths -BaseRevision $Base -HeadRevision $Head
+foreach ($relative in $changedPaths) {
+    [void]$changedPathSet.Add(([string]$relative).Replace('\\', '/'))
 }
-$selected = @($selected.ToArray() | Sort-Object)
-if ($selected.Count -eq 0) { throw 'No paths matched the requested pattern set.' }
+foreach ($relative in $candidates) {
+    if ($basePathSet.Contains($relative) -ne $headPathSet.Contains($relative)) { [void]$changedPathSet.Add($relative) }
+}
+if (-not $explicitPathRequest) {
+    $selected = @($selected | Where-Object { $changedPathSet.Contains([string]$_) })
+}
+if ($explicitPathRequest -and $selected.Count -eq 0) { throw 'No authoritative generated paths matched the requested path set.' }
 
 Write-Output ('BASE: ' + $Base)
 Write-Output ('HEAD: ' + $Head)
@@ -606,11 +726,31 @@ Write-Output ('HEAD: ' + $Head)
 $anyChanged = $false
 $totalBaseDangling = 0
 $totalHeadDangling = 0
+$reportedPathCount = 0
+$semanticCheckedPathCount = 0
+$notCheckedPathCount = 0
 
 foreach ($relative in $selected) {
+    $coverageKind = Get-PathCoverageKind $relative
+    if ($coverageKind -cne 'supported text') {
+        $basePresent = $basePathSet.Contains($relative)
+        $headPresent = $headPathSet.Contains($relative)
+        $reportedPathCount++
+        $notCheckedPathCount++
+        Write-Output ''
+        Write-Output ('== ' + $relative)
+        Write-Output ('  kind       ' + $coverageKind)
+        Write-Output '  semantic   NOT CHECKED'
+        if (-not $basePresent) { Write-Output '  presence   ADDED in head' }
+        elseif (-not $headPresent) { Write-Output '  presence   REMOVED in head' }
+        continue
+    }
+
     $baseAnalysis = Get-Analysis (Get-BlobLines $Base $relative)
     $headAnalysis = Get-Analysis (Get-BlobLines $Head $relative)
     if ($null -eq $baseAnalysis -and $null -eq $headAnalysis) { continue }
+    $reportedPathCount++
+    $semanticCheckedPathCount++
     Write-Output ''
     Write-Output ('== ' + $relative)
     if ($null -eq $baseAnalysis) { Write-Output '  presence   ADDED in head'; $anyChanged = $true; $totalHeadDangling += $headAnalysis.Dangling; Write-Output ('  dangling   ' + $headAnalysis.Dangling); continue }
@@ -658,6 +798,7 @@ foreach ($relative in $selected) {
 }
 
 Write-Output ''
+Write-Output ('COVERAGE: ' + $reportedPathCount + '/' + $selected.Count + ' authoritative changed paths reported; semantic checked ' + $semanticCheckedPathCount + '; NOT CHECKED ' + $notCheckedPathCount)
 Write-Output ('SEMANTIC: ' + $(if ($anyChanged) { 'changed' } else { 'identical' }))
 Write-Output ('DANGLING: ' + $totalHeadDangling + ' (base ' + $totalBaseDangling + ')')
 

@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:HarnessScratchRoot = 'C:\wt'
 
 function New-HarnessPass {
     param([AllowEmptyString()][string]$Message = 'ok')
@@ -52,7 +53,6 @@ function Set-HarnessRowStubs {
         function script:Get-EnvironmentFingerprint { return 'environment' }
         function script:Get-WorkingTreeDigest { return 'working-tree' }
         $script:InvocationId = 'fixture-invocation'
-        $script:RequestedInventoryPaths = @('Assets/_Game/Generated/fixture.json')
     }
     & $Module $setup | Out-Null
 }
@@ -184,6 +184,139 @@ function Test-LedgerRowOrderedLiteral {
     $ast = Get-HarnessFunctionAst $State.CurrentSource 'New-LedgerRow'
     if ($ast.Extent.Text -notmatch '(?im)\[ordered\]\s*@\{') { return New-HarnessFail 'New-LedgerRow is not backed by [ordered] literal' }
     return New-HarnessPass '[ordered] row literal'
+}
+
+function Test-GeneratedPathSurfaceRemoved {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $findLegacySurface = {
+        param([string]$Source)
+        $ast = Get-HarnessAst $Source
+        $generatedPathVariables = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            [string]$Node.VariablePath.UserPath -ceq 'GeneratedPath'
+        }, $true))
+        $requestedInventoryVariables = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            [string]$Node.VariablePath.UserPath -ceq 'RequestedInventoryPaths'
+        }, $true))
+        $requestedInventoryFields = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+            [string]$Node.Value -ceq 'requested_inventory'
+        }, $true))
+        return $generatedPathVariables.Count + $requestedInventoryVariables.Count + $requestedInventoryFields.Count
+    }
+
+    $headCount = [int](& $findLegacySurface $State.CurrentSource)
+    if ($headCount -ne 0) { return New-HarnessFail ('legacy generated-path surface remains at ' + $headCount + ' site(s)') }
+    $redSource = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $State.RedSource -ErrorAction Stop).Path)
+    $redCount = [int](& $findLegacySurface $redSource)
+    if ($redCount -eq 0) { return New-HarnessFail 'red baseline does not retain the legacy generated-path surface' }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s)')
+}
+
+function Test-GeneratedYamlComparatorCoverage {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $paths = @(
+        'Assets/_Game/Animations/FpsKick.controller',
+        'Assets/_Game/Generated/BlueCircleCueMesh.asset'
+    )
+    $quotedPaths = @($paths | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ', '
+    $command = "& '" + $State.ComparatorPath.Replace("'", "''") + "' -Base 'HEAD' -Head 'WORKTREE' -Path @(" + $quotedPaths + ')'
+    $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1)
+    if ($LASTEXITCODE -ne 0) { return New-HarnessFail ('comparator rejected supported controller/cue paths: ' + ($output -join ' | ')) }
+    foreach ($path in $paths) {
+        if (($output -join "`n") -notmatch [regex]::Escape('== ' + $path)) {
+            return New-HarnessFail ('comparator omitted supported generated path: ' + $path)
+        }
+        if (($output -join "`n") -notmatch '(?m)^SEMANTIC: ' -or ($output -join "`n") -notmatch '(?m)^DANGLING: ') {
+            return New-HarnessFail 'comparator output contract omitted SEMANTIC or DANGLING.'
+        }
+    }
+
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $uncovered = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $State.ComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/_Game/Generated/NotAuthoritative.asset' 2>&1)
+        $uncoveredExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($uncoveredExitCode -eq 0 -or ($uncovered -join "`n") -notmatch 'Requested path is uncovered') {
+        return New-HarnessFail ('uncovered generated-path request did not fail closed: ' + ($uncovered -join ' | '))
+    }
+    try {
+        $ErrorActionPreference = 'Continue'
+        $outsideInventory = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $State.ComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/InputSystem_Actions.inputactions' 2>&1)
+        $outsideInventoryExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($outsideInventoryExitCode -eq 0 -or ($outsideInventory -join "`n") -notmatch 'outside the authoritative generated inventory') {
+        return New-HarnessFail ('non-authoritative requested path did not fail closed: ' + ($outsideInventory -join ' | '))
+    }
+    return New-HarnessPass 'controller/cue paths covered; uncovered and non-authoritative requests rejected'
+}
+
+function Test-GeneratedYamlComparatorDefaultMetaCoverage {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $fixtureRoot = Join-Path $script:HarnessScratchRoot ('generated-yaml-comparator-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $validationDirectory = Join-Path $fixtureRoot 'Tools/Validation'
+        $materialsDirectory = Join-Path $fixtureRoot 'Assets/_Game/Materials'
+        [IO.Directory]::CreateDirectory($validationDirectory) | Out-Null
+        [IO.Directory]::CreateDirectory($materialsDirectory) | Out-Null
+        Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1') -Force
+        Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $validationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
+        $materialPath = Join-Path $materialsDirectory 'Fixture.mat'
+        $metaPath = $materialPath + '.meta'
+        [IO.File]::WriteAllText($materialPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Fixture`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($metaPath, "fileFormatVersion: 2`nguid: 11111111111111111111111111111111`n", (New-Object Text.UTF8Encoding($false)))
+        & git -C $fixtureRoot init --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git initialization failed' }
+        & git -C $fixtureRoot config core.autocrlf false 2>$null
+        & git -C $fixtureRoot config user.email 'harness@example.invalid' 2>$null
+        & git -C $fixtureRoot config user.name 'Harness' 2>$null
+        & git -C $fixtureRoot add . 2>$null
+        & git -C $fixtureRoot commit --quiet -m 'fixture baseline' 2>$null
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git baseline commit failed' }
+        [IO.File]::AppendAllText($materialPath, "  m_ShaderKeywords: CHANGED`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($metaPath, "timeCreated: 1`n", (New-Object Text.UTF8Encoding($false)))
+
+        $fixtureComparator = Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1'
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $fixtureComparator -Base 'HEAD' -Head 'WORKTREE' 2>&1)
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail ('default comparator fixture failed: ' + ($output -join ' | ')) }
+        $text = $output -join "`n"
+        foreach ($path in @('Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta')) {
+            if ($text -notmatch [regex]::Escape('== ' + $path)) { return New-HarnessFail ('default comparator omitted changed authoritative path: ' + $path) }
+        }
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+unsupported metadata.*?semantic\s+NOT CHECKED') {
+            return New-HarnessFail 'default comparator did not explicitly report modified authoritative .meta as NOT CHECKED'
+        }
+        if ($text -notmatch '(?m)^COVERAGE: 2/2 authoritative changed paths reported; semantic checked 1; NOT CHECKED 1$') {
+            return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
+        }
+    } finally {
+        Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $currentSource = [IO.File]::ReadAllText($State.ComparatorPath)
+    $redSource = [IO.File]::ReadAllText($State.ComparatorRedFixturePath)
+    $legacyGate = 'if ($explicitPathRequest -or $basePresent -ne $headPresent)'
+    if ($currentSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'current comparator retains the legacy default .meta omission gate' }
+    if ($redSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail 'red comparator fixture does not retain the legacy default .meta omission gate' }
+    if ($currentSource -notmatch '(?s)if \(\$coverageKind -cne ''supported text''\).*?\$reportedPathCount\+\+.*?semantic\s+NOT CHECKED') {
+        return New-HarnessFail 'unsupported metadata branch does not unconditionally report default coverage and NOT CHECKED status'
+    }
+    if ($currentSource -notmatch '(?m)^Write-Output \(''COVERAGE: '' \+ \$reportedPathCount \+ ''/'' \+ \$selected.Count') {
+        return New-HarnessFail 'coverage summary does not account for every selected authoritative changed path'
+    }
+    return New-HarnessPass 'modified .meta default-report branch and all-path coverage summary present; red fixture retains omission gate'
 }
 
 function Test-RowReuseEqual {
@@ -392,7 +525,7 @@ function Test-PathIntersects {
 function Test-EvidencePathBudget {
     param([Parameter(Mandatory = $true)]$State)
     $module = $null
-    $root = Join-Path ([IO.Path]::GetTempPath()) ('harness-evidence-' + [Guid]::NewGuid().ToString('N'))
+    $root = Join-Path $script:HarnessScratchRoot ('harness-evidence-' + [Guid]::NewGuid().ToString('N'))
     try {
         $module = & $State.ShimCommand $State.CurrentSource @('Assert-EvidencePathBudget') @()
         $deepest = [string](Invoke-HarnessModuleFunction $module 'Assert-EvidencePathBudget' @{ EvidenceDirectory = $root })
@@ -407,6 +540,29 @@ function Test-EvidencePathBudget {
     } finally {
         if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
         Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-ShortWorkspacePath {
+    param([Parameter(Mandatory = $true)]$State)
+    $currentModule = $null
+    $redModule = $null
+    try {
+        $currentModule = & $State.ShimCommand $State.CurrentSource @('Get-FullPath', 'Assert-ShortWorkspacePath') @()
+        $accepted = [string](Invoke-HarnessModuleFunction $currentModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\wt\fixture'; Label = 'Fixture' })
+        if ($accepted -cne 'C:\wt\fixture') { return New-HarnessFail ('C:\wt child path changed: ' + $accepted) }
+        $currentRejected = $false
+        try { Invoke-HarnessModuleFunction $currentModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\evidence'; Label = 'EvidenceRoot' } | Out-Null } catch { $currentRejected = $true }
+        if (-not $currentRejected) { return New-HarnessFail 'root-level C:\evidence path accepted' }
+
+        $redModule = & $State.ShimCommand $State.RedSource @('Assert-ShortWorkspacePath') @()
+        $redRejected = $false
+        try { Invoke-HarnessModuleFunction $redModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\evidence'; Label = 'EvidenceRoot' } | Out-Null } catch { $redRejected = $true }
+        if ($redRejected) { return New-HarnessFail 'red baseline no longer accepts root-level evidence path' }
+        return New-HarnessPass 'C:\wt child accepted; C:\ root sibling rejected; red baseline remains permissive'
+    } finally {
+        if ($null -ne $currentModule) { Remove-Module -ModuleInfo $currentModule -Force -ErrorAction SilentlyContinue }
+        if ($null -ne $redModule) { Remove-Module -ModuleInfo $redModule -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -662,7 +818,7 @@ function Test-HookSettings {
             if ($value.Contains('${CLAUDE_PROJECT_DIR}')) { $value.Replace('${CLAUDE_PROJECT_DIR}', $State.ProjectRoot) } else { $value }
         })
         if ($ForceFailure) { $arguments += '-HookTestForceFailure' }
-        $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('RocketFooxballHook-' + [guid]::NewGuid().ToString('N'))
+        $fixtureRoot = Join-Path $script:HarnessScratchRoot ('RocketFooxballHook-' + [guid]::NewGuid().ToString('N'))
         [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
         $process = $null
         $quoteArgument = {
