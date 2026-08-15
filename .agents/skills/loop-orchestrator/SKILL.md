@@ -64,30 +64,28 @@ Dispatch exact `sol_high` planner with `run_id`, `plan_id`, `attempt_id`, covere
 
 Planner result handling:
 
-- `ready`: stop planner; verify artifact exists at reserved path; compute SHA-256 and byte size; record source path/digest/size.
+- `ready`: stop planner; verify artifact exists at reserved path; compute SHA-256 and byte size; record plan artifact path/digest/size.
 - `needs_user`: record `awaiting_user` and question. User response -> fresh planner attempt, new `attempt_id`, new reserved path.
 - `blocked`: record blocker and recheck condition. Resolution -> fresh planner attempt and new reserved path.
 - decomposition change: route candidate revision through fresh task-breakdown attempt; planner never splits candidates.
 
-Accepted source artifact remains pre-execution input only. Execution binding creates one attempt snapshot through [state acceptance contract](references/state-and-recovery.md#dispatch-and-acceptance-writes), then verifies snapshot digest/size.
+Accepted plan artifact at reserved create-once path binds directly as execution authority through [state acceptance contract](references/state-and-recovery.md#dispatch-and-acceptance-writes). LP verifies its digest/size before dispatch. No copy.
 
 ## EXECUTION
 
-For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only. Create unique create-once execution snapshot through [state acceptance contract](references/state-and-recovery.md#dispatch-and-acceptance-writes):
+For each accepted plan, LP creates one new isolated branch/worktree from exact recorded plan-baseline SHA. Provision per [`AGENTS.md`](../../../AGENTS.md) `Unity execution` before dispatch: short worktree path, private `Library/`, short evidence root probed at deepest path, zero Unity process, zero project lock, zero second writer. Verify initial worktree `HEAD` equals baseline; bind full SHA as immutable execution `start_sha`. Source branch ref becomes provenance only.
 
-`<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/executions/<attempt-id>.md`
+For `$p` = bound plan artifact path, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to the accepted digest and size without loading artifact bytes or context. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> proceed. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries plan artifact as sole authority; no separate provenance copy. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
 
-For `$p = $snapshotPath`, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to the accepted digest and size without loading snapshot bytes or context. Mismatch -> plan `blocked`; no product mutation or dispatch. Match -> record snapshot path/digest/size atomically. Bind one exact `sol_high` execution orchestrator using [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md). Handoff carries source path as provenance and snapshot as sole plan authority. Dispatch fields follow its [LP handoff contract](../orchestrate-implementation/SKILL.md#lp-handoff-contract).
+Plan artifact digest and `start_sha` binding close source boundary. Target/launch checkout and source branch leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
 
-Snapshot and `start_sha` binding close source boundary. Target/launch checkout, source branch, and source artifact leave execution observation, recovery, and acceptance gates. Later changes there do not pause or invalidate attempt. LP and execution orchestrator use plan worktree plus exact `start_sha..plan_head` comparisons until attempt ends.
-
-Path authority derives from bound snapshot; LP never restates it by hand. Before execution dispatch, regenerate owned/protected sets from snapshot, normalize repo-relative/sorted/deduped, compare against state, then store exact sets atomically. Missing or extra authority -> plan `blocked`; no worker creation or mutation. Reconciliation -> fresh `attempt_id`.
+Path authority derives from bound plan artifact; LP never restates it by hand. Before execution dispatch, regenerate owned/protected sets from plan artifact, normalize repo-relative/sorted/deduped, compare against state, then store exact sets atomically. Missing or extra authority -> plan `blocked`; no worker creation or mutation. Reconciliation -> fresh `attempt_id`.
 
 Execution orchestrator builds declared checks before worker dispatch. Workflow owns `check-ledger.json`; harness owns `harness-summary.json`; state stores ledger pointer + SHA-256 only. Workers run compact fast/local proof; production-final rows retain full contract. Workflow/Unity invocation -> [Workflow Harness Precondition](references/state-and-recovery.md#workflow-harness-precondition). Production-final proof -> [Production Bake Gate](references/state-and-recovery.md#production-bake-gate).
 
 Execution orchestrator becomes sole Git owner for plan worktree. LP does not dispatch its workers or perform its review/fix loop. Parallel execution allowed only for breakdown-approved disjoint candidates with stable inputs.
 
-Accept `complete` only when exact execution identity matches, bound snapshot digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, exact `start_sha..plan_head` changed paths stay owned, required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
+Accept `complete` only when exact execution identity matches, bound plan artifact digest rehash matches, observed branch/worktree match, committed head descends from `start_sha`, exact `start_sha..plan_head` changed paths stay owned, required checks bind head, and index/worktree are clean. Source-branch ref never participates. `blocked` records concrete needed LP action. Any retry uses fresh `attempt_id` and fresh dispatch identity.
 
 ## MERGING
 

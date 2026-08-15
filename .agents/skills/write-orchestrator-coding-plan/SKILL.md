@@ -44,7 +44,7 @@ Result status:
 - `blocked`: return exact blocker, evidence, and one needed LP action/recheck; create no accepted artifact.
 - decomposition mismatch: return `blocked` with needed LP action `fresh task-breakdown`; planner never creates/splits candidates.
 
-After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binding copies source once into attempt snapshot and verifies accepted digest/size. Planner never claims digest acceptance.
+After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binds accepted plan artifact in place at reserved path and reverifies accepted digest/size; later digest change -> `blocked`. Planner never claims digest acceptance.
 
 Dependent candidate planning begins only after LP supplies observed accepted upstream integration SHA. Never plan against forecast or invented downstream baseline.
 
@@ -117,7 +117,7 @@ Ordinary task checks (`fast|development`) use exactly one line: `proof: <command
 
 Execution route:
 
-`accepted source artifact -> LP-bound attempt snapshot + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
+`accepted plan artifact -> LP-bound in place at reserved path + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
 
 Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates. Reference review/fix gates by link only; never copy thresholds or numeric constants into plan.
 

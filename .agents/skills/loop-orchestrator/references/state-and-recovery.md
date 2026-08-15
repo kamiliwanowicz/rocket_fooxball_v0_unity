@@ -14,9 +14,9 @@ LP is sole state writer. Breakdown, planner, execution orchestrator, workers, re
 
 Truth priority:
 
-`observed Git + live-agent facts -> attempt-bound plan snapshot bytes -> state claims -> agent prose`
+`observed Git + live-agent facts -> attempt-bound plan artifact bytes -> state claims -> agent prose`
 
-State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative snapshot digest.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative plan artifact digest.
 
 ## Atomic write
 
@@ -68,12 +68,9 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
-- source artifact: [absolute path or None]
-- source artifact sha256: [lowercase digest or None]
-- source artifact bytes: [integer or None]
-- execution snapshot: [absolute path or None]
-- execution snapshot sha256: [lowercase digest or None]
-- execution snapshot bytes: [integer or None]
+- plan artifact: [absolute path or None]
+- plan artifact sha256: [lowercase digest or None]
+- plan artifact bytes: [integer or None]
 - branch: [exact name or None]
 - worktree: [absolute path or None]
 - accepted execution SHA: [full SHA or None]
@@ -143,13 +140,9 @@ Blocked:
 
 `planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
 
-Pre-bind source digest mismatch:
+Plan artifact digest mismatch:
 
-`planned -> blocked`; preserve accepted artifact metadata, record observed digest/size, mutate no product worktree, and start fresh planning attempt only after LP selects new reserved artifact path.
-
-Post-bind snapshot digest mismatch:
-
-`executing | done -> blocked`; preserve source provenance, record observed snapshot digest/size, stop mutation, and retry through fresh execution attempt plus fresh snapshot. Source artifact drift after snapshot binding is outside run gates and causes no transition.
+`planned | executing | done -> blocked`; record observed digest/size, mutate no product worktree, stop mutation. Recovery from `planned` needs fresh planning attempt at new reserved artifact path; from `executing | done` needs fresh execution attempt.
 
 Merge:
 
@@ -174,10 +167,8 @@ Planner acceptance:
 
 1. Stop planner. Verify reserved artifact exists + create-once.
 2. For `$p`, compute exact values: `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()`; `(Get-Item $p).Length`.
-3. Record source artifact path/digest/size + `planned` atomically.
-4. Verify destination absent: `if (Test-Path -LiteralPath $snapshotPath) { throw 'snapshot destination exists' }`. Create snapshot only with `Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop`.
-5. For `$p = $snapshotPath`, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; compare both to accepted values without loading snapshot bytes or context. Mismatch -> pre-bind source-digest transition.
-6. Record matching snapshot path/digest/size before execution dispatch. Never read/write artifact bytes through agent.
+3. Record plan artifact path/digest/size + `planned` atomically.
+4. Bind that path as sole plan authority for execution dispatch. Never read artifact bytes through agent.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 
@@ -206,7 +197,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Source drift after binding is ignored.
+3. Rehash bound plan artifact for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
@@ -220,7 +211,7 @@ Missing or corrupt state:
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
 
-Authoritative artifact mismatch blocks execution: source before snapshot binding; snapshot after binding. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+Bound plan artifact digest/size mismatch blocks execution; the plan artifact is sole authority. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
 
 ## Recovery scenarios
 
@@ -229,8 +220,7 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
-- source digest mismatch before binding: status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
-- snapshot digest mismatch after binding: status `blocked`; fresh execution attempt and snapshot required; source drift ignored.
+- plan artifact digest mismatch: status `blocked`; no execution dispatch/product mutation; from `planned` fresh planning attempt at new reserved artifact path; from `executing | done` fresh execution attempt.
 - source-branch drift after worktree creation: no transition; use bound `start_sha..plan_head` comparison.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 

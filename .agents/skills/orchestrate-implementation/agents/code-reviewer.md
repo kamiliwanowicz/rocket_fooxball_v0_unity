@@ -15,7 +15,7 @@ Inspect exact frozen Git objects independently from live worktree. Read-only. Fi
 Follow silently; never report script:
 
 1. Read whole repository [`AGENTS.md`](../../../../AGENTS.md).
-2. Read bound snapshot at supplied exact task `implementation` locator.
+2. Read bound plan artifact at supplied exact task `implementation` locator.
 3. Inspect `review_base_sha..frozen_sha` for plan conformance, correctness, ownership/lifecycle/frame behavior, edge handling, call-site/consumer integration, repository rules, material open-ended risk.
 4. Treat statically visible compile hazard as normal finding; bounded scratch permits no compile/test/build outputs.
 

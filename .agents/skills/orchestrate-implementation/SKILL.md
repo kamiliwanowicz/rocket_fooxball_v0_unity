@@ -20,7 +20,7 @@ Never switch mode. Partial/ambiguous LP handoff -> `blocked` before mutation.
 
 - `run_id`, stable `plan_id`, unique `attempt_id`
 - identity, role `execution orchestrator`, profile `sol_high`
-- accepted plan source provenance + attempt snapshot absolute path, lowercase SHA-256, byte size
+- plan artifact absolute path, lowercase SHA-256, byte size; no separate provenance copy in this mode
 - requirement IDs, objective, dependency SHAs
 - immutable `start_sha`, branch, isolated worktree
 - owned/protected paths, checks, proof boundary, evidence locations
@@ -29,12 +29,19 @@ Never switch mode. Partial/ambiguous LP handoff -> `blocked` before mutation.
 
 Missing/mismatched field -> `blocked` before child dispatch or product mutation.
 
-## Pinned snapshot
+## Pinned plan artifact
 
-Every snapshot copy/integrity operation:
+Plan artifact = authoritative plan file, both modes. "Snapshot" = user-direct pinned copy only. Mode asymmetry deliberate.
+
+`lp-dispatched` -> no copy. LP-bound plan artifact is authority; its path is create-once + unique per attempt, so bound digest alone enforces immutability. Verify in place: recompute hash + size with `$p` = plan artifact path; compare to bound values.
+
+`user-direct` -> copy plan artifact exactly once into the absent executions path, because the user-supplied source is mutable and not create-once:
 
 1. Destination must be absent immediately before copy.
-2. Copy/hash/size commands:
+2. Copy exact bytes once; never overwrite.
+3. Source path leaves execution authority after the copy binds.
+
+Copy/hash/size commands (`Copy-Item` user-direct only):
 
 ```powershell
 Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop
@@ -42,15 +49,14 @@ Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop
 (Get-Item $p).Length
 ```
 
-3. Copy exact bytes once; never overwrite. `$p` is each source/snapshot integrity target.
-4. Integrity rechecks use hash + item metadata only; never load snapshot bytes.
+`$p` is the plan artifact integrity target (`lp-dispatched`) or each source/snapshot integrity target (`user-direct`). Integrity rechecks use hash + item metadata only; never load bytes into context.
 
-Snapshot mismatch -> `blocked`; source path leaves execution authority after snapshot binds.
+Plan artifact digest/size mismatch, either mode -> `blocked`.
 
 ## User-direct bootstrap
 
 1. Resolve repository root + accepted plan source. Create stable `plan_id`, unique `attempt_id`.
-2. Create absent `<git-common-dir>/orchestrate-implementation/<plan-id>/executions/<attempt-id>.md` with pinned snapshot procedure. Bind source only as provenance.
+2. User-supplied plan source is mutable, not create-once -> pin it. Copy into absent `<git-common-dir>/orchestrate-implementation/<plan-id>/executions/<attempt-id>.md` through the pinned plan artifact procedure; that snapshot becomes the plan artifact. Bind source only as provenance.
 3. Capture launch checkout path, branch, exact `HEAD` as `launch_head_sha`, status. Preserve launch checkout.
 4. Create unique `codex/<plan-slug>-<attempt-id>` branch + short isolated worktree from exact `launch_head_sha`; confirm child writability and worktree root/branch/`HEAD`.
 5. Bind full `HEAD` as immutable `start_sha`; derive/bind objective, requirements, exact dependency SHAs, ownership, checks, proof boundary, evidence from snapshot.
@@ -63,11 +69,11 @@ Before first child dispatch:
 
 - plan-worktree `HEAD` is `start_sha`; capture status
 - unowned pre-existing changes -> preserve/exclude; overlap with owned path -> `blocked`
-- `lp-dispatched` -> verify LP identity/role/profile, snapshot path/digest/size, dependencies, worktree/branch, ownership, Git authority
-- `user-direct` -> verify attempt identity, snapshot through pinned integrity procedure, created worktree/branch, ownership, branch-only Git boundary
+- `lp-dispatched` -> verify LP identity/role/profile, plan artifact path/digest/size in place, dependencies, worktree/branch, ownership, Git authority
+- `user-direct` -> verify attempt identity, pinned snapshot through pinned integrity procedure, created worktree/branch, ownership, branch-only Git boundary
 - verify bound dependency list; for each SHA run `git merge-base --is-ancestor <dependency_sha> <start_sha>`
 
-Snapshot identity/digest/size mismatch, missing dependency, or non-ancestor dependency -> `blocked`; no child dispatch/product mutation. Final return rechecks snapshot through pinned integrity procedure.
+Plan artifact identity/digest/size mismatch, missing dependency, or non-ancestor dependency -> `blocked`; no child dispatch/product mutation. Final return rechecks the active-mode plan artifact through pinned integrity procedure.
 
 ## Frozen code boundary
 
@@ -133,7 +139,7 @@ Implementation/fix writer contract:
 
 Fix adds: `review_cycle_id`, `pre_fix_frozen_sha`, accepted finding IDs, finding-owned paths, acceptance criteria.
 
-Omit snapshot identity/path/digest, unrelated status, dependency SHAs, orchestrator Git facts.
+Omit plan artifact identity/path/digest, unrelated status, dependency SHAs, orchestrator Git facts.
 
 ### Reviewer
 
@@ -141,10 +147,10 @@ Reviewer contract:
 
 - `execution_id`; identity/profile/role; repository + exact worktree; read-only Git
 - `checkpoint_id`, `review_cycle_id`, kind `initial | fix-re-review`, covered execution IDs, task/path slice, `review_base_sha`, `frozen_sha`
-- bound snapshot path + exact covered-task `implementation` locator
+- bound plan artifact path + exact covered-task `implementation` locator
 - unique scratch root outside product worktree + scratch rules
 
-Omit snapshot digest and unrelated fields. Reviewer behavior/result -> [`code-reviewer`](agents/code-reviewer.md).
+Omit plan artifact digest and unrelated fields. Reviewer behavior/result -> [`code-reviewer`](agents/code-reviewer.md).
 
 ### Investigator
 
@@ -155,7 +161,7 @@ Investigator contract:
 - decision: `fix_found | no_reasonable_fix`
 - unique scratch root outside product worktree + scratch rules
 
-Omit plan snapshot and unrelated fields.
+Omit plan artifact and unrelated fields.
 
 ### Scratch rules
 
@@ -257,9 +263,9 @@ Final verification runs pending/invalidated rows only; exact-SHA evidence reusab
 2. Process terminal writer -> verify report/files/Git/scope/checks/identity -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
 3. Reviewer result -> verify reviewer return acceptance; accept verdict + qualifying Critical/High only. No accepted finding -> checkpoint accepted. Accepted finding -> fresh narrow fix writer.
 4. Fix -> barrier -> scope verify -> commit/freeze -> rerun invalidated rows -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
-5. Final exact committed `HEAD`: pending/invalidated checks, snapshot integrity, ancestry, owned-only `start_sha..HEAD` diff, clean status, initial unrelated status, branch, dependencies, requirements.
+5. Final exact committed `HEAD`: pending/invalidated checks, plan artifact integrity, ancestry, owned-only `start_sha..HEAD` diff, clean status, initial unrelated status, branch, dependencies, requirements.
 
-Required unowned edit, decomposition change, dependency drift, snapshot mismatch, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
+Required unowned edit, decomposition change, dependency drift, plan artifact mismatch, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
 
 ## Completion routing
 
@@ -276,8 +282,8 @@ Attempt ID: [attempt_id]
 Assigned Agent: [exact agent identity]
 Role: execution orchestrator
 Profile: [exact profile]
-Source Plan Path: [exact path]
-Snapshot: [exact path] -> accepted [digest]/[bytes] -> observed [digest]/[bytes]
+Plan Artifact: [exact path] -> accepted [digest]/[bytes] -> observed [digest]/[bytes]
+Plan Source Provenance: [exact path in user-direct; otherwise None]
 Start SHA: [exact 40-character lowercase SHA]
 Dependencies: [full SHA list or None]
 Branch: [exact branch]
@@ -301,4 +307,4 @@ Changed Path Count: [n]
 
 `lp-dispatched` -> LP verifies facts, derives final changed-path set/count, dispatches merger. `user-direct` -> user; integration remains explicit authority.
 
-`complete` requires matching snapshot, committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned-only diff, every writer through checkpoint review/fix/re-review, final checks passing, lifecycle gate satisfied.
+`complete` requires matching plan artifact, committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned-only diff, every writer through checkpoint review/fix/re-review, final checks passing, lifecycle gate satisfied.
