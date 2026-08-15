@@ -36,7 +36,7 @@ Worktree scope is closed: current run's plan worktrees plus multi-plan integrati
 
 1. Read request, repository instructions, cited sources, dirty paths, current branch, full baseline SHA, checks, and authority.
 2. Generate unique `run_id`, stable `REQ-*` IDs, and unique run directory under Git common dir. Create required `state.md` through atomic-write contract before first dispatch.
-3. Multi-plan route -> bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, and state path. `single_plan` route -> bind planner directly from accepted plan context; no breakdown dispatch.
+3. Multi-plan route -> bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, candidate sizing policy (target 5-10 tasks per candidate; split only for parallel ownership, upstream integration SHA, or planner capacity), and state path. `single_plan` route -> bind planner directly from accepted plan context; no breakdown dispatch.
 
 Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
@@ -46,13 +46,13 @@ Candidate has one production-final owner after source fan-in and accepted fixes.
 
 Dispatch [`task-breakdown`](agents/task-breakdown.md) for multi-plan routes. `single_plan` route skips BREAKDOWN agent; LP verifies accepted plan context, requirement coverage, baseline, dependencies, and owned/protected paths before planning. LP never substitutes inline decomposition for multi-plan routes.
 
-Accept result only when strict template is complete, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic.
+Accept result only when strict template is complete, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, every candidate covers at least one requirement and records estimated tasks plus allowed split reason, no candidate exists only to hand contract to later candidate, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic.
 
 - `ready`: record result; assign stable `plan_id` per candidate; start eligible planning.
 - `needs_user`: record breakdown status `awaiting_user`, material question, and safe independent work. User response -> fresh breakdown attempt with new `attempt_id`.
 - `blocked`: record exact blocker and recheck condition. Resolution -> recheck facts, then fresh breakdown attempt.
 
-Prefer one large plan. Split only for independent ownership, meaningful parallel gain, or accepted dependency. Shared contracts, generated/serialized assets, migrations, and product decisions stay serialized.
+Prefer few large plans. Target 5-10 implementation tasks per candidate; candidate is an ordered task chain, and sequential tasks inside one candidate are the normal shape. Split only for independent ownership with real parallel gain, accepted upstream dependency, or planner capacity. Shared contracts, generated/serialized assets, migrations, and product decisions stay serialized as ordered tasks inside one candidate, not as separate candidates. Requirement-free or contract-only candidate -> reject; fresh breakdown attempt with sizing correction.
 
 ## PLANNING
 

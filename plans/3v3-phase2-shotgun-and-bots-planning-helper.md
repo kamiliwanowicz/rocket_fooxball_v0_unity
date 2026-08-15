@@ -17,15 +17,15 @@
 
 ## Run instruction for LP
 
-- Route: `hybrid`. Expect ~11 candidates, ~10 waves, parallel lanes only in wave 1. Do not force `single_plan`; do not expect phase-1's lane count.
-- Parallel gain is near zero after wave 1. Phase 1 declared 3 waves / 2 lanes and actually ran 5 waves with only wave 1 parallel -> cause recorded in its own state: builder contracts + generated manifest + scene overlap. Same cause applies here, stronger.
+- Route: `multi_sequential`. Expect 2 candidates -> `shotgun-vertical`, `bot-and-difficulty-vertical`. Split reason = planner capacity only. No parallel lanes. Do not force `single_plan`; do not expect phase-1's lane count.
+- Parallel gain is near zero for the whole run, not merely after an opening wave. Phase 1 declared 3 waves / 2 lanes and actually ran 5 waves with only wave 1 parallel -> cause recorded in its own state: builder contracts + generated manifest + scene overlap. Same cause applies here, stronger.
 - One `run_id` for the whole run. Never open a second run for this objective.
 - Dispose stale phase-1 run dir `3v3-phase1-20260811T221945585-98af23fa` (phase `BREAKDOWN`, `Plans: None`, never advanced) before INIT. Resume locates runs by identity, never similarity -> stale sibling is a live recovery hazard.
-- Retry budget: phase 1 needed 14 execution attempts for 6 candidates (~2.3 per Unity-mutating candidate; P1 alone took 5). Forecast ~25 attempts here. Record `blocked attempt -> preserved SHA` per candidate so retries resume from preserved work, not wave baseline.
+- Retry budget: phase 1 needed 14 execution attempts for 6 candidates (~2.3 per Unity-mutating candidate; P1 alone took 5). Same expectation applies per Unity-mutating TASK here, not per candidate -> budget ~2-3 attempts for each Unity-mutating task, more for the highest-risk ones (B2). Record `blocked attempt -> preserved SHA` per candidate so retries resume from preserved work, not run baseline.
 - Environment pre-flight per candidate dispatch, not once per run: short worktree path, private `Library/`, short evidence root probed at deepest expected path, zero Unity process, zero project lock. Two phase-1 attempts died on provisioning alone with zero product mutation.
-- Harness pre-gate cost scales with builder ownership. Phase 1 logged 41 harness dirs + 37 Unity invocations for 6 candidates. Every candidate here that edits `Assets/_Game/Editor/MovementLab/*.cs`, `Tools/Validation/*.ps1`, or `Tools/Tests/**` re-stales the gate and re-pays it on every step.
+- Harness pre-gate cost scales with builder ownership. Phase 1 logged 41 harness dirs + 37 Unity invocations for 6 candidates. Every task here that edits `Assets/_Game/Editor/MovementLab/*.cs`, `Tools/Validation/*.ps1`, or `Tools/Tests/**` re-stales the gate and re-pays it on every step, including tasks inside the same candidate.
 - Bake: every new pickup, bot, and viewmodel is dynamic per HealthPickup precedent -> not a lighting input -> production bake self-skips. Guard the `bakeCount >= 2` hard stop anyway. Any candidate marking a new visual `isStatic = true` converts itself into a rebake + user-authority request.
-- Record accepted integration SHA per wave. With ~10 waves a missing per-wave record forces drift replay from run baseline.
+- Record accepted integration SHA per candidate. A missing per-candidate record forces drift replay from run baseline.
 - Intermediate waves run Git/scope/downstream rows only. Final wave runs union of pending production-final rows once.
 - Run ends at `READY_FOR_USER_MERGE`.
 
@@ -33,12 +33,12 @@
 
 - Treat candidate shape below as strong prior, not fixed answer. Deviate only with recorded evidence.
 - Resolve every `D*` decision below inside the breakdown/plan `Decisions` block. Workers must never choose these.
-- Serialize every candidate that writes `Assets/_Game/Editor/MovementLab/**` or any generated output. Only wave 1 candidates avoid that set.
-- Do not propose a registration-only "shared prelude" candidate that adds path consts for assets nobody builds yet -> unstable fragment, cannot validate standalone. Each builder-touching candidate ships a complete vertical slice instead: runtime + builder + validator + regenerated output.
-- Size with S/M/L/XL buckets. Full mechanic (state + lifecycle + integration) = L = usually two workers. Phase-1 shipped three XL single-worker feature commits that should have split at seam `pure logic + types -> lifecycle/integration -> scene/prefab composition`.
-- Every candidate `owns` must enumerate transitive generated outputs it can stale: `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Generated/MovementLabBuildManifest.json`, affected materials, affected `.meta`. Under-declared `owns` produced 8 separate regen commits in phase 1.
-- Forbid new whole-scene or whole-project aggregate assertions. Validator scope must match owner scope, else candidate N breaks candidate M's gate.
-- New runtime script directories (`Runtime/Bots/**`, new `Runtime/Weapons/Shotgun*.cs`) must be added to stage input lists in the same candidate that creates them, or builds silently reuse stale outputs.
+- Serialize every TASK that writes `Assets/_Game/Editor/MovementLab/**` or any generated output. That is task ordering inside a candidate, never a candidate boundary. Only A1 and B1 avoid that set.
+- Do not propose a registration-only "shared prelude" candidate that adds path consts for assets nobody builds yet -> unstable fragment, cannot validate standalone. Each builder-touching task ships a complete vertical slice instead: runtime + builder + validator + regenerated output. Extend: D13 extraction and any shared type lands as the first task of the candidate that consumes it, never its own candidate.
+- Size TASKS with S/M/L/XL buckets. Full mechanic (state + lifecycle + integration) = L task. Phase-1 shipped three XL single-worker feature commits that should have split at seam `pure logic + types -> lifecycle/integration -> scene/prefab composition`; apply that seam when an L/XL task is written. Worker count is decided per task, not per candidate -> an L/XL task may take a second worker only when its seam splits cleanly and neither half writes the same file.
+- `owns` is enumerated per task; the candidate `owns` is the union rolled up from its tasks. Each task `owns` must enumerate transitive generated outputs it can stale: `Assets/_Game/Scenes/MovementLab.unity`, `Assets/_Game/Prefabs/Player.prefab`, `Assets/_Game/Generated/MovementLabBuildManifest.json`, affected materials, affected `.meta`. Under-declared `owns` produced 8 separate regen commits in phase 1.
+- Forbid new whole-scene or whole-project aggregate assertions. Validator scope must match owner scope, else task N breaks task M's gate - within one candidate as much as across candidates.
+- New runtime script directories (`Runtime/Bots/**`, new `Runtime/Weapons/Shotgun*.cs`) must be added to stage input lists in the same task that creates them, or builds silently reuse stale outputs. Deferring this to a later task in the same candidate still stales the build.
 
 ## Decisions required before any candidate is dispatched
 
@@ -55,7 +55,7 @@ Bot rest:
 - D6 component placement. One `BotController` on shared `Player.prefab` disabled for local slot, vs prefab variant, vs `AddComponent` in composer roster loop. Variant breaks the "same prefab for six slots" provenance assumption the validator asserts.
 - D7 sensing source. Serialized refs injected by builder vs match-owner reads (`MatchController.Participants`, ball). Scene search is banned. Pickup memory must respect "visible state + remembered timing only".
 - D8 difficulty config ownership. Serialized fields vs ScriptableObject profiles vs roster-level selection on `MatchController`.
-- D9 pure-logic split. How much decision logic lands in static `Bot*Rules` modules. Determines wave-1 candidate size.
+- D9 pure-logic split. How much decision logic lands in static `Bot*Rules` modules. Determines B1 task size.
 - D10 rocket-jump model. Heuristic (pitch-down + underfoot window) vs ballistic solve. Decide whether bot rocket-jumping is difficulty-gated or cut for this run.
 - D11 navigation model. See `I6`. Recommend no NavMesh package, no new builder stage.
 
@@ -137,43 +137,44 @@ Arena + navigation:
 
 ## Candidate shape prior
 
-Wave 1 -> parallel, zero builder writes, zero generated output:
+Two candidates, strictly serial, split reason = planner capacity. One Unity-mutating task at a time, ordered inside its candidate.
 
-- `C1 shotgun-pure-rules` -> `ShotgunAmmoRules` (grant 8, cap 16, overflow discarded, at-cap rejects, collect without shotgun) + `ShotgunDamageRules` (range falloff, fixed spread, two-close-shots kill, pellet-count to ball-force with cap) + EditMode tests. owns `Runtime/Weapons/Shotgun*Rules.cs`, `Tests/EditMode/Shotgun*Tests.cs`. `unity_mutation: false`. size M.
-- `C2 bot-pure-rules` -> difficulty parameter table, error model (aim noise, reaction latency, decision jitter), role-assignment and target-scoring primitives + EditMode tests. owns `Runtime/Bots/*Rules.cs`, `Tests/EditMode/Bot*Tests.cs`. `unity_mutation: false`. size L, two workers. Requires D8/D9 settled.
+Candidate A `shotgun-vertical` -> ordered task chain A1..A6:
 
-Wave 2+ -> strictly serial, one Unity-mutating candidate per wave:
+- `A1 shotgun-pure-rules` -> `ShotgunAmmoRules` (grant 8, cap 16, overflow discarded, at-cap rejects, collect without shotgun) + `ShotgunDamageRules` (range falloff, fixed spread, two-close-shots kill, pellet-count to ball-force with cap) + EditMode tests. owns `Runtime/Weapons/Shotgun*Rules.cs`, `Tests/EditMode/Shotgun*Tests.cs`. `unity_mutation: false`. task size M.
+- `A2 shotgun-asset-import` -> register both FBXes, configure importers to the weapon contract, closed-inventory + fingerprint + `Tools/Validation` metadata path updates. task size M. Self-validating without any prefab work.
+- `A3 shotgun-viewmodel-mount` -> mount `FpsShotgun` under `Viewmodels`, material slot wiring, presentation ref, per-slot visibility. task size M. Visual only, no fire.
+- `A4 shotgun-weapon-runtime` -> extract shared relationship/friendly-fire policy (D13), `ShotgunWeapon` component, RMB action + reader surface, shotgun ownership + shells on the vitals owner (D14), reset/respawn clearing, damage-cause enum append, immunity cancel on fire. task size L. D13 extraction is the leading sub-step of this task, never its own candidate.
+- `A5 shotgun-and-ammo-pickups` -> two `ArenaPickup` subclasses + prefabs + materials + one neutral shotgun spawn + two mirrored ammo spawns + scene roots + validator count contracts + immunity cancel on pickup + goal-reset shotgun removal. task size L.
+- `A6 shotgun-hud` -> live-HUD shotgun/ammo widget states, hit marker, death-summary weapon fidelity. Optional leading sub-step: HUD split per D16. task size M-L.
 
-- `C3 shotgun-asset-import` -> register both FBXes, configure importers to the weapon contract, closed-inventory + fingerprint + `Tools/Validation` metadata path updates. size M. Self-validating without any prefab work.
-- `C4 shotgun-viewmodel-mount` -> mount `FpsShotgun` under `Viewmodels`, material slot wiring, presentation ref, per-slot visibility. size M. Visual only, no fire.
-- `C5 shotgun-weapon-runtime` -> extract shared relationship/friendly-fire policy (D13), `ShotgunWeapon` component, RMB action + reader surface, shotgun ownership + shells on the vitals owner (D14), reset/respawn clearing, damage-cause enum append, immunity cancel on fire. size L, two workers.
-- `C6 shotgun-and-ammo-pickups` -> two `ArenaPickup` subclasses + prefabs + materials + one neutral shotgun spawn + two mirrored ammo spawns + scene roots + validator count contracts + immunity cancel on pickup + goal-reset shotgun removal. size L, two workers.
-- `C7 shotgun-hud` -> live-HUD shotgun/ammo widget states, hit marker, death-summary weapon fidelity. Optional first worker: HUD split per D16. size M-L.
-- `C8 bot-control-seam` -> D1-D4 implemented, plus builder wiring on the five non-local slots, proven by one trivial hardcoded behavior (face ball, approach ball). size L, two workers. Highest-risk candidate in the run.
-- `C9 bot-navigation` -> steering + traversal over floor, two ramp decks, two shield-gated recesses, one-way drop edges. size L.
-- `C10 bot-perception-and-roles` -> visibility + pickup-timing memory, dynamic attacker/support/defender, football-first priorities, allied pickup etiquette. size L, two workers.
-- `C11 bot-combat` -> aim + prediction, rocket use, dash use, shotgun use, error-model application, optional difficulty-gated rocket jump per D10. size L, two workers.
-- `C12 difficulty-and-setup-ui` -> difficulty selection before match start (requires deferring `BeginNewMatch`), pause screen with difficulty display, allied bots pinned Medium. size L.
+Task order rationale inside A: A1 outputs are consumed by A4. A2 -> A3 -> A4 -> A5 -> A6 is a hard chain: import before mount, mount before weapon, weapon before pickups (pickups grant shells), pickups before HUD only for the full state matrix.
 
-Ordering rules:
+Candidate B `bot-and-difficulty-vertical` -> ordered task chain B1..B6:
 
-- C3 -> C4 -> C5 -> C6 -> C7 is a hard chain: import before mount, mount before weapon, weapon before pickups (pickups grant shells), pickups before HUD only for the full state matrix.
-- C8 must precede C9-C11. C8 owns the final form of `ParticipantState.cs:387-388`; C5 must not restructure those lines.
-- C12 last -> it needs every difficulty parameter to exist.
-- C1/C2 outputs are consumed by C5/C11 respectively -> wave 1 must merge before those.
+- `B1 bot-pure-rules` -> difficulty parameter table, error model (aim noise, reaction latency, decision jitter), role-assignment and target-scoring primitives + EditMode tests. owns `Runtime/Bots/*Rules.cs`, `Tests/EditMode/Bot*Tests.cs`. `unity_mutation: false`. task size L. Requires D8/D9 settled.
+- `B2 bot-control-seam` -> D1-D4 implemented, plus builder wiring on the five non-local slots, proven by one trivial hardcoded behavior (face ball, approach ball). task size L. Highest-risk task in the run.
+- `B3 bot-navigation` -> steering + traversal over floor, two ramp decks, two shield-gated recesses, one-way drop edges. task size L.
+- `B4 bot-perception-and-roles` -> visibility + pickup-timing memory, dynamic attacker/support/defender, football-first priorities, allied pickup etiquette. task size L.
+- `B5 bot-combat` -> aim + prediction, rocket use, dash use, shotgun use, error-model application, optional difficulty-gated rocket jump per D10. task size L.
+- `B6 difficulty-and-setup-ui` -> difficulty selection before match start (requires deferring `BeginNewMatch`), pause screen with difficulty display, allied bots pinned Medium. task size L.
+
+Task order rationale inside B: B1 outputs are consumed by B5. B2 must precede B3-B5; B2 owns the final form of `ParticipantState.cs:387-388`. B6 last -> it needs every difficulty parameter from B1-B5 to exist.
+
+- A must merge before B: B5 shotgun use needs A4 + A5, and A4 must not restructure `ParticipantState.cs:387-388` beyond the line form B2 will consume.
 
 ## Issues to surface before implementation
 
-- I1 `ParticipantState.cs:387-388` is a guaranteed two-candidate collision: C5 wants a sibling shotgun gate line, C8 must change the condition itself. Assign final form to C8; C5 adds its line in the form C8 will consume.
+- I1 `ParticipantState.cs:387-388` is a guaranteed collision and it remains a cross-candidate collision: A4 (candidate A) wants a sibling shotgun gate line, B2 (candidate B) must change the condition itself. Assign final form to B2; A4 adds its line in the form B2 will consume.
 - I2 Three files absorb most of the run: `MatchHud.cs` 713 LOC gets 4 features, `MatchController.cs` 737 LOC gets 4 changes (goal reset, pause, deferred start, difficulty), `ParticipantState.cs` 511 LOC gets shotgun state + bot gates. Serialize or split first; do not fan out across them.
 - I3 Render budgets no longer gate anything. All budget throws removed repo-wide -> `MovementLabLightingPipeline.cs` whole-scene 140/150000/180/8, `MovementLabArenaPipeline.cs` Architecture renderer 80 and ArenaKit triangle 75000, Blender per-module + aggregate + weapon + character triangle raises, retro-texture 96 MiB gate. Counts still measured and logged/manifested. `AGENTS.md` now states render budgets are report-only. Consequence for this run: no renderer-count planning, no viewmodel renderer merging for budget reasons, no early guard candidate. Do not reintroduce a budget throw. Perf remains a real concern -> user verifies manually; treat frame cost as playtest feedback, not a build gate.
 - I4 Registering the shotgun FBXes rewrites both `.meta` files and changes closed-inventory and fingerprint sets, including `Tools/Validation/Invoke-MovementLabWorkflow.ps1:69-70`. That is a guard path -> harness pre-gate goes stale and must be re-run.
 - I5 `materialImportMode` currently 2 (Import). Switching to None breaks any prefab referencing an extracted FBX sub-material to pink. Wire the three slots explicitly, as `Player.prefab:11427-11444` does for the launcher.
-- I6 NavMesh is the largest unscoped item. No package, no stage, and `MovementLabSceneComposer.cs:151` rebuilds the scene from scratch every GameplayScene run. Adding it needs a package add, a new stage enum member + definition + runner case, a `ManifestSchemaVersion` bump, an SHA-bound migration authorization, and a document-transplant to survive scene recreation. Recommend rejecting NavMesh for this run -> `CharacterController` steering + raycast visibility + a builder-authored waypoint graph mirroring `BuildParticipantSpawnSet`. If breakdown disagrees, NavMesh becomes its own candidate ahead of C9, not a task inside it.
+- I6 NavMesh is the largest unscoped item. No package, no stage, and `MovementLabSceneComposer.cs:151` rebuilds the scene from scratch every GameplayScene run. Adding it needs a package add, a new stage enum member + definition + runner case, a `ManifestSchemaVersion` bump, an SHA-bound migration authorization, and a document-transplant to survive scene recreation. Recommend rejecting NavMesh for this run -> `CharacterController` steering + raycast visibility + a builder-authored waypoint graph mirroring `BuildParticipantSpawnSet`. If breakdown disagrees, NavMesh becomes its own task ahead of B3, not a sub-step inside it.
 - I7 Arena is genuinely multi-layer. Any flat single-height nav model either buries the ramp decks or makes the under-ramp floor unwalkable. Shield colliders mutate connectivity at runtime -> a statically baked graph routes bots into a solid wall during shield-up phases.
 - I8 Fall damage and ledge safety are unmodeled. A bot graph treating descents as free will walk bots off 4.93 m ramp ledges and 8 m wall tops.
 - I9 Prefab-only changes silently skip scene composition. If GameplayScene is stale only for `dependency-state-changed`, the composer does not run. A bot component added to `Player.prefab` without a GameplayScene contract or input key change ships with no per-slot configuration. Bump `gameplay-scene-contract` in the same change.
-- I10 Manifest migration authorization is bound to the exact Git SHA and consumed on use. In a ~10-wave run, authorize immediately before each build; never batch.
+- I10 Manifest migration authorization is bound to the exact Git SHA and consumed on use. Across a 12-task run, authorize immediately before each build; never batch.
 - I11 Damage/death cause enums are append-only. An unmapped shotgun cause degrades to `Unknown` -> frags still score, weapon fidelity in death and goal summaries is lost.
 - I12 Bots must not instantiate additional `PlayerInputReader` components. Six readers already share one `InputActionAsset`; extra instances double-fire callbacks and can globally disable actions.
 - I13 `AGENTS.md` is stale where it says the first EditMode test assembly should be created when next touching pure gameplay logic. It exists at `Assets/_Game/Scripts/Tests/EditMode/RocketFooxball.EditModeTests.asmdef` with three test files. Do not plan a candidate to create it.
@@ -181,16 +182,16 @@ Ordering rules:
 - I15 The muzzle axis convention (Blender `-Y` -> Unity `+Z`) is asserted nowhere in C#. A fire-direction bug presents as backwards pellets and no existing validator catches it.
 - I16 `ExplosionResolver` is a single shared scene instance with fixed-size shared buffers wired to all six launchers. Per-weapon blast tuning needs new serialized fields or a second instance; nested resolves within one frame reuse the same buffers.
 - I17 Immunity is cancelled twice per rocket shot (direct call plus event). Harmless today. A shotgun copying only one path diverges; pick one deliberately.
-- I18 Enemy-rocket knockback fraction (0.5) has never been felt in play -> inert avatars do not fire. C8 is the first moment it becomes observable, and it lands in the same run as shotgun feel and bot difficulty.
+- I18 Enemy-rocket knockback fraction (0.5) has never been felt in play -> inert avatars do not fire. B2 is the first moment it becomes observable, and it lands in the same run as shotgun feel and bot difficulty.
 - I19 `MatchHud` serialized surface is frozen to exactly three refs by the validator -> shotgun and ammo data must reach the HUD through `localParticipant` or `match`, or the HUD candidate also owns a validator edit and contends with the builder candidate on the same file.
-- I20 Nine hard-coded screen-policy rows in the validator (`MovementLabValidator.cs:870-889`) break on any new screen or `Resolve` signature change -> C12 writes both `MatchHud.cs` and `MovementLabValidator.cs`.
+- I20 Nine hard-coded screen-policy rows in the validator (`MovementLabValidator.cs:870-889`) break on any new screen or `Resolve` signature change -> B6 writes both `MatchHud.cs` and `MovementLabValidator.cs`.
 
 ## Validation
 
 - Follow `AGENTS.md` `Unity execution` + `Validation` verbatim. Harness pre-gate before every workflow or Unity invocation, including `-PlanOnly`.
 - Pure logic (ammo economy, damage curve, difficulty params, bot decision scoring, cooldown math) -> EditMode tests as siblings in the existing assembly.
 - Builder-generated change -> builder protocol: production bake current -> one authoritative build -> semantic validate in a separate Unity process.
-- Cheap early guard against I3: run `Assemble` + fast build before any bake work on C4 and C6.
+- Cheap early guard against I3: run `Assemble` + fast build before any bake work on A3 and A5.
 - Declare `expected_status` before every production-final invocation. Two consecutive mismatches halt the run.
 - Generated churn -> separate commit `chore: regenerate MovementLab outputs`.
 - Report only checks run.
