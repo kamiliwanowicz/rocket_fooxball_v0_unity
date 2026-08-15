@@ -14,7 +14,7 @@ Act as loop owner (`LP`). Coordinate route:
 ## Roles
 
 - LP: route owner, sole state writer, blocker resolver, acceptance verifier, user-branch merge authority.
-- [`task-breakdown`](agents/task-breakdown.md): exact `sol_high`; returns plan candidates and requirement coverage; skipped for `single_plan`.
+- [`task-breakdown`](agents/task-breakdown.md): exact `sol_high`; writes plan candidates and requirement coverage to LP-reserved create-once artifact, returns pointer plus comments only; may fan out own exact `sol_medium` read-only analysis subagents; skipped for `single_plan`.
 - planner: exact `sol_high`; uses [`$write-orchestrator-coding-plan`](../write-orchestrator-coding-plan/SKILL.md) once per ready candidate.
 - execution orchestrator: exact `sol_high`; uses [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) once per accepted plan.
 - [merging agent](agents/merging.md): exact `sol_high`; integrates completed waves in bound isolated integration worktree; skipped for `single_plan`.
@@ -36,7 +36,7 @@ Worktree scope is closed: current run's plan worktrees plus multi-plan integrati
 
 1. Read request, repository instructions, cited sources, dirty paths, current branch, full baseline SHA, checks, and authority.
 2. Generate unique `run_id`, stable `REQ-*` IDs, and unique run directory under Git common dir. Create required `state.md` through atomic-write contract before first dispatch.
-3. Multi-plan route -> bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, candidate sizing policy (target 5-10 tasks per candidate; split only for parallel ownership, upstream integration SHA, or planner capacity), and state path. `single_plan` route -> bind planner directly from accepted plan context; no breakdown dispatch.
+3. Multi-plan route -> reserve unique create-once breakdown artifact path `<git-common-dir>/loop-orchestrator/<run-id>/breakdown/<attempt-id>.md`, then bind breakdown attempt with unique `attempt_id`, exact `sol_high`, objective, requirements, baseline, evidence paths, constraints, checks, candidate sizing policy (target 5-10 tasks per candidate; split only for parallel ownership, upstream integration SHA, or planner capacity), reserved artifact path, and state path. `single_plan` route -> bind planner directly from accepted plan context; no breakdown dispatch.
 
 Dirty owned path overlapping run scope -> protect it. Continue only after user-authorized inclusion or separate accepted commit. Refresh accepted full baseline before provisioning plan worktrees.
 
@@ -46,9 +46,9 @@ Candidate has one production-final owner after source fan-in and accepted fixes.
 
 Dispatch [`task-breakdown`](agents/task-breakdown.md) for multi-plan routes. `single_plan` route skips BREAKDOWN agent; LP verifies accepted plan context, requirement coverage, baseline, dependencies, and owned/protected paths before planning. LP never substitutes inline decomposition for multi-plan routes.
 
-Accept result only when strict template is complete, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, every candidate covers at least one requirement and records estimated tasks plus allowed split reason, no candidate exists only to hand contract to later candidate, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic.
+Accept result only when strict return template is complete, returned artifact path equals reserved path, artifact exists create-once and parses as breakdown [result artifact](agents/task-breakdown.md#result-artifact) template, baseline matches observed accepted baseline, each requirement has exactly one candidate owner, every candidate covers at least one requirement and records estimated tasks plus allowed split reason, no candidate exists only to hand contract to later candidate, dependency graph is acyclic, writable paths do not overlap within parallel wave, and integration order is deterministic. Return carrying inline candidate bodies instead of pointer -> reject; fresh attempt.
 
-- `ready`: record result; assign stable `plan_id` per candidate; start eligible planning.
+- `ready`: for `$p` = returned artifact path, compute `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()` and `(Get-Item $p).Length`; record artifact path/digest/size plus returned comments; assign stable `plan_id` per candidate; start eligible planning. LP reads artifact directly and reads only sections needed for current dispatch; never restates candidate bodies into state or dispatch text beyond bound fields.
 - `needs_user`: record breakdown status `awaiting_user`, material question, and safe independent work. User response -> fresh breakdown attempt with new `attempt_id`.
 - `blocked`: record exact blocker and recheck condition. Resolution -> recheck facts, then fresh breakdown attempt.
 
@@ -101,9 +101,9 @@ Target drift -> current merge attempt `blocked`. LP follows [target-drift recove
 
 ## Dispatch identity and results
 
-Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, immutable execution `start_sha` when applicable, branch/worktree, owned/protected paths, dependencies, allowed Git operations, checks, and state path.
+Every dispatch carries `run_id`, `plan_id` or `None`, unique `attempt_id`, exact assigned agent/profile/role, bounded task and done condition, baseline SHA, immutable execution `start_sha` when applicable, branch/worktree, owned/protected paths, dependencies, allowed Git operations, checks, reserved create-once artifact path when role writes one (breakdown, planner), and state path.
 
-Dispatch and return text is terse AI-to-AI: exact paths/symbols/commands/SHAs, no prose, no narration, no recap. Each child returns exactly one strict template from its owning contract, no text before or after.
+Dispatch and return text is terse AI-to-AI: exact paths/symbols/commands/SHAs, no prose, no narration, no recap. Each child returns exactly one strict template from its owning contract, no text before or after. Artifact-writing roles return artifact pointer plus bounded status/comment fields; artifact bodies never travel inline.
 
 Role-specific statuses:
 

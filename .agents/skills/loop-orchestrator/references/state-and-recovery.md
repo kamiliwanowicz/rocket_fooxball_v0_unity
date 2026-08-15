@@ -55,7 +55,10 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - status: pending | ready | awaiting_user | blocked
 - decision: single_plan | multi_sequential | multi_parallel | hybrid | None
 - baseline: [full SHA]
-- result evidence: [accepted result location/identity or None]
+- result artifact: [absolute reserved path or None]
+- result artifact sha256: [lowercase digest or None]
+- result artifact bytes: [integer or None]
+- comments: [returned material caveats or None]
 - integration order: [plan_id list or None]
 
 ## Plans
@@ -163,6 +166,13 @@ Before dispatch, record phase, attempt identity, role/profile, plan status, immu
 
 After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
 
+Breakdown acceptance:
+
+1. Stop breakdown. Verify returned artifact path equals reserved path and exists create-once.
+2. Compute digest/size exactly as planner acceptance step 2.
+3. Record breakdown artifact path/digest/size, comments, decision, and `ready` atomically. State stores no candidate bodies.
+4. Read artifact sections on demand for `plan_id` assignment and planner dispatch binding.
+
 Planner acceptance:
 
 1. Stop planner. Verify reserved artifact exists + create-once.
@@ -197,7 +207,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash bound plan artifact for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge.
+3. Rehash recorded breakdown artifact when breakdown status is `ready`, and bound plan artifact for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Breakdown artifact missing or digest mismatch -> breakdown `blocked`; fresh breakdown attempt at new reserved path; already-accepted plans keep their bound plan artifacts.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
