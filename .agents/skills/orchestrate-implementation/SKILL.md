@@ -184,7 +184,7 @@ Reviewer/investigator return acceptance -> verify exact `frozen_sha` object stil
 
 ## Child return contract
 
-Child returns exact template only; unrepresentable fact -> `Blocker`. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result; preserve evidence only. Sole correction: reported writer `Execution ID` mismatch -> correct only when live registry agent ID matches `Assigned Agent` and reported `Changed Paths` exactly match its bound Git writer slice. All other mismatch -> fatal. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
+Child returns exact template only; unrepresentable fact -> `Blocker`. Writer/reviewer return metadata or format defect -> preserve immutable original report, then use `followup_task` on same child for return-only correction. Correction preserves original status, verdict/findings, changed paths, checks, blockers, and evidence verbatim; no implementation, review, or check rerun. Accept only when corrected identity/scope matches registry; otherwise reject and preserve evidence only. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
 
 Writer:
 
@@ -227,10 +227,10 @@ Needed Action or Recheck: [one action/fact or None]
 
 ## Child lifecycle gate
 
-- registry -> agent ID, `execution_id`, role, `running | returned | retired`
-- one dispatch -> one child turn; follow-up -> fresh child
+- registry -> agent ID, `execution_id`, role, `running | correction-pending | returned | retired`
+- one dispatch -> one substantive child turn; writer/reviewer return-only correction -> `followup_task` same child; other follow-up -> fresh child
 - terminal return required; messages/files/partial reports while running -> progress evidence only
-- returned -> capture immutable report, mark `returned`, retire immediately
+- valid terminal return -> capture immutable report, mark `returned`, retire immediately; eligible return defect -> capture original, mark `correction-pending`, request return-only correction
 - replaced/cancelled/unneeded -> interrupt, await terminal, capture late evidence, retire before replacement
 - hung -> inspect task-owned edits, interrupt, await terminal, retire, restore writer barrier, then replace
 - exit -> `list_agents`; interrupt running descendants; await terminal; recheck. Complete requires zero running + all registry entries retired
