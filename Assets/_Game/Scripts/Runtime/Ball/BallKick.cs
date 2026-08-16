@@ -40,6 +40,8 @@ namespace RocketFooxball.Runtime.Ball
         private float cooldownRemaining;
         private bool simulationEnabled = true;
         private bool collisionSubscribed;
+        private bool requestPending;
+        private Vector3 requestedAim;
 
         public float CooldownRemaining => Mathf.Max(cooldownRemaining, 0f);
         public bool SimulationEnabled => simulationEnabled;
@@ -70,23 +72,30 @@ namespace RocketFooxball.Runtime.Ball
         private void OnDisable()
         {
             UnsubscribeCollision();
+            ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
         {
             if (!simulationEnabled || player == null)
             {
+                ClearProgrammaticRequest();
                 return;
             }
 
             cooldownRemaining = DashKickRules.TickCooldown(cooldownRemaining, Time.fixedDeltaTime);
-            var aim = GetAimDirection();
+            var useProgrammaticRequest = requestPending;
+            var programmaticAim = requestedAim;
+            ClearProgrammaticRequest();
+            var localRequest = input != null && input.ConsumeKickPressed();
+            var hasRequest = useProgrammaticRequest || localRequest;
+            var aim = useProgrammaticRequest ? programmaticAim : GetAimDirection();
             if (player.IsDashing)
             {
                 player.SetDashAim(aim);
             }
 
-            if (input != null && input.ConsumeKickPressed() &&
+            if (hasRequest &&
                 DashKickRules.CanActivate(
                     simulationEnabled,
                     aim,
@@ -109,6 +118,19 @@ namespace RocketFooxball.Runtime.Ball
             }
         }
 
+        /// <summary>Queues the latest valid one-step dash-kick aim.</summary>
+        public bool RequestKick(Vector3 aim)
+        {
+            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            {
+                return false;
+            }
+
+            requestedAim = aim.normalized;
+            requestPending = true;
+            return true;
+        }
+
         /// <summary>Enables or freezes dash-kick input without changing cooldown ownership.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
@@ -117,6 +139,7 @@ namespace RocketFooxball.Runtime.Ball
             {
                 contactedBalls.Clear();
                 contactedParticipants.Clear();
+                ClearProgrammaticRequest();
             }
         }
 
@@ -126,6 +149,13 @@ namespace RocketFooxball.Runtime.Ball
             cooldownRemaining = 0f;
             contactedBalls.Clear();
             contactedParticipants.Clear();
+            ClearProgrammaticRequest();
+        }
+
+        private void ClearProgrammaticRequest()
+        {
+            requestPending = false;
+            requestedAim = Vector3.zero;
         }
 
         private void TryProcessContacts()
@@ -299,6 +329,16 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             return look != null && look.Head != null ? look.Head.forward : transform.forward;
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

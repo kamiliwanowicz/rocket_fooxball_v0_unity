@@ -83,7 +83,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnDisable()
         {
-            requestPending = false;
+            ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
@@ -100,15 +100,19 @@ namespace RocketFooxball.Runtime.Weapons
             // Every edge/request is one-shot, including an attempt while pumping,
             // empty, unowned, or simulation-disabled.
             var useProgrammaticRequest = requestPending;
+            var programmaticOrigin = requestedOrigin;
+            var programmaticDirection = requestedDirection;
             requestPending = false;
+            requestedOrigin = Vector3.zero;
+            requestedDirection = Vector3.zero;
 
             if (!CanFire)
             {
                 return;
             }
 
-            var origin = useProgrammaticRequest ? requestedOrigin : GetAimOrigin();
-            var direction = useProgrammaticRequest ? requestedDirection : GetAimDirection();
+            var origin = useProgrammaticRequest ? programmaticOrigin : GetAimOrigin();
+            var direction = useProgrammaticRequest ? programmaticDirection : GetAimDirection();
             if (!IsFinite(origin) || !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
             {
                 return;
@@ -128,7 +132,8 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Queues the latest valid programmatic one-slot fire request.</summary>
         public bool RequestFire(Vector3 origin, Vector3 direction)
         {
-            if (!IsFinite(origin) || !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
+            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(origin) ||
+                !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -145,7 +150,7 @@ namespace RocketFooxball.Runtime.Weapons
             simulationEnabled = enabled;
             if (!enabled)
             {
-                requestPending = false;
+                ClearProgrammaticRequest();
             }
         }
 
@@ -153,6 +158,11 @@ namespace RocketFooxball.Runtime.Weapons
         public void ResetState()
         {
             pumpRemaining = 0f;
+            ClearProgrammaticRequest();
+        }
+
+        private void ClearProgrammaticRequest()
+        {
             requestPending = false;
             requestedOrigin = Vector3.zero;
             requestedDirection = Vector3.zero;

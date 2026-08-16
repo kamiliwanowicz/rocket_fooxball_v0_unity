@@ -56,6 +56,9 @@ namespace RocketFooxball.Runtime.Movement
         private CharacterController controller;
         private Vector3 velocity;
         private Vector3 queuedExternalImpulse;
+        private Vector2 requestedMove;
+        private bool moveIntentPending;
+        private bool jumpRequestPending;
         private Vector3 groundNormal = Vector3.up;
         private Vector3 groundNormalThisStep = Vector3.up;
         private float coyoteTimer;
@@ -94,19 +97,31 @@ namespace RocketFooxball.Runtime.Movement
             controller = GetComponent<CharacterController>();
         }
 
+        private void OnDisable()
+        {
+            ClearProgrammaticInput();
+        }
+
         private void FixedUpdate()
         {
             if (controller == null)
             {
+                ClearProgrammaticInput();
                 return;
             }
 
             if (!simulationEnabled)
             {
+                ClearProgrammaticInput();
                 input?.ClearGameplayState();
                 queuedExternalImpulse = Vector3.zero;
                 return;
             }
+
+            var hasProgrammaticMove = moveIntentPending;
+            var programmaticMove = requestedMove;
+            var programmaticJump = jumpRequestPending;
+            ClearProgrammaticInput();
 
             var deltaTime = Time.fixedDeltaTime;
             var grounded = controller.isGrounded || hasGroundContact;
@@ -134,7 +149,8 @@ namespace RocketFooxball.Runtime.Movement
                 return;
             }
 
-            if (input != null && input.ConsumeJumpPressed())
+            var deviceJump = input != null && input.ConsumeJumpPressed();
+            if (programmaticJump || deviceJump)
             {
                 jumpBufferTimer = jumpBufferTime;
             }
@@ -149,7 +165,7 @@ namespace RocketFooxball.Runtime.Movement
             }
             jumpBufferTimer = Mathf.Max(jumpBufferTimer - deltaTime, 0f);
 
-            var move = input != null ? input.Move : Vector2.zero;
+            var move = hasProgrammaticMove ? programmaticMove : (input != null ? input.Move : Vector2.zero);
             var strafeDirection = Mathf.Abs(move.x) > 0.001f ? transform.right * Mathf.Sign(move.x) : Vector3.zero;
             var forwardDirection = Mathf.Abs(move.y) > 0.001f ? transform.forward * Mathf.Sign(move.y) : Vector3.zero;
             var jumpedThisStep = TryConsumeJump(grounded, strafeDirection + forwardDirection);
@@ -211,6 +227,31 @@ namespace RocketFooxball.Runtime.Movement
             }
 
             queuedExternalImpulse += impulse;
+        }
+
+        /// <summary>Queues the latest valid one-step movement intent.</summary>
+        public bool SetMoveIntent(Vector2 move)
+        {
+            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(move))
+            {
+                return false;
+            }
+
+            requestedMove = Vector2.ClampMagnitude(move, 1f);
+            moveIntentPending = true;
+            return true;
+        }
+
+        /// <summary>Queues one jump request for the next enabled fixed step.</summary>
+        public bool RequestJump()
+        {
+            if (!isActiveAndEnabled || !simulationEnabled)
+            {
+                return false;
+            }
+
+            jumpRequestPending = true;
+            return true;
         }
 
         /// <summary>Starts a bounded dash without replacing existing velocity.</summary>
@@ -281,6 +322,7 @@ namespace RocketFooxball.Runtime.Movement
             {
                 EndDash(DashEndReason.SimulationDisabled, 1f);
                 queuedExternalImpulse = Vector3.zero;
+                ClearProgrammaticInput();
                 coyoteTimer = 0f;
                 jumpBufferTimer = 0f;
                 input?.ClearGameplayState();
@@ -292,6 +334,7 @@ namespace RocketFooxball.Runtime.Movement
         {
             EndDash(DashEndReason.SimulationDisabled, 1f);
             queuedExternalImpulse = Vector3.zero;
+            ClearProgrammaticInput();
             coyoteTimer = 0f;
             jumpBufferTimer = 0f;
             groundContactThisStep = false;
@@ -377,6 +420,13 @@ namespace RocketFooxball.Runtime.Movement
             dashDirection = Vector3.zero;
             dashContribution = Vector3.zero;
             dashAim = Vector3.zero;
+        }
+
+        private void ClearProgrammaticInput()
+        {
+            requestedMove = Vector2.zero;
+            moveIntentPending = false;
+            jumpRequestPending = false;
         }
 
         private void ApplyGroundMovement(Vector3 strafeDirection, Vector3 forwardDirection, Vector3 activeGroundNormal, float deltaTime)
@@ -510,6 +560,11 @@ namespace RocketFooxball.Runtime.Movement
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(Vector2 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y);
         }
 
         private static bool IsFinite(float value)
