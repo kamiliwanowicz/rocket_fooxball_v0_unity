@@ -177,9 +177,9 @@ namespace RocketFooxball.Editor
             var graphObject = RequireSingleChild(systems.transform, NavigationGraphName);
             var blueObject = RequireSingleChild(systems.transform, BlueCoordinatorName);
             var redObject = RequireSingleChild(systems.transform, RedCoordinatorName);
-            var graph = RequireSingleComponent<BotNavigationGraph>(graphObject, NavigationGraphName);
-            var blueCoordinator = RequireSingleComponent<BotTeamRoleCoordinator>(blueObject, BlueCoordinatorName);
-            var redCoordinator = RequireSingleComponent<BotTeamRoleCoordinator>(redObject, RedCoordinatorName);
+            var graph = RequireSingleComponent<BotNavigationGraph>(graphObject.gameObject, NavigationGraphName);
+            var blueCoordinator = RequireSingleComponent<BotTeamRoleCoordinator>(blueObject.gameObject, BlueCoordinatorName);
+            var redCoordinator = RequireSingleComponent<BotTeamRoleCoordinator>(redObject.gameObject, RedCoordinatorName);
             if (UnityEngine.Object.FindObjectsByType<BotController>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 6 ||
                 UnityEngine.Object.FindObjectsByType<BotNavigator>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 6 ||
                 UnityEngine.Object.FindObjectsByType<BotPerception>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 6 ||
@@ -425,6 +425,16 @@ namespace RocketFooxball.Editor
                 if (layer >= 0) mask &= ~(1 << layer);
             }
             return mask;
+        }
+
+        private static void SetLayerMask(UnityEngine.Object target, string propertyName, int value)
+        {
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.LayerMask)
+                throw new InvalidOperationException(target.GetType().Name + " has no serialized layer mask '" + propertyName + "'.");
+            property.intValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static Transform RequireSingleChild(Transform root, string name)
