@@ -5,7 +5,7 @@ description: Use when user requests repository-grounded coding plan or LP dispat
 
 # Write Orchestrator Coding Plan
 
-Write implementation-ready Markdown plan. Planner pre-decides coding design from repository evidence so worker translates plan into code instead of designing while coding. Planner performs no implementation, staging, commits, branch/worktree mutation, implementation dispatch, or candidate splitting.
+Write implementation-ready Markdown plan. Planning owns heavy reasoning: exact `sol_high` subagents investigate repository slices and close design choices before dispatch. Planner synthesizes verified design. Worker translates recorded design into code; worker does not design solution. Planner performs no implementation, staging, commits, branch/worktree mutation, implementation dispatch, or candidate splitting.
 
 ## Intake modes
 
@@ -51,30 +51,36 @@ Dependent candidate planning begins only after LP supplies observed accepted ups
 ## Inspect
 
 1. Read repository instructions, source plans, candidate scope, design obligations, and validation workflow.
-2. Trace relevant execution paths through code, assets, manifests, settings, and symbols. Record current control flow, state ownership, call sites, serialization, and constraints. Mark claims `observed` or `proposed`.
+2. Trace relevant execution paths through code, assets, manifests, settings, and symbols. Record current control flow, state ownership, call sites, serialization, constraints, and every implementation choice exposed by requested change. Mark claims `observed` or `proposed`.
 3. Record branch, worktree root, dirty paths, and exact accepted `baseline_sha`. Preserve unrelated changes.
-4. Ask only questions changing scope, behavior, compatibility, architecture, or authority. Record minor assumptions.
-5. Unavailable repository evidence -> `blocked` in LP mode; provisional plan with named missing evidence in direct mode.
+4. Ask questions changing scope, behavior, compatibility, architecture, or authority before artifact creation. Record resolved answer as decision; accepted artifact contains no open question.
+5. Unavailable repository evidence -> LP `blocked`; direct mode stops without plan artifact and reports exact missing evidence plus needed user/repository action. Never publish provisional accepted plan.
 
-### Analysis delegation
+### Planning delegation
 
-Use exact `sol_medium` subagents when repository evidence spans separable areas or focused analysis materially improves confidence. Keep small-scope inspection local.
+Use exact `sol_high` subagents for repository investigation and design closure. Non-trivial plan requires delegation. Non-trivial: multiple paths/symbols, behavior change, API/contract change, state/lifecycle logic, serialization, migration, generated output, validation workflow, or parallel task graph. Single mechanical edit with zero design choice may stay local.
 
-- Dispatch with `fork_turns: "none"`. Give each subagent one self-contained, bounded question with relevant paths, symbols, constraints, and required evidence.
-- Require read-only analysis: no edits, implementation, plan drafting, staging, commits, branch/worktree mutation, or project-mutating validation.
-- Prompt and result are terse AI-to-AI text: exact paths/symbols/commands, observed gaps, no prose, no narration, no speculative plan content.
-- Parallel dispatch only for independent questions. Planner owns synthesis and plan claims.
-- Conflicting or consequential subagent evidence -> planner inspects source directly before recording claim.
-- Subagent returns exactly this template; no text before or after:
+- Dispatch with `fork_turns: "none"`. Give each subagent one self-contained concern: exact question, paths, symbols, known constraints, downstream contract, and choices requiring resolution.
+- Parallelize independent concerns. Keep shared contract or conflicting design questions with one owner or serialize them.
+- Require read-only work: inspect repository, trace behavior, compare viable designs, select evidence-backed proposal, enumerate edge cases and downstream effects. No edits, implementation, plan drafting, staging, commits, branch/worktree mutation, or project-mutating validation.
+- Require exact evidence for observed claims. Require proposed design details precise enough for task recipe: symbols, signatures, algorithm/order, lifecycle, fallbacks, callers, validation, and rejected alternatives where material.
+- Planner owns synthesis and plan claims. Consequential or conflicting result -> planner inspects source directly, resolves conflict, then records one design.
+- After draft, dispatch fresh exact `sol_high` closure auditor for each non-trivial plan. Provide draft plus relevant repository paths, not planner conclusions. Auditor simulates each worker task and reports every remaining design choice, missing repository fact, contract mismatch, edge case, and unverifiable check. Planner resolves findings and repeats fresh audit until `Worker Decisions Remaining: None` and `Gaps: None`.
+- Required `sol_high` unavailable -> stop. Never downgrade planning analysis or transfer design work to implementation worker.
+- Prompt and result use terse AI-to-AI language. Subagent returns exactly this template; no text before or after:
 
 ```markdown
-# Analysis Result
+# Planning Analysis
 
 Status: complete | blocked
 Assigned Agent: [exact agent identity]
-Profile: sol_medium
+Profile: sol_high
+Role: investigator | design-closure-auditor
 Question: [bounded dispatched question]
-Findings: [`exact path/symbol` -> observed fact]
+Observed: [`exact path/symbol` -> fact]
+Proposed Design: [exact evidence-backed design or None]
+Rejected Alternatives: [alternative -> rejection reason or None]
+Worker Decisions Remaining: [unresolved implementation choice or None]
 Gaps: [missing evidence or None]
 Blocker: [exact blocker when blocked; otherwise None]
 ```
@@ -97,15 +103,27 @@ Default: one coherent direct execution plan for assigned candidate. Planner does
 
 Split anchors: prefab/scene wiring + few call sites -> usually one task; new MonoBehaviour + one-system integration -> cohesive task; full mechanic with separable state/lifecycle/integration -> split; whole subsystem -> split; bulk repetitive generation/config -> one task when split harms execution.
 
-## Implementation design gate
+## Worker-decision gate
 
-Before writing artifact, ask what worker would still need to figure out. Resolve choices affecting behavior, contracts, state ownership, other files, or edge cases. Detail stays proportional: direct edit may need one precise line; complex mechanic needs concrete symbols, logic, ordering, math, integration, and lifecycle behavior relevant to that mechanic. Avoid empty checklist fields.
+Before writing artifact, simulate each task from dispatch through proof. Identify every choice worker would encounter. Resolve each repository-significant choice in plan from observed evidence or explicit proposed design.
 
-Ready task lets worker follow recorded design using only local coding judgment. Product/architecture choice missing from repository -> `needs_user`. Repository evidence gap -> LP `blocked`. Excess design surface -> decomposition mismatch.
+Predefine applicable details:
+
+- exact paths, symbols, signatures, types, data shapes, owners, producers, and consumers
+- algorithm, formulas, constants, ordering, ties, fallbacks, invalid-input behavior, and edge cases
+- state transitions, lifecycle timing, frame ownership, reset/disable behavior, and error handling
+- call-site changes, integration sequence, serialization, wiring, migrations, generated outputs, and unchanged contracts
+- validation command, expected discriminatory evidence, and invalidation boundary
+
+Worker freedom: syntax, formatting, local names, and mechanical adaptation needed to express recorded design in observed codebase. Planner owns every choice affecting behavior, architecture, API/contract shape, state ownership, dependencies, compatibility, persistence, safety, scope, or proof.
+
+Never delegate design with phrases such as `choose`, `decide`, `determine`, `design`, `figure out`, `investigate and implement`, `as appropriate`, `if needed`, `use best judgment`, or `update callers as necessary`. Replace each with exact choice, trigger, target, and behavior. Select worker profile from user/`AGENTS.md` rules. Accepted task is fully designed; never select profile defined for tasks lacking detailed plan or use stronger reasoning profile to compensate for missing design.
+
+Unresolved product/architecture choice -> `needs_user`. Missing repository evidence -> LP `blocked`; direct mode stops without accepted artifact and reports exact evidence needed. Design too large to pre-resolve within one worker task -> decomposition mismatch. Never defer unresolved design to implementation worker.
 
 After design detail, apply `Plan shape` splitting rules. No meaningful independent acceptance -> fold.
 
-Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan explains concrete contact state, projection/order, ramp-exit handling, and separation from wall handling.
+Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan defines stored contact fields, projection formula and order, ramp-exit clearing trigger, launch-velocity preservation rule, and wall-contact separation.
 
 ## Plan contract
 
@@ -119,7 +137,7 @@ Ordinary task checks (`fast|development`) use exactly one line: `proof: <command
 
 - Plans follow `AGENTS.md` visual-proof policy. Task-specific source-asset previews required by applicable skills, including [`$use-blender`](../use-blender/SKILL.md), remain allowed as supplementary proof.
 - Plan Unity checks from [`AGENTS.md`](../../../AGENTS.md) -> `Unity execution`; `Validation`, including required pre-gates and generated-output proof policy.
-- Builder task -> trace authoritative builder inventory before plan write. Task `owns` lists each produced builder output, exact path per output; include derived outputs such as cue-mesh assets. Do not hide produced outputs behind broad inventory glob. Unknown output path -> `blocked` in LP mode, unresolved evidence in direct mode. Classifier combines inventory + exact task declarations; declaration absent inventory requires builder-source evidence as `declared-new`.
+- Builder task -> trace authoritative builder inventory before plan write. Task `owns` lists each produced builder output, exact path per output; include derived outputs such as cue-mesh assets. Do not hide produced outputs behind broad inventory glob. Unknown output path -> LP `blocked`; direct mode stops without plan artifact. Classifier combines inventory + exact task declarations; declaration absent inventory requires builder-source evidence as `declared-new`.
 - Expensive proof contract: `same_dispatch` -> named task owner runs proof before return; `orchestrator_phase` -> execution orchestrator runs shared proof after `checks` names exact checkpoint/final trigger, declared source fan-in, declared outputs, accepted review/fixes; `None` -> no expensive proof. Every non-`None` mode names one `expensive_proof_owner`; `orchestrator_phase` names trigger checkpoint/final boundary in `checks`. Never use narrative run-point wording or workflow path-selection flag.
 
 Execution route:
@@ -154,7 +172,7 @@ Dependencies: [accepted full SHAs or None]
 ## Decisions
 - assumption: [minor assumption]
 - decision: [chosen approach and reason]
-- question: [material unresolved choice] | None
+- question: None
 
 ## Execution Graph
 `START -> T1 -> CP1 -> {T2 -> CP2 || T3 -> CP3} -> JOIN1 -> T4 -> CP4 -> FINAL`
@@ -176,7 +194,7 @@ Dependencies: [accepted full SHAs or None]
 - unity_mutation: `true | false`
 - expensive_proof_owner: `[one identity or None]`
 - expensive_proof_execution: `same_dispatch | orchestrator_phase | None`
-- implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
+- implementation: [complete ordered coding recipe; exact symbols, signatures, logic, order, integration, lifecycle, fallbacks, edge handling, and caller changes; no worker-owned design choices]
 - done when: [observable acceptance]
 - checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
 - review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
@@ -220,8 +238,10 @@ Needed LP Action or Recheck: [one action/fact or None]
 ## Final check
 
 - Verify every Markdown link and target heading.
-- Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
-- Verify template completeness plus `Plan shape` and `Implementation design gate`.
+- Verify required `sol_high` investigations completed and fresh closure audit reports `Worker Decisions Remaining: None` plus `Gaps: None`.
+- Run worker-decision audit task by task. Search delegated-design phrases from `Worker-decision gate`; resolve each occurrence. Any repository-significant worker choice prevents `ready`.
+- Verify template completeness plus `Plan shape` and `Worker-decision gate`.
+- Verify `question: None`, complete repository evidence, and zero provisional or unresolved task design.
 - Verify every sequential edge has an explicit dependency reason, every parallel lane has disjoint ownership and a stable contract, and shared integration plus final proof occur only after their required fan-in.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
