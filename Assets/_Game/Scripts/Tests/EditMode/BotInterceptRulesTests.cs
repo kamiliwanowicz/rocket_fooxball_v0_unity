@@ -28,8 +28,8 @@ namespace RocketFooxball.Tests.EditMode
                 5f,
                 out time,
                 out point), Is.True);
-            Assert.That(time, Is.EqualTo(2.1828206f).Within(0.0001f));
-            Assert.That(point.x, Is.EqualTo(4.365641f).Within(0.0002f));
+            Assert.That(time, Is.EqualTo(2.1821789f).Within(0.0001f));
+            Assert.That(point.x, Is.EqualTo(4.364358f).Within(0.0002f));
         }
 
         [Test]

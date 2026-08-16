@@ -29,9 +29,17 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void AimNoiseNormalizesNonUnitDirectionWhenConeIsZero()
+        {
+            var result = BotAimRules.ApplyAimNoise(new Vector3(0f, 0f, 2f), 0f, 2, 7);
+
+            Assert.That(result, Is.EqualTo(Vector3.forward));
+        }
+
+        [Test]
         public void PitchClampKeepsYawAndLimitsVerticalAngle()
         {
-            var clamped = BotAimRules.ClampPitch(new Vector3(0.4f, 1f, 0.2f));
+            var clamped = BotAimRules.ClampPitch(new Vector3(0.4f, 10f, 0.2f));
             var pitch = Mathf.Atan2(clamped.y, new Vector2(clamped.x, clamped.z).magnitude) * Mathf.Rad2Deg;
             Assert.That(pitch, Is.EqualTo(80f).Within(0.0001f));
             Assert.That(clamped.sqrMagnitude, Is.EqualTo(1f).Within(0.0001f));

@@ -163,6 +163,12 @@ namespace RocketFooxball.Runtime.Bots
                 return Vector3.zero;
             }
 
+            var safeDegrees = IsFinite(maxDegrees) ? Mathf.Clamp(maxDegrees, 0f, 89f) : 0f;
+            if (safeDegrees <= 0f)
+            {
+                return Mathf.Abs(direction.sqrMagnitude - 1f) <= Epsilon ? direction : direction.normalized;
+            }
+
             var forward = direction.normalized;
             if (!IsFinite(forward) || forward.sqrMagnitude <= Epsilon)
             {
@@ -178,7 +184,6 @@ namespace RocketFooxball.Runtime.Bots
                 return Vector3.zero;
             }
 
-            var safeDegrees = IsFinite(maxDegrees) ? Mathf.Clamp(maxDegrees, 0f, 89f) : 0f;
             var coneRadians = Mathf.Sqrt(BotDifficultyRules.Sample01(slotId, ordinal, BotSampleChannel.AimConeRadius)) *
                               safeDegrees * Mathf.Deg2Rad;
             var azimuth = 2f * Mathf.PI * BotDifficultyRules.Sample01(slotId, ordinal, BotSampleChannel.AimConeAzimuth);
