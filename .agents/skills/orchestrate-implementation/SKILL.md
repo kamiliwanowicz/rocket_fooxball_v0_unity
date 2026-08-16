@@ -107,7 +107,9 @@ Current child stays assigned for isolated blocker, rescue, scope correction, con
 
 Writer contract carries `read_paths`, `validation_environment`, `unity_mutation`, `expensive_proof_owner`, `expensive_proof_execution`. Enum: `same_dispatch | orchestrator_phase | None`. `same_dispatch` -> named task owner runs proof before return. `orchestrator_phase` -> execution orchestrator runs shared proof only after plan `checks` names checkpoint/final trigger, every declared source producer reaches trigger, generated outputs reach generated-output gate, checkpoint review/fixes accepted. `None` -> no expensive proof. Trigger derives from plan checks plus exact declared outputs; never narrative run-point or workflow path-selection flag. Planner names one production-final owner after source fan-in, review, fixes. Worker checks default fast/local unless task owns development proof. Expensive-proof reduction never relaxes review.
 
-Source-only writer for `unity_mutation: true` -> return Unity compile proof before terminal return. Source/proof split without this proof -> prohibited. Relevant Unity test/import or compile-only Unity batch qualifies; `dotnet build` does not.
+Source-only writer for `unity_mutation: true` -> return Unity compile proof before terminal return unless `expensive_proof_execution: orchestrator_phase`. `orchestrator_phase` -> writer runs fast/local checks only; execution orchestrator runs sole declared Unity proof after trigger. Relevant Unity test/import or compile-only Unity batch qualifies; `dotnet build` does not.
+
+Unity command -> orchestrator supplies exact [`AGENTS.md`](../../../AGENTS.md)-compliant command using `Start-Process -Wait -PassThru` + `.ExitCode`. Direct `Unity.exe` invocation or polling instead of `-Wait` -> reject before launch.
 
 Production-final gate: declare `expected_status`; compare observed status. Two consecutive mismatches -> `blocked`, comparator suspect, no further Unity. Probe requires valid workflow `schemaVersion: 1`; failure follows workflow failure contract.
 

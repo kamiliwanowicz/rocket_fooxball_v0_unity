@@ -83,6 +83,11 @@ Blocker: [exact blocker when blocked; otherwise None]
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
+- Build the dependency/ownership graph before drafting task order. Identify stable contracts, shared files/symbols, generated outputs, mutation environments, review boundaries, and final proof consumers.
+- Maximize safe parallel implementation. Extract independent core work into sibling lanes, then assign shared integration, wiring, or aggregation to a named fan-in task that alone owns the shared surface. Keep coupled work together when no stable contract separates it.
+- Give parallel sibling tasks disjoint owned files and symbols plus stable, predeclared input/output contracts. Overlapping ownership, shared generated output, migration state, Unity/project mutation environment, or shared validation environment requires serialization unless the repository supplies an isolation mechanism.
+- Justify every sequential edge with a concrete data, contract, ownership, mutation, review, or validation dependency. Do not serialize an unrelated lane behind another lane's checkpoint; let its per-worker review proceed independently and join only where a consumer or final gate needs every predecessor.
+- Fan in all source producers and accepted reviews/fixes before the production-final owner starts the shared final phase. Within that sole-owner phase, order producer mutation before its generated-output gate, then run the remaining exact-SHA proof; never require an output gate before the mutation that creates its outputs.
 - Size primarily by reasoning and proof load: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary. Volume is coarse tripwire, not the rule.
 - Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
 - Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. Task obviously containing two separable builds -> prefer split. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
@@ -162,6 +167,8 @@ Dependencies: [accepted full SHAs or None]
 - objective: [single bounded implementation outcome; dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
+- dependencies: `[predecessor task/checkpoint -> concrete reason work cannot start earlier]` or `None`
+- parallel_contract: `[stable input/output symbols plus disjointness from sibling ownership]` or `None`
 - owns: `[exact paths or tight globs]`
 - protected: `[exact paths/symbols]`
 - read_paths: `[exact path/symbol -> reason]`
@@ -215,5 +222,6 @@ Needed LP Action or Recheck: [one action/fact or None]
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
 - Verify template completeness plus `Plan shape` and `Implementation design gate`.
+- Verify every sequential edge has an explicit dependency reason, every parallel lane has disjoint ownership and a stable contract, and shared integration plus final proof occur only after their required fan-in.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.
