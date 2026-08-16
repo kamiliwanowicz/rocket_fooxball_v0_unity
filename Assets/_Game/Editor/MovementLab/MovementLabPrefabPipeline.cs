@@ -42,9 +42,12 @@ namespace RocketFooxball.Editor
             RequireComponent<RocketFooxball.Runtime.Movement.PlayerMotor>(MovementLabContract.PlayerPrefabPath, "PlayerMotor");
             RequireComponent<RocketFooxball.Runtime.Ball.BallMotor>(MovementLabContract.BallPrefabPath, "BallMotor");
             RequireComponent<RocketFooxball.Runtime.Weapons.RocketLauncher>(MovementLabContract.PlayerPrefabPath, "RocketLauncher");
+            RequireComponent<RocketFooxball.Runtime.Weapons.ShotgunWeapon>(MovementLabContract.PlayerPrefabPath, "ShotgunWeapon");
             RequireComponent<RocketFooxball.Runtime.Participants.ParticipantState>(MovementLabContract.PlayerPrefabPath, "ParticipantState");
             RequireComponent<RocketFooxball.Runtime.Feedback.ExplosionVfx>(MovementLabContract.ExplosionPrefabPath, "ExplosionVfx");
             RequireComponent<RocketFooxball.Runtime.Pickups.HealthPickup>(MovementLabContract.HealthPickupPrefabPath, "HealthPickup");
+            RequireComponent<RocketFooxball.Runtime.Pickups.ShotgunPickup>(MovementLabContract.ShotgunPickupPrefabPath, "ShotgunPickup");
+            RequireComponent<RocketFooxball.Runtime.Pickups.AmmoPickup>(MovementLabContract.AmmoPickupPrefabPath, "AmmoPickup");
         }
         internal static void RequireComponent<T>(string path, string label) where T : UnityEngine.Component
         {
@@ -70,9 +73,11 @@ namespace RocketFooxball.Editor
                     var characterModel = AssetDatabase.LoadAssetAtPath<GameObject>(CharacterModelPath);
                     var fpsKickModel = AssetDatabase.LoadAssetAtPath<GameObject>(FpsKickModelPath);
                     var weaponModel = AssetDatabase.LoadAssetAtPath<GameObject>(WeaponModelPath);
-                    if (characterModel == null || fpsKickModel == null || weaponModel == null)
+                    var fpsShotgunModel = AssetDatabase.LoadAssetAtPath<GameObject>(FpsShotgunModelPath);
+                    var shotgunModel = AssetDatabase.LoadAssetAtPath<GameObject>(ShotgunModelPath);
+                    if (characterModel == null || fpsKickModel == null || weaponModel == null || fpsShotgunModel == null || shotgunModel == null)
                     {
-                        throw new InvalidOperationException("Missing imported character, FPS kick, or weapon model.");
+                        throw new InvalidOperationException("Missing imported character, FPS kick, rocket weapon, or shotgun model.");
                     }
 
                     var root = new GameObject("Player") { tag = "Player" };
@@ -92,6 +97,7 @@ namespace RocketFooxball.Editor
                     var kick = root.AddComponent<BallKick>();
                     var presentation = root.AddComponent<PlayerPresentation>();
                     var participant = root.AddComponent<ParticipantState>();
+                    var shotgun = root.AddComponent<ShotgunWeapon>();
                     var participantLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
                     var projectileLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
                     root.layer = participantLayer;
@@ -138,6 +144,17 @@ namespace RocketFooxball.Editor
                     worldAnimator.runtimeAnimatorController = EnsureWorldAnimatorController(WorldControllerPath, CharacterModelPath);
                     worldAnimator.avatar = FindImportedAvatar(CharacterModelPath);
                     worldAnimator.applyRootMotion = false;
+
+                    var handR = FindNamedTransform(worldVisual.transform, "Hand.R");
+                    if (handR == null)
+                    {
+                        throw new InvalidOperationException("World shotgun requires imported Hand.R bind pose: " + CharacterModelPath);
+                    }
+                    var worldShotgunMount = new GameObject("WorldShotgunMount").transform;
+                    worldShotgunMount.position = handR.position;
+                    worldShotgunMount.rotation = root.transform.rotation;
+                    worldShotgunMount.SetParent(handR, true);
+
                     // Hide the complete imported world model from the local player's camera.
                     // The imported eye/head and body meshes are separate branches, so hiding
                     // only CharacterHead leaves the rest of the model rendered in first person.
@@ -163,12 +180,24 @@ namespace RocketFooxball.Editor
                     viewmodels.localPosition = Vector3.zero;
                     viewmodels.localRotation = Quaternion.identity;
                     // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
-                    var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
+                    var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(-0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
                     var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
                     var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
                     var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent);
                     RemovePhysicsComponents(weaponVisual);
+                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
+                    var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
+                    AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
+                    RemovePhysicsAndAnimators(fpsShotgunVisual);
+                    var worldShotgunVisual = InstantiateImportedVisual(shotgunModel, "WorldShotgunVisual", worldShotgunMount, Vector3.zero, Quaternion.identity, Vector3.one);
+                    AssignImportedMaterials(worldShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
+                    RemovePhysicsAndAnimators(worldShotgunVisual);
+                    var worldShotgunAccentRenderer = FindRendererByName(worldShotgunVisual, "WeaponAccent");
+                    SetDynamicRecursively(worldShotgunMount.gameObject);
+                    SetDynamicRecursively(fpsShotgunVisual);
                     var fpsVisual = InstantiateImportedVisual(fpsKickModel, "FpsKickVisual", viewmodels, new Vector3(0.12f, -0.42f, 0.30f), Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(fpsVisual, characterRed, characterBlack, characterCream, characterEye);
                     RemovePhysicsComponents(fpsVisual);
@@ -205,8 +234,24 @@ namespace RocketFooxball.Editor
                     SetObjectReference(launcher, "look", look);
                     SetObjectReference(launcher, "aimCamera", camera);
                     SetObjectReference(launcher, "spawnPoint", muzzle);
-                    SetObjectReference(launcher, "projectilePrefab", rocketPrefab.GetComponent<RocketProjectile>());
-                    SetFloat(launcher, "firingInterval", 0.70f);
+                     SetObjectReference(launcher, "projectilePrefab", rocketPrefab.GetComponent<RocketProjectile>());
+                     SetFloat(launcher, "firingInterval", 0.70f);
+                     SetObjectReference(shotgun, "input", input);
+                     SetObjectReference(shotgun, "look", look);
+                     SetObjectReference(shotgun, "aimCamera", camera);
+                     SetObjectReference(shotgun, "ownerParticipant", participant);
+                     SetLayerMask(shotgun, "hitMask", ~(1 << projectileLayer));
+                     SetFloat(shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
+                     SetInteger(shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
+                     SetFloat(shotgun, "spreadAngleDegrees", 7f);
+                     SetFloat(shotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange);
+                     SetFloat(shotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange);
+                     SetFloat(shotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange);
+                     SetFloat(shotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier);
+                     SetFloat(shotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier);
+                     SetFloat(shotgun, "pumpDelay", 0.85f);
+                     SetFloat(shotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse);
+                     SetFloat(shotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap);
                     SetObjectReference(kick, "input", input);
                     SetObjectReference(kick, "player", motor);
                     SetObjectReference(kick, "look", look);
@@ -232,15 +277,20 @@ namespace RocketFooxball.Editor
                     SetFloat(feedback, "celebrationFov", CelebrationFov);
                     SetObjectReference(presentation, "kick", kick);
                     SetObjectReference(presentation, "motor", motor);
-                    SetObjectReference(presentation, "launcher", launcher);
+                     SetObjectReference(presentation, "launcher", launcher);
+                     SetObjectReference(presentation, "shotgun", shotgun);
                     SetObjectReference(presentation, "worldAnimator", worldAnimator);
                     SetObjectReference(presentation, "fpsKickAnimator", fpsAnimator);
                     SetObjectReference(presentation, "cameraFeedback", feedback);
                     SetObjectReference(presentation, "weaponVisual", weaponVisual.transform);
+                    SetObjectReference(presentation, "fpsShotgunVisual", fpsShotgunVisual.transform);
+                    SetObjectReference(presentation, "worldShotgunVisual", worldShotgunVisual.transform);
                     SetObjectReference(presentation, "gameplayCamera", camera);
                     SetObjectReference(presentation, "audioListener", camera.GetComponent<AudioListener>());
                     SetObjectReference(presentation, "participant", participant);
-                    SetObjectArray(presentation, "teamTintRenderers", worldVisual.GetComponentsInChildren<Renderer>(true));
+                    SetObjectArray(presentation, "teamTintRenderers", worldVisual.GetComponentsInChildren<Renderer>(true)
+                        .Where(renderer => !renderer.transform.IsChildOf(worldShotgunMount))
+                        .Concat(new[] { worldShotgunAccentRenderer }).Cast<UnityEngine.Object>().ToArray());
                     SetObjectReference(presentation, "blueTeamCue", blueCue);
                     SetObjectReference(presentation, "redTeamCue", redCue);
                     SetObjectReference(presentation, "immunityShield", immunityShield);
@@ -253,7 +303,8 @@ namespace RocketFooxball.Editor
                     SetObjectReference(participant, "input", input);
                     SetObjectReference(participant, "look", look);
                     SetObjectReference(participant, "kick", kick);
-                    SetObjectReference(participant, "launcher", launcher);
+                     SetObjectReference(participant, "launcher", launcher);
+                     SetObjectReference(participant, "shotgun", shotgun);
                     SetObjectReference(participant, "presentation", presentation);
                     SetObjectReference(participant, "cameraFeedback", feedback);
                     SetInteger(participant, "slotId", 0);
@@ -363,6 +414,112 @@ namespace RocketFooxball.Editor
                     var transforms = root.GetComponentsInChildren<Transform>(true);
                     for (var i = 0; i < transforms.Length; i++) transforms[i].gameObject.isStatic = false;
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, HealthPickupPrefabPath);
+                    UnityEngine.Object.DestroyImmediate(root);
+                    return prefab;
+                }
+
+                internal static GameObject BuildShotgunPickupPrefab(Material shotgunMetal, Material shotgunDark,
+                    Material shotgunAccent, Material teamBlueMaterial, Material teamRedMaterial)
+                {
+                    if (shotgunMetal == null || shotgunDark == null || shotgunAccent == null || teamBlueMaterial == null || teamRedMaterial == null)
+                        throw new InvalidOperationException("Shotgun pickup materials are required before prefab build.");
+                    var model = AssetDatabase.LoadAssetAtPath<GameObject>(ShotgunModelPath);
+                    if (model == null) throw new InvalidOperationException("Missing shotgun pickup model: " + ShotgunModelPath);
+
+                    var root = new GameObject("ShotgunPickup");
+                    root.transform.localScale = Vector3.one;
+                    var trigger = root.AddComponent<SphereCollider>();
+                    trigger.isTrigger = true;
+                    trigger.radius = MovementLabContract.ShotgunPickupTriggerRadius;
+                    var body = root.AddComponent<Rigidbody>();
+                    body.isKinematic = true;
+                    body.useGravity = false;
+                    body.constraints = RigidbodyConstraints.FreezeAll;
+                    body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                    body.interpolation = RigidbodyInterpolation.None;
+
+                    var visualRoot = new GameObject("VisualRoot");
+                    visualRoot.transform.SetParent(root.transform, false);
+                    var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity, Vector3.one);
+                    AssignImportedMaterials(shotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
+                    RemovePhysicsAndAnimators(shotgunVisual);
+                    var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, MovementLabContract.PickupCueBluePosition);
+                    blueCue.transform.SetParent(visualRoot.transform, false);
+                    blueCue.transform.localPosition = MovementLabContract.PickupCueBluePosition;
+                    blueCue.transform.localScale = MovementLabContract.PickupCueScale;
+                    var redCue = CreateShapeCue("RedTriangleCue", true, teamRedMaterial, MovementLabContract.PickupCueRedPosition);
+                    redCue.transform.SetParent(visualRoot.transform, false);
+                    redCue.transform.localPosition = MovementLabContract.PickupCueRedPosition;
+                    redCue.transform.localScale = MovementLabContract.PickupCueScale;
+
+                    var pickup = root.AddComponent<ShotgunPickup>();
+                    SetObjectReference(pickup, "pickupTrigger", trigger);
+                    SetObjectReference(pickup, "visualRoot", visualRoot);
+                    SetInteger(pickup, "grant", MovementLabContract.ShotgunPickupGrant);
+                    SetFloat(pickup, "respawnDelay", MovementLabContract.ShotgunPickupRespawnDelay);
+                    SetDynamicRecursively(root);
+                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, ShotgunPickupPrefabPath);
+                    UnityEngine.Object.DestroyImmediate(root);
+                    return prefab;
+                }
+
+                internal static GameObject BuildAmmoPickupPrefab(Material ammoShellMaterial, Material teamBlueMaterial, Material teamRedMaterial)
+                {
+                    if (ammoShellMaterial == null || teamBlueMaterial == null || teamRedMaterial == null)
+                        throw new InvalidOperationException("Ammo pickup materials are required before prefab build.");
+
+                    var root = new GameObject("AmmoPickup");
+                    root.transform.localScale = Vector3.one;
+                    var trigger = root.AddComponent<SphereCollider>();
+                    trigger.isTrigger = true;
+                    trigger.radius = MovementLabContract.AmmoPickupTriggerRadius;
+                    var body = root.AddComponent<Rigidbody>();
+                    body.isKinematic = true;
+                    body.useGravity = false;
+                    body.constraints = RigidbodyConstraints.FreezeAll;
+                    body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
+                    body.interpolation = RigidbodyInterpolation.None;
+
+                    var visualRoot = new GameObject("VisualRoot");
+                    visualRoot.transform.SetParent(root.transform, false);
+                    var leftShell = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                    leftShell.name = "ShellLeft";
+                    leftShell.transform.SetParent(visualRoot.transform, false);
+                    leftShell.transform.localPosition = MovementLabContract.AmmoShellLeftPosition;
+                    leftShell.transform.localScale = MovementLabContract.AmmoShellScale;
+                    UnityEngine.Object.DestroyImmediate(leftShell.GetComponent<Collider>());
+                    var leftRenderer = leftShell.GetComponent<MeshRenderer>();
+                    leftRenderer.sharedMaterial = ammoShellMaterial;
+                    leftRenderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+                    leftRenderer.reflectionProbeUsage = ReflectionProbeUsage.BlendProbes;
+
+                    var rightShell = GameObject.CreatePrimitive(PrimitiveType.Capsule);
+                    rightShell.name = "ShellRight";
+                    rightShell.transform.SetParent(visualRoot.transform, false);
+                    rightShell.transform.localPosition = MovementLabContract.AmmoShellRightPosition;
+                    rightShell.transform.localScale = MovementLabContract.AmmoShellScale;
+                    UnityEngine.Object.DestroyImmediate(rightShell.GetComponent<Collider>());
+                    var rightRenderer = rightShell.GetComponent<MeshRenderer>();
+                    rightRenderer.sharedMaterial = ammoShellMaterial;
+                    rightRenderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+                    rightRenderer.reflectionProbeUsage = ReflectionProbeUsage.BlendProbes;
+
+                    var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, MovementLabContract.PickupCueBluePosition);
+                    blueCue.transform.SetParent(visualRoot.transform, false);
+                    blueCue.transform.localPosition = MovementLabContract.PickupCueBluePosition;
+                    blueCue.transform.localScale = MovementLabContract.PickupCueScale;
+                    var redCue = CreateShapeCue("RedTriangleCue", true, teamRedMaterial, MovementLabContract.PickupCueRedPosition);
+                    redCue.transform.SetParent(visualRoot.transform, false);
+                    redCue.transform.localPosition = MovementLabContract.PickupCueRedPosition;
+                    redCue.transform.localScale = MovementLabContract.PickupCueScale;
+
+                    var pickup = root.AddComponent<AmmoPickup>();
+                    SetObjectReference(pickup, "pickupTrigger", trigger);
+                    SetObjectReference(pickup, "visualRoot", visualRoot);
+                    SetInteger(pickup, "grant", MovementLabContract.AmmoPickupGrant);
+                    SetFloat(pickup, "respawnDelay", MovementLabContract.AmmoPickupRespawnDelay);
+                    SetDynamicRecursively(root);
+                    var prefab = PrefabUtility.SaveAsPrefabAsset(root, AmmoPickupPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
                     return prefab;
                 }
@@ -688,8 +845,39 @@ namespace RocketFooxball.Editor
                     for (var i = 0; i < bodies.Length; i++) UnityEngine.Object.DestroyImmediate(bodies[i]);
                 }
 
+                internal static void RemovePhysicsAndAnimators(GameObject visual)
+                {
+                    RemovePhysicsComponents(visual);
+                    var animators = visual.GetComponentsInChildren<Animator>(true);
+                    for (var i = 0; i < animators.Length; i++) UnityEngine.Object.DestroyImmediate(animators[i]);
+                }
+
+                internal static Renderer FindRendererByName(GameObject root, string name)
+                {
+                    if (root == null) throw new InvalidOperationException("Unable to find imported renderer '" + name + "' under a null root.");
+                    var matches = root.GetComponentsInChildren<Renderer>(true)
+                        .Where(renderer => renderer != null && string.Equals(renderer.name, name, StringComparison.Ordinal))
+                        .ToArray();
+                    if (matches.Length != 1)
+                    {
+                        throw new InvalidOperationException("Expected exactly one imported renderer named '" + name + "' under " + root.name + ", found " + matches.Length + ".");
+                    }
+                    return matches[0];
+                }
+
+                internal static void SetDynamicRecursively(GameObject root)
+                {
+                    if (root == null) return;
+                    root.isStatic = false;
+                    for (var i = 0; i < root.transform.childCount; i++)
+                    {
+                        SetDynamicRecursively(root.transform.GetChild(i).gameObject);
+                    }
+                }
+
                 internal static Transform FindNamedTransform(Transform root, string name)
                 {
+                    if (root == null) return null;
                     if (root.name == name) return root;
                     for (var i = 0; i < root.childCount; i++)
                     {
@@ -944,7 +1132,8 @@ namespace RocketFooxball.Editor
                             var prefabMotor = Require(root.GetComponent<PlayerMotor>(), "Player prefab PlayerMotor");
                             ValidateReference(input, "actions", AssetDatabase.LoadAssetAtPath<InputActionAsset>(InputActionsPath), "PlayerInputReader.actions");
                             var prefabLook = Require(root.GetComponent<PlayerLook>(), "Player prefab PlayerLook");
-                            var prefabLauncher = Require(root.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
+                             var prefabLauncher = Require(root.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
+                             var prefabShotgun = Require(root.GetComponent<ShotgunWeapon>(), "Player prefab ShotgunWeapon");
                             var prefabKick = Require(root.GetComponent<BallKick>(), "Player prefab BallKick");
                             var prefabFeedback = Require(root.GetComponent<PlayerCameraFeedback>(), "Player prefab PlayerCameraFeedback");
                             var prefabQualityRuntime = Require(root.transform.Find("Head/Camera").GetComponent<GraphicsQualityRuntime>(), "Player prefab GraphicsQualityRuntime");
@@ -964,21 +1153,49 @@ namespace RocketFooxball.Editor
                             ValidateReference(prefabKick, "look", prefabLook, "Player prefab BallKick.look");
                             ValidateReference(prefabKick, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab BallKick.aimCamera");
                             ValidateReference(prefabKick, "ownerParticipant", prefabParticipant, "Player prefab BallKick.ownerParticipant");
-                            ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
+                             ValidateReference(prefabPresentation, "kick", prefabKick, "Player prefab PlayerPresentation.kick");
+                             ValidateReference(prefabPresentation, "shotgun", prefabShotgun, "Player prefab PlayerPresentation.shotgun");
                             ValidateReference(prefabPresentation, "cameraFeedback", prefabFeedback, "Player prefab PlayerPresentation.cameraFeedback");
-                            ValidateReference(prefabPresentation, "participant", prefabParticipant, "Player prefab PlayerPresentation.participant");
-                            ValidateReference(prefabPresentation, "gameplayCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerPresentation.gameplayCamera");
-                            ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
+                             ValidateReference(prefabPresentation, "participant", prefabParticipant, "Player prefab PlayerPresentation.participant");
+                             ValidateReference(prefabPresentation, "gameplayCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerPresentation.gameplayCamera");
+                             ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
+                             ValidateReference(prefabPresentation, "fpsShotgunVisual", root.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual"), "Player prefab PlayerPresentation.fpsShotgunVisual");
+                             var prefabWorldVisual = Require(root.transform.Find("WorldVisual"), "Player prefab WorldVisual");
+                             var prefabWorldShotgunMount = FindNamedTransform(prefabWorldVisual, "WorldShotgunMount");
+                             if (prefabWorldShotgunMount == null) throw new InvalidOperationException("Player prefab WorldShotgunMount is missing.");
+                             var prefabWorldShotgunVisualReference = FindNamedTransform(prefabWorldShotgunMount, "WorldShotgunVisual");
+                             if (prefabWorldShotgunVisualReference == null) throw new InvalidOperationException("Player prefab WorldShotgunVisual is missing.");
+                             ValidateReference(prefabPresentation, "worldShotgunVisual", prefabWorldShotgunVisualReference, "Player prefab PlayerPresentation.worldShotgunVisual");
                             ValidateReference(prefabParticipant, "motor", prefabMotor, "Player prefab ParticipantState.motor");
                             ValidateReference(prefabParticipant, "characterController", controller, "Player prefab ParticipantState.characterController");
-                            ValidateReference(prefabParticipant, "presentation", prefabPresentation, "Player prefab ParticipantState.presentation");
-                            ValidateReference(prefabParticipant, "cameraFeedback", prefabFeedback, "Player prefab ParticipantState.cameraFeedback");
-                            ValidateReference(prefabLauncher, "ownerParticipant", prefabParticipant, "Player prefab RocketLauncher.ownerParticipant");
+                             ValidateReference(prefabParticipant, "presentation", prefabPresentation, "Player prefab ParticipantState.presentation");
+                             ValidateReference(prefabParticipant, "cameraFeedback", prefabFeedback, "Player prefab ParticipantState.cameraFeedback");
+                             ValidateReference(prefabParticipant, "shotgun", prefabShotgun, "Player prefab ParticipantState.shotgun");
+                             ValidateReference(prefabLauncher, "ownerParticipant", prefabParticipant, "Player prefab RocketLauncher.ownerParticipant");
+                             ValidateReference(prefabShotgun, "input", input, "Player prefab ShotgunWeapon.input");
+                             ValidateReference(prefabShotgun, "look", prefabLook, "Player prefab ShotgunWeapon.look");
+                             ValidateReference(prefabShotgun, "aimCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab ShotgunWeapon.aimCamera");
+                             ValidateReference(prefabShotgun, "ownerParticipant", prefabParticipant, "Player prefab ShotgunWeapon.ownerParticipant");
+                             var projectileLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
+                             if (projectileLayer < 0 || (prefabShotgun.HitMask.value & (1 << projectileLayer)) != 0)
+                                 throw new InvalidOperationException("Player prefab ShotgunWeapon.hitMask must exclude Projectiles.");
                             ValidateReference(prefabFeedback, "participant", prefabParticipant, "Player prefab PlayerCameraFeedback.participant");
                             ValidateSerializedInteger(prefabParticipant, "slotId", 0, "Player prefab ParticipantState.slotId");
                             ValidateSerializedFloat(prefabParticipant, "maxHealth", 100f, "Player prefab ParticipantState.maxHealth");
                             ValidateSerializedFloat(prefabParticipant, "deathWait", 5f, "Player prefab ParticipantState.deathWait");
-                            ValidateSerializedFloat(prefabParticipant, "immunityDuration", 2f, "Player prefab ParticipantState.immunityDuration");
+                             ValidateSerializedFloat(prefabParticipant, "immunityDuration", 2f, "Player prefab ParticipantState.immunityDuration");
+                             ValidateSerializedInteger(prefabParticipant, "shotgunShellCapacity", 16, "Player prefab ParticipantState.shotgunShellCapacity");
+                             ValidateSerializedFloat(prefabShotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage, "Player prefab ShotgunWeapon.pelletDamage");
+                             ValidateSerializedInteger(prefabShotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount, "Player prefab ShotgunWeapon.pelletCount");
+                             ValidateSerializedFloat(prefabShotgun, "spreadAngleDegrees", 7f, "Player prefab ShotgunWeapon.spreadAngleDegrees");
+                             ValidateSerializedFloat(prefabShotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange, "Player prefab ShotgunWeapon.fullDamageRange");
+                             ValidateSerializedFloat(prefabShotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange, "Player prefab ShotgunWeapon.mediumRange");
+                             ValidateSerializedFloat(prefabShotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange, "Player prefab ShotgunWeapon.maxRange");
+                             ValidateSerializedFloat(prefabShotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier, "Player prefab ShotgunWeapon.mediumMultiplier");
+                             ValidateSerializedFloat(prefabShotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier, "Player prefab ShotgunWeapon.farMultiplier");
+                             ValidateSerializedFloat(prefabShotgun, "pumpDelay", 0.85f, "Player prefab ShotgunWeapon.pumpDelay");
+                             ValidateSerializedFloat(prefabShotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse, "Player prefab ShotgunWeapon.ballImpulsePerPellet");
+                             ValidateSerializedFloat(prefabShotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap, "Player prefab ShotgunWeapon.ballImpulseCap");
                             if (LayerMask.NameToLayer("Participants") < 0 || LayerMask.NameToLayer("Projectiles") < 0) throw new InvalidOperationException("Participants and Projectiles layers are required.");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "Player prefab PlayerCameraFeedback.celebrationOrbitRadius");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "Player prefab PlayerCameraFeedback.celebrationOrbitHeight");
@@ -1007,9 +1224,24 @@ namespace RocketFooxball.Editor
                              var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
                              ValidateWeaponMaterials(prefabWeaponVisual.gameObject);
                              ValidateNoPhysics(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual");
-                            ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual").gameObject, "Player prefab FpsKickVisual");
-                            var worldVisual = Require(root.transform.Find("WorldVisual"), "Player prefab WorldVisual");
-                            ValidateLayerRecursively(worldVisual.gameObject, 0, "Player prefab WorldVisual");
+                             var prefabFpsShotgunVisual = Require(root.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual"), "Player prefab FpsShotgunVisual");
+                             ValidateShotgunMaterials(prefabFpsShotgunVisual.gameObject);
+                             ValidateImportedVisual(prefabFpsShotgunVisual.gameObject, FpsShotgunModelPath, "Player prefab FpsShotgunVisual");
+                             ValidateNoPhysics(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
+                             ValidateNoAnimators(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
+                             ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual").gameObject, "Player prefab FpsKickVisual");
+                             var worldVisual = prefabWorldVisual;
+                             ValidateLayerRecursively(worldVisual.gameObject, 0, "Player prefab WorldVisual");
+                             if (prefabWorldShotgunMount == null || prefabWorldShotgunMount.parent == null || prefabWorldShotgunMount.parent.name != "Hand.R")
+                                 throw new InvalidOperationException("Player prefab WorldShotgunMount must be parented to imported Hand.R.");
+                             var prefabWorldShotgunVisual = FindNamedTransform(prefabWorldShotgunMount, "WorldShotgunVisual");
+                             if (prefabWorldShotgunVisual == null) throw new InvalidOperationException("Player prefab WorldShotgunVisual is missing.");
+                             ValidateShotgunMaterials(prefabWorldShotgunVisual.gameObject);
+                             ValidateImportedVisual(prefabWorldShotgunVisual.gameObject, ShotgunModelPath, "Player prefab WorldShotgunVisual");
+                             ValidateNoPhysics(prefabWorldShotgunVisual.gameObject, "Player prefab WorldShotgunVisual");
+                             ValidateNoAnimators(prefabWorldShotgunVisual.gameObject, "Player prefab WorldShotgunVisual");
+                             ValidateShotgunPresentation(root, prefabCamera, prefabFpsShotgunVisual, prefabWorldVisual, prefabWorldShotgunMount, prefabWorldShotgunVisual, "Player prefab");
+                             ValidateTeamTintRenderers(prefabPresentation, prefabWorldVisual, prefabWorldShotgunMount, FindRendererByName(prefabWorldShotgunVisual.gameObject, "WeaponAccent"), "Player prefab PlayerPresentation.teamTintRenderers");
                             ValidateShapeCue(Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue"), BlueCircleCueMeshPath, "Player prefab BlueCircleCue");
                             ValidateShapeCue(Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue"), RedTriangleCueMeshPath, "Player prefab RedTriangleCue");
                             ValidateImmunityShield(Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield"), AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath), "Player prefab BlueImmunityShield");
@@ -1038,6 +1270,14 @@ namespace RocketFooxball.Editor
                         else if (path == HealthPickupPrefabPath)
                         {
                             ValidateHealthPickupPrefab(root);
+                        }
+                        else if (path == ShotgunPickupPrefabPath)
+                        {
+                            ValidateShotgunPickupPrefab(root);
+                        }
+                        else if (path == AmmoPickupPrefabPath)
+                        {
+                            ValidateAmmoPickupPrefab(root);
                         }
                         else if (path == RocketPrefabPath)
                         {
@@ -1132,6 +1372,106 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Health pickup prefab must not contain lights, particles, or animation.");
                 }
 
+                internal static void ValidateShotgunPickupPrefab(GameObject root)
+                {
+                    if (root == null || root.name != "ShotgunPickup" || root.transform.localScale != Vector3.one || root.isStatic)
+                        throw new InvalidOperationException("Shotgun pickup prefab root contract invalid.");
+                    var trigger = Require(root.GetComponent<SphereCollider>(), "Shotgun pickup trigger collider");
+                    var body = Require(root.GetComponent<Rigidbody>(), "Shotgun pickup Rigidbody");
+                    var pickup = Require(root.GetComponent<ShotgunPickup>(), "Shotgun pickup ShotgunPickup component");
+                    var visualRoot = Require(root.transform.Find("VisualRoot"), "Shotgun pickup VisualRoot");
+                    if (!trigger.enabled || !trigger.isTrigger || Mathf.Abs(trigger.radius - MovementLabContract.ShotgunPickupTriggerRadius) > 0.001f ||
+                        !body.isKinematic || body.useGravity || body.constraints != RigidbodyConstraints.FreezeAll ||
+                        root.GetComponents<Collider>().Length != 1 || root.GetComponents<Rigidbody>().Length != 1)
+                        throw new InvalidOperationException("Shotgun pickup trigger/body contract invalid.");
+                    ValidateReference(pickup, "pickupTrigger", trigger, "Shotgun pickup pickupTrigger");
+                    ValidateReference(pickup, "visualRoot", visualRoot.gameObject, "Shotgun pickup visualRoot");
+                    ValidateSerializedInteger(pickup, "grant", MovementLabContract.ShotgunPickupGrant, "Shotgun pickup grant");
+                    ValidateSerializedFloat(pickup, "respawnDelay", MovementLabContract.ShotgunPickupRespawnDelay, "Shotgun pickup respawnDelay");
+                    ValidatePickupPrefabMatchIsNull(pickup, "Shotgun pickup");
+                    ValidatePickupVisualRoot(visualRoot, 3, "Shotgun pickup");
+
+                    var model = Require(visualRoot.Find("ShotgunModel"), "Shotgun pickup imported model");
+                    ValidateShotgunMaterials(model.gameObject);
+                    ValidateImportedVisual(model.gameObject, ShotgunModelPath, "Shotgun pickup imported model");
+                    ValidateImportedVisualForward(model, "Shotgun pickup imported model");
+                    if (model.localRotation != Quaternion.identity || model.localScale != Vector3.one)
+                        throw new InvalidOperationException("Shotgun pickup imported model must use identity +Z mounting.");
+                    ValidatePickupCuePair(visualRoot, "Shotgun pickup");
+                    ValidateDynamicHierarchy(root, "Shotgun pickup");
+                }
+
+                internal static void ValidateAmmoPickupPrefab(GameObject root)
+                {
+                    if (root == null || root.name != "AmmoPickup" || root.transform.localScale != Vector3.one || root.isStatic)
+                        throw new InvalidOperationException("Ammo pickup prefab root contract invalid.");
+                    var trigger = Require(root.GetComponent<SphereCollider>(), "Ammo pickup trigger collider");
+                    var body = Require(root.GetComponent<Rigidbody>(), "Ammo pickup Rigidbody");
+                    var pickup = Require(root.GetComponent<AmmoPickup>(), "Ammo pickup AmmoPickup component");
+                    var visualRoot = Require(root.transform.Find("VisualRoot"), "Ammo pickup VisualRoot");
+                    if (!trigger.enabled || !trigger.isTrigger || Mathf.Abs(trigger.radius - MovementLabContract.AmmoPickupTriggerRadius) > 0.001f ||
+                        !body.isKinematic || body.useGravity || body.constraints != RigidbodyConstraints.FreezeAll ||
+                        root.GetComponents<Collider>().Length != 1 || root.GetComponents<Rigidbody>().Length != 1)
+                        throw new InvalidOperationException("Ammo pickup trigger/body contract invalid.");
+                    ValidateReference(pickup, "pickupTrigger", trigger, "Ammo pickup pickupTrigger");
+                    ValidateReference(pickup, "visualRoot", visualRoot.gameObject, "Ammo pickup visualRoot");
+                    ValidateSerializedInteger(pickup, "grant", MovementLabContract.AmmoPickupGrant, "Ammo pickup grant");
+                    ValidateSerializedFloat(pickup, "respawnDelay", MovementLabContract.AmmoPickupRespawnDelay, "Ammo pickup respawnDelay");
+                    ValidatePickupPrefabMatchIsNull(pickup, "Ammo pickup");
+                    ValidatePickupVisualRoot(visualRoot, 4, "Ammo pickup");
+
+                    var expectedShellMaterial = AssetDatabase.LoadAssetAtPath<Material>(AmmoShellMaterialPath);
+                    for (var i = 0; i < 2; i++)
+                    {
+                        var shellName = i == 0 ? "ShellLeft" : "ShellRight";
+                        var shell = Require(visualRoot.Find(shellName), "Ammo pickup " + shellName);
+                        var filter = Require(shell.GetComponent<MeshFilter>(), "Ammo pickup " + shellName + " MeshFilter");
+                        var renderer = Require(shell.GetComponent<MeshRenderer>(), "Ammo pickup " + shellName + " MeshRenderer");
+                        var expectedPosition = i == 0 ? MovementLabContract.AmmoShellLeftPosition : MovementLabContract.AmmoShellRightPosition;
+                        if (filter.sharedMesh == null || filter.sharedMesh.name != "Capsule" || shell.localPosition != expectedPosition ||
+                            shell.localScale != MovementLabContract.AmmoShellScale || renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 1 ||
+                            renderer.sharedMaterial != expectedShellMaterial || shell.GetComponents<Collider>().Length != 0 ||
+                            shell.GetComponents<Rigidbody>().Length != 0 || shell.GetComponents<MonoBehaviour>().Length != 0 || shell.gameObject.isStatic)
+                            throw new InvalidOperationException("Ammo pickup shell visual contract invalid: " + shellName);
+                    }
+                    ValidatePickupCuePair(visualRoot, "Ammo pickup");
+                    ValidateDynamicHierarchy(root, "Ammo pickup");
+                }
+
+                private static void ValidatePickupPrefabMatchIsNull(ArenaPickup pickup, string label)
+                {
+                    var matchProperty = new SerializedObject(pickup).FindProperty("match");
+                    if (matchProperty == null || matchProperty.propertyType != SerializedPropertyType.ObjectReference || matchProperty.objectReferenceValue != null)
+                        throw new InvalidOperationException(label + " prefab match reference must remain null.");
+                }
+
+                private static void ValidatePickupVisualRoot(Transform visualRoot, int expectedChildCount, string label)
+                {
+                    if (visualRoot.parent == null || visualRoot.childCount != expectedChildCount || visualRoot.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                        visualRoot.GetComponentsInChildren<Rigidbody>(true).Length != 0 || visualRoot.GetComponentsInChildren<Light>(true).Length != 0 ||
+                        visualRoot.GetComponentsInChildren<ParticleSystem>(true).Length != 0 || visualRoot.GetComponentsInChildren<Animator>(true).Length != 0 ||
+                        visualRoot.GetComponentsInChildren<MonoBehaviour>(true).Length != 0)
+                        throw new InvalidOperationException(label + " visual hierarchy must contain only dynamic mesh visuals.");
+                }
+
+                private static void ValidatePickupCuePair(Transform visualRoot, string label)
+                {
+                    var blue = Require(visualRoot.Find("BlueCircleCue"), label + " BlueCircleCue");
+                    var red = Require(visualRoot.Find("RedTriangleCue"), label + " RedTriangleCue");
+                    ValidateShapeCue(blue, BlueCircleCueMeshPath, label + " BlueCircleCue");
+                    ValidateShapeCue(red, RedTriangleCueMeshPath, label + " RedTriangleCue");
+                    var blueRenderer = blue.GetComponent<MeshRenderer>();
+                    var redRenderer = red.GetComponent<MeshRenderer>();
+                    var blueMaterial = AssetDatabase.LoadAssetAtPath<Material>(TeamBlueMaterialPath);
+                    var redMaterial = AssetDatabase.LoadAssetAtPath<Material>(TeamRedMaterialPath);
+                    if (blueRenderer.sharedMaterial != blueMaterial || redRenderer.sharedMaterial != redMaterial ||
+                        blue.localScale != MovementLabContract.PickupCueScale || red.localScale != MovementLabContract.PickupCueScale ||
+                        blue.localPosition != MovementLabContract.PickupCueBluePosition || red.localPosition != MovementLabContract.PickupCueRedPosition ||
+                        blue.GetComponents<MonoBehaviour>().Length != 0 || red.GetComponents<MonoBehaviour>().Length != 0 ||
+                        blue.gameObject.isStatic || red.gameObject.isStatic)
+                        throw new InvalidOperationException(label + " cue pair contract invalid.");
+                }
+
                 internal static void ValidateBallMesh(Mesh mesh)
                 {
                     if (mesh == null || mesh.name != "Sphere" || mesh.vertexCount == 0 || mesh.uv == null || mesh.uv.Length != mesh.vertexCount)
@@ -1160,6 +1500,44 @@ namespace RocketFooxball.Editor
                     var renderer = Require(shield.GetComponent<ParticleSystemRenderer>(), label + " ParticleSystemRenderer");
                     if (shield.GetComponent<MeshRenderer>() != null || renderer.renderMode != ParticleSystemRenderMode.Mesh || renderer.mesh == null || renderer.sharedMaterial != expectedMaterial || system.main.maxParticles != 2)
                         throw new InvalidOperationException(label + " particle mesh/material contract invalid.");
+                }
+
+                internal static void ValidateImportedVisualForward(Transform visualRoot, string label)
+                {
+                    if (visualRoot == null) throw new InvalidOperationException(label + " root is missing.");
+                    var meshFilters = visualRoot.GetComponentsInChildren<MeshFilter>(true);
+                    var localBounds = new Bounds();
+                    var hasBounds = false;
+                    for (var i = 0; i < meshFilters.Length; i++)
+                    {
+                        var filter = meshFilters[i];
+                        if (filter == null || filter.sharedMesh == null) continue;
+                        var meshBounds = filter.sharedMesh.bounds;
+                        var center = meshBounds.center;
+                        var extents = meshBounds.extents;
+                        for (var x = -1; x <= 1; x += 2)
+                        {
+                            for (var y = -1; y <= 1; y += 2)
+                            {
+                                for (var z = -1; z <= 1; z += 2)
+                                {
+                                    var worldPoint = filter.transform.TransformPoint(center + Vector3.Scale(extents, new Vector3(x, y, z)));
+                                    var localPoint = visualRoot.InverseTransformPoint(worldPoint);
+                                    if (hasBounds) localBounds.Encapsulate(localPoint);
+                                    else
+                                    {
+                                        localBounds = new Bounds(localPoint, Vector3.zero);
+                                        hasBounds = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!hasBounds || localBounds.size.z <= localBounds.size.x || localBounds.size.z <= localBounds.size.y || localBounds.max.z <= 0f || localBounds.max.z <= -localBounds.min.z)
+                    {
+                        throw new InvalidOperationException(label + " imported mesh must be Z-major with muzzle-positive local +Z bounds.");
+                    }
                 }
 
                 internal static void ValidateRocketVisualForward(Transform rocketRoot, MeshFilter[] meshFilters)
@@ -1200,7 +1578,10 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateImportedVisual(GameObject visual, string sourcePath, string label)
                 {
-                    var renderers = visual.GetComponentsInChildren<Renderer>(true);
+                    var nestedShotgun = FindNamedTransform(visual.transform, "WorldShotgunMount");
+                    var renderers = visual.GetComponentsInChildren<Renderer>(true)
+                        .Where(renderer => nestedShotgun == null || !renderer.transform.IsChildOf(nestedShotgun))
+                        .ToArray();
                     if (renderers.Length == 0) throw new InvalidOperationException(label + " contains no renderers.");
                     var sourceGuids = AssetDatabase.AssetPathToGUID(sourcePath);
                     if (string.IsNullOrEmpty(sourceGuids)) throw new InvalidOperationException("Missing source GUID: " + sourcePath);
@@ -1224,6 +1605,75 @@ namespace RocketFooxball.Editor
                     if (root.GetComponentsInChildren<Collider>(true).Length > 0 || root.GetComponentsInChildren<Rigidbody>(true).Length > 0)
                     {
                         throw new InvalidOperationException(label + " must not contain physics components.");
+                    }
+                }
+
+                internal static void ValidateNoAnimators(GameObject root, string label)
+                {
+                    if (root.GetComponentsInChildren<Animator>(true).Length > 0)
+                    {
+                        throw new InvalidOperationException(label + " must not contain imported animators.");
+                    }
+                }
+
+                internal static void ValidateShotgunPresentation(GameObject player, Camera camera, Transform fpsVisual,
+                    Transform worldVisual, Transform worldMount, Transform worldShotgunVisual, string label)
+                {
+                    if (player == null || camera == null || fpsVisual == null || worldVisual == null || worldMount == null || worldShotgunVisual == null)
+                        throw new InvalidOperationException(label + " shotgun presentation references are incomplete.");
+
+                    var expectedFpsPosition = new Vector3(0.30f, -0.28f, 0.45f);
+                    var viewmodels = camera.transform.Find("Viewmodels");
+                    if (viewmodels == null || fpsVisual.parent != viewmodels || Vector3.Distance(fpsVisual.localPosition, expectedFpsPosition) > 0.001f ||
+                        Quaternion.Angle(fpsVisual.localRotation, Quaternion.identity) > 0.001f || Vector3.Distance(fpsVisual.localScale, Vector3.one) > 0.001f ||
+                        Vector3.Dot(fpsVisual.forward, camera.transform.forward) < 0.999f)
+                    {
+                        throw new InvalidOperationException(label + " FPS shotgun must be identity-mounted at camera +Z.");
+                    }
+
+                    var handR = FindNamedTransform(worldVisual, "Hand.R");
+                    if (handR == null || worldMount.parent != handR || worldShotgunVisual.parent != worldMount ||
+                        Vector3.Distance(worldMount.position, handR.position) > 0.001f ||
+                        Vector3.Dot(worldMount.forward, player.transform.forward) < 0.999f ||
+                        Quaternion.Angle(worldShotgunVisual.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(worldShotgunVisual.localScale, Vector3.one) > 0.001f ||
+                        Vector3.Dot(worldShotgunVisual.forward, player.transform.forward) < 0.999f)
+                    {
+                        throw new InvalidOperationException(label + " world shotgun must preserve Hand.R bind position and player +Z.");
+                    }
+
+                    ValidateImportedVisualForward(fpsVisual, label + " FpsShotgunVisual");
+                    ValidateImportedVisualForward(worldShotgunVisual, label + " WorldShotgunVisual");
+                    ValidateDynamicHierarchy(fpsVisual.gameObject, label + " FpsShotgunVisual");
+                    ValidateDynamicHierarchy(worldMount.gameObject, label + " WorldShotgunMount");
+                }
+
+                internal static void ValidateDynamicHierarchy(GameObject root, string label)
+                {
+                    var transforms = root.GetComponentsInChildren<Transform>(true);
+                    for (var i = 0; i < transforms.Length; i++)
+                    {
+                        if (transforms[i] != null && transforms[i].gameObject.isStatic)
+                            throw new InvalidOperationException(label + " hierarchy must remain dynamic: " + transforms[i].name);
+                    }
+                }
+
+                internal static void ValidateTeamTintRenderers(PlayerPresentation presentation, Transform worldVisual,
+                    Transform worldShotgunMount, Renderer worldShotgunAccent, string label)
+                {
+                    if (presentation == null || worldVisual == null || worldShotgunMount == null || worldShotgunAccent == null)
+                        throw new InvalidOperationException(label + " references are incomplete.");
+                    var expected = worldVisual.GetComponentsInChildren<Renderer>(true)
+                        .Where(renderer => !renderer.transform.IsChildOf(worldShotgunMount))
+                        .Concat(new[] { worldShotgunAccent }).ToArray();
+                    var serialized = new SerializedObject(presentation);
+                    var property = serialized.FindProperty("teamTintRenderers");
+                    if (property == null || !property.isArray || property.arraySize != expected.Length)
+                        throw new InvalidOperationException(label + " must contain world renderers plus only WeaponAccent.");
+                    for (var i = 0; i < expected.Length; i++)
+                    {
+                        if (property.GetArrayElementAtIndex(i).objectReferenceValue != expected[i])
+                            throw new InvalidOperationException(label + " renderer routing mismatch at index " + i + ".");
                     }
                 }
 

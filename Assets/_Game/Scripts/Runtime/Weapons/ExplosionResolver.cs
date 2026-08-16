@@ -111,53 +111,23 @@ namespace RocketFooxball.Runtime.Weapons
                 var strength = falloff * (IsOccluded(origin, targetCollider, targetCollider.ClosestPoint(origin), false, impactCollider) ? occludedForce : 1f);
                 var target = targets.GetPlayer(i);
                 // Legacy direct calls without a source projectile remain force-only.
-                var relationship = GetRelationship(target, sourceParticipant);
-                if (relationship == ParticipantRelationship.Friendly || relationship == ParticipantRelationship.Immune)
+                var relationship = ParticipantRelationshipAdapter.Classify(target, sourceParticipant);
+                if (!ParticipantRelationshipPolicy.CanReceiveRocketForce(relationship))
                 {
                     continue;
                 }
 
-                var impulseScale = relationship == ParticipantRelationship.Enemy ? enemyRocketImpulseMultiplier : 1f;
+                var impulseScale = ParticipantRelationshipPolicy.RocketImpulseScale(relationship, enemyRocketImpulseMultiplier);
                 var impulse = ComputePlayerImpulse(target.Motor, origin, playerImpulseStrength * strength * impulseScale);
                 target.Motor?.AddExternalImpulse(impulse);
                 target.CameraFeedback?.RequestBlastShake(Mathf.Clamp01(strength * cameraFeedbackScale));
 
-                if (relationship == ParticipantRelationship.Enemy && target.IsAlive && !target.IsImmune)
+                if (ParticipantRelationshipPolicy.CanReceiveRocketDamage(relationship) && target.IsAlive && !target.IsImmune)
                 {
                     var damage = directRocketDamage * strength;
                     target.TryApplyDamage(sourceParticipant, damage, ParticipantDamageCause.Rocket, "Rocket Launcher");
                 }
             }
-        }
-
-        private enum ParticipantRelationship
-        {
-            Unattributed,
-            Own,
-            Friendly,
-            Enemy,
-            Immune
-        }
-
-        private static ParticipantRelationship GetRelationship(ParticipantState target, ParticipantState sourceParticipant)
-        {
-            if (target == null)
-            {
-                return ParticipantRelationship.Immune;
-            }
-            if (!target.IsAlive || target.IsImmune)
-            {
-                return ParticipantRelationship.Immune;
-            }
-            if (sourceParticipant == null)
-            {
-                return ParticipantRelationship.Unattributed;
-            }
-            if (target == sourceParticipant)
-            {
-                return ParticipantRelationship.Own;
-            }
-            return target.Team == sourceParticipant.Team ? ParticipantRelationship.Friendly : ParticipantRelationship.Enemy;
         }
 
         private void DispatchBalls(Vector3 origin, Collider impactCollider)

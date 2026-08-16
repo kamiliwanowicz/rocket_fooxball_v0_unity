@@ -138,6 +138,8 @@ namespace RocketFooxball.Editor
                     ConfigureRigModelImporter(CharacterModelPath, true);
                     ConfigureRigModelImporter(FpsKickModelPath, false);
                     ConfigureStaticModelImporter(WeaponModelPath);
+                    ConfigureStaticModelImporter(FpsShotgunModelPath);
+                    ConfigureStaticModelImporter(ShotgunModelPath);
                     ConfigureStaticModelImporter(RocketModelPath);
                     ConfigureStaticModelImporter(ArenaKitModelPath);
                 }
@@ -254,7 +256,8 @@ namespace RocketFooxball.Editor
                     var secondaryUv = tangentSpace.FindProperty("generateSecondaryUV");
                     if (normalImport != null && normalImport.intValue != 0) { normalImport.intValue = 0; changed = true; }
                     if (tangents != null && tangents.intValue != 3) { tangents.intValue = 3; changed = true; }
-                    if (path == ArenaKitModelPath && secondaryUv != null && !secondaryUv.boolValue) { secondaryUv.boolValue = true; changed = true; }
+                    var requireUv1 = path == ArenaKitModelPath;
+                    if (secondaryUv != null && secondaryUv.boolValue != requireUv1) { secondaryUv.boolValue = requireUv1; changed = true; }
                     tangentSpace.ApplyModifiedPropertiesWithoutUndo();
                     if (changed)
                     {
@@ -306,8 +309,8 @@ namespace RocketFooxball.Editor
                     var normalImport = serialized.FindProperty("normalImportMode");
                     var tangents = serialized.FindProperty("tangentImportMode");
                     var secondaryUv = serialized.FindProperty("generateSecondaryUV");
-                    if (normalImport == null || tangents == null || normalImport.intValue != 0 || tangents.intValue != 3 ||
-                        (arena && secondaryUv != null && !secondaryUv.boolValue))
+                    if (normalImport == null || tangents == null || secondaryUv == null || normalImport.intValue != 0 || tangents.intValue != 3 ||
+                        secondaryUv.boolValue != arena)
                     {
                         throw new InvalidOperationException(label + " importer must import authored normals and calculate Mikk tangents.");
                     }
@@ -422,6 +425,8 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Weapon importer contract invalid.");
                     }
                     ValidatePbrModelImporter(weapon, false, "Weapon");
+                    ValidateStaticWeaponModel(FpsShotgunModelPath, "FpsShotgun");
+                    ValidateStaticWeaponModel(ShotgunModelPath, "Shotgun");
                     var rocket = AssetImporter.GetAtPath(RocketModelPath) as ModelImporter;
                     if (rocket == null || rocket.animationType != ModelImporterAnimationType.None || rocket.importAnimation || rocket.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(rocket.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("Rocket importer contract invalid.");
                     ValidatePbrModelImporter(rocket, false, "Rocket");
@@ -437,6 +442,52 @@ namespace RocketFooxball.Editor
                     }
                     if (!rocketSurface || !rocketHot) throw new InvalidOperationException("Rocket imported mesh names are incomplete.");
                     ValidateArenaKitModel();
+                }
+
+                internal static void ValidateStaticWeaponModel(string path, string label)
+                {
+                    var importer = AssetImporter.GetAtPath(path) as ModelImporter;
+                    if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f)
+                    {
+                        throw new InvalidOperationException(label + " importer contract invalid.");
+                    }
+                    ValidatePbrModelImporter(importer, false, label);
+
+                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccent" };
+                    var assets = AssetDatabase.LoadAllAssetsAtPath(path);
+                    var meshes = new List<Mesh>();
+                    for (var i = 0; i < assets.Length; i++)
+                    {
+                        if (assets[i] is Mesh mesh && AssetDatabase.GetAssetPath(mesh) == path) meshes.Add(mesh);
+                    }
+                    if (meshes.Count != expectedGroups.Length)
+                    {
+                        throw new InvalidOperationException(label + " imported mesh count must equal three.");
+                    }
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < meshes.Count; i++)
+                    {
+                        var mesh = meshes[i];
+                        var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
+                        if (group == null || !seen.Add(group) || mesh.subMeshCount != 1)
+                        {
+                            throw new InvalidOperationException(label + " imported mesh groups must be exactly WeaponMetal, WeaponDark, and WeaponAccent.");
+                        }
+                        ValidateMeshPbrChannels(mesh, false, label + "/" + group);
+                    }
+                    if (seen.Count != expectedGroups.Length) throw new InvalidOperationException(label + " imported mesh groups are incomplete.");
+                }
+
+                private static string GetStaticWeaponMeshGroup(string meshName, string[] expectedGroups)
+                {
+                    for (var i = 0; i < expectedGroups.Length; i++)
+                    {
+                        var group = expectedGroups[i];
+                        if (string.Equals(meshName, group, StringComparison.Ordinal) ||
+                            string.Equals(meshName, group + "Mesh", StringComparison.Ordinal) ||
+                            meshName.EndsWith("_" + group + "Mesh", StringComparison.Ordinal)) return group;
+                    }
+                    return null;
                 }
 
                 internal static void ValidateArenaKitModel()

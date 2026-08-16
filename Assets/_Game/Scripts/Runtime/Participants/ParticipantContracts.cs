@@ -23,7 +23,8 @@ namespace RocketFooxball.Runtime.Participants
         DashKick,
         Arena,
         Ball,
-        Other
+        Other,
+        Shotgun
     }
 
     public enum ParticipantDeathCause
@@ -32,7 +33,8 @@ namespace RocketFooxball.Runtime.Participants
         Rocket,
         DashKick,
         Arena,
-        Self
+        Self,
+        Shotgun
     }
 
     /// <summary>Stable serialized identity used by roster consumers and score systems.</summary>

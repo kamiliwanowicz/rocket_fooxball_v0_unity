@@ -22,6 +22,7 @@ namespace RocketFooxball.Runtime.Participants
         [SerializeField, Min(1f)] private float maxHealth = 100f;
         [SerializeField, Min(0f)] private float deathWait = 5f;
         [SerializeField, Min(0f)] private float immunityDuration = 2f;
+        [SerializeField, Min(1)] private int shotgunShellCapacity = 16;
 
         [Header("Leaf Owners")]
         [SerializeField] private PlayerMotor motor;
@@ -30,6 +31,7 @@ namespace RocketFooxball.Runtime.Participants
         [SerializeField] private PlayerLook look;
         [SerializeField] private BallKick kick;
         [SerializeField] private RocketLauncher launcher;
+        [SerializeField] private ShotgunWeapon shotgun;
         [SerializeField] private PlayerPresentation presentation;
         [SerializeField] private PlayerCameraFeedback cameraFeedback;
 
@@ -40,6 +42,8 @@ namespace RocketFooxball.Runtime.Participants
         private bool matchSimulationEnabled = true;
         private bool identityConfigured;
         private bool eventsSubscribed;
+        private bool hasShotgun = true;
+        private int shotgunShells = 8;
 
         public int SlotId => slotId;
         public string DisplayName => displayName;
@@ -59,6 +63,10 @@ namespace RocketFooxball.Runtime.Participants
         public float RespawnRemaining => IsDead ? Mathf.Max(deathRemaining, 0f) : 0f;
         public float ImmunityRemaining => IsAlive ? Mathf.Max(immunityRemaining, 0f) : 0f;
         public bool IsImmune => IsAlive && immunityRemaining > 0f;
+        public bool HasShotgun => hasShotgun;
+        public int ShotgunShells => shotgunShells;
+        public int ShotgunShellCapacity => Mathf.Max(1, shotgunShellCapacity);
+        public ShotgunWeapon Shotgun => shotgun;
         public bool IsCollisionPassThrough => !IsAlive || IsImmune;
         public bool MatchSimulationEnabled => matchSimulationEnabled;
         public PlayerMotor Motor => motor;
@@ -92,6 +100,8 @@ namespace RocketFooxball.Runtime.Participants
             CacheReferences();
             health = Mathf.Clamp(maxHealth, 1f, Mathf.Max(maxHealth, 1f));
             maxHealth = Mathf.Max(maxHealth, 1f);
+            shotgunShellCapacity = Mathf.Max(1, shotgunShellCapacity);
+            shotgunShells = Mathf.Clamp(shotgunShells, 0, shotgunShellCapacity);
             identityConfigured = true;
             if (!ValidateComposition())
             {
@@ -103,6 +113,7 @@ namespace RocketFooxball.Runtime.Participants
             presentation?.SetLocalMode(localParticipant);
             presentation?.SetAlive(true);
             presentation?.SetImmune(false);
+            presentation?.SetShotgunOwned(hasShotgun);
         }
 
         private void OnEnable()
@@ -165,6 +176,7 @@ namespace RocketFooxball.Runtime.Participants
             identityConfigured = true;
             presentation?.ConfigureSlot(this);
             presentation?.SetLocalMode(localParticipant);
+            presentation?.SetShotgunOwned(hasShotgun);
             return true;
         }
 
@@ -183,6 +195,7 @@ namespace RocketFooxball.Runtime.Participants
             deathRemaining = 0f;
             immunityRemaining = 0f;
             lifecycle = ParticipantLifecycle.Alive;
+            ClearShotgunState();
             motor?.ClearQueuedState();
             input?.ResetInputState();
             kick?.ResetState();
@@ -221,6 +234,7 @@ namespace RocketFooxball.Runtime.Participants
             health = maxHealth;
             deathRemaining = 0f;
             immunityRemaining = Mathf.Max(immunityDuration, 0f);
+            ClearShotgunState();
             motor?.ResetState(worldPosition, worldRotation);
             if (motor == null)
             {
@@ -334,6 +348,75 @@ namespace RocketFooxball.Runtime.Participants
             CancelImmunity();
         }
 
+        /// <summary>Collects a shotgun and its standard eight-shell pack.</summary>
+        public bool TryCollectShotgun()
+        {
+            return TryCollectShotgun(8);
+        }
+
+        /// <summary>Collects a shotgun pickup with a caller-supplied shell grant.</summary>
+        public bool TryCollectShotgun(int shellGrant)
+        {
+            if (!IsAlive || shotgunShellCapacity <= 0)
+            {
+                return false;
+            }
+
+            if (!ShotgunAmmoRules.TryApplyPickup(
+                    hasShotgun,
+                    shotgunShells,
+                    shellGrant,
+                    ShotgunShellCapacity,
+                    true,
+                    out var nextHasShotgun,
+                    out var nextShells))
+            {
+                return false;
+            }
+
+            hasShotgun = nextHasShotgun;
+            shotgunShells = nextShells;
+            presentation?.SetShotgunOwned(hasShotgun);
+            return true;
+        }
+
+        /// <summary>Collects an ammo pack without requiring a carried shotgun.</summary>
+        public bool TryCollectShotgunAmmo(int shellGrant = 8)
+        {
+            if (!IsAlive || shotgunShellCapacity <= 0)
+            {
+                return false;
+            }
+
+            if (!ShotgunAmmoRules.TryApplyPickup(
+                    hasShotgun,
+                    shotgunShells,
+                    shellGrant,
+                    ShotgunShellCapacity,
+                    false,
+                    out var nextHasShotgun,
+                    out var nextShells))
+            {
+                return false;
+            }
+
+            hasShotgun = nextHasShotgun;
+            shotgunShells = nextShells;
+            return true;
+        }
+
+        /// <summary>Consumes one shell while retaining the empty carried weapon.</summary>
+        public bool TryConsumeShotgunShell()
+        {
+            if (!IsAlive || !hasShotgun || shotgunShells <= 0)
+            {
+                return false;
+            }
+
+            shotgunShells--;
+            return true;
+        }
+
         private void KillInternal(ParticipantState attacker, ParticipantDamageCause cause, string weapon, float healthBefore)
         {
             var previous = lifecycle;
@@ -341,6 +424,7 @@ namespace RocketFooxball.Runtime.Participants
             deathRemaining = Mathf.Max(deathWait, 0f);
             immunityRemaining = 0f;
             lifecycle = ParticipantLifecycle.Dead;
+            ClearShotgunState();
             ApplyLeafSimulation();
             presentation?.SetImmune(false);
             presentation?.SetAlive(false);
@@ -386,6 +470,7 @@ namespace RocketFooxball.Runtime.Participants
             motor?.SetSimulationEnabled(active);
             launcher?.SetSimulationEnabled(active && localParticipant);
             kick?.SetSimulationEnabled(active && localParticipant);
+            shotgun?.SetSimulationEnabled(active && localParticipant);
             if (input != null)
             {
                 input.enabled = localParticipant && IsAlive;
@@ -468,6 +553,10 @@ namespace RocketFooxball.Runtime.Participants
             {
                 launcher = GetComponent<RocketLauncher>();
             }
+            if (shotgun == null)
+            {
+                shotgun = GetComponent<ShotgunWeapon>();
+            }
             if (presentation == null)
             {
                 presentation = GetComponent<PlayerPresentation>();
@@ -481,7 +570,7 @@ namespace RocketFooxball.Runtime.Participants
         private bool ValidateComposition()
         {
             if (motor == null || characterController == null || presentation == null ||
-                (localParticipant && (input == null || look == null || kick == null || launcher == null || cameraFeedback == null)))
+                (localParticipant && (input == null || look == null || kick == null || launcher == null || shotgun == null || cameraFeedback == null)))
             {
                 Debug.LogError("ParticipantState requires serialized references: motor, characterController, presentation, and local leaf owners.", this);
                 enabled = false;
@@ -501,9 +590,19 @@ namespace RocketFooxball.Runtime.Participants
                     return ParticipantDeathCause.Rocket;
                 case ParticipantDamageCause.DashKick:
                     return ParticipantDeathCause.DashKick;
+                case ParticipantDamageCause.Shotgun:
+                    return ParticipantDeathCause.Shotgun;
                 default:
                     return ParticipantDeathCause.Unknown;
             }
+        }
+
+        private void ClearShotgunState()
+        {
+            hasShotgun = false;
+            shotgunShells = 0;
+            shotgun?.ResetState();
+            presentation?.SetShotgunOwned(false);
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

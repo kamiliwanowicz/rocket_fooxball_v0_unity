@@ -155,6 +155,23 @@ namespace RocketFooxball.Editor
                     return material;
                 }
 
+                internal static Material GetOrCreateAmmoShellMaterial()
+                {
+                    var material = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "AmmoShell", null, null, null, null, null, null, Vector2.one,
+                        AmmoShellBaseColor, AmmoShellEmissionColor, AmmoShellEmissionStrength,
+                        0.75f, 0.80f, 1f, 1f));
+                    material.SetFloat("_Surface", 0f);
+                    material.SetFloat("_Blend", 0f);
+                    material.SetFloat("_AlphaClip", 0f);
+                    material.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                    material.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+                    material.DisableKeyword("_ALPHATEST_ON");
+                    material.renderQueue = (int)RenderQueue.Geometry;
+                    EditorUtility.SetDirty(material);
+                    return material;
+                }
+
                 internal static void SetDetailNormalKeyword(Material material, bool enabled)
                 {
                     material.DisableKeyword("_DETAIL");
@@ -262,7 +279,7 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateOpaqueMaterialReferences()
                 {
-                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "HealthPickup.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccent.mat", "TeamBlue.mat", "TeamRed.mat" };
+                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "HealthPickup.mat", "AmmoShell.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccent.mat", "ShotgunMetal.mat", "ShotgunDark.mat", "ShotgunAccent.mat", "TeamBlue.mat", "TeamRed.mat" };
                     for (var i = 0; i < paths.Length; i++)
                     {
                         var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/" + paths[i]);
@@ -321,6 +338,20 @@ namespace RocketFooxball.Editor
                     var baseColor = material.GetColor("_BaseColor");
                     if (Vector4.Distance(baseColor, new Color(0.10f, 0.85f, 0.25f, 1f)) > 0.001f)
                         throw new InvalidOperationException("HealthPickup base color contract mismatch.");
+                }
+
+                internal static void ValidateAmmoShellMaterial(Material material)
+                {
+                    ValidatePbrScalars(material, 0.75f, 0.80f, 1f, 1f, AmmoShellEmissionStrength, "AmmoShell");
+                    ValidateEmission(material, AmmoShellEmissionColor, AmmoShellEmissionStrength, "AmmoShell");
+                    if (material == null || material.shader == null || material.shader.name != LitShaderName ||
+                        Mathf.Abs(material.GetFloat("_Surface")) > 0.001f || Mathf.Abs(material.GetFloat("_Blend")) > 0.001f ||
+                        Mathf.Abs(material.GetFloat("_AlphaClip")) > 0.001f || material.IsKeywordEnabled("_SURFACE_TYPE_TRANSPARENT") ||
+                        material.IsKeywordEnabled("_ALPHAPREMULTIPLY_ON") || material.IsKeywordEnabled("_ALPHATEST_ON") ||
+                        material.renderQueue != (int)RenderQueue.Geometry)
+                        throw new InvalidOperationException("AmmoShell material must be opaque URP Lit geometry.");
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), AmmoShellBaseColor) > 0.001f)
+                        throw new InvalidOperationException("AmmoShell base color contract mismatch.");
                 }
 
                 internal static void ValidateEmission(Material material, Color baseColor, float strength, string label)
@@ -395,6 +426,52 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Weapon material slots must contain Metal, Dark, and Accent parts.");
                     }
+                }
+
+                internal static void ValidateShotgunMaterials(GameObject visual)
+                {
+                    if (visual == null) throw new InvalidOperationException("Shotgun visual is null.");
+                    var metal = AssetDatabase.LoadAssetAtPath<Material>(ShotgunMetalMaterialPath);
+                    var dark = AssetDatabase.LoadAssetAtPath<Material>(ShotgunDarkMaterialPath);
+                    var accent = AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentMaterialPath);
+                    ValidateWeaponMaterial(metal, LoadTexture(WeaponMetalTexturePath), ShotgunMetalBaseColor, "WeaponMetal");
+                    ValidateWeaponMaterial(dark, LoadTexture(WeaponDarkTexturePath), ShotgunDarkBaseColor, "WeaponDark");
+                    ValidateWeaponMaterial(accent, LoadTexture(WeaponAccentTexturePath), ShotgunAccentBaseColor, "WeaponAccent");
+
+                    var renderers = visual.GetComponentsInChildren<Renderer>(true);
+                    if (renderers.Length != 3) throw new InvalidOperationException("Shotgun visual must contain exactly three renderers.");
+                    var seenMetal = false;
+                    var seenDark = false;
+                    var seenAccent = false;
+                    for (var i = 0; i < renderers.Length; i++)
+                    {
+                        var renderer = renderers[i];
+                        var expected = metal;
+                        if (renderer.name.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            expected = dark;
+                            seenDark = true;
+                        }
+                        else if (renderer.name.IndexOf("Accent", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            expected = accent;
+                            seenAccent = true;
+                        }
+                        else if (renderer.name.IndexOf("Metal", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            seenMetal = true;
+                        }
+                        else
+                        {
+                            throw new InvalidOperationException("Shotgun renderer name must identify Metal, Dark, or Accent: " + renderer.name);
+                        }
+
+                        var slots = renderer.sharedMaterials;
+                        if (slots == null || slots.Length != 1 || slots[0] != expected)
+                            throw new InvalidOperationException("Shotgun material slot contract mismatch: " + renderer.name);
+                    }
+                    if (!seenMetal || !seenDark || !seenAccent)
+                        throw new InvalidOperationException("Shotgun material slots must contain exactly Metal, Dark, and Accent parts.");
                 }
 
                 internal static void ValidateWeaponMaterial(Material material, Texture2D texture, Color baseColor, string label)

@@ -18,6 +18,8 @@ namespace RocketFooxball.Editor
         internal const string CharacterModelPath = "Assets/_Game/Models/LowPolyCharacter.fbx";
         internal const string FpsKickModelPath = "Assets/_Game/Models/FpsKickRig.fbx";
         internal const string WeaponModelPath = "Assets/_Game/Models/FpsRocketLauncher.fbx";
+        internal const string FpsShotgunModelPath = "Assets/_Game/Models/FpsShotgun.fbx";
+        internal const string ShotgunModelPath = "Assets/_Game/Models/Shotgun.fbx";
         internal const string ScenePath = MovementLabContract.ScenePath;
         internal const string InputActionsPath = MovementLabContract.InputActionsPath;
         internal const string MaterialsPath = MovementLabContract.MaterialsPath;
@@ -27,9 +29,17 @@ namespace RocketFooxball.Editor
         internal const string ExplosionPrefabPath = MovementLabContract.ExplosionPrefabPath;
         internal const string HealthPickupPrefabPath = MovementLabContract.HealthPickupPrefabPath;
         internal const string HealthPickupMaterialPath = MovementLabContract.HealthPickupMaterialPath;
+        internal const string ShotgunPickupPrefabPath = MovementLabContract.ShotgunPickupPrefabPath;
+        internal const string AmmoPickupPrefabPath = MovementLabContract.AmmoPickupPrefabPath;
+        internal const string AmmoShellMaterialPath = MovementLabContract.AmmoShellMaterialPath;
         internal const string HealthPickupsRootName = MovementLabContract.HealthPickupsRootName;
         internal const string HealthPickupWestNorthName = MovementLabContract.HealthPickupWestNorthName;
         internal const string HealthPickupEastSouthName = MovementLabContract.HealthPickupEastSouthName;
+        internal const string ShotgunPickupsRootName = MovementLabContract.ShotgunPickupsRootName;
+        internal const string AmmoPickupsRootName = MovementLabContract.AmmoPickupsRootName;
+        internal const string ShotgunPickupName = MovementLabContract.ShotgunPickupName;
+        internal const string AmmoPickupWestNorthName = MovementLabContract.AmmoPickupWestNorthName;
+        internal const string AmmoPickupEastSouthName = MovementLabContract.AmmoPickupEastSouthName;
         internal const string WorldControllerPath = AnimationsPath + "/WorldCharacter.controller";
         internal const string FpsControllerPath = AnimationsPath + "/FpsKick.controller";
         internal const string TeamBlueMaterialPath = MaterialsPath + "/TeamBlue.mat";
@@ -38,6 +48,9 @@ namespace RocketFooxball.Editor
         internal const string TeamRedShieldMaterialPath = MaterialsPath + "/TeamRedShield.mat";
         internal const string TeamBlueTrailMaterialPath = MaterialsPath + "/TeamBlueTrail.mat";
         internal const string TeamRedTrailMaterialPath = MaterialsPath + "/TeamRedTrail.mat";
+        internal const string ShotgunMetalMaterialPath = MovementLabContract.ShotgunMetalMaterialPath;
+        internal const string ShotgunDarkMaterialPath = MovementLabContract.ShotgunDarkMaterialPath;
+        internal const string ShotgunAccentMaterialPath = MovementLabContract.ShotgunAccentMaterialPath;
         internal const string BlueCircleCueMeshPath = MovementLabContract.BlueCircleCueMeshPath;
         internal const string RedTriangleCueMeshPath = MovementLabContract.RedTriangleCueMeshPath;
 
@@ -76,10 +89,49 @@ namespace RocketFooxball.Editor
             }
         }
 
+        internal readonly struct ShotgunPickupSpawnDefinition
+        {
+            internal readonly string Name;
+            internal readonly Vector3 Position;
+            internal readonly Quaternion Rotation;
+
+            internal ShotgunPickupSpawnDefinition(string name, Vector3 position, Quaternion rotation)
+            {
+                Name = name;
+                Position = position;
+                Rotation = rotation;
+            }
+        }
+
+        internal readonly struct AmmoPickupSpawnDefinition
+        {
+            internal readonly string Name;
+            internal readonly Vector3 Position;
+            internal readonly Quaternion Rotation;
+
+            internal AmmoPickupSpawnDefinition(string name, Vector3 position, Quaternion rotation)
+            {
+                Name = name;
+                Position = position;
+                Rotation = rotation;
+            }
+        }
+
         internal static readonly HealthPickupSpawnDefinition[] HealthPickupSpawns =
         {
             new HealthPickupSpawnDefinition(HealthPickupWestNorthName, MovementLabContract.HealthPickupWestNorthPosition, MovementLabContract.HealthPickupWestNorthRotation),
             new HealthPickupSpawnDefinition(HealthPickupEastSouthName, MovementLabContract.HealthPickupEastSouthPosition, MovementLabContract.HealthPickupEastSouthRotation)
+        };
+
+        internal static readonly ShotgunPickupSpawnDefinition[] ShotgunPickupSpawns =
+        {
+            new ShotgunPickupSpawnDefinition(ShotgunPickupName, MovementLabContract.ShotgunPickupPosition, MovementLabContract.ShotgunPickupRotation)
+        };
+
+        internal static readonly AmmoPickupSpawnDefinition[] AmmoPickupSpawns =
+        {
+            new AmmoPickupSpawnDefinition(AmmoPickupWestNorthName, MovementLabContract.AmmoPickupWestNorthPosition, MovementLabContract.AmmoPickupWestNorthRotation),
+            new AmmoPickupSpawnDefinition(AmmoPickupEastSouthName, MovementLabContract.AmmoPickupEastSouthPosition, MovementLabContract.AmmoPickupEastSouthRotation)
         };
 
         // Stable six-slot composition. Blue owns positive-X/South goal; Red owns negative-X/North goal.
@@ -194,6 +246,12 @@ namespace RocketFooxball.Editor
         internal static readonly Color WeaponMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
         internal static readonly Color WeaponDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
         internal static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
+        internal static readonly Color ShotgunMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
+        internal static readonly Color ShotgunDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
+        internal static readonly Color ShotgunAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
+        internal static readonly Color AmmoShellBaseColor = MovementLabContract.AmmoShellBaseColor;
+        internal static readonly Color AmmoShellEmissionColor = MovementLabContract.AmmoShellEmissionColor;
+        internal const float AmmoShellEmissionStrength = MovementLabContract.AmmoShellEmissionStrength;
         internal static readonly Color ExplosionFireMaterialColor = MovementLabContract.ExplosionFireMaterialColor;
         internal static readonly Color ExplosionSmokeMaterialColor = MovementLabContract.ExplosionSmokeMaterialColor;
         internal static readonly Color GridColor = MovementLabContract.GridColor;
@@ -204,8 +262,8 @@ namespace RocketFooxball.Editor
 
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
-            PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ScenePath,
-            HealthPickupMaterialPath,
+            PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, ScenePath,
+            HealthPickupMaterialPath, AmmoShellMaterialPath,
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", RocketHotMaterialPath,
             ProjectileGlowMaterialPath, MaterialsPath + "/GoalFrame.mat", MaterialsPath + "/Shield.mat", MaterialsPath + "/ShieldBlue.mat",
@@ -214,7 +272,8 @@ namespace RocketFooxball.Editor
             ExplosionSparksMaterialPath, MaterialsPath + "/Smoke.mat", GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath,
             SkyMaterialPath, VolumeProfilePath, LightingSettingsPath, MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat", MaterialsPath + "/WeaponDark.mat",
-            MaterialsPath + "/WeaponAccent.mat", TeamBlueMaterialPath, TeamRedMaterialPath,
+            MaterialsPath + "/WeaponAccent.mat", ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentMaterialPath,
+            TeamBlueMaterialPath, TeamRedMaterialPath,
             TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath, TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath,
             BlueCircleCueMeshPath, RedTriangleCueMeshPath,
             WorldControllerPath, FpsControllerPath
@@ -234,6 +293,7 @@ namespace RocketFooxball.Editor
         internal static readonly string[] GeneratedImporterMetadataPaths =
         {
             RocketModelPath + ".meta", ArenaKitModelPath + ".meta", CharacterModelPath + ".meta", FpsKickModelPath + ".meta", WeaponModelPath + ".meta",
+            FpsShotgunModelPath + ".meta", ShotgunModelPath + ".meta",
             GrassTexturePath + ".meta", GrassNormalTexturePath + ".meta", GrassMetallicTexturePath + ".meta", GrassOcclusionTexturePath + ".meta",
             WallTexturePath + ".meta", WallNormalTexturePath + ".meta", WallMetallicTexturePath + ".meta", WallOcclusionTexturePath + ".meta",
             TrimTexturePath + ".meta", TrimNormalTexturePath + ".meta", TrimMetallicTexturePath + ".meta", TrimOcclusionTexturePath + ".meta",

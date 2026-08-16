@@ -65,7 +65,7 @@ $script:AuthoritativeInventory = @(
 # generated inventory. T4 probes still fingerprint these exact importer metas,
 # so compatibility is an explicit path set rather than a caller-expandable root.
 $script:ClosedImporterMetadataPaths = @(
-    'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta',
+    'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta', 'Assets/_Game/Models/FpsShotgun.fbx.meta', 'Assets/_Game/Models/Shotgun.fbx.meta',
     'Assets/_Game/Textures/RetroGrass.png.meta', 'Assets/_Game/Textures/RetroGrass_Normal.png.meta', 'Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroGrass_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroWall.png.meta', 'Assets/_Game/Textures/RetroWall_Normal.png.meta', 'Assets/_Game/Textures/RetroWall_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWall_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroTrim.png.meta', 'Assets/_Game/Textures/RetroTrim_Normal.png.meta', 'Assets/_Game/Textures/RetroTrim_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroTrim_Occlusion.png.meta',
@@ -81,6 +81,8 @@ $script:ClosedImporterMetadataPaths = @(
 $script:BuilderOutputContract = @(
     'Assets/_Game/Generated/MovementLabBuildManifest.json',
     'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab',
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab', 'Assets/_Game/Prefabs/AmmoPickup.prefab',
+    'Assets/_Game/Materials/ShotgunMetal.mat', 'Assets/_Game/Materials/ShotgunDark.mat', 'Assets/_Game/Materials/ShotgunAccent.mat', 'Assets/_Game/Materials/AmmoShell.mat',
     'Assets/_Game/Animations/WorldCharacter.controller', 'Assets/_Game/Animations/FpsKick.controller',
     'Assets/_Game/Scenes/MovementLab.unity', 'Assets/_Game/Scenes/MovementLab/LightingData.asset',
     'Assets/_Game/Lighting/MovementLabVolumeProfile.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings.asset', 'Assets/_Game/Lighting/MovementLabLightingManifest.json',
@@ -95,6 +97,8 @@ $script:BuilderOutputContract = @(
     'ProjectSettings/QualitySettings.asset', 'ProjectSettings/GraphicsSettings.asset', 'ProjectSettings/ProjectSettings.asset',
     'Assets/_Game/Generated/MovementLabBuildManifest.json.meta',
     'Assets/_Game/Prefabs/Player.prefab.meta', 'Assets/_Game/Prefabs/Ball.prefab.meta', 'Assets/_Game/Prefabs/Rocket.prefab.meta', 'Assets/_Game/Prefabs/ExplosionVfx.prefab.meta',
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
+    'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta',
     'Assets/_Game/Animations/WorldCharacter.controller.meta', 'Assets/_Game/Animations/FpsKick.controller.meta',
     'Assets/_Game/Scenes/MovementLab.unity.meta', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
     'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset.meta'

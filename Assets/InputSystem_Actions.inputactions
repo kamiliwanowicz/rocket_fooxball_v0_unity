@@ -42,6 +42,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "ShotgunFire",
+                    "type": "Button",
+                    "id": "f75e2f4a-0f80-4d83-9a8d-c73a5d6d14cf",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Kick",
                     "type": "Button",
                     "id": "f4938cc6-64df-45f7-93de-2b6e0bf6f5c8",
@@ -208,6 +217,28 @@
                     "processors": "",
                     "groups": ";Gamepad",
                     "action": "Fire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "2f8d6ac8-3d13-4db4-9b2b-e3aa4fef11aa",
+                    "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "ShotgunFire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "4c686716-8ce5-4c46-99ef-1538d0c2411b",
+                    "path": "<Gamepad>/leftTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Gamepad",
+                    "action": "ShotgunFire",
                     "isComposite": false,
                     "isPartOfComposite": false
                 },

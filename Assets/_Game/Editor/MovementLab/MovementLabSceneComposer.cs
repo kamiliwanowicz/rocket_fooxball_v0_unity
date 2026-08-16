@@ -86,6 +86,7 @@ namespace RocketFooxball.Editor
                     var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
                     var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
                     var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
+                    var ammoShellMaterial = GetOrCreateAmmoShellMaterial();
                     GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
@@ -104,8 +105,13 @@ namespace RocketFooxball.Editor
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
                     BuildHealthPickupPrefab(healthPickupMaterial);
+                    BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                    BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(ShotgunPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(AmmoPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
                 }
 
@@ -194,6 +200,9 @@ namespace RocketFooxball.Editor
                             var participant = participantStates[participantIndex];
                             SetObjectReference(participant.Kick, "ball", ballMotor);
                             SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
+                            SetObjectReference(participant.Shotgun, "ball", ballMotor);
+                            SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
+                            SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
                         }
                         SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
                         SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
@@ -216,6 +225,8 @@ namespace RocketFooxball.Editor
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
                         BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                        BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                        BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
                         var hud = new GameObject("DebugHUD");
                         var hudComponent = hud.AddComponent<MovementDebugHud>();
                         SetObjectReference(hudComponent, "player", playerMotor);
@@ -339,6 +350,44 @@ namespace RocketFooxball.Editor
                     }
                 }
 
+                private static void BuildShotgunPickupInstances(GameObject shotgunPickupPrefab, MatchController match)
+                {
+                    if (shotgunPickupPrefab == null) throw new InvalidOperationException("Shotgun pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for shotgun pickup scene wiring.");
+                    var root = new GameObject(ShotgunPickupsRootName);
+                    for (var i = 0; i < ShotgunPickupSpawns.Length; i++)
+                    {
+                        var definition = ShotgunPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(shotgunPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate shotgun pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<ShotgunPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Shotgun pickup prefab has no ShotgunPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
+                }
+
+                private static void BuildAmmoPickupInstances(GameObject ammoPickupPrefab, MatchController match)
+                {
+                    if (ammoPickupPrefab == null) throw new InvalidOperationException("Ammo pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for ammo pickup scene wiring.");
+                    var root = new GameObject(AmmoPickupsRootName);
+                    for (var i = 0; i < AmmoPickupSpawns.Length; i++)
+                    {
+                        var definition = AmmoPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(ammoPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate ammo pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<AmmoPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Ammo pickup prefab has no AmmoPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
+                }
+
                 internal static void AssembleMovementLabUnstaged()
                 {
                     var builderSignature = ComputeBuilderSignature();
@@ -393,9 +442,15 @@ namespace RocketFooxball.Editor
                     var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    var ammoShellMaterial = GetOrCreateAmmoShellMaterial();
                     BuildHealthPickupPrefab(healthPickupMaterial);
+                    BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                    BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(ShotgunPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(AmmoPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
 
                     RegisterBuildScene();
                     UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
@@ -462,6 +517,9 @@ namespace RocketFooxball.Editor
                         var participant = participantStates[participantIndex];
                         SetObjectReference(participant.Kick, "ball", ballMotor);
                         SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
+                        SetObjectReference(participant.Shotgun, "ball", ballMotor);
+                        SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
+                        SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
                     }
 
                     SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
@@ -486,6 +544,8 @@ namespace RocketFooxball.Editor
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
                     BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                    BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                    BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
 
                     var hud = new GameObject("DebugHUD");
                     var hudComponent = hud.AddComponent<MovementDebugHud>();
