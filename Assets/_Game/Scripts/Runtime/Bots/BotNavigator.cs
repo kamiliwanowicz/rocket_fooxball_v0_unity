@@ -535,7 +535,7 @@ namespace RocketFooxball.Runtime.Bots
             var bestLateralDirection = new Vector2(-bestDirectionXZ.y, bestDirectionXZ.x);
             var projected = bestCenter + new Vector3(bestLateralDirection.x, 0f, bestLateralDirection.y) * bestLateral;
             steeringPoint = new Vector3(projected.x, bestCenter.y, projected.z);
-            verticalRoute = GetVerticalRoute(bestOther, terminalNode);
+            verticalRoute = GetVerticalRoute(terminalNode, bestOther);
             return true;
         }
 

@@ -1,3 +1,4 @@
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using RocketFooxball.Runtime.Bots;
@@ -83,6 +84,136 @@ namespace RocketFooxball.Tests.EditMode
             var edges = new[] { Edge(0, 0, 1, 1f) };
 
             Assert.That(Find(nodes, edges, 0, 1, new[] { true }, 2, out _, out _, out _), Is.EqualTo(BotPathStatus.Invalid));
+        }
+
+        [Test]
+        public void FindPathAllowsSameAreaWalkWithinControllerStepLimit()
+        {
+            var nodes = new[]
+            {
+                new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.34f, 0f), BotNavigationArea.Floor, 1f)
+            };
+            var edges = new[] { Edge(0, 0, 1, 2f) };
+
+            Assert.That(Find(nodes, edges, 0, 1, new[] { true }, 2, out var path, out var pathCount, out _),
+                Is.EqualTo(BotPathStatus.Success));
+            Assert.That(pathCount, Is.EqualTo(2));
+            Assert.That(path, Is.EqualTo(new[] { 0, 1 }));
+        }
+
+        [Test]
+        public void FindPathRejectsSameAreaWalkAboveControllerStepLimit()
+        {
+            var nodes = new[]
+            {
+                new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.35f, 0f), BotNavigationArea.Floor, 1f)
+            };
+            var edges = new[] { Edge(0, 0, 1, 2f) };
+
+            Assert.That(Find(nodes, edges, 0, 1, new[] { true }, 2, out _, out _, out _), Is.EqualTo(BotPathStatus.Invalid));
+        }
+
+        [Test]
+        public void GraphValidationEnforcesSameAreaWalkStepLimit()
+        {
+            var graphObject = new GameObject("BotNavigationRulesTestGraph");
+            try
+            {
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                SetPrivateField(graph, "nodes", new[]
+                {
+                    new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.35f, 0f), BotNavigationArea.Floor, 1f)
+                });
+                SetPrivateField(graph, "edges", new[] { Edge(0, 0, 1, 2f) });
+
+                Assert.That(graph.TryValidate(out _), Is.False);
+
+                SetPrivateField(graph, "nodes", new[]
+                {
+                    new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.34f, 0f), BotNavigationArea.Floor, 1f)
+                });
+
+                Assert.That(graph.TryValidate(out _), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        [Test]
+        public void RampTerminalProjectionReportsMotionTowardOtherEndpoint()
+        {
+            var graphObject = new GameObject("BotNavigationRulesTestGraph");
+            var navigatorObject = new GameObject("BotNavigationRulesTestNavigator");
+            try
+            {
+                var low = new BotNavigationNodeRecord(
+                    0,
+                    new Vector3(0f, 0f, 0f),
+                    BotNavigationArea.RampDeck,
+                    1f);
+                var high = new BotNavigationNodeRecord(
+                    1,
+                    new Vector3(8f, 4f, 0f),
+                    BotNavigationArea.RampDeck,
+                    1f);
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                SetPrivateField(graph, "nodes", new[] { low, high });
+                SetPrivateField(graph, "edges", new[]
+                {
+                    new BotNavigationEdgeRecord(0, low.Id, high.Id, BotNavigationTraversal.Ramp, 9f, 2f, null)
+                });
+
+                navigatorObject.SetActive(false);
+                var navigator = navigatorObject.AddComponent<BotNavigator>();
+                SetPrivateField(navigator, "graph", graph);
+                navigatorObject.SetActive(true);
+
+                var worldTarget = new Vector3(4f, 2f, 0f);
+                Assert.That(
+                    InvokeRampTerminalProjection(navigator, worldTarget, high, out var highSteeringPoint),
+                    Is.EqualTo(BotVerticalRoute.Descend));
+                Assert.That(highSteeringPoint, Is.EqualTo(worldTarget));
+
+                Assert.That(
+                    InvokeRampTerminalProjection(navigator, worldTarget, low, out var lowSteeringPoint),
+                    Is.EqualTo(BotVerticalRoute.Ascend));
+                Assert.That(lowSteeringPoint, Is.EqualTo(worldTarget));
+            }
+            finally
+            {
+                Object.DestroyImmediate(navigatorObject);
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        private static BotVerticalRoute InvokeRampTerminalProjection(
+            BotNavigator navigator,
+            Vector3 worldTarget,
+            BotNavigationNodeRecord terminalNode,
+            out Vector3 steeringPoint)
+        {
+            var method = typeof(BotNavigator).GetMethod(
+                "TryProjectRampTerminal",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+
+            var arguments = new object[] { worldTarget, terminalNode, Vector3.zero, BotVerticalRoute.None };
+            Assert.That(method.Invoke(navigator, arguments), Is.EqualTo(true));
+            steeringPoint = (Vector3)arguments[2];
+            return (BotVerticalRoute)arguments[3];
+        }
+
+        private static void SetPrivateField(object target, string fieldName, object value)
+        {
+            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(field, Is.Not.Null);
+            field.SetValue(target, value);
         }
 
         private static BotNavigationNodeRecord Node(int id, float x)

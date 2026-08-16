@@ -261,15 +261,22 @@ namespace RocketFooxball.Runtime.Bots
             switch (edge.Traversal)
             {
                 case BotNavigationTraversal.Walk:
+                    var maxWalkVerticalDelta = controllerStepOffset + controllerSkinWidth + 0.0001f;
                     if (from.Area == to.Area)
                     {
+                        if (Mathf.Abs(verticalDelta) > maxWalkVerticalDelta)
+                        {
+                            reason = "walk edge " + edge.Id + " exceeds the controller step limit";
+                            return false;
+                        }
+
                         return true;
                     }
 
                     var floorRampPair =
                         (from.Area == BotNavigationArea.Floor && to.Area == BotNavigationArea.RampDeck) ||
                         (from.Area == BotNavigationArea.RampDeck && to.Area == BotNavigationArea.Floor);
-                    if (!floorRampPair || Mathf.Abs(verticalDelta) > controllerStepOffset + controllerSkinWidth + 0.0001f)
+                    if (!floorRampPair || Mathf.Abs(verticalDelta) > maxWalkVerticalDelta)
                     {
                         reason = "walk edge " + edge.Id + " crosses an invalid area or step";
                         return false;

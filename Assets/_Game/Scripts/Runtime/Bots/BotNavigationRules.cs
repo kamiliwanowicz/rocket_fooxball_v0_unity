@@ -318,16 +318,17 @@ namespace RocketFooxball.Runtime.Bots
             switch (edge.Traversal)
             {
                 case BotNavigationTraversal.Walk:
+                    var maxWalkVerticalDelta = BotNavigationGraph.ExpectedControllerStepOffset +
+                        BotNavigationGraph.ExpectedControllerSkinWidth + ClearanceEpsilon;
                     if (from.Area == to.Area)
                     {
-                        return true;
+                        return Mathf.Abs(verticalDelta) <= maxWalkVerticalDelta;
                     }
 
                     var floorRampPair =
                         (from.Area == BotNavigationArea.Floor && to.Area == BotNavigationArea.RampDeck) ||
                         (from.Area == BotNavigationArea.RampDeck && to.Area == BotNavigationArea.Floor);
-                    return floorRampPair && Mathf.Abs(verticalDelta) <= BotNavigationGraph.ExpectedControllerStepOffset +
-                        BotNavigationGraph.ExpectedControllerSkinWidth + ClearanceEpsilon;
+                    return floorRampPair && Mathf.Abs(verticalDelta) <= maxWalkVerticalDelta;
 
                 case BotNavigationTraversal.Ramp:
                     if (from.Area != BotNavigationArea.RampDeck || to.Area != BotNavigationArea.RampDeck || horizontal <= 0.0001f)
