@@ -146,15 +146,16 @@ namespace RocketFooxball.Runtime.Ball
             RecordGroundContact(collision);
         }
 
-        /// <summary>Queues an additive impulse for next fixed-step ball simulation.</summary>
-        public void QueueImpulse(Vector3 impulse)
+        /// <summary>Queues an additive impulse for next fixed-step ball simulation and reports acceptance.</summary>
+        public bool QueueImpulse(Vector3 impulse)
         {
             if (!simulationEnabled || !BallMotionRules.IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
             {
-                return;
+                return false;
             }
 
             queuedExternalImpulse += impulse;
+            return true;
         }
 
         /// <summary>Applies aimed kick velocity while preserving useful incoming momentum.</summary>

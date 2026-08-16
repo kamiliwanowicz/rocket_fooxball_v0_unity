@@ -258,7 +258,10 @@ namespace RocketFooxball.Runtime.Weapons
                 var impulse = ShotgunDamageRules.CalculateBallImpulse(accumulatedBallFalloff, ballImpulsePerPellet, ballImpulseCap);
                 if (impulse > 0f)
                 {
-                    ball.QueueImpulse(accumulatedBallDirection.normalized * impulse);
+                    if (ball.QueueImpulse(accumulatedBallDirection.normalized * impulse))
+                    {
+                        ball.RecordParticipantTouch(ownerParticipant);
+                    }
                 }
             }
 
