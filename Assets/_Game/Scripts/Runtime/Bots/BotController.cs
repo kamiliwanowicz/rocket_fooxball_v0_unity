@@ -187,10 +187,13 @@ namespace RocketFooxball.Runtime.Bots
                 BotDifficultyRules.GetReactionDelay(difficulty, participant.SlotId, reactionOrdinal);
             reactionScheduled = IsFinite(nextReactionTime);
 
-            // The first decision for a copied snapshot is immediate. Subsequent decisions
-            // are scheduled independently from reaction timing.
-            nextDecisionTime = reactedSnapshot.GameplayTime;
-            decisionScheduled = reactedSnapshot.HasData && IsFinite(nextDecisionTime);
+            // The first decision for a copied snapshot is immediate. Once armed, its
+            // deadline is independent from later reaction snapshots.
+            if (!decisionScheduled && reactedSnapshot.HasData && IsFinite(reactedSnapshot.GameplayTime))
+            {
+                nextDecisionTime = reactedSnapshot.GameplayTime;
+                decisionScheduled = true;
+            }
         }
 
         private void RunDecision(float gameplayTime)
