@@ -770,14 +770,14 @@ namespace RocketFooxball.Runtime.Bots
 
         private void TryAddEnemyTargets(ref BotTargetSelection selection, float decisionTime)
         {
-            var hasVisible = false;
-            var hasRecent = false;
-            var visibleObservation = default(BotParticipantObservation);
-            var recentObservation = default(BotParticipantObservation);
-            var visiblePosition = Vector3.zero;
-            var recentPosition = Vector3.zero;
-            var visibleDistance = float.PositiveInfinity;
-            var recentDistance = float.PositiveInfinity;
+            var visibleCount = 0;
+            var recentCount = 0;
+            var visibleA = default(EnemyOpportunityCandidate);
+            var visibleB = default(EnemyOpportunityCandidate);
+            var visibleC = default(EnemyOpportunityCandidate);
+            var recentA = default(EnemyOpportunityCandidate);
+            var recentB = default(EnemyOpportunityCandidate);
+            var recentC = default(EnemyOpportunityCandidate);
             var origin = reactedSnapshot.Self.HasObservation && IsFinite(reactedSnapshot.Self.Position)
                 ? reactedSnapshot.Self.Position
                 : GetCurrentPosition();
@@ -786,54 +786,62 @@ namespace RocketFooxball.Runtime.Bots
                 reactedSnapshot.EnemyA,
                 decisionTime,
                 origin,
-                ref hasVisible,
-                ref visibleObservation,
-                ref visiblePosition,
-                ref visibleDistance,
-                ref hasRecent,
-                ref recentObservation,
-                ref recentPosition,
-                ref recentDistance);
+                ref visibleCount,
+                ref visibleA,
+                ref visibleB,
+                ref visibleC,
+                ref recentCount,
+                ref recentA,
+                ref recentB,
+                ref recentC);
             ConsiderEnemy(
                 reactedSnapshot.EnemyB,
                 decisionTime,
                 origin,
-                ref hasVisible,
-                ref visibleObservation,
-                ref visiblePosition,
-                ref visibleDistance,
-                ref hasRecent,
-                ref recentObservation,
-                ref recentPosition,
-                ref recentDistance);
+                ref visibleCount,
+                ref visibleA,
+                ref visibleB,
+                ref visibleC,
+                ref recentCount,
+                ref recentA,
+                ref recentB,
+                ref recentC);
             ConsiderEnemy(
                 reactedSnapshot.EnemyC,
                 decisionTime,
                 origin,
-                ref hasVisible,
-                ref visibleObservation,
-                ref visiblePosition,
-                ref visibleDistance,
-                ref hasRecent,
-                ref recentObservation,
-                ref recentPosition,
-                ref recentDistance);
+                ref visibleCount,
+                ref visibleA,
+                ref visibleB,
+                ref visibleC,
+                ref recentCount,
+                ref recentA,
+                ref recentB,
+                ref recentC);
 
-            if (hasVisible)
+            if (visibleCount > 0)
             {
-                TryAddEnemyCandidate(
-                    ref selection,
-                    visibleObservation,
-                    visiblePosition,
-                    decisionTime);
+                TryAddEnemyCandidate(ref selection, visibleA.Observation, visibleA.PredictedPosition, decisionTime);
             }
-            if (hasRecent)
+            if (visibleCount > 1)
             {
-                TryAddEnemyCandidate(
-                    ref selection,
-                    recentObservation,
-                    recentPosition,
-                    decisionTime);
+                TryAddEnemyCandidate(ref selection, visibleB.Observation, visibleB.PredictedPosition, decisionTime);
+            }
+            if (visibleCount > 2)
+            {
+                TryAddEnemyCandidate(ref selection, visibleC.Observation, visibleC.PredictedPosition, decisionTime);
+            }
+            if (recentCount > 0)
+            {
+                TryAddEnemyCandidate(ref selection, recentA.Observation, recentA.PredictedPosition, decisionTime);
+            }
+            if (recentCount > 1)
+            {
+                TryAddEnemyCandidate(ref selection, recentB.Observation, recentB.PredictedPosition, decisionTime);
+            }
+            if (recentCount > 2)
+            {
+                TryAddEnemyCandidate(ref selection, recentC.Observation, recentC.PredictedPosition, decisionTime);
             }
         }
 
@@ -841,16 +849,16 @@ namespace RocketFooxball.Runtime.Bots
             BotParticipantObservation observation,
             float decisionTime,
             Vector3 origin,
-            ref bool hasVisible,
-            ref BotParticipantObservation visibleObservation,
-            ref Vector3 visiblePosition,
-            ref float visibleDistance,
-            ref bool hasRecent,
-            ref BotParticipantObservation recentObservation,
-            ref Vector3 recentPosition,
-            ref float recentDistance)
+            ref int visibleCount,
+            ref EnemyOpportunityCandidate visibleA,
+            ref EnemyOpportunityCandidate visibleB,
+            ref EnemyOpportunityCandidate visibleC,
+            ref int recentCount,
+            ref EnemyOpportunityCandidate recentA,
+            ref EnemyOpportunityCandidate recentB,
+            ref EnemyOpportunityCandidate recentC)
         {
-            if (!observation.HasObservation || !observation.IsAlive || observation.IsLocalParticipant ||
+            if (!observation.HasObservation || !observation.IsAlive ||
                 !IsFinite(observation.Position) || !IsFinite(observation.Velocity))
             {
                 return;
@@ -878,51 +886,109 @@ namespace RocketFooxball.Runtime.Bots
                 return;
             }
 
+            var candidate = new EnemyOpportunityCandidate(observation, predictedPosition, distance);
             if (observation.IsVisible)
             {
-                if (!hasVisible || IsCloserEnemy(predictedPosition, observation.SlotId, visiblePosition, visibleObservation.SlotId, origin, distance, visibleDistance))
-                {
-                    hasVisible = true;
-                    visibleObservation = observation;
-                    visiblePosition = predictedPosition;
-                    visibleDistance = distance;
-                }
+                InsertEnemyCandidate(
+                    ref visibleCount,
+                    ref visibleA,
+                    ref visibleB,
+                    ref visibleC,
+                    candidate);
             }
-            else if (!hasRecent || IsCloserEnemy(predictedPosition, observation.SlotId, recentPosition, recentObservation.SlotId, origin, distance, recentDistance))
+            else
             {
-                hasRecent = true;
-                recentObservation = observation;
-                recentPosition = predictedPosition;
-                recentDistance = distance;
+                InsertEnemyCandidate(
+                    ref recentCount,
+                    ref recentA,
+                    ref recentB,
+                    ref recentC,
+                    candidate);
             }
         }
 
-        private static bool IsCloserEnemy(
-            Vector3 candidatePosition,
-            int candidateSlot,
-            Vector3 currentPosition,
-            int currentSlot,
-            Vector3 origin,
-            float candidateDistance,
-            float currentDistance)
+        private static void InsertEnemyCandidate(
+            ref int count,
+            ref EnemyOpportunityCandidate first,
+            ref EnemyOpportunityCandidate second,
+            ref EnemyOpportunityCandidate third,
+            EnemyOpportunityCandidate candidate)
         {
-            if (!IsFinite(candidateDistance))
+            if (count <= 0)
             {
-                return false;
-            }
-            if (!IsFinite(currentDistance))
-            {
-                return true;
+                first = candidate;
+                count = 1;
+                return;
             }
 
-            var candidateComputedDistance = Vector3.Distance(origin, candidatePosition);
-            var currentComputedDistance = Vector3.Distance(origin, currentPosition);
-            if (candidateComputedDistance != currentComputedDistance)
+            if (count == 1)
             {
-                return candidateComputedDistance < currentComputedDistance;
+                if (IsEarlierEnemy(candidate, first))
+                {
+                    second = first;
+                    first = candidate;
+                }
+                else
+                {
+                    second = candidate;
+                }
+                count = 2;
+                return;
             }
 
-            return candidateSlot < currentSlot;
+            if (count == 2)
+            {
+                if (IsEarlierEnemy(candidate, first))
+                {
+                    third = second;
+                    second = first;
+                    first = candidate;
+                }
+                else if (IsEarlierEnemy(candidate, second))
+                {
+                    third = second;
+                    second = candidate;
+                }
+                else
+                {
+                    third = candidate;
+                }
+                count = 3;
+                return;
+            }
+
+            if (!IsEarlierEnemy(candidate, third))
+            {
+                return;
+            }
+
+            if (IsEarlierEnemy(candidate, first))
+            {
+                third = second;
+                second = first;
+                first = candidate;
+            }
+            else if (IsEarlierEnemy(candidate, second))
+            {
+                third = second;
+                second = candidate;
+            }
+            else
+            {
+                third = candidate;
+            }
+        }
+
+        private static bool IsEarlierEnemy(
+            EnemyOpportunityCandidate candidate,
+            EnemyOpportunityCandidate current)
+        {
+            if (candidate.Distance != current.Distance)
+            {
+                return candidate.Distance < current.Distance;
+            }
+
+            return candidate.Observation.SlotId < current.Observation.SlotId;
         }
 
         private void TryAddEnemyCandidate(
@@ -1498,6 +1564,23 @@ namespace RocketFooxball.Runtime.Bots
         private static bool IsFinite(float value)
         {
             return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+
+        private readonly struct EnemyOpportunityCandidate
+        {
+            public EnemyOpportunityCandidate(
+                BotParticipantObservation observation,
+                Vector3 predictedPosition,
+                float distance)
+            {
+                Observation = observation;
+                PredictedPosition = predictedPosition;
+                Distance = distance;
+            }
+
+            public BotParticipantObservation Observation { get; }
+            public Vector3 PredictedPosition { get; }
+            public float Distance { get; }
         }
 
         private readonly struct BotReactedSnapshot
