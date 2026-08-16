@@ -140,6 +140,8 @@ namespace RocketFooxball.Runtime.Bots
             {
                 EvaluateCombatDecision(gameplayTime);
             }
+
+            ApplyFinalPoseAndMove();
         }
 
         public bool SetDifficulty(BotDifficulty nextDifficulty)
@@ -1088,14 +1090,12 @@ namespace RocketFooxball.Runtime.Bots
                     ? GetFiniteFacing(reactedSnapshot.EnemyGoalPosition - GetCurrentPosition(), transform.forward)
                     : GetFiniteFacing(transform.forward, Vector3.forward);
                 ClearMotion();
-                ApplyFacing(storedActionFacing);
                 return;
             }
 
             if (navigator == null || !IsFinite(activeTarget.NavigationPosition))
             {
                 ClearMotion();
-                ApplyFacing(storedActionFacing);
                 return;
             }
 
@@ -1104,7 +1104,6 @@ namespace RocketFooxball.Runtime.Bots
                 navigationSteering.Status == BotNavigationStatus.Unreachable)
             {
                 ClearMotion();
-                ApplyFacing(storedActionFacing);
                 return;
             }
 
@@ -1113,20 +1112,13 @@ namespace RocketFooxball.Runtime.Bots
             if (navigationSteering.Status == BotNavigationStatus.Following &&
                 IsFinite(flatSteering) && flatSteering.sqrMagnitude > DirectionEpsilon)
             {
-                storedSteeringDirection = flatSteering;
+                storedSteeringDirection = IsFinite(worldSteering) ? worldSteering : flatSteering;
                 hasRoute = true;
-                ApplyFacing(worldSteering);
-                ApplyMoveIntent(flatSteering);
                 return;
             }
 
             storedSteeringDirection = Vector3.zero;
             hasRoute = navigationSteering.Status == BotNavigationStatus.Following;
-            if (motor != null)
-            {
-                motor.SetMoveIntent(Vector2.zero);
-            }
-            ApplyFacing(storedActionFacing);
         }
 
         private void EvaluateCombatDecision(float decisionTime)
@@ -1268,7 +1260,10 @@ namespace RocketFooxball.Runtime.Bots
 
             storedAimDirection = lastCombatResult.AimDirection;
             hasAim = IsFinite(storedAimDirection) && storedAimDirection.sqrMagnitude > DirectionEpsilon;
-            TranslateCombatResult(lastCombatResult, actionOrigin);
+            if (hasAim)
+            {
+                TranslateCombatResult(lastCombatResult, actionOrigin);
+            }
         }
 
         private BotBallObservation BuildDecisionBall(float decisionTime)
@@ -1287,6 +1282,20 @@ namespace RocketFooxball.Runtime.Bots
             var velocity = IsFinite(reactedSnapshot.Ball.Velocity)
                 ? reactedSnapshot.Ball.Velocity
                 : Vector3.zero;
+            if (reactedSnapshot.Ball.IsGrounded)
+            {
+                velocity.y = 0f;
+            }
+            else if (IsFinite(effectiveAge))
+            {
+                velocity += Vector3.down * (GamePhysicsSettings.GravityMagnitude * effectiveAge);
+            }
+
+            if (!IsFinite(velocity))
+            {
+                velocity = Vector3.zero;
+            }
+
             return new BotBallObservation(
                 true,
                 reactedSnapshot.Ball.IsVisible,
@@ -1294,6 +1303,24 @@ namespace RocketFooxball.Runtime.Bots
                 position,
                 velocity,
                 effectiveAge);
+        }
+
+        private void ApplyFinalPoseAndMove()
+        {
+            var facingDirection = storedActionFacing;
+            if (hasAim && lastCombatResult.HasAction && IsFinite(storedAimDirection) &&
+                storedAimDirection.sqrMagnitude > DirectionEpsilon)
+            {
+                facingDirection = storedAimDirection;
+            }
+            else if (hasRoute && IsFinite(storedSteeringDirection) &&
+                storedSteeringDirection.sqrMagnitude > DirectionEpsilon)
+            {
+                facingDirection = storedSteeringDirection;
+            }
+
+            ApplyFacing(facingDirection);
+            ApplyMoveIntent(hasRoute ? storedSteeringDirection : Vector3.zero);
         }
 
         private bool TryGetDecisionEnemy(float decisionTime, out BotParticipantObservation enemy)
