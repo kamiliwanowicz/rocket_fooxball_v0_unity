@@ -6,7 +6,7 @@
 - Gameplay-rule conflict -> [`3v3-bots-combat-design-handoff.md`](3v3-bots-combat-design-handoff.md) wins.
 - Remaining scope, order, ownership -> this doc wins.
 - Audience: planning agents, workers, reviewers.
-- Integrated branch: `codex/shotgun-a1-a5-integration`.
+- Integrated branch: `shotgun_design_and_match_foundation`.
 - Product checkpoint: `99f18e88305029a5d3dc3d156c383684bc90ce92`.
 - Generated-output checkpoint: `c060e33b8a7e7fa7b4808f60ee586db62e66b508`.
 - Recovery source accepted through `32bc4d405d15fe1f91c70be35f6d1f50dea23ee5` only.
