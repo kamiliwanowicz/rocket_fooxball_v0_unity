@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Diagnostics;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
@@ -48,6 +49,23 @@ namespace RocketFooxball.Editor
             RequireComponent<RocketFooxball.Runtime.Pickups.HealthPickup>(MovementLabContract.HealthPickupPrefabPath, "HealthPickup");
             RequireComponent<RocketFooxball.Runtime.Pickups.ShotgunPickup>(MovementLabContract.ShotgunPickupPrefabPath, "ShotgunPickup");
             RequireComponent<RocketFooxball.Runtime.Pickups.AmmoPickup>(MovementLabContract.AmmoPickupPrefabPath, "AmmoPickup");
+            ValidateBotPrefabContract();
+        }
+
+        private static void ValidateBotPrefabContract()
+        {
+            var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(MovementLabContract.PlayerPrefabPath);
+            if (prefab == null) throw new InvalidOperationException("Player prefab is required for bot composition.");
+            var participant = prefab.GetComponent<ParticipantState>();
+            var controller = prefab.GetComponent<BotController>();
+            var navigator = prefab.GetComponent<BotNavigator>();
+            var perception = prefab.GetComponent<BotPerception>();
+            if (participant == null || controller == null || navigator == null || perception == null ||
+                prefab.GetComponents<BotController>().Length != 1 || prefab.GetComponents<BotNavigator>().Length != 1 ||
+                prefab.GetComponents<BotPerception>().Length != 1 || controller.enabled || navigator.enabled || perception.enabled)
+                throw new InvalidOperationException("Player prefab must contain exactly one disabled BotController, BotNavigator, and BotPerception.");
+            ValidateReference(participant, "botController", controller, "Player prefab ParticipantState.botController");
+            ValidateReference(controller, "participant", participant, "Player prefab BotController.participant");
         }
         internal static void RequireComponent<T>(string path, string label) where T : UnityEngine.Component
         {
@@ -316,6 +334,19 @@ namespace RocketFooxball.Editor
                     SetFloat(participant, "immunityDuration", 2f);
                     SetObjectReference(feedback, "participant", participant);
                     SetObjectReference(launcher, "ownerParticipant", participant);
+
+                    // Bot components are part of the shared prefab contract. They remain
+                    // disabled in the asset and are composed per-slot by the scene builder.
+                    root.SetActive(false);
+                    var botController = root.AddComponent<BotController>();
+                    var botNavigator = root.AddComponent<BotNavigator>();
+                    var botPerception = root.AddComponent<BotPerception>();
+                    botController.enabled = false;
+                    botNavigator.enabled = false;
+                    botPerception.enabled = false;
+                    SetObjectReference(participant, "botController", botController);
+                    SetObjectReference(botController, "participant", participant);
+                    root.SetActive(true);
 
                     // Keep collider root explicit while camera/viewmodel children remain default.
                     root.layer = participantLayer;

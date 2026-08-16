@@ -66,10 +66,10 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:3";
-        private const string MaterialContract = "material-prefab-contract:9";
+        private const string MaterialContract = "material-prefab-contract:10";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:14";
+        private const string GameplayContract = "gameplay-scene-contract:15";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:4";
@@ -111,6 +111,7 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
@@ -123,6 +124,16 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ShotgunPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/AmmoPickup.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotContracts.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotNavigationGraph.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotNavigator.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotPerception.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Bots/BotController.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Ball/BallKick.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
                  }), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
@@ -149,10 +160,22 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
                  }, WithMetas(new[]
                  {
+                     "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ShotgunPickup.cs",
-                     "Assets/_Game/Scripts/Runtime/Pickups/AmmoPickup.cs"
+                     "Assets/_Game/Scripts/Runtime/Pickups/AmmoPickup.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotContracts.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotNavigationGraph.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotNavigator.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotPerception.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotController.cs",
+                     "Assets/_Game/Scripts/Runtime/Bots/BotNavigationRules.cs",
+                     "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
+                     "Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs",
+                     "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
+                     "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
                  })),
                 new[]
                 {

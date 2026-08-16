@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Diagnostics;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
@@ -253,6 +254,20 @@ namespace RocketFooxball.Editor
             var availableAssets = ValidateAssetPrerequisites(accumulator);
             var context = CaptureScenePrerequisites(builderSignature, accumulator, availableAssets);
             ValidateGameplayAndSerializedWiring(context, accumulator);
+            if (context.SceneReady)
+            {
+                accumulator.Capture("bots", "composition", () =>
+                {
+                    var pickups = new ArenaPickup[5];
+                    pickups[0] = context.HealthPickups?.FirstOrDefault(item => item != null && item.name == HealthPickupWestNorthName);
+                    pickups[1] = context.HealthPickups?.FirstOrDefault(item => item != null && item.name == HealthPickupEastSouthName);
+                    pickups[2] = context.ShotgunPickups?.FirstOrDefault(item => item != null && item.name == ShotgunPickupName);
+                    pickups[3] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupWestNorthName);
+                    pickups[4] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupEastSouthName);
+                    MovementLabBotPipeline.ValidateScene(context.Scene, context.Participants, context.Match, context.BallMotor, pickups,
+                        context.North, context.South, context.NorthShield, context.SouthShield);
+                });
+            }
             ValidateImportedVisualAndAnimatorContracts(context, accumulator, availableAssets);
             ValidateMaterialImporterAndPrefabContracts(context, accumulator, availableAssets);
             ValidateArenaContracts(context, accumulator);
