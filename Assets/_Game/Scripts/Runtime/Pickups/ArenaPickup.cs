@@ -15,6 +15,7 @@ namespace RocketFooxball.Runtime.Pickups
         private PickupRespawnState respawnState = new PickupRespawnState();
         private bool compositionValid;
         private bool resetEventSubscribed;
+        private bool paused;
 
         public bool IsAvailable => respawnState != null && respawnState.IsAvailable;
         public float RespawnRemaining => respawnState != null ? respawnState.Remaining : 0f;
@@ -40,12 +41,14 @@ namespace RocketFooxball.Runtime.Pickups
             if (compositionValid && !resetEventSubscribed)
             {
                 match.CoordinatedResetRequested += OnCoordinatedResetRequested;
+                match.PauseChanged += OnPauseChanged;
                 resetEventSubscribed = true;
             }
         }
 
         protected virtual void OnDisable()
         {
+            paused = false;
             if (!resetEventSubscribed)
             {
                 return;
@@ -54,13 +57,15 @@ namespace RocketFooxball.Runtime.Pickups
             if (match != null)
             {
                 match.CoordinatedResetRequested -= OnCoordinatedResetRequested;
+                match.PauseChanged -= OnPauseChanged;
             }
             resetEventSubscribed = false;
         }
 
         protected virtual void FixedUpdate()
         {
-            if (!compositionValid || respawnState == null || respawnState.IsAvailable)
+            if (!compositionValid || respawnState == null || respawnState.IsAvailable || paused ||
+                !MatchRules.ShouldAdvancePausedTimer((MatchRules.MatchState)match.State))
             {
                 return;
             }
@@ -85,7 +90,8 @@ namespace RocketFooxball.Runtime.Pickups
 
         private void TryCollect(Collider other)
         {
-            if (!compositionValid || respawnState == null || !respawnState.IsAvailable || other == null)
+            if (!compositionValid || match == null || !match.GameplayEnabled || paused ||
+                respawnState == null || !respawnState.IsAvailable || other == null)
             {
                 return;
             }
@@ -104,17 +110,25 @@ namespace RocketFooxball.Runtime.Pickups
 
         private void OnCoordinatedResetRequested(MatchResetReason reason)
         {
+            paused = false;
             ResetAvailability();
+        }
+
+        private void OnPauseChanged(bool pausedState)
+        {
+            paused = pausedState;
         }
 
         private void ResetAvailability()
         {
+            paused = false;
             respawnState?.Reset();
             SetVisualActive(true);
         }
 
         private void ResetPresentation()
         {
+            paused = false;
             respawnState.Reset();
             SetVisualActive(true);
         }

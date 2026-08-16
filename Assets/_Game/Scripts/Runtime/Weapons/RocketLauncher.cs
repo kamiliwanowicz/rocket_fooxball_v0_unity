@@ -27,6 +27,7 @@ namespace RocketFooxball.Runtime.Weapons
         private readonly List<RocketProjectile> activeProjectiles = new List<RocketProjectile>(16);
         private float cooldownRemaining;
         private bool simulationEnabled = true;
+        private bool paused;
         private bool requestPending;
         private Vector3 requestedLaunchPosition;
         private Vector3 requestedDirection;
@@ -35,7 +36,7 @@ namespace RocketFooxball.Runtime.Weapons
         public float FiringInterval => firingInterval;
         public int ActiveProjectileCount => activeProjectiles.Count;
         public bool SimulationEnabled => simulationEnabled;
-        public bool CanFire => simulationEnabled && cooldownRemaining <= 0f && projectilePrefab != null;
+        public bool CanFire => !paused && simulationEnabled && cooldownRemaining <= 0f && projectilePrefab != null;
         public float ProjectileSpeed => projectilePrefab != null && IsFinite(projectilePrefab.Speed) && projectilePrefab.Speed > 0f
             ? projectilePrefab.Speed
             : 0f;
@@ -51,11 +52,17 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnDisable()
         {
+            SetPaused(false);
             ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             if (!simulationEnabled)
             {
                 ClearProgrammaticRequest();
@@ -81,6 +88,11 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Spawns one crosshair-authoritative rocket when cooldown permits.</summary>
         public bool LaunchRocket()
         {
+            if (paused)
+            {
+                return false;
+            }
+
             var origin = GetAimOrigin();
             var direction = GetAimDirection();
             if (!TryGetLaunchPosition(origin, direction, out var launchPosition))
@@ -94,7 +106,7 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Queues the latest valid one-step rocket launch pose.</summary>
         public bool RequestFire(Vector3 launchPosition, Vector3 direction)
         {
-            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(launchPosition) ||
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(launchPosition) ||
                 !IsFinite(direction) || direction.sqrMagnitude <= 0.000001f)
             {
                 return false;
@@ -110,7 +122,7 @@ namespace RocketFooxball.Runtime.Weapons
         public bool TryGetLaunchPosition(Vector3 fallbackOrigin, Vector3 direction, out Vector3 launchPosition)
         {
             launchPosition = Vector3.zero;
-            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(fallbackOrigin) ||
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(fallbackOrigin) ||
                 !IsFinite(direction) || direction.sqrMagnitude <= 0.000001f)
             {
                 return false;
@@ -146,6 +158,11 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Stops fixed-step launches and leaves active projectile cleanup to match reset.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
+            if (!enabled && paused)
+            {
+                SetPaused(false);
+            }
+
             simulationEnabled = enabled;
             if (!enabled)
             {
@@ -153,9 +170,30 @@ namespace RocketFooxball.Runtime.Weapons
             }
         }
 
+        /// <summary>Freezes launcher fire processing and forwards the pause to all current and future rockets.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
+            {
+                ClearProgrammaticRequest();
+            }
+
+            for (var i = 0; i < activeProjectiles.Count; i++)
+            {
+                activeProjectiles[i]?.SetPaused(pausedState);
+            }
+        }
+
         /// <summary>Clears cooldown and destroys all tracked rockets.</summary>
         public void ResetState()
         {
+            SetPaused(false);
             cooldownRemaining = 0f;
             ClearProgrammaticRequest();
             DestroyAllProjectiles();
@@ -199,6 +237,7 @@ namespace RocketFooxball.Runtime.Weapons
                 }
             }
             activeProjectiles.Add(projectile);
+            projectile.SetPaused(paused);
         }
 
         /// <summary>Removes projectile after detonation or external destruction.</summary>

@@ -43,11 +43,12 @@ namespace RocketFooxball.Runtime.Weapons
         private readonly float[] participantDamage = new float[16];
         private float pumpRemaining;
         private bool simulationEnabled = true;
+        private bool paused;
         private bool requestPending;
         private Vector3 requestedOrigin;
         private Vector3 requestedDirection;
 
-        public bool CanFire => simulationEnabled && ownerParticipant != null && ownerParticipant.IsAlive &&
+        public bool CanFire => !paused && simulationEnabled && ownerParticipant != null && ownerParticipant.IsAlive &&
                                ownerParticipant.HasShotgun && ownerParticipant.ShotgunShells > 0 &&
                                pumpRemaining <= 0f;
         public float PumpRemaining => Mathf.Max(pumpRemaining, 0f);
@@ -83,11 +84,17 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnDisable()
         {
+            paused = false;
             ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             pumpRemaining = Mathf.Max(pumpRemaining - Time.fixedDeltaTime, 0f);
 
             var localRequest = input != null && input.ConsumeShotgunPressed();
@@ -132,7 +139,7 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Queues the latest valid programmatic one-slot fire request.</summary>
         public bool RequestFire(Vector3 origin, Vector3 direction)
         {
-            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(origin) ||
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(origin) ||
                 !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
             {
                 return false;
@@ -147,8 +154,28 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Enables fixed-step firing without changing inventory state.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
+            if (!enabled)
+            {
+                paused = false;
+            }
+
             simulationEnabled = enabled;
             if (!enabled)
+            {
+                ClearProgrammaticRequest();
+            }
+        }
+
+        /// <summary>Freezes firing while preserving pump timing and inventory.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
             {
                 ClearProgrammaticRequest();
             }
@@ -157,6 +184,7 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Clears pump timing and queued programmatic input for a reset.</summary>
         public void ResetState()
         {
+            paused = false;
             pumpRemaining = 0f;
             ClearProgrammaticRequest();
         }

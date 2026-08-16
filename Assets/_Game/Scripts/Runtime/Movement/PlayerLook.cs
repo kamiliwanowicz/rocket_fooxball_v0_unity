@@ -13,6 +13,7 @@ namespace RocketFooxball.Runtime.Movement
         [SerializeField, Range(1f, 89.9f)] private float maxPitchDegrees = 89f;
 
         private float pitch;
+        private bool paused;
 
         public float PitchDegrees => pitch;
         public Transform Head => head;
@@ -22,8 +23,18 @@ namespace RocketFooxball.Runtime.Movement
             SetCursorCapture(true);
         }
 
+        private void OnDisable()
+        {
+            paused = false;
+        }
+
         private void Update()
         {
+            if (paused)
+            {
+                return;
+            }
+
             if (input == null || head == null)
             {
                 return;
@@ -49,6 +60,17 @@ namespace RocketFooxball.Runtime.Movement
             head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
         }
 
+        /// <summary>Stops look and cursor-request consumption without changing the current view.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+        }
+
         /// <summary>Resets pitch and keeps current horizontal facing.</summary>
         public void ResetView()
         {
@@ -58,6 +80,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Resets pitch and faces a supplied world-space direction without changing camera aim mechanically.</summary>
         public void ResetView(Vector3 worldForward)
         {
+            paused = false;
             var flatForward = new Vector3(worldForward.x, 0f, worldForward.z);
             if (flatForward.sqrMagnitude > 0.000001f)
             {

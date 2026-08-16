@@ -73,6 +73,7 @@ namespace RocketFooxball.Runtime.Movement
         private Vector3 dashContribution;
         private Vector3 dashAim;
         private bool airDashAvailable = true;
+        private bool paused;
 
         /// <summary>Raised during CharacterController collision dispatch with actual contact data.</summary>
         public event Action<ControllerColliderHit> CollisionHit;
@@ -99,11 +100,17 @@ namespace RocketFooxball.Runtime.Movement
 
         private void OnDisable()
         {
+            paused = false;
             ClearProgrammaticInput();
         }
 
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             if (controller == null)
             {
                 ClearProgrammaticInput();
@@ -192,7 +199,7 @@ namespace RocketFooxball.Runtime.Movement
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
-            if (hit == null)
+            if (paused || hit == null)
             {
                 return;
             }
@@ -221,7 +228,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Queues an additive fixed-step impulse. Invalid or gated impulses are ignored.</summary>
         public void AddExternalImpulse(Vector3 impulse)
         {
-            if (!simulationEnabled || !IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
+            if (paused || !simulationEnabled || !IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
             {
                 return;
             }
@@ -232,7 +239,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Queues the latest valid one-step movement intent.</summary>
         public bool SetMoveIntent(Vector2 move)
         {
-            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(move))
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(move))
             {
                 return false;
             }
@@ -245,7 +252,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Queues one jump request for the next enabled fixed step.</summary>
         public bool RequestJump()
         {
-            if (!isActiveAndEnabled || !simulationEnabled)
+            if (paused || !isActiveAndEnabled || !simulationEnabled)
             {
                 return false;
             }
@@ -257,7 +264,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Starts a bounded dash without replacing existing velocity.</summary>
         public bool TryStartDash(Vector3 aim)
         {
-            if (!simulationEnabled || dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            if (paused || !simulationEnabled || dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -294,7 +301,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Supplies current camera aim for fixed-step dash steering.</summary>
         public void SetDashAim(Vector3 aim)
         {
-            if (!dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            if (paused || !dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
             {
                 return;
             }
@@ -305,7 +312,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Ends active dash and removes only requested tracked contribution.</summary>
         public void EndDash(DashEndReason reason, float retainedContributionFraction)
         {
-            if (!dashActive)
+            if (paused || !dashActive)
             {
                 return;
             }
@@ -320,11 +327,28 @@ namespace RocketFooxball.Runtime.Movement
             simulationEnabled = enabled;
             if (!enabled)
             {
+                paused = false;
                 EndDash(DashEndReason.SimulationDisabled, 1f);
                 queuedExternalImpulse = Vector3.zero;
                 ClearProgrammaticInput();
                 coyoteTimer = 0f;
                 jumpBufferTimer = 0f;
+                input?.ClearGameplayState();
+            }
+        }
+
+        /// <summary>Freezes fixed-step movement while preserving velocity, dash, timers, impulse, and ground state.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
+            {
+                ClearProgrammaticInput();
                 input?.ClearGameplayState();
             }
         }
@@ -346,6 +370,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Resets position, facing, velocity, jump buffers, impulses, and collision state.</summary>
         public void ResetState(Vector3 worldPosition, Quaternion worldRotation)
         {
+            paused = false;
             var wasControllerEnabled = controller != null && controller.enabled;
             if (controller != null && wasControllerEnabled)
             {

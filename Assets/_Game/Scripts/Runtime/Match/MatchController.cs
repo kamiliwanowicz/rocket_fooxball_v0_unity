@@ -370,6 +370,14 @@ namespace RocketFooxball.Runtime.Match
             }
 
             SetState(MatchRules.MatchState.Paused);
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(true);
+                }
+            }
+            ball?.SetPaused(true);
             PauseChanged?.Invoke(true);
             return true;
         }
@@ -381,7 +389,16 @@ namespace RocketFooxball.Runtime.Match
                 return false;
             }
 
+            ball?.SetPaused(false);
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(false);
+                }
+            }
             SetState(MatchRules.MatchState.Playing);
+            ReconcileParticipantCollisions();
             PauseChanged?.Invoke(false);
             return true;
         }
@@ -456,6 +473,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void PerformCoordinatedReset(MatchResetReason reason)
         {
+            ClearMatchPause();
             SetState(MatchRules.MatchState.Reset, true);
             phaseRemaining = 0f;
             ApplyGameplayGate(false);
@@ -507,6 +525,18 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
             ball?.SetSimulationEnabled(enabled);
+        }
+
+        private void ClearMatchPause()
+        {
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(false);
+                }
+            }
+            ball?.SetPaused(false);
         }
 
         private void DestroyAllProjectiles()

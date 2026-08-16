@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Movement;
@@ -32,6 +33,7 @@ namespace RocketFooxball.Runtime.Participants
         [SerializeField] private BallKick kick;
         [SerializeField] private RocketLauncher launcher;
         [SerializeField] private ShotgunWeapon shotgun;
+        [SerializeField] private BotController botController;
         [SerializeField] private PlayerPresentation presentation;
         [SerializeField] private PlayerCameraFeedback cameraFeedback;
 
@@ -40,6 +42,7 @@ namespace RocketFooxball.Runtime.Participants
         private float immunityRemaining;
         private ParticipantLifecycle lifecycle = ParticipantLifecycle.Alive;
         private bool matchSimulationEnabled = true;
+        private bool matchPaused;
         private bool identityConfigured;
         private bool eventsSubscribed;
         private bool hasShotgun = true;
@@ -69,12 +72,14 @@ namespace RocketFooxball.Runtime.Participants
         public ShotgunWeapon Shotgun => shotgun;
         public bool IsCollisionPassThrough => !IsAlive || IsImmune;
         public bool MatchSimulationEnabled => matchSimulationEnabled;
+        public bool MatchPaused => matchPaused;
         public PlayerMotor Motor => motor;
         public CharacterController CharacterController => characterController;
         public PlayerInputReader Input => input;
         public PlayerLook Look => look;
         public BallKick Kick => kick;
         public RocketLauncher Launcher => launcher;
+        public BotController BotController => botController;
         public PlayerPresentation Presentation => presentation;
         public PlayerCameraFeedback CameraFeedback => cameraFeedback;
         public ParticipantSlotContract Slot => new ParticipantSlotContract(slotId, displayName, team, localParticipant);
@@ -129,6 +134,11 @@ namespace RocketFooxball.Runtime.Participants
 
         private void FixedUpdate()
         {
+            if (matchPaused)
+            {
+                return;
+            }
+
             var changed = false;
             if (IsAlive && immunityRemaining > 0f)
             {
@@ -187,36 +197,41 @@ namespace RocketFooxball.Runtime.Participants
             ApplyLeafSimulation();
         }
 
+        /// <summary>Pauses leaf simulation without changing normal match/lifecycle gates.</summary>
+        public void SetMatchPaused(bool paused)
+        {
+            if (matchPaused == paused)
+            {
+                return;
+            }
+
+            motor?.SetPaused(paused);
+            kick?.SetPaused(paused);
+            launcher?.SetPaused(paused);
+            shotgun?.SetPaused(paused);
+            if (localParticipant)
+            {
+                look?.SetPaused(paused);
+            }
+            else
+            {
+                botController?.SetPaused(paused);
+            }
+            matchPaused = paused;
+        }
+
         /// <summary>Restores full health and alive state for coordinated kickoff/goal reset.</summary>
         public void ResetForKickoff()
         {
-            var previous = lifecycle;
-            health = maxHealth;
-            deathRemaining = 0f;
-            immunityRemaining = 0f;
-            lifecycle = ParticipantLifecycle.Alive;
-            ClearShotgunState();
-            motor?.ClearQueuedState();
-            input?.ResetInputState();
-            kick?.ResetState();
-            launcher?.ResetState();
-            look?.ResetView();
-            cameraFeedback?.ResetFeedback();
-            presentation?.SetImmune(false);
-            presentation?.SetAlive(true);
-            ApplyLeafSimulation();
-            if (previous != lifecycle)
-            {
-                LifecycleChanged?.Invoke(new ParticipantLifecycleEvent(this, previous, lifecycle));
-                CollisionStateChanged?.Invoke(this);
-            }
-            PublishReadModel();
+            var previous = PrepareKickoffReset();
+            botController?.ResetState();
+            FinishKickoffReset(previous);
         }
 
         /// <summary>Restores kickoff state and places slot without granting respawn immunity.</summary>
         public void ResetForKickoff(Vector3 worldPosition, Quaternion worldRotation)
         {
-            ResetForKickoff();
+            var previous = PrepareKickoffReset();
             motor?.ResetState(worldPosition, worldRotation);
             if (motor == null)
             {
@@ -224,11 +239,14 @@ namespace RocketFooxball.Runtime.Participants
             }
             look?.ResetView(transform.forward);
             cameraFeedback?.ResetFeedback();
+            botController?.ResetState();
+            FinishKickoffReset(previous);
         }
 
         /// <summary>Moves participant to an authored spawn and grants post-respawn immunity.</summary>
         public void RespawnAt(Vector3 worldPosition, Quaternion worldRotation)
         {
+            BeginLifecycleReset();
             var previous = lifecycle;
             lifecycle = ParticipantLifecycle.Alive;
             health = maxHealth;
@@ -245,6 +263,7 @@ namespace RocketFooxball.Runtime.Participants
             kick?.ResetState();
             launcher?.ResetState();
             cameraFeedback?.ResetFeedback();
+            botController?.ResetState();
             presentation?.SetAlive(true);
             presentation?.SetImmune(immunityRemaining > 0f);
             ApplyLeafSimulation();
@@ -468,9 +487,10 @@ namespace RocketFooxball.Runtime.Participants
                 characterController.enabled = IsAlive;
             }
             motor?.SetSimulationEnabled(active);
-            launcher?.SetSimulationEnabled(active && localParticipant);
-            kick?.SetSimulationEnabled(active && localParticipant);
-            shotgun?.SetSimulationEnabled(active && localParticipant);
+            launcher?.SetSimulationEnabled(active);
+            kick?.SetSimulationEnabled(active);
+            shotgun?.SetSimulationEnabled(active);
+            botController?.SetSimulationEnabled(active && !localParticipant);
             if (input != null)
             {
                 input.enabled = localParticipant && IsAlive;
@@ -557,6 +577,10 @@ namespace RocketFooxball.Runtime.Participants
             {
                 shotgun = GetComponent<ShotgunWeapon>();
             }
+            if (botController == null)
+            {
+                botController = GetComponent<BotController>();
+            }
             if (presentation == null)
             {
                 presentation = GetComponent<PlayerPresentation>();
@@ -569,15 +593,53 @@ namespace RocketFooxball.Runtime.Participants
 
         private bool ValidateComposition()
         {
-            if (motor == null || characterController == null || presentation == null ||
-                (localParticipant && (input == null || look == null || kick == null || launcher == null || shotgun == null || cameraFeedback == null)))
+            if (motor == null || characterController == null || kick == null || launcher == null || shotgun == null ||
+                presentation == null || (!localParticipant && botController == null) ||
+                (localParticipant && (input == null || look == null || cameraFeedback == null)))
             {
-                Debug.LogError("ParticipantState requires serialized references: motor, characterController, presentation, and local leaf owners.", this);
+                Debug.LogError("ParticipantState requires serialized references: shared motor, characterController, kick, launcher, shotgun, presentation, non-local botController, and local input/look/cameraFeedback.", this);
                 enabled = false;
                 return false;
             }
 
             return true;
+        }
+
+        private void BeginLifecycleReset()
+        {
+            botController?.SetSimulationEnabled(false);
+            SetMatchPaused(false);
+        }
+
+        private ParticipantLifecycle PrepareKickoffReset()
+        {
+            BeginLifecycleReset();
+            var previous = lifecycle;
+            health = maxHealth;
+            deathRemaining = 0f;
+            immunityRemaining = 0f;
+            lifecycle = ParticipantLifecycle.Alive;
+            ClearShotgunState();
+            motor?.ClearQueuedState();
+            input?.ResetInputState();
+            kick?.ResetState();
+            launcher?.ResetState();
+            look?.ResetView();
+            cameraFeedback?.ResetFeedback();
+            return previous;
+        }
+
+        private void FinishKickoffReset(ParticipantLifecycle previous)
+        {
+            presentation?.SetImmune(false);
+            presentation?.SetAlive(true);
+            ApplyLeafSimulation();
+            if (previous != lifecycle)
+            {
+                LifecycleChanged?.Invoke(new ParticipantLifecycleEvent(this, previous, lifecycle));
+                CollisionStateChanged?.Invoke(this);
+            }
+            PublishReadModel();
         }
 
         private void PublishReadModel() => ReadModelChanged?.Invoke(ReadModel);

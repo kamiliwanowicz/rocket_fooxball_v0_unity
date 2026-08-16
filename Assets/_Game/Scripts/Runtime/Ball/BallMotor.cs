@@ -38,6 +38,11 @@ namespace RocketFooxball.Runtime.Ball
         private bool preFreezeKinematic;
         private Vector3 preFreezeVelocity;
         private Vector3 preFreezeAngularVelocity;
+        private bool paused;
+        private bool pauseStored;
+        private bool prePauseKinematic;
+        private Vector3 prePauseVelocity;
+        private Vector3 prePauseAngularVelocity;
         private Action<ControllerColliderHit>[] collisionHandlers;
         private Action[] kickHandlers;
         private ParticipantState lastTouchParticipant;
@@ -107,12 +112,13 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnDisable()
         {
+            SetPaused(false);
             UnsubscribeParticipantHandlers();
         }
 
         private void FixedUpdate()
         {
-            if (body == null || !simulationEnabled)
+            if (paused || body == null || !simulationEnabled)
             {
                 return;
             }
@@ -138,18 +144,28 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnCollisionEnter(Collision collision)
         {
+            if (paused)
+            {
+                return;
+            }
+
             RecordGroundContact(collision);
         }
 
         private void OnCollisionStay(Collision collision)
         {
+            if (paused)
+            {
+                return;
+            }
+
             RecordGroundContact(collision);
         }
 
         /// <summary>Queues an additive impulse for next fixed-step ball simulation and reports acceptance.</summary>
         public bool QueueImpulse(Vector3 impulse)
         {
-            if (!simulationEnabled || !BallMotionRules.IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
+            if (paused || !simulationEnabled || !BallMotionRules.IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -161,7 +177,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Applies aimed kick velocity while preserving useful incoming momentum.</summary>
         public bool ApplyKick(Vector3 aimDirection, Vector3 playerVelocity, float speedFraction = 0.91f, float playerMomentumShare = 0.20f)
         {
-            if (body == null || !simulationEnabled || !BallMotionRules.IsFinite(aimDirection) || aimDirection.sqrMagnitude <= Epsilon)
+            if (paused || body == null || !simulationEnabled || !BallMotionRules.IsFinite(aimDirection) || aimDirection.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -176,6 +192,11 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Enables or freezes body simulation while retaining scoring-frame transform and velocity.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
+            if (!enabled && paused)
+            {
+                SetPaused(false);
+            }
+
             if (simulationEnabled == enabled)
             {
                 return;
@@ -205,6 +226,42 @@ namespace RocketFooxball.Runtime.Ball
             }
         }
 
+        /// <summary>Freezes the Rigidbody while preserving queued impulses, contacts, transform, and velocity.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (body == null)
+            {
+                pauseStored = false;
+                return;
+            }
+
+            if (paused)
+            {
+                pauseStored = true;
+                prePauseKinematic = body.isKinematic;
+                prePauseVelocity = body.linearVelocity;
+                prePauseAngularVelocity = body.angularVelocity;
+                body.isKinematic = true;
+                return;
+            }
+
+            if (!pauseStored)
+            {
+                return;
+            }
+
+            body.isKinematic = prePauseKinematic;
+            body.linearVelocity = prePauseVelocity;
+            body.angularVelocity = prePauseAngularVelocity;
+            pauseStored = false;
+        }
+
         /// <summary>Clears pending impulses and contact state without moving the body.</summary>
         public void ClearQueuedState()
         {
@@ -216,6 +273,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Resets body position and both velocity channels.</summary>
         public void ResetState(Vector3 worldPosition, Quaternion worldRotation)
         {
+            SetPaused(false);
             lastTouchParticipant = null;
             if (body == null)
             {
@@ -240,7 +298,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Records a valid roster participant as ball touch owner for goal attribution.</summary>
         public bool RecordParticipantTouch(ParticipantState participant)
         {
-            if (participant == null || !IsRosterParticipant(participant))
+            if (paused || participant == null || !IsRosterParticipant(participant))
             {
                 return false;
             }
@@ -324,7 +382,7 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnPlayerCollisionHit(ParticipantState participant, ControllerColliderHit hit)
         {
-            if (!simulationEnabled || hit == null || hit.collider == null || body == null)
+            if (paused || !simulationEnabled || hit == null || hit.collider == null || body == null)
             {
                 return;
             }
@@ -357,6 +415,11 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnKickSucceeded(ParticipantState participant)
         {
+            if (paused)
+            {
+                return;
+            }
+
             RecordParticipantTouch(participant);
         }
 

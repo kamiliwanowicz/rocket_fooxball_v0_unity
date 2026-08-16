@@ -39,6 +39,7 @@ namespace RocketFooxball.Runtime.Ball
         private CharacterController controller;
         private float cooldownRemaining;
         private bool simulationEnabled = true;
+        private bool paused;
         private bool collisionSubscribed;
         private bool requestPending;
         private Vector3 requestedAim;
@@ -72,11 +73,17 @@ namespace RocketFooxball.Runtime.Ball
         private void OnDisable()
         {
             UnsubscribeCollision();
+            paused = false;
             ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             if (!simulationEnabled || player == null)
             {
                 ClearProgrammaticRequest();
@@ -121,7 +128,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Queues the latest valid one-step dash-kick aim.</summary>
         public bool RequestKick(Vector3 aim)
         {
-            if (!isActiveAndEnabled || !simulationEnabled || !IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -137,8 +144,24 @@ namespace RocketFooxball.Runtime.Ball
             simulationEnabled = enabled;
             if (!enabled)
             {
+                paused = false;
                 contactedBalls.Clear();
                 contactedParticipants.Clear();
+                ClearProgrammaticRequest();
+            }
+        }
+
+        /// <summary>Freezes kick processing while preserving cooldown and contact state.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
+            {
                 ClearProgrammaticRequest();
             }
         }
@@ -146,6 +169,7 @@ namespace RocketFooxball.Runtime.Ball
         /// <summary>Clears cooldown and per-activation contact state for coordinated reset.</summary>
         public void ResetState()
         {
+            paused = false;
             cooldownRemaining = 0f;
             contactedBalls.Clear();
             contactedParticipants.Clear();
@@ -160,7 +184,7 @@ namespace RocketFooxball.Runtime.Ball
 
         private void TryProcessContacts()
         {
-            if (controller == null || !DashKickRules.IsContactActive(player.DashElapsed, dashContactStartDelay))
+            if (paused || controller == null || !DashKickRules.IsContactActive(player.DashElapsed, dashContactStartDelay))
             {
                 return;
             }
@@ -246,7 +270,7 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnPlayerCollision(ControllerColliderHit hit)
         {
-            if (hit == null || player == null || !player.IsDashing || hit.collider == null)
+            if (paused || hit == null || player == null || !player.IsDashing || hit.collider == null)
             {
                 return;
             }
