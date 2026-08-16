@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Bots;
+using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Pickups;
@@ -194,20 +195,36 @@ namespace RocketFooxball.Editor
             if (rampWest == null || rampEast == null) throw new InvalidOperationException("Bot validation requires both authored ramps.");
             ValidateGraphGeometry(graph, rampWest, rampEast, redShield, blueShield);
             ValidateNodeClearance(graph);
-            ValidateProductionRecesses(graph);
+            ValidateProductionRecesses(graph, redShield, blueShield);
             if (Vector3.Distance(roster[0].transform.position, graph.GetNode(10).Position) > 0.001f ||
                 Vector3.Distance(roster[3].transform.position, graph.GetNode(4).Position) > 0.001f)
                 throw new InvalidOperationException("Local Blue slot 0 and first Red slot 3 must reuse graph spawn nodes 10 and 4.");
 
             var inputAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.InputSystem.InputActionAsset>(MovementLabContract.InputActionsPath);
+            var playerPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(MovementLabContract.PlayerPrefabPath);
+            if (playerPrefab == null) throw new InvalidOperationException("Bot validation requires the Player prefab.");
+            var expectedInput = playerPrefab.GetComponent<PlayerInputReader>();
+            var expectedController = playerPrefab.GetComponent<BotController>();
+            var expectedNavigator = playerPrefab.GetComponent<BotNavigator>();
+            var expectedPerception = playerPrefab.GetComponent<BotPerception>();
+            if (expectedInput == null || expectedController == null || expectedNavigator == null || expectedPerception == null ||
+                playerPrefab.GetComponents<PlayerInputReader>().Length != 1 || playerPrefab.GetComponents<BotController>().Length != 1 ||
+                playerPrefab.GetComponents<BotNavigator>().Length != 1 || playerPrefab.GetComponents<BotPerception>().Length != 1)
+                throw new InvalidOperationException("Bot validation requires exactly one PlayerInputReader, BotController, BotNavigator, and BotPerception on the Player prefab.");
             for (var i = 0; i < roster.Length; i++)
             {
                 var participant = roster[i];
-                if (participant.GetComponents<BotController>().Length != 1 || participant.GetComponents<BotNavigator>().Length != 1 || participant.GetComponents<BotPerception>().Length != 1)
+                if (participant.GetComponents<PlayerInputReader>().Length != 1 || participant.GetComponents<BotController>().Length != 1 ||
+                    participant.GetComponents<BotNavigator>().Length != 1 || participant.GetComponents<BotPerception>().Length != 1)
                     throw new InvalidOperationException("Participant " + i + " must contain exactly one bot component set.");
                 var controller = participant.GetComponent<BotController>();
                 var navigator = participant.GetComponent<BotNavigator>();
                 var perception = participant.GetComponent<BotPerception>();
+                var input = participant.GetComponent<PlayerInputReader>();
+                ValidatePrefabComponentSource(input, expectedInput, participant.DisplayName + ".PlayerInputReader");
+                ValidatePrefabComponentSource(controller, expectedController, participant.DisplayName + ".BotController");
+                ValidatePrefabComponentSource(navigator, expectedNavigator, participant.DisplayName + ".BotNavigator");
+                ValidatePrefabComponentSource(perception, expectedPerception, participant.DisplayName + ".BotPerception");
                 var expectedEnabled = i != 0;
                 if (controller.enabled != expectedEnabled || navigator.enabled != expectedEnabled || perception.enabled != expectedEnabled)
                     throw new InvalidOperationException("Bot component enabled state mismatch for participant slot " + i + ".");
@@ -240,7 +257,7 @@ namespace RocketFooxball.Editor
                 ValidateSerializedLayerMask(controller, "combatObstacleMask", LayerMaskMaskWithout(MovementLabContract.ParticipantsLayerName, MovementLabContract.ProjectilesLayerName), "BotController.combatObstacleMask");
                 ValidateSerializedFloat(controller, "maxPitchDegrees", 89f, "BotController.maxPitchDegrees");
                 ValidateSerializedFloat(controller, "jumpProbeDistance", 4f, "BotController.jumpProbeDistance");
-                ValidateReference(participant.Input, "actions", inputAsset, "PlayerInputReader.actions");
+                ValidateReference(input, "actions", inputAsset, "PlayerInputReader.actions");
             }
 
             ValidateCoordinator(blueCoordinator, match, ParticipantTeam.Blue, roster.Take(3).ToArray(), new[] { roster[1].GetComponent<BotPerception>(), roster[2].GetComponent<BotPerception>() });
@@ -467,8 +484,11 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Bot edge " + edge.Id + " does not match the authored deterministic catalog.");
                 if (edge.Traversal == BotNavigationTraversal.ShieldGate)
                 {
-                    var expected = edge.FromNodeId < 31 ? redShield : blueShield;
-                    if (edge.GateCollider != expected) throw new InvalidOperationException("Bot shield-gate collider reference mismatch at edge " + edge.Id + ".");
+                    var isRedGate = (edge.FromNodeId == 30 && edge.ToNodeId == 31) || (edge.FromNodeId == 31 && edge.ToNodeId == 30);
+                    var isBlueGate = (edge.FromNodeId == 32 && edge.ToNodeId == 33) || (edge.FromNodeId == 33 && edge.ToNodeId == 32);
+                    var expectedGate = isRedGate ? redShield : isBlueGate ? blueShield : null;
+                    if (expectedGate == null || edge.GateCollider != expectedGate)
+                        throw new InvalidOperationException("Bot shield-gate collider reference mismatch at edge " + edge.Id + ".");
                 }
                 else if (edge.GateCollider != null)
                 {
@@ -503,8 +523,12 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void ValidateProductionRecesses(BotNavigationGraph graph)
+        private static void ValidateProductionRecesses(BotNavigationGraph graph, Collider redShield, Collider blueShield)
         {
+            if (redShield == null || blueShield == null || !redShield.gameObject.activeInHierarchy || !redShield.enabled ||
+                !blueShield.gameObject.activeInHierarchy || !blueShield.enabled)
+                throw new InvalidOperationException("Production shield gates must both be active and enabled.");
+
             var reachable = new HashSet<int>();
             var pending = new Queue<int>();
             for (var i = 0; i < graph.NodeCount; i++)
@@ -522,12 +546,26 @@ namespace RocketFooxball.Editor
                 for (var i = 0; i < graph.EdgeCount; i++)
                 {
                     var edge = graph.GetEdge(i);
-                    if (edge.FromNodeId != current || edge.Traversal == BotNavigationTraversal.ShieldGate) continue;
+                    if (edge.FromNodeId != current) continue;
+                    var gateOpen = edge.Traversal != BotNavigationTraversal.ShieldGate ||
+                        (edge.GateCollider != null && !edge.GateCollider.enabled);
+                    if (!gateOpen) continue;
                     var target = graph.GetNode(FindNodeIndex(graph, edge.ToNodeId));
                     if (target.Area == BotNavigationArea.GoalRecess) throw new InvalidOperationException("Production shield gates must keep goal recesses unreachable.");
                     if (reachable.Add(target.Id)) pending.Enqueue(target.Id);
                 }
             }
+        }
+
+        private static void ValidatePrefabComponentSource(Component instance, Component expected, string label)
+        {
+            if (instance == null || expected == null)
+                throw new InvalidOperationException(label + " is missing from the participant or Player prefab.");
+            ValidatePersistentIdentity(instance, label);
+            var source = PrefabUtility.GetCorrespondingObjectFromSource(instance);
+            if (source == null || source != expected || !string.Equals(AssetDatabase.GetAssetPath(source), MovementLabContract.PlayerPrefabPath, StringComparison.Ordinal))
+                throw new InvalidOperationException(label + " must correspond to the Player prefab component; scene-added or replacement components are not allowed.");
+            ValidatePersistentIdentity(source, label + " prefab source");
         }
 
         private static int FindNodeIndex(BotNavigationGraph graph, int id)

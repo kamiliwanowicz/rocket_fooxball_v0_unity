@@ -146,20 +146,20 @@ namespace RocketFooxball.Editor
                       "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
                       "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
-                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
                       "Assets/_Game/Scripts/Runtime/Input/PlayerInputReader.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/ParticipantRelationship.cs",
-                      "Assets/_Game/Scripts/Runtime/Weapons/ShotgunWeapon.cs",
-                      "Assets/_Game/Scripts/Runtime/Weapons/ExplosionResolver.cs",
                       "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantSpawnSet.cs",
-                     "Assets/_Game/Scripts/Runtime/Match/MatchController.cs",
                      "Assets/_Game/Scripts/Runtime/Match/GoalTrigger.cs",
-                     "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
-                     "Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs",
-                     "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
+                     "Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
                  }, WithMetas(new[]
                  {
+                     "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
+                     "Assets/_Game/Scripts/Runtime/Weapons/ShotgunWeapon.cs",
+                     "Assets/_Game/Scripts/Runtime/Weapons/ExplosionResolver.cs",
+                     "Assets/_Game/Scripts/Runtime/Match/MatchController.cs",
+                     "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
+                     "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
