@@ -31,6 +31,7 @@ namespace RocketFooxball.Runtime.Bots
         private const float PredictionLookaheadSeconds = 0.25f;
         private const float DirectionEpsilon = 0.000001f;
         private const int MaxPickupCandidates = 5;
+        private const float CombatTargetDistanceEpsilon = 0.05f;
         private const string CompositionError =
             "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, and exact 89-degree/4-meter tuning.";
 
@@ -63,13 +64,21 @@ namespace RocketFooxball.Runtime.Bots
         private bool reactionScheduled;
         private bool decisionScheduled;
         private BotReactedSnapshot reactedSnapshot;
+        private readonly RaycastHit[] combatRaycastHits = new RaycastHit[8];
 
-        // Navigation is owned here; aim and consumer action remain intentionally inactive in this slice.
         private BotTargetSelection activeTarget = BotTargetSelection.None;
         private BotNavigationSteeringResult navigationSteering = BotNavigationSteeringResult.Invalid;
         private BotAimSolution ballAim = BotAimSolution.Invalid;
         private BotAimSolution enemyAim = BotAimSolution.Invalid;
         private BotCombatResult lastCombatResult = BotCombatResult.None;
+        private BotParticipantObservation combatEnemy;
+        private Vector3 ballRocketLaunchPosition;
+        private Vector3 enemyRocketLaunchPosition;
+        private Vector3 rocketJumpLaunchPosition;
+        private Vector3 rocketJumpAimPoint;
+        private bool rocketLineClearToBall;
+        private bool rocketLineClearToEnemy;
+        private bool rocketJumpLineClear;
         private Vector3 storedAimDirection;
         private Vector3 storedSteeringDirection;
         private Vector3 storedActionFacing;
@@ -114,6 +123,7 @@ namespace RocketFooxball.Runtime.Bots
                 return;
             }
 
+            var decisionRan = false;
             if (reactionScheduled && gameplayTime >= nextReactionTime)
             {
                 RunReaction(gameplayTime);
@@ -122,9 +132,14 @@ namespace RocketFooxball.Runtime.Bots
             if (decisionScheduled && gameplayTime >= nextDecisionTime)
             {
                 RunDecision(gameplayTime);
+                decisionRan = true;
             }
 
             UpdateNavigationAndMovement(gameplayTime);
+            if (decisionRan)
+            {
+                EvaluateCombatDecision(gameplayTime);
+            }
         }
 
         public bool SetDifficulty(BotDifficulty nextDifficulty)
@@ -217,6 +232,7 @@ namespace RocketFooxball.Runtime.Bots
 
         private void RunDecision(float gameplayTime)
         {
+            ClearCombatState();
             if (!reactedSnapshot.HasData)
             {
                 decisionScheduled = false;
@@ -1113,6 +1129,376 @@ namespace RocketFooxball.Runtime.Bots
             ApplyFacing(storedActionFacing);
         }
 
+        private void EvaluateCombatDecision(float decisionTime)
+        {
+            if (!compositionValid || !simulationEnabled || paused || !reactedSnapshot.HasData ||
+                head == null || launcher == null || motor == null || kick == null || shotgun == null ||
+                navigator == null || participant == null)
+            {
+                return;
+            }
+
+            var actionOrigin = head.position;
+            if (!IsFinite(actionOrigin))
+            {
+                return;
+            }
+
+            var parameters = BotDifficultyRules.GetParameters(difficulty);
+            var decisionBall = BuildDecisionBall(decisionTime);
+            var hasDecisionEnemy = TryGetDecisionEnemy(decisionTime, out var decisionEnemy);
+            combatEnemy = hasDecisionEnemy ? decisionEnemy : default(BotParticipantObservation);
+
+            var ballRouteReachable = decisionBall.HasObservation && IsFinite(decisionBall.Position) &&
+                navigator.TryProbeTarget(decisionBall.Position, out _, out _);
+            var enemyRouteReachable = hasDecisionEnemy && IsFinite(decisionEnemy.Position) &&
+                navigator.TryProbeTarget(decisionEnemy.Position, out _, out _);
+
+            ballAim = BotAimRules.SolveDirectAim(
+                actionOrigin,
+                decisionBall.Position,
+                BotCombatTarget.Ball,
+                parameters,
+                participant.SlotId,
+                decisionOrdinal);
+            enemyAim = BotAimRules.SolveDirectAim(
+                actionOrigin,
+                decisionEnemy.Position,
+                BotCombatTarget.Enemy,
+                parameters,
+                participant.SlotId,
+                decisionOrdinal);
+
+            var projectileSpeed = launcher.ProjectileSpeed;
+            var ballRocketAim = BotAimRules.SolveInterceptAim(
+                actionOrigin,
+                decisionBall.Position,
+                decisionBall.Velocity,
+                projectileSpeed,
+                BotCombatAction.FireRocket,
+                BotCombatTarget.Ball,
+                parameters,
+                participant.SlotId,
+                decisionOrdinal);
+            var enemyRocketAim = BotAimRules.SolveInterceptAim(
+                actionOrigin,
+                decisionEnemy.Position,
+                decisionEnemy.Velocity,
+                projectileSpeed,
+                BotCombatAction.FireRocket,
+                BotCombatTarget.Enemy,
+                parameters,
+                participant.SlotId,
+                decisionOrdinal);
+
+            if (ballRocketAim.IsValid &&
+                launcher.TryGetLaunchPosition(actionOrigin, ballRocketAim.Direction, out ballRocketLaunchPosition))
+            {
+                rocketLineClearToBall = HasCombatLineOfSight(
+                    ballRocketLaunchPosition,
+                    ballRocketAim.AimPoint,
+                    true);
+            }
+
+            if (enemyRocketAim.IsValid &&
+                launcher.TryGetLaunchPosition(actionOrigin, enemyRocketAim.Direction, out enemyRocketLaunchPosition))
+            {
+                rocketLineClearToEnemy = HasCombatLineOfSight(
+                    enemyRocketLaunchPosition,
+                    enemyRocketAim.AimPoint,
+                    false);
+            }
+
+            var routeForwardXZ = navigationSteering.HasSteering
+                ? NormalizeHorizontal(navigationSteering.WorldDirection)
+                : Vector3.zero;
+            var rocketJumpDirection = BotCombatRules.GetRocketJumpDirection(routeForwardXZ);
+            if (rocketJumpDirection.sqrMagnitude > DirectionEpsilon &&
+                launcher.TryGetLaunchPosition(actionOrigin, rocketJumpDirection, out rocketJumpLaunchPosition))
+            {
+                rocketJumpLineClear = TryGetRocketJumpAimPoint(
+                    rocketJumpLaunchPosition,
+                    rocketJumpDirection,
+                    out rocketJumpAimPoint);
+            }
+
+            var isGrounded = motor.IsGrounded;
+            var hasGroundContact = motor.HasGroundContact;
+            var dashReady = kick.SimulationEnabled && kick.CooldownRemaining <= 0f &&
+                !motor.IsDashing && (isGrounded || hasGroundContact || motor.AirDashAvailable);
+            var input = new BotCombatInput(
+                difficulty,
+                reactedSnapshot.Role,
+                activeTarget.HasTarget ? activeTarget.Key.Kind : BotTargetKind.None,
+                activeTarget.HasTarget ? activeTarget.Score : 0f,
+                activeTarget.HasTarget && activeTarget.SuppressParticipantCombat,
+                activeTarget.HasTarget && activeTarget.PreferBallActions,
+                actionOrigin,
+                ballRocketLaunchPosition,
+                enemyRocketLaunchPosition,
+                rocketJumpLaunchPosition,
+                routeForwardXZ,
+                decisionBall,
+                combatEnemy,
+                reactedSnapshot.AllyA,
+                reactedSnapshot.AllyB,
+                ballRouteReachable,
+                enemyRouteReachable,
+                dashReady,
+                shotgun.CanFire,
+                launcher.CanFire,
+                ballAim,
+                ballRocketAim,
+                enemyAim,
+                enemyRocketAim,
+                rocketLineClearToBall,
+                rocketLineClearToEnemy,
+                isGrounded,
+                navigationSteering.VerticalRoute == BotVerticalRoute.Ascend,
+                rocketJumpAimPoint,
+                rocketJumpLineClear);
+
+            lastCombatResult = BotCombatRules.Evaluate(input);
+            if (!lastCombatResult.HasAction)
+            {
+                storedAimDirection = Vector3.zero;
+                hasAim = false;
+                return;
+            }
+
+            storedAimDirection = lastCombatResult.AimDirection;
+            hasAim = IsFinite(storedAimDirection) && storedAimDirection.sqrMagnitude > DirectionEpsilon;
+            TranslateCombatResult(lastCombatResult, actionOrigin);
+        }
+
+        private BotBallObservation BuildDecisionBall(float decisionTime)
+        {
+            if (!TryGetBallEstimate(
+                    reactedSnapshot,
+                    decisionTime,
+                    0f,
+                    out var position,
+                    out var effectiveAge,
+                    out _))
+            {
+                return default(BotBallObservation);
+            }
+
+            var velocity = IsFinite(reactedSnapshot.Ball.Velocity)
+                ? reactedSnapshot.Ball.Velocity
+                : Vector3.zero;
+            return new BotBallObservation(
+                true,
+                reactedSnapshot.Ball.IsVisible,
+                reactedSnapshot.Ball.IsGrounded,
+                position,
+                velocity,
+                effectiveAge);
+        }
+
+        private bool TryGetDecisionEnemy(float decisionTime, out BotParticipantObservation enemy)
+        {
+            enemy = default(BotParticipantObservation);
+            if (!activeTarget.HasTarget || activeTarget.Key.Kind != BotTargetKind.EnemyOpportunity ||
+                !TryGetEnemyObservation(activeTarget.Key.SubjectId, out var observation) ||
+                !observation.HasObservation || !observation.IsAlive ||
+                !IsFinite(observation.Position) || !IsFinite(observation.Velocity))
+            {
+                return false;
+            }
+
+            var effectiveAge = GetEffectiveAge(
+                observation.AgeSeconds,
+                decisionTime,
+                reactedSnapshot.GameplayTime);
+            if (!IsFinite(effectiveAge) || effectiveAge > ObservationMemorySeconds)
+            {
+                return false;
+            }
+
+            var predictedPosition = observation.Position + observation.Velocity *
+                (effectiveAge + PredictionLookaheadSeconds);
+            if (!IsFinite(predictedPosition))
+            {
+                predictedPosition = observation.Position;
+            }
+
+            enemy = new BotParticipantObservation(
+                true,
+                observation.IsVisible,
+                observation.SlotId,
+                observation.Team,
+                observation.IsLocalParticipant,
+                observation.IsAlive,
+                predictedPosition,
+                observation.Velocity,
+                observation.Health,
+                observation.MaxHealth,
+                observation.HasShotgun,
+                observation.ShotgunShells,
+                observation.ShotgunShellCapacity,
+                effectiveAge);
+            return true;
+        }
+
+        private bool TryGetEnemyObservation(int slotId, out BotParticipantObservation observation)
+        {
+            if (reactedSnapshot.EnemyA.HasObservation && reactedSnapshot.EnemyA.SlotId == slotId)
+            {
+                observation = reactedSnapshot.EnemyA;
+                return true;
+            }
+            if (reactedSnapshot.EnemyB.HasObservation && reactedSnapshot.EnemyB.SlotId == slotId)
+            {
+                observation = reactedSnapshot.EnemyB;
+                return true;
+            }
+            if (reactedSnapshot.EnemyC.HasObservation && reactedSnapshot.EnemyC.SlotId == slotId)
+            {
+                observation = reactedSnapshot.EnemyC;
+                return true;
+            }
+
+            observation = default(BotParticipantObservation);
+            return false;
+        }
+
+        private bool HasCombatLineOfSight(Vector3 origin, Vector3 aimPoint, bool ballTarget)
+        {
+            var offset = aimPoint - origin;
+            var distance = offset.magnitude;
+            if (!IsFinite(origin) || !IsFinite(aimPoint) || !IsFinite(offset) ||
+                !IsFinite(distance) || distance <= DirectionEpsilon)
+            {
+                return false;
+            }
+
+            var direction = offset / distance;
+            var hitCount = UnityEngine.Physics.RaycastNonAlloc(
+                origin,
+                direction,
+                combatRaycastHits,
+                distance,
+                EffectiveCombatObstacleMask(),
+                QueryTriggerInteraction.Ignore);
+            if (hitCount <= 0)
+            {
+                return true;
+            }
+
+            var ballBody = ballTarget && match != null && match.Ball != null
+                ? match.Ball.Rigidbody
+                : null;
+            var blockingDistance = distance - CombatTargetDistanceEpsilon;
+            var nearestBlockingDistance = float.PositiveInfinity;
+            for (var i = 0; i < hitCount; i++)
+            {
+                var collider = combatRaycastHits[i].collider;
+                if (collider == null)
+                {
+                    continue;
+                }
+
+                if (ballTarget && ballBody != null && collider.attachedRigidbody == ballBody)
+                {
+                    continue;
+                }
+
+                if (IsFinite(combatRaycastHits[i].distance) &&
+                    combatRaycastHits[i].distance < nearestBlockingDistance)
+                {
+                    nearestBlockingDistance = combatRaycastHits[i].distance;
+                }
+            }
+
+            return nearestBlockingDistance >= blockingDistance;
+        }
+
+        private bool TryGetRocketJumpAimPoint(
+            Vector3 launchPosition,
+            Vector3 direction,
+            out Vector3 aimPoint)
+        {
+            aimPoint = Vector3.zero;
+            var hitCount = UnityEngine.Physics.RaycastNonAlloc(
+                launchPosition,
+                direction,
+                combatRaycastHits,
+                jumpProbeDistance,
+                EffectiveCombatObstacleMask(),
+                QueryTriggerInteraction.Ignore);
+            if (hitCount <= 0 || participant.CharacterController == null)
+            {
+                return false;
+            }
+
+            var nearestHit = default(RaycastHit);
+            var nearestDistance = float.PositiveInfinity;
+            for (var i = 0; i < hitCount; i++)
+            {
+                var hit = combatRaycastHits[i];
+                if (hit.collider == null || !IsFinite(hit.point) || !IsFinite(hit.distance) ||
+                    hit.distance < 0f || hit.distance >= nearestDistance)
+                {
+                    continue;
+                }
+
+                nearestHit = hit;
+                nearestDistance = hit.distance;
+            }
+
+            if (nearestHit.collider == null ||
+                !BlastMath.TryGetUnderfootFacing(
+                    transform.forward,
+                    participant.CharacterController.bounds,
+                    participant.CharacterController.radius,
+                    nearestHit.point,
+                    out _))
+            {
+                return false;
+            }
+
+            aimPoint = nearestHit.point;
+            return IsFinite(aimPoint);
+        }
+
+        private int EffectiveCombatObstacleMask()
+        {
+            var mask = combatObstacleMask.value;
+            RemoveNamedLayer(ref mask, "Participants");
+            RemoveNamedLayer(ref mask, "Projectiles");
+            return mask;
+        }
+
+        private static void RemoveNamedLayer(ref int mask, string layerName)
+        {
+            var layer = LayerMask.NameToLayer(layerName);
+            if (layer >= 0)
+            {
+                mask &= ~(1 << layer);
+            }
+        }
+
+        private void TranslateCombatResult(BotCombatResult result, Vector3 actionOrigin)
+        {
+            switch (result.Action)
+            {
+                case BotCombatAction.DashKick:
+                    kick.RequestKick(result.AimDirection);
+                    break;
+                case BotCombatAction.FireShotgun:
+                    shotgun.RequestFire(actionOrigin, result.AimDirection);
+                    break;
+                case BotCombatAction.FireRocket:
+                    launcher.RequestFire(result.LaunchPosition, result.AimDirection);
+                    break;
+                case BotCombatAction.RocketJump:
+                    motor.RequestJump();
+                    launcher.RequestFire(result.LaunchPosition, result.AimDirection);
+                    break;
+            }
+        }
+
         private void ApplyMoveIntent(Vector3 worldSteering)
         {
             if (motor == null || !IsFinite(worldSteering))
@@ -1504,15 +1890,28 @@ namespace RocketFooxball.Runtime.Bots
 
             activeTarget = BotTargetSelection.None;
             navigationSteering = BotNavigationSteeringResult.Invalid;
-            ballAim = BotAimSolution.Invalid;
-            enemyAim = BotAimSolution.Invalid;
-            lastCombatResult = BotCombatResult.None;
             storedAimDirection = Vector3.zero;
             storedSteeringDirection = Vector3.zero;
             storedActionFacing = Vector3.zero;
             hasAim = false;
             hasRoute = false;
+            ClearCombatState();
             ClearMotion();
+        }
+
+        private void ClearCombatState()
+        {
+            ballAim = BotAimSolution.Invalid;
+            enemyAim = BotAimSolution.Invalid;
+            lastCombatResult = BotCombatResult.None;
+            combatEnemy = default(BotParticipantObservation);
+            ballRocketLaunchPosition = Vector3.zero;
+            enemyRocketLaunchPosition = Vector3.zero;
+            rocketJumpLaunchPosition = Vector3.zero;
+            rocketJumpAimPoint = Vector3.zero;
+            rocketLineClearToBall = false;
+            rocketLineClearToEnemy = false;
+            rocketJumpLineClear = false;
         }
 
         private bool ValidateComposition()
@@ -1521,7 +1920,8 @@ namespace RocketFooxball.Runtime.Bots
                 head == null || kick == null || launcher == null || shotgun == null || navigator == null ||
                 perception == null || roleCoordinator == null ||
                 participant.Motor != motor || participant.Kick != kick || participant.Launcher != launcher ||
-                participant.Shotgun != shotgun || perception.ObserverSlotId != participant.SlotId ||
+                participant.Shotgun != shotgun || participant.CharacterController == null ||
+                perception.ObserverSlotId != participant.SlotId || ContainsForbiddenLayer(combatObstacleMask.value) ||
                 !IsSupportedDifficulty(difficulty) || !IsFinite(maxPitchDegrees) ||
                 !Mathf.Approximately(maxPitchDegrees, ExpectedMaxPitchDegrees) ||
                 !IsFinite(jumpProbeDistance) ||
@@ -1532,6 +1932,17 @@ namespace RocketFooxball.Runtime.Bots
             }
 
             return true;
+        }
+
+        private static bool ContainsForbiddenLayer(int mask)
+        {
+            return ContainsLayer(mask, "Participants") || ContainsLayer(mask, "Projectiles");
+        }
+
+        private static bool ContainsLayer(int mask, string layerName)
+        {
+            var layer = LayerMask.NameToLayer(layerName);
+            return layer >= 0 && (mask & (1 << layer)) != 0;
         }
 
         private void FailComposition()
