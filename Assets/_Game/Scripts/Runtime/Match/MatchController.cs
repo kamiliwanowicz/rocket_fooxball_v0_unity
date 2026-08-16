@@ -370,6 +370,7 @@ namespace RocketFooxball.Runtime.Match
             }
 
             SetState(MatchRules.MatchState.Paused);
+            SetGoalPollingEnabled(false);
             if (participants != null)
             {
                 for (var i = 0; i < participants.Length; i++)
@@ -389,6 +390,7 @@ namespace RocketFooxball.Runtime.Match
                 return false;
             }
 
+            SetGoalPollingEnabled(true);
             ball?.SetPaused(false);
             if (participants != null)
             {
@@ -529,6 +531,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void ClearMatchPause()
         {
+            SetGoalPollingEnabled(true);
             if (participants != null)
             {
                 for (var i = 0; i < participants.Length; i++)
@@ -537,6 +540,18 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
             ball?.SetPaused(false);
+        }
+
+        private void SetGoalPollingEnabled(bool enabled)
+        {
+            if (northGoal != null)
+            {
+                northGoal.enabled = enabled;
+            }
+            if (southGoal != null)
+            {
+                southGoal.enabled = enabled;
+            }
         }
 
         private void DestroyAllProjectiles()

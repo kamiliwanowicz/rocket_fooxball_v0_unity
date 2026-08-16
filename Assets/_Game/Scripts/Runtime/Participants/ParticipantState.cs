@@ -205,6 +205,11 @@ namespace RocketFooxball.Runtime.Participants
                 return;
             }
 
+            if (!paused && localParticipant)
+            {
+                input?.ClearGameplayState();
+            }
+
             motor?.SetPaused(paused);
             kick?.SetPaused(paused);
             launcher?.SetPaused(paused);
