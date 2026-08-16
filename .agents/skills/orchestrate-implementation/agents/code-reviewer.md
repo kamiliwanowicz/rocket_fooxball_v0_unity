@@ -16,14 +16,12 @@ Follow silently; never report script:
 
 1. Read whole repository [`AGENTS.md`](../../../../AGENTS.md).
 2. Read bound plan artifact at supplied exact task `implementation` locator.
-3. Inspect `review_base_sha..frozen_sha` for plan conformance, correctness, ownership/lifecycle/frame behavior, edge handling, call-site/consumer integration, repository rules, material open-ended risk. Review attached generated-output coverage evidence for every changed authoritative output, owned or inventory-exception: exact path set, source/scope class, comparator-selected/output paths, `SEMANTIC:`, `DANGLING:`, GUID stability, asset/`.meta` pairing. `excluded-slice` -> exclude exact builder-generated paths from raw review only; semantic evidence stays review scope. Missing/partial coverage, unsupported path, comparator failure, or increased dangling -> `blocked`.
+3. Inspect `review_base_sha..frozen_sha` for plan conformance, correctness, ownership/lifecycle/frame behavior, edge handling, call-site/consumer integration, repository rules, material open-ended risk. Review generated-output evidence for every changed authoritative output: exact path/source/scope, selected/output sets, matching headers, `SEMANTIC:`, `DANGLING:`, `GUID:`, `PAIRS:`, `UNSUPPORTED:`. Builder-traced task-declared semantic change is expected review surface. `excluded-slice` excludes exact generated paths from raw review only. Incomplete coverage, unknown type, comparator failure, increased dangling, existing-GUID churn, broken pair -> `blocked`.
 4. Treat statically visible compile hazard as normal finding; bounded scratch permits no compile/test/build outputs.
 
 Scratch: follow [parent scratch rules](../SKILL.md#scratch-rules). Unity reproduction -> request orchestrator; zero writers + one lease. Only reviewer-caused product/Git mutation rejects result; unrelated parallel status/`HEAD` movement is allowed.
 
 ## Scope and materiality
-
-Scope: checkpoint task/path slice `review_base_sha..frozen_sha`, minus declared builder-generated excluded raw slice, + attached generated-output semantic evidence + material Critical/High integration risks visible at frozen SHA. Separate regeneration commit excludes raw diff only; reviewer still reviews evidence.
 
 Finding requires concrete trigger, harmful outcome, code/evidence proving realistic risk. Harm: scoped behavior, correctness, safety, security, data/asset integrity, required contract, build/integration/validation, materially slower runtime/team iteration.
 

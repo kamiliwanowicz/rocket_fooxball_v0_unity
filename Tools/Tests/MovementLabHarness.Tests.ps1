@@ -269,14 +269,39 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
     try {
         $validationDirectory = Join-Path $fixtureRoot 'Tools/Validation'
         $materialsDirectory = Join-Path $fixtureRoot 'Assets/_Game/Materials'
+        $generatedDirectory = Join-Path $fixtureRoot 'Assets/_Game/Generated'
+        $movementLabDirectory = Join-Path $fixtureRoot 'Assets/_Game/Scenes/MovementLab'
+        $projectSettingsDirectory = Join-Path $fixtureRoot 'ProjectSettings'
         [IO.Directory]::CreateDirectory($validationDirectory) | Out-Null
         [IO.Directory]::CreateDirectory($materialsDirectory) | Out-Null
+        [IO.Directory]::CreateDirectory($generatedDirectory) | Out-Null
+        [IO.Directory]::CreateDirectory($movementLabDirectory) | Out-Null
+        [IO.Directory]::CreateDirectory($projectSettingsDirectory) | Out-Null
         Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1') -Force
         Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $validationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
         $materialPath = Join-Path $materialsDirectory 'Fixture.mat'
         $metaPath = $materialPath + '.meta'
+        $churnPath = Join-Path $materialsDirectory 'Churn.mat'
+        $churnMetaPath = $churnPath + '.meta'
+        $unknownPath = Join-Path $generatedDirectory 'Fixture.unknown'
+        $unknownMetaPath = $unknownPath + '.meta'
+        $projectSettingsPath = Join-Path $projectSettingsDirectory 'FixtureSettings.asset'
+        $binaryPaths = @(
+            (Join-Path $movementLabDirectory 'Fixture.png'),
+            (Join-Path $movementLabDirectory 'Fixture.exr'),
+            (Join-Path $movementLabDirectory 'LightingData.asset')
+        )
         [IO.File]::WriteAllText($materialPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Fixture`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($metaPath, "fileFormatVersion: 2`nguid: 11111111111111111111111111111111`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($churnPath, "%YAML 1.1`n--- !u!21 &2`nMaterial:`n  m_Name: Churn`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: 22222222222222222222222222222222`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllBytes($unknownPath, [Text.Encoding]::ASCII.GetBytes('unknown baseline'))
+        [IO.File]::WriteAllText($unknownMetaPath, "fileFormatVersion: 2`nguid: 33333333333333333333333333333333`n", (New-Object Text.UTF8Encoding($false)))
+        foreach ($binaryPath in $binaryPaths) {
+            [IO.File]::WriteAllBytes($binaryPath, [Text.Encoding]::ASCII.GetBytes('binary baseline ' + $binaryPath))
+            [IO.File]::WriteAllText(($binaryPath + '.meta'), "fileFormatVersion: 2`nguid: 44444444444444444444444444444444`n", (New-Object Text.UTF8Encoding($false)))
+        }
+        [IO.File]::WriteAllText($projectSettingsPath, "setting: baseline`n", (New-Object Text.UTF8Encoding($false)))
         & git -C $fixtureRoot init --quiet 2>$null
         if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git initialization failed' }
         & git -C $fixtureRoot config core.autocrlf false 2>$null
@@ -287,19 +312,71 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git baseline commit failed' }
         [IO.File]::AppendAllText($materialPath, "  m_ShaderKeywords: CHANGED`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::AppendAllText($metaPath, "timeCreated: 1`n", (New-Object Text.UTF8Encoding($false)))
+        foreach ($binaryPath in $binaryPaths) { [IO.File]::AppendAllText($binaryPath, "`nhead binary drift", (New-Object Text.UTF8Encoding($false))) }
+        [IO.File]::AppendAllText($unknownPath, "`nhead unknown drift", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($projectSettingsPath, "setting: head`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`n", (New-Object Text.UTF8Encoding($false)))
+        Remove-Item -LiteralPath $churnPath -Force
 
         $fixtureComparator = Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1'
-        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $fixtureComparator -Base 'HEAD' -Head 'WORKTREE' 2>&1)
+        $paths = @(
+            'Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta',
+            'Assets/_Game/Materials/Churn.mat', 'Assets/_Game/Materials/Churn.mat.meta',
+            'Assets/_Game/Generated/Fixture.unknown', 'Assets/_Game/Generated/Fixture.unknown.meta',
+            'Assets/_Game/Scenes/MovementLab/Fixture.png', 'Assets/_Game/Scenes/MovementLab/Fixture.png.meta',
+            'Assets/_Game/Scenes/MovementLab/Fixture.exr', 'Assets/_Game/Scenes/MovementLab/Fixture.exr.meta',
+            'Assets/_Game/Scenes/MovementLab/LightingData.asset', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
+            'ProjectSettings/FixtureSettings.asset'
+        )
+        $quotedPaths = @($paths | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ', '
+        $command = "& '" + $fixtureComparator.Replace("'", "''") + "' -Base 'HEAD' -Head 'WORKTREE' -Path @(" + $quotedPaths + ')'
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1)
         if ($LASTEXITCODE -ne 0) { return New-HarnessFail ('default comparator fixture failed: ' + ($output -join ' | ')) }
         $text = $output -join "`n"
-        foreach ($path in @('Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta')) {
+        foreach ($path in $paths) {
             if ($text -notmatch [regex]::Escape('== ' + $path)) { return New-HarnessFail ('default comparator omitted changed authoritative path: ' + $path) }
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+unsupported metadata.*?semantic\s+NOT CHECKED') {
-            return New-HarnessFail 'default comparator did not explicitly report modified authoritative .meta as NOT CHECKED'
+        if ($text -notmatch '(?m)^SEMANTIC: changed$') {
+            return New-HarnessFail 'intentional YAML/text semantic change was not reported'
         }
-        if ($text -notmatch '(?m)^COVERAGE: 2/2 authoritative changed paths reported; semantic checked 1; NOT CHECKED 1$') {
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+metadata.*?guid\s+stable\s+11111111111111111111111111111111') {
+            return New-HarnessFail 'stable GUID metadata was not reported'
+        }
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Churn\.mat\.meta.*?guid\s+churn\s+22222222222222222222222222222222\s+->\s+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') {
+            return New-HarnessFail 'GUID churn was not reported'
+        }
+        if ($text -notmatch '(?m)^  pair\s+broken') {
+            return New-HarnessFail 'broken asset/meta pair was not reported'
+        }
+        $projectSettingsSection = [regex]::Match($text, '(?s)== ProjectSettings/FixtureSettings\.asset.*?(?=\r?\n== |\r?\nCOVERAGE:)')
+        if (-not $projectSettingsSection.Success -or $projectSettingsSection.Value -notmatch '(?m)^  pair\s+not-applicable') {
+            return New-HarnessFail 'ProjectSettings asset was not reported as pair not-applicable'
+        }
+        if ($projectSettingsSection.Value -match '(?m)^  pair\s+broken|(?m)^  guid\s+') {
+            return New-HarnessFail 'ProjectSettings asset incorrectly received pair/GUID analysis'
+        }
+        foreach ($path in @(
+            'Assets/_Game/Scenes/MovementLab/Fixture.png',
+            'Assets/_Game/Scenes/MovementLab/Fixture.exr',
+            'Assets/_Game/Scenes/MovementLab/LightingData.asset'
+        )) {
+            if ($text -notmatch ('(?s)== ' + [regex]::Escape($path) + '.*?kind\s+binary provenance.*?bytes\s+.*?blob\s+.*?provenance')) {
+                return New-HarnessFail ('binary provenance was not reported for ' + $path)
+            }
+        }
+        if ($text -notmatch '(?s)== Assets/_Game/Generated/Fixture\.unknown\r?\n.*?kind\s+unsupported') {
+            return New-HarnessFail 'unknown generated type was not reported unsupported'
+        }
+        foreach ($header in @('COVERAGE:', 'SEMANTIC:', 'DANGLING:', 'GUID:', 'PAIRS:', 'UNSUPPORTED:')) {
+            if ($text -notmatch ('(?m)^' + [regex]::Escape($header))) { return New-HarnessFail ('comparator omitted exact summary header ' + $header) }
+        }
+        if ($text -notmatch '(?m)^COVERAGE: 13/13 authoritative changed paths reported; semantic checked 3; NOT CHECKED 10$') {
             return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
+        }
+        if ($text -notmatch '(?m)^GUID: stable 5; churn 1; added 0; removed 0; invalid 0$' -or
+            $text -notmatch '(?m)^PAIRS: intact 5; broken 1$' -or
+            $text -notmatch '(?m)^UNSUPPORTED: 1$') {
+            return New-HarnessFail ('GUID/pair/unsupported summaries were incorrect: ' + $text)
         }
     } finally {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -310,13 +387,14 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
     $legacyGate = 'if ($explicitPathRequest -or $basePresent -ne $headPresent)'
     if ($currentSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'current comparator retains the legacy default .meta omission gate' }
     if ($redSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail 'red comparator fixture does not retain the legacy default .meta omission gate' }
-    if ($currentSource -notmatch '(?s)if \(\$coverageKind -cne ''supported text''\).*?\$reportedPathCount\+\+.*?semantic\s+NOT CHECKED') {
-        return New-HarnessFail 'unsupported metadata branch does not unconditionally report default coverage and NOT CHECKED status'
+    foreach ($marker in @('binary provenance', 'hash-object', 'Get-MetadataAnalysis', 'GUID:', 'PAIRS:', 'UNSUPPORTED:')) {
+        if ($currentSource.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('current comparator omitted coverage marker: ' + $marker) }
+        if ($redSource.IndexOf($marker, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail ('red comparator fixture unexpectedly contains coverage marker: ' + $marker) }
     }
     if ($currentSource -notmatch '(?m)^Write-Output \(''COVERAGE: '' \+ \$reportedPathCount \+ ''/'' \+ \$selected.Count') {
         return New-HarnessFail 'coverage summary does not account for every selected authoritative changed path'
     }
-    return New-HarnessPass 'modified .meta default-report branch and all-path coverage summary present; red fixture retains omission gate'
+    return New-HarnessPass 'semantic change exit-0; stable/churn GUIDs; binary provenance; intact/broken pairs; unsupported type; exact summaries; red fixture fail-closed'
 }
 
 function Test-RowReuseEqual {
