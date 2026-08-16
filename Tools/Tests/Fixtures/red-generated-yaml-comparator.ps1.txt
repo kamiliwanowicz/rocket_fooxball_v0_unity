@@ -1,0 +1,5 @@
+# Historical red baseline: default mode reported unsupported paths only when explicitly requested
+# or when their presence changed, omitting modified authoritative .meta files.
+if ($explicitPathRequest -or $basePresent -ne $headPresent) {
+    Write-Output '  semantic   NOT CHECKED'
+}

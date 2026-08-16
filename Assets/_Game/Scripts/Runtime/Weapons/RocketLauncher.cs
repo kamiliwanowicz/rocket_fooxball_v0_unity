@@ -3,6 +3,7 @@ using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Weapons
 {
@@ -17,6 +18,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private RocketProjectile projectilePrefab;
         [SerializeField] private ExplosionResolver explosionResolver;
+        [SerializeField] private ParticipantState ownerParticipant;
 
         [Header("Firing")]
         [SerializeField, Min(0.05f)] private float firingInterval = 0.70f;
@@ -31,6 +33,7 @@ namespace RocketFooxball.Runtime.Weapons
         public int ActiveProjectileCount => activeProjectiles.Count;
         public bool SimulationEnabled => simulationEnabled;
         public bool CanFire => simulationEnabled && cooldownRemaining <= 0f && projectilePrefab != null;
+        public ParticipantState OwnerParticipant => ownerParticipant;
 
         /// <summary>Raised once after a projectile is initialized, registered, and cooldown is assigned.</summary>
         public event System.Action RocketLaunched;
@@ -67,9 +70,10 @@ namespace RocketFooxball.Runtime.Weapons
             var spawnPosition = spawnPoint != null ? spawnPoint.position : origin;
             spawnPosition += direction * spawnOffset;
             var projectile = Object.Instantiate(projectilePrefab, spawnPosition, Quaternion.LookRotation(direction, Vector3.up));
-            projectile.Initialize(transform, this, explosionResolver, direction);
+            projectile.Initialize(ownerParticipant, transform, this, explosionResolver, direction);
             RegisterProjectile(projectile);
             cooldownRemaining = Mathf.Max(firingInterval, 0.01f);
+            ownerParticipant?.CancelImmunity();
             RocketLaunched?.Invoke();
             return true;
         }
@@ -151,6 +155,10 @@ namespace RocketFooxball.Runtime.Weapons
             if (aimCamera == null)
             {
                 aimCamera = GetComponentInChildren<Camera>(true);
+            }
+            if (ownerParticipant == null)
+            {
+                ownerParticipant = GetComponent<ParticipantState>();
             }
         }
 

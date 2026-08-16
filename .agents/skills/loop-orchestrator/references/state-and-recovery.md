@@ -14,22 +14,21 @@ LP is sole state writer. Breakdown, planner, execution orchestrator, workers, re
 
 Truth priority:
 
-`observed Git + live-agent facts -> attempt-bound plan snapshot bytes -> state claims -> agent prose`
+`observed Git + live-agent facts -> attempt-bound plan artifact bytes -> state claims -> agent prose`
 
-State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative snapshot digest.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative plan artifact digest.
 
 ## Atomic write
 
-Before every dispatch and after every accepted result, LP:
+Before every dispatch and after every accepted result, LP writes state.
 
-1. Build complete next state bytes in unique temporary file inside run directory.
-2. Flush and close temporary file.
-3. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
-4. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
-5. Keep backup until verification passes.
-6. Reopen `state.md`; verify readable run ID and intended phase/status before continuing.
+Field update -> default scripted targeted patch into unique temporary file. Match target section + exact field key once. Zero/multiple matches -> stop. Full rebuild -> structural or phase change only.
 
-State field change -> build complete next document. Targeted text patch must match section plus exact field key exactly once. Zero or multiple matches -> stop. After replacement, verify intended field, expected phase, and unchanged neighboring identifiers.
+1. Flush and close temporary file.
+2. Windows existing state -> `[System.IO.File]::Replace($tempPath, $statePath, $backupPath)` with real unique backup path. Never pass `$null` backup.
+3. Windows missing state -> `[System.IO.File]::Move($tempPath, $statePath)`.
+4. Keep backup until verification passes.
+5. Fully reopen `state.md`; verify readable full state, run ID, intended field/phase/status, unchanged neighboring identifiers.
 
 Partial write, rename failure, or verification mismatch -> no dispatch. Preserve old readable state and return blocker evidence. Never let another agent repair state.
 
@@ -48,6 +47,13 @@ Authority: [allowed operations; user target branch/candidate approval or None]
 Question: [material active question or None]
 Blocker: [active blocker + evidence + recheck/action or None]
 
+## Rule Set
+- active manifest sha256: [lowercase digest]
+- active sources: [exact rule source paths + lowercase SHA-256]
+- pending manifest sha256: [lowercase digest or None]
+- pending sources: [exact rule source paths + lowercase SHA-256 or None]
+- reconciliations: [checkpoint ID -> old/new digest -> compatible | blocked -> affected rules/tasks/checks -> evidence; or None]
+
 ## Requirements
 - REQ-[stable ID]: [requirement] -> [plan_id or unassigned] -> [pending | covered | accepted]
 
@@ -56,7 +62,10 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - status: pending | ready | awaiting_user | blocked
 - decision: single_plan | multi_sequential | multi_parallel | hybrid | None
 - baseline: [full SHA]
-- result evidence: [accepted result location/identity or None]
+- result artifact: [absolute reserved path or None]
+- result artifact sha256: [lowercase digest or None]
+- result artifact bytes: [integer or None]
+- comments: [returned material caveats or None]
 - integration order: [plan_id list or None]
 
 ## Plans
@@ -69,24 +78,15 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - dependencies: [plan IDs + accepted SHAs or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
-- `read_paths`: [exact paths]
-- `validation_environment`: [bounded environment and lease]
-- `unity_mutation`: true | false
-- `expensive_proof_owner`: [identity or None]
-- `expensive_proof_run_point`: [boundary or None]
-- `proof_invalidation_paths`: [exact paths]
-- source artifact: [absolute path or None]
-- source artifact sha256: [lowercase digest or None]
-- source artifact bytes: [integer or None]
-- execution snapshot: [absolute path or None]
-- execution snapshot sha256: [lowercase digest or None]
-- execution snapshot bytes: [integer or None]
+- plan artifact: [absolute path or None]
+- plan artifact sha256: [lowercase digest or None]
+- plan artifact bytes: [integer or None]
 - branch: [exact name or None]
 - worktree: [absolute path or None]
 - accepted execution SHA: [full SHA or None]
 - merge wave/status: [wave + pending | merged | blocked]
 - accepted integration SHA: [full SHA or None]
-- checks: [check -> result/evidence/SHA or pending]
+- checks: [pending | blocked check IDs]
 - executed ledger: [absolute `check-ledger.json` path or None]
 - executed ledger sha256: [lowercase digest or None]
 - question: [one question or None]
@@ -104,25 +104,41 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - drift: [expected/observed full SHAs + rejected | pending_acceptance | accepted + evidence/authority or None]
 - merge status: pending | active | blocked | complete
 - final SHA: [full SHA or None]
-- checks: [check -> result/evidence/SHA or pending]
+- checks: [pending | blocked check IDs]
+- executed ledger: [absolute `check-ledger.json` path or None]
+- executed ledger sha256: [lowercase digest or None]
 - clean: true | false | unknown
+
+## Cleanup
+- status: pending | complete | blocked | not_eligible
+- removed worktrees: [exact absolute run paths or None]
+- removed aliases: [exact `C:\wt` reparse-point paths or None]
+- prune evidence: [dry-run and completion evidence or None]
+- blocker: [evidence + needed action/recheck or None]
 ```
 
 ## Executed Ledger Pointer
 
-Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harness-summary.json`. State stores only absolute ledger path plus SHA-256 in plan fields above; LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows and evidence only after digest verification. Full row contract stays in producer/consumer policy.
+Workflow-owned `check-ledger.json` is sole executed ledger. Harness writes `harness-summary.json`. Plan/integration `checks` store pending/blocked IDs only. Results, evidence, and SHAs -> absolute ledger pointer + lowercase SHA-256. LP never copies or rewrites rows. Rehash recorded ledger before resume or merge; digest mismatch -> `blocked`. Consumers read `production-final` rows/evidence after digest verification. Full row contract stays in producer/consumer policy.
 
 ## Workflow Harness Precondition
 
-Before every `Tools/Validation/Invoke-MovementLabWorkflow.ps1` or Unity invocation, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`. Require exit `0`, `<10s`, no Unity process, and no project lock.
+Harness pre-gate -> [`AGENTS.md`](../../../../AGENTS.md) `Unity execution` command, exit code, runtime limit, process, lock requirements. Run before every workflow/Unity invocation; applies `-PlanOnly` + read-only validation. Nonzero, timeout, Unity process, or project lock -> `blocked`.
 
-Nonzero, timeout, Unity process, or project lock -> `blocked`. Repair affected tooling; rerun harness to green before any workflow or Unity command, including `-PlanOnly` and read-only validation. Editing `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs` makes gate stale; rerun harness before next workflow or Unity command.
+Harness stale after edits under `Tools/Tests/**`, `Tools/Validation/*.ps1`, or `Assets/_Game/Editor/MovementLab/*.cs`. Repair/rerun green before next workflow/Unity invocation.
+
+Workflow command only:
+
+`Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>`
+
+Apply `-PlanOnly`, `-LedgerPath`, `-EvidenceRoot` when applicable. Carry prior accepted `-LedgerPath` across retries/dependencies. Never pass workflow arguments to test runner.
+
+Production-final order: zero writers -> clean exact SHA -> lease -> accepted reviews/fixes -> `ProductionPrepare` -> `ProductionValidate` semantic pass.
 
 ## Production Bake Gate
 
-- Order: production-final preconditions -> `ProductionPrepare` -> `ProductionValidate` semantic pass. Never require `ValidateMovementLab()` before production bake.
 - Budget: rehash bound `workflow-result.json` where `mode == 'ProductionPrepare'`; sum `bakeCount`. Cumulative `>=2` -> `blocked` before `ProductionPrepare`. Postflight `>2` -> evidence-corruption/contract violation; observed total never exceeds `2`.
-- Reattest: lighting-input intersection invalidates production-final proof. Current lighting-input digest unchanged -> builder skip expected; rerun needs no authority. Exact current-lighting skip marker -> `reused`, `bakeCount=0`; absent marker -> one bake, `bakeCount=1`; invalid/duplicate marker -> `blocked`.
+- Marker/skip/input semantics: [`AGENTS.md`](../../../../AGENTS.md) `Unity execution` production bake gate sole owner. Lighting-input intersection invalidates production-final proof.
 - Replacement bake: current lighting-input digest changed after prior production-final attempt -> predicted real rebuild; explicit user authority required before dispatch. Missing authority -> `blocked`; never force rerun. With authority, `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
@@ -141,13 +157,9 @@ Blocked:
 
 `planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
 
-Pre-bind source digest mismatch:
+Plan artifact digest mismatch:
 
-`planned -> blocked`; preserve accepted artifact metadata, record observed digest/size, mutate no product worktree, and start fresh planning attempt only after LP selects new reserved artifact path.
-
-Post-bind snapshot digest mismatch:
-
-`executing | done -> blocked`; preserve source provenance, record observed snapshot digest/size, stop mutation, and retry through fresh execution attempt plus fresh snapshot. Source artifact drift after snapshot binding is outside run gates and causes no transition.
+`planned | executing | done -> blocked`; record observed digest/size, mutate no product worktree, stop mutation. Recovery from `planned` needs fresh planning attempt at new reserved artifact path; from `executing | done` needs fresh execution attempt.
 
 Merge:
 
@@ -168,16 +180,29 @@ Before dispatch, record phase, attempt identity, role/profile, plan status, immu
 
 After result, stop role when required; verify result against live identity, Git/artifact facts, scope, and checks; then atomically record accepted status/facts. Rejected/late result does not advance state.
 
+Breakdown acceptance:
+
+1. Stop breakdown. Verify returned artifact path equals reserved path and exists create-once.
+2. Compute digest/size exactly as planner acceptance step 2.
+3. Record breakdown artifact path/digest/size, comments, decision, and `ready` atomically. State stores no candidate bodies.
+4. Read artifact sections on demand for `plan_id` assignment and planner dispatch binding.
+
 Planner acceptance:
 
-1. Stop planner.
-2. Verify reserved artifact exists and was create-once.
-3. Compute SHA-256 and byte size.
-4. Record source artifact path/digest/size and status `planned` atomically.
-5. Read source once into create-once execution snapshot. Reopen snapshot and compare accepted digest/size; mismatch follows pre-bind source-digest transition.
-6. Record matching snapshot path/digest/size before execution dispatch.
+1. Stop planner. Verify reserved artifact exists + create-once.
+2. For `$p`, compute exact values: `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()`; `(Get-Item $p).Length`.
+3. Record plan artifact path/digest/size + `planned` atomically.
+4. Bind that path as sole plan authority for execution dispatch. Never read artifact bytes through agent.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
+
+## Rule hot-swap
+
+Rule manifest: exact source paths + SHA-256 for instructions, skills, profiles, templates, repository rules used by bound plan/execution dispatch. LP records active manifest before planner/execution dispatch. Plan artifact remains immutable across rule revision.
+
+Hot-swap gate: accepted review checkpoint; covered children retired; writer barrier closed; frozen checkpoint SHA clean; no active child. LP detects revision -> records pending manifest -> same live execution orchestrator rereads changed sources + bound plan -> LP records reconciliation. No orchestrator retirement solely for rule revision.
+
+Reconciliation: changed sources, old/new manifests, checkpoint, affected task/check/profile/ownership/check rules, accepted-checkpoint invalidation, evidence, `compatible | blocked` verdict. `compatible` -> plan satisfies new rules; no authority/product-scope expansion; recheck every invalidated accepted checkpoint before next writer. LP promotes pending manifest atomically; same execution orchestrator continues. `blocked` -> exact conflict + fresh planner action; no plan rewrite, mixed-rule checkpoint, or new dispatch.
 
 ## Target-drift recovery
 
@@ -204,7 +229,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash source artifact only for plans before execution snapshot binding. Rehash bound snapshot for `executing`, `done`, and `merged` plans. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Source drift after binding is ignored.
+3. Rehash recorded breakdown artifact when breakdown status is `ready`, and bound plan artifact for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Breakdown artifact missing or digest mismatch -> breakdown `blocked`; fresh breakdown attempt at new reserved path; already-accepted plans keep their bound plan artifacts.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
@@ -218,7 +243,7 @@ Missing or corrupt state:
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
 
-Authoritative artifact mismatch blocks execution: source before snapshot binding; snapshot after binding. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+Bound plan artifact digest/size mismatch blocks execution; the plan artifact is sole authority. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
 
 ## Recovery scenarios
 
@@ -227,13 +252,26 @@ Authoritative artifact mismatch blocks execution: source before snapshot binding
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
-- source digest mismatch before binding: status `blocked`; no execution dispatch/product mutation; fresh planner artifact path required.
-- snapshot digest mismatch after binding: status `blocked`; fresh execution attempt and snapshot required; source drift ignored.
+- plan artifact digest mismatch: status `blocked`; no execution dispatch/product mutation; from `planned` fresh planning attempt at new reserved artifact path; from `executing | done` fresh execution attempt.
 - source-branch drift after worktree creation: no transition; use bound `start_sha..plan_head` comparison.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
 ## Cleanup and completion
 
-Stop/verify writers before cleanup. Remove current run's temporary worktrees/branches only after accepted SHAs remain reachable, state/evidence remains readable, and no live writer can mutate accepted work. Preserve ambiguous artifacts until disposition recorded.
+`READY_FOR_USER_MERGE` is handoff, not cleanup eligibility. Automatic cleanup only after all gates pass:
+
+- state: phase `READY_FOR_USER_MERGE`; final handoff facts, state, accepted artifacts, and ledger pointers/digests readable.
+- merge: recorded target branch from explicit authority exists; observed target ref contains exact recorded final SHA (`git merge-base --is-ancestor <final-sha> <target-ref>` succeeds). Authority request, candidate availability, or target observation alone fail gate.
+- quiescence: no live run agent/writer; every bound run worktree exact-path registered, branch-bound, clean, and no operation/lock remains.
+- scope: candidate paths are only exact plan worktrees plus exact integration worktree recorded for this run. Never discover by name, prefix, glob, or repository-wide inventory.
+
+Gate failure -> `not_eligible` for unmerged handoff; otherwise `blocked` with evidence. Preserve worktrees, private `Library/`, aliases, branches, and durable evidence. Never retry cleanup by deleting paths directly.
+
+Eligible cleanup:
+
+1. Reverify each exact recorded worktree immediately before removal. Run `git worktree remove <exact-path>` without `--force`; removal failure -> `blocked`, stop. Never delete branches, primary checkout, Git-common evidence, or any unrecorded worktree.
+2. Run `git worktree prune --dry-run`. Continue with `git worktree prune` only when every reported stale registration is proven to belong to an exact removed current-run worktree; unrelated or unprovable registration -> `blocked`, no prune. Requery `git worktree list --porcelain`; removed paths must be absent.
+3. Remove only exact recorded `C:\wt` aliases after worktree cleanup: path remains under `C:\wt`; item is a junction/symlink reparse point; recorded target matches current-run removed worktree or durable evidence root. Before unlink, preserve every alias referenced by retained `state.md`, `check-ledger.json`, `workflow-result.json`, or evidence pointer. No pointer canonicalization/migration. Unlink only unreferenced reparse points; no recursive delete. Regular directory, changed/missing target, or unrecorded alias -> preserve and record blocker.
+4. Atomically record exact removed worktrees/aliases and prune evidence as `complete`. Retain run state, artifacts, ledgers, and Git-common durable evidence for recovery/audit.
 
 Run complete when state and observed facts agree on `READY_FOR_USER_MERGE`, every requirement accepted, every plan merged or accepted through `single_plan`, required `check-ledger.json` pointers/digests match, final checks bind final SHA, and authority boundary explicit. Otherwise record exact blocker and one needed action/recheck.

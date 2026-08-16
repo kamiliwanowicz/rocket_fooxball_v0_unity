@@ -1,14 +1,20 @@
 {
-    "schemaVersion": 7,
-    "gitSha": "6e3717023be369888609a04bbdb3c53217cfe793",
-    "manifestStatus": "current",
-    "sourceSignature": "445ebece6862122d5b871f7c1182eb03a1b6cf24a64ca24e08630e7a57b19ed8",
-    "generatedOutputFingerprint": "d690cb5da52fb7a4c32fa55a85b1fab7ea2adc00c2103dd88c1ea4117666c2e8",
+    "schemaVersion": 8,
+    "gitSha": "99f18e88305029a5d3dc3d156c383684bc90ce92",
+    "manifestStatus": "stale",
+    "sourceSignature": "d845433d3142b262de85717271e305ccaa92e59e598aaa849496bf267a237398",
+    "generatedOutputFingerprint": "c19228f6a3f4e21fea48ad8e3c4f4bb942ad409325b679e0acb111bb571d6ddb",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "c1a592a78ab395718b1679cc4f2c661a03158653965b2449baeba1bb6ddc29e2",
+    "lightingInputDigest": "90c4767d742d26f9bd196df92f3bc0383508a3847aa2efb5d0ee184c5b3fed18",
     "bakedProfile": "Production",
-    "staleStages": [],
-    "staleReasons": [],
+    "staleStages": [
+        "Lighting",
+        "BakedOutput"
+    ],
+    "staleReasons": [
+        "input-source-changed;input-changed",
+        "input-source-changed;input-changed"
+    ],
     "fingerprintPaths": [
         "Assets/Settings/PC_Iteration_RPAsset.asset",
         "Assets/Settings/PC_Iteration_RPAsset.asset.meta",
@@ -26,12 +32,18 @@
         "Assets/_Game/Animations/FpsKick.controller.meta",
         "Assets/_Game/Animations/WorldCharacter.controller",
         "Assets/_Game/Animations/WorldCharacter.controller.meta",
+        "Assets/_Game/Generated/BlueCircleCueMesh.asset",
+        "Assets/_Game/Generated/BlueCircleCueMesh.asset.meta",
+        "Assets/_Game/Generated/RedTriangleCueMesh.asset",
+        "Assets/_Game/Generated/RedTriangleCueMesh.asset.meta",
         "Assets/_Game/Lighting/MovementLabLightingManifest.json",
         "Assets/_Game/Lighting/MovementLabLightingManifest.json.meta",
         "Assets/_Game/Lighting/MovementLabLightingSettings.asset",
         "Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta",
         "Assets/_Game/Lighting/MovementLabVolumeProfile.asset",
         "Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta",
+        "Assets/_Game/Materials/AmmoShell.mat",
+        "Assets/_Game/Materials/AmmoShell.mat.meta",
         "Assets/_Game/Materials/ArenaGlow.mat",
         "Assets/_Game/Materials/ArenaGlow.mat.meta",
         "Assets/_Game/Materials/ArenaHazard.mat",
@@ -70,6 +82,8 @@
         "Assets/_Game/Materials/GoalFrame.mat.meta",
         "Assets/_Game/Materials/Hazard.mat",
         "Assets/_Game/Materials/Hazard.mat.meta",
+        "Assets/_Game/Materials/HealthPickup.mat",
+        "Assets/_Game/Materials/HealthPickup.mat.meta",
         "Assets/_Game/Materials/Marking.mat",
         "Assets/_Game/Materials/Marking.mat.meta",
         "Assets/_Game/Materials/ProjectileGlow.mat",
@@ -86,8 +100,26 @@
         "Assets/_Game/Materials/ShieldBlue.mat.meta",
         "Assets/_Game/Materials/ShieldRed.mat",
         "Assets/_Game/Materials/ShieldRed.mat.meta",
+        "Assets/_Game/Materials/ShotgunAccent.mat",
+        "Assets/_Game/Materials/ShotgunAccent.mat.meta",
+        "Assets/_Game/Materials/ShotgunDark.mat",
+        "Assets/_Game/Materials/ShotgunDark.mat.meta",
+        "Assets/_Game/Materials/ShotgunMetal.mat",
+        "Assets/_Game/Materials/ShotgunMetal.mat.meta",
         "Assets/_Game/Materials/Smoke.mat",
         "Assets/_Game/Materials/Smoke.mat.meta",
+        "Assets/_Game/Materials/TeamBlue.mat",
+        "Assets/_Game/Materials/TeamBlue.mat.meta",
+        "Assets/_Game/Materials/TeamBlueShield.mat",
+        "Assets/_Game/Materials/TeamBlueShield.mat.meta",
+        "Assets/_Game/Materials/TeamBlueTrail.mat",
+        "Assets/_Game/Materials/TeamBlueTrail.mat.meta",
+        "Assets/_Game/Materials/TeamRed.mat",
+        "Assets/_Game/Materials/TeamRed.mat.meta",
+        "Assets/_Game/Materials/TeamRedShield.mat",
+        "Assets/_Game/Materials/TeamRedShield.mat.meta",
+        "Assets/_Game/Materials/TeamRedTrail.mat",
+        "Assets/_Game/Materials/TeamRedTrail.mat.meta",
         "Assets/_Game/Materials/Trim.mat",
         "Assets/_Game/Materials/Trim.mat.meta",
         "Assets/_Game/Materials/Wall.mat",
@@ -101,16 +133,24 @@
         "Assets/_Game/Models/ArenaKit.fbx.meta",
         "Assets/_Game/Models/FpsKickRig.fbx.meta",
         "Assets/_Game/Models/FpsRocketLauncher.fbx.meta",
+        "Assets/_Game/Models/FpsShotgun.fbx.meta",
         "Assets/_Game/Models/LowPolyCharacter.fbx.meta",
         "Assets/_Game/Models/LowPolyRocket.fbx.meta",
+        "Assets/_Game/Models/Shotgun.fbx.meta",
+        "Assets/_Game/Prefabs/AmmoPickup.prefab",
+        "Assets/_Game/Prefabs/AmmoPickup.prefab.meta",
         "Assets/_Game/Prefabs/Ball.prefab",
         "Assets/_Game/Prefabs/Ball.prefab.meta",
         "Assets/_Game/Prefabs/ExplosionVfx.prefab",
         "Assets/_Game/Prefabs/ExplosionVfx.prefab.meta",
+        "Assets/_Game/Prefabs/HealthPickup.prefab",
+        "Assets/_Game/Prefabs/HealthPickup.prefab.meta",
         "Assets/_Game/Prefabs/Player.prefab",
         "Assets/_Game/Prefabs/Player.prefab.meta",
         "Assets/_Game/Prefabs/Rocket.prefab",
         "Assets/_Game/Prefabs/Rocket.prefab.meta",
+        "Assets/_Game/Prefabs/ShotgunPickup.prefab",
+        "Assets/_Game/Prefabs/ShotgunPickup.prefab.meta",
         "Assets/_Game/Scenes/MovementLab.unity",
         "Assets/_Game/Scenes/MovementLab.unity.meta",
         "Assets/_Game/Scenes/MovementLab/LightingData.asset",
@@ -221,12 +261,18 @@
         "3967b0aa6dbb9934c81a677b4334347d",
         "b1bb8c8e1f3a45be77a6b074391e83d70e0a67b7bf798fde6246326427bd18b4",
         "f4486ef35b81d5a4dabd43be4ff31777",
+        "d3a924566f4172204944f01e9d08a62a789bc5bfc2cbf63623fec696dda8da0f",
+        "5d7990ee5ccf29f49871e4312211a549",
+        "640596db53efd2367678624b6a50dcd674bd727e93671e39d86b03e05157c2fc",
+        "62b65894efce7c445beb868116b3009a",
         "683e81bc926fec3cb0c8c1a21827ea544f28c260fb1ca1626a7bb1df06215c7a",
         "72e0360e42e1d194eac2b9de78fe5b83",
         "0b9f5938b1632a12ad3e9ccdffe00546af178af586fd9cbbbd7026b84e1fca5e",
         "9de7bc27372189346b95e51479e6c8c9",
         "eacf1c8be6632a1ee8b9c883da0dd26ee16081e381ffe7c43eff399ff5f8319c",
         "c6e7eaf4bbc0468459bebe71e809eeda",
+        "7e8e12f7907293aa6cf9e162fbe4f6989b161e8d7a94d32842fde090c9086022",
+        "ee86cab47e9f5484a807d49425020949",
         "e3b5aa6d8180e4844a084c9e6e7818e362a52668de33adc7f935c9cf7126a422",
         "49c4dabbadbd02d41b80191f94645307",
         "9095429b8b1744dedfbf6801c0b9f708d88b9e2fba203e8447e6e5c0a5b2d42c",
@@ -265,6 +311,8 @@
         "a256dce2cbc89e54f934981d48c00e70",
         "a96e9b211f493aeeded833db0c6d60295efc800f0277cf59d98da9136733a2f7",
         "a9585b86f9cc5194facf9bea6509a551",
+        "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
+        "26f953a18b358094290f33dd64b0c96d",
         "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
         "7d93bd4314658f643b0ec8cff4d8c226",
         "0051fc6fcad0dce28088dfcf24e72be37d519faf032fec5e4e6bf8c537cf293b",
@@ -281,8 +329,26 @@
         "599476c8be31fcf469fa8827cac41190",
         "f680bd850ea46ac222451a76fa7ea7a2d47908e67b9ccd2b488ff1b04a49c346",
         "86c38d84feb12604dbd759c3dcb3b785",
+        "1cc4c2b573bba13460614893cf450b053c6b42bd18f9db42b1256c1519f69aae",
+        "a54eea506fb998d4683d215d9c9a0e02",
+        "a551a0a618046690e48aa6d290f318fa174154d6d611b8aee9684c2b36b559f5",
+        "c6f5e58dec533e24ea6a4dcd8f72b286",
+        "77a6057a3bafaf5973eb9cc035e681c9e7070ef52e8a3941106c1001f2a3c9ab",
+        "817be6b52fdb07c4b8d41c6761dbcb4c",
         "0427cb964fafb830791cd897770b3cd44e345f8faaad5a1c705be0b58522e88f",
         "5d840820311370a4fa91db22124cbe77",
+        "6243afee3c6666156bf93de8073163cbe92d660d754838e71b151ab09dea3165",
+        "efc98e472707b364993cbc83c9edd174",
+        "0c0a8545bfa0964dfcc8c0e6b8017539e8affd6dd4da0598360923746db43589",
+        "c0171e54fdc0f64499578d0b7e5fe701",
+        "3f92c904232c1e5987032a0a947a6583ecaa2d7ef0817c2d6262dc6201277487",
+        "b0ab9e80406efa54babc0af0f8b05345",
+        "e3ead20cef3aa9d57db1b4496d7b61302f150acca0081bc5e14db99b0bbf6c26",
+        "6db7e0e75cd59f046a95e3ca56691b74",
+        "586eb1bed180d19fa08320bca41f93b2789a38c4d09e50f10f0a55987ab64ce4",
+        "5f69566535bcedd408a67f22179a2b91",
+        "4a1e08b1055a5a7efabf4a8356d3325c20cac43deaae86dfdd6c79223a28db8a",
+        "5a702ad7e41f9b04aa188c268a09fc5e",
         "66541b81a7d342c320634642c6406365133fa21a38f69a6e064a5b158203d5ef",
         "fcdd2739449183b48aedb5cba5a1f8b9",
         "33b3b33578848b118a531f135cbdf4a8562ddfc4f21173c72dd16e369fe8366d",
@@ -296,16 +362,24 @@
         "5979bda68030bdf4e9475ce7c370ffb4",
         "a5b342686133f6f4b9d5dc96fcbac238",
         "2e879bd5e76d0f942866c9c5071f66eb",
+        "71c588591a757084d96a41e29150f813",
         "4cb50b0e4144f234a9ff0bb7e1c358d6",
         "7a94b566aedb5b1469c8eda27577dd64",
-        "d8d1e2565dfd7ce8642d2f242726db18da7e8ccf9baecdf4f8692b7cea327874",
+        "7ecfad3c51015d246b366aee8d439a51",
+        "083ec564caa7e23acd7a31f67410444319a4671dbda44b96ec5dc102ceeb3ffd",
+        "9a55feafafe06164cb708c31654445b5",
+        "9b7f62c6ee07118d1363b95676706e5778a3ab62689dcf078b36daf633096381",
         "f3c453663c6e3de4fbef8019e550c341",
         "405faee753e5817bbc491e2a8276dc7d1b80d75ee36b81980fdcb8c6519e6c9f",
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
-        "ab634913c1210c5e79c365b2b3218fac2983494ec8cbeafdb5687c4abd882d27",
+        "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
+        "50df7b6af8a168d4c9e73b1c38864f37",
+        "9f96e7017c230121b8a29bab7c1a2a4d0df6bb65582d50a3700e36732b8b4598",
         "04f6dead4185c42458fce3ea760fc4b7",
-        "c75e84391bf69dcdebe026c41d299491aa07e820cbbd5fba9cb04d015a9b8b5e",
+        "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
         "8cf33930ca4c1194a8901597f06610c0",
+        "df4179c99c442e1eec4163a45c25262c0e45ec01badb80be486aa9cd6e3cb9e8",
+        "052b0bad7e1c977438a11b8a680a6f9c",
         "215bf30c053a6315825a1042db57ed0efad4e1e2f6f47ccbad4d0ac36c2325da",
         "4f646a78eaba1c2409e9bb3fce837175",
         "ce48f4caa2de36e5381534de28c9a9184e3b4d7739c96ceaa3a13f8cf130840a",
@@ -396,23 +470,23 @@
         "9b1a184225163714f429d2d5fd84903c7078e4eeaa653315f1936c8c9ee53506",
         "41ceac85410c51b38aa50c2fce922dc6f9e952cf05eb4f003477e6c917a6d4b5",
         "0463d352c4b982af5b63f576e525070ba80be14b647651c150bd87ef3909a90a",
-        "309d71e5059d3377e7d5146eca99b65003017ba2be0db76e9b53738e1e31c843",
+        "45234dfbf4ca341b3db5a47bd50fc16b336825398cacfdb879040a3821691a94",
         "7c1b55ebf274ce6e7045ec134f8f64ebc3d4533e0798d0fdad7d3a180cabb7a0"
     ],
     "stages": [
         {
             "stage": "Importer",
-            "schemaVersion": 7,
-            "contractVersion": "importer-contract:2",
+            "schemaVersion": 8,
+            "contractVersion": "importer-contract:3",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "8d9ae0fe32ee84405ace2f75ba893a971a85414105a1a02383ce6e030475bcfc",
-            "repositoryInputDigest": "8d9ae0fe32ee84405ace2f75ba893a971a85414105a1a02383ce6e030475bcfc",
+            "inputDigest": "f511d9ef61d9440144080d9beeb78f954e419eabf18da57359080e247dfb2369",
+            "repositoryInputDigest": "f511d9ef61d9440144080d9beeb78f954e419eabf18da57359080e247dfb2369",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "d4316780b0cf1bc931867d80550bea0890c91b6c2c9fa751137c47a83b5a3d5f",
+            "outputDigest": "27eaab7a0c3b09429dcaf208eb0c976a30f42beb15d6f6fa15d2267636b5bfee",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "priorInputDigest": "f511d9ef61d9440144080d9beeb78f954e419eabf18da57359080e247dfb2369",
+            "priorOutputDigest": "27eaab7a0c3b09429dcaf208eb0c976a30f42beb15d6f6fa15d2267636b5bfee",
             "profile": "",
             "outputs": [
                 {
@@ -431,6 +505,11 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Models/FpsShotgun.fbx.meta",
+                    "digest": "71c588591a757084d96a41e29150f813",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Models/LowPolyCharacter.fbx.meta",
                     "digest": "4cb50b0e4144f234a9ff0bb7e1c358d6",
                     "missing": false
@@ -438,6 +517,11 @@
                 {
                     "path": "Assets/_Game/Models/LowPolyRocket.fbx.meta",
                     "digest": "7a94b566aedb5b1469c8eda27577dd64",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Models/Shotgun.fbx.meta",
+                    "digest": "7ecfad3c51015d246b366aee8d439a51",
                     "missing": false
                 },
                 {
@@ -664,17 +748,17 @@
         },
         {
             "stage": "MaterialPrefab",
-            "schemaVersion": 7,
-            "contractVersion": "material-prefab-contract:4;serialized:1",
+            "schemaVersion": 8,
+            "contractVersion": "material-prefab-contract:9;serialized:5",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "5075ab2bf276521b371a9c6f5a0a2bc1a5fea6c37a963c594630e49e68bffb25",
-            "repositoryInputDigest": "cb18d381e8b2b7527fa471dbe6e09842a91afb7d52f1e212d7b418871e890d9d",
-            "dependencyDigest": "95abab14255263a990ecc66cb8b8e49e7a755da273322f772a082e29bea63606",
-            "outputDigest": "96b4ad679a5c3d9ddec9dbeaa4f3810d12446f7d2680ef61dd850be1440e3138",
+            "inputDigest": "d23ceb9206d6c00a9de587fb4e8a2adabfa86f86e68dab25c922fc2d4e85f014",
+            "repositoryInputDigest": "d233eb42b041129a671a56e1d7c59724e546f8eca2f5805e5930f17307e5ea48",
+            "dependencyDigest": "48a5f68428d21076015b5d96b5917196c48079dbde1b14843a1e0412f0b76485",
+            "outputDigest": "332f8bc37f9c54ecffdb072c0672dc7a6b325b948010326d114037df7b7fff95",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "priorInputDigest": "d23ceb9206d6c00a9de587fb4e8a2adabfa86f86e68dab25c922fc2d4e85f014",
+            "priorOutputDigest": "332f8bc37f9c54ecffdb072c0672dc7a6b325b948010326d114037df7b7fff95",
             "profile": "",
             "outputs": [
                 {
@@ -695,6 +779,36 @@
                 {
                     "path": "Assets/_Game/Animations/WorldCharacter.controller.meta",
                     "digest": "f4486ef35b81d5a4dabd43be4ff31777",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Generated/BlueCircleCueMesh.asset",
+                    "digest": "d3a924566f4172204944f01e9d08a62a789bc5bfc2cbf63623fec696dda8da0f",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Generated/BlueCircleCueMesh.asset.meta",
+                    "digest": "5d7990ee5ccf29f49871e4312211a549",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Generated/RedTriangleCueMesh.asset",
+                    "digest": "640596db53efd2367678624b6a50dcd674bd727e93671e39d86b03e05157c2fc",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Generated/RedTriangleCueMesh.asset.meta",
+                    "digest": "62b65894efce7c445beb868116b3009a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/AmmoShell.mat",
+                    "digest": "7e8e12f7907293aa6cf9e162fbe4f6989b161e8d7a94d32842fde090c9086022",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/AmmoShell.mat.meta",
+                    "digest": "ee86cab47e9f5484a807d49425020949",
                     "missing": false
                 },
                 {
@@ -888,6 +1002,16 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Materials/HealthPickup.mat",
+                    "digest": "cd32ae610efbb6073164290ed59e2d65340c465cb021d932dbb89762f92e2e55",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/HealthPickup.mat.meta",
+                    "digest": "26f953a18b358094290f33dd64b0c96d",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Materials/Marking.mat",
                     "digest": "a5e36f8633cf0ff870c70b9d7f88b424838ad9267a3b6639f464e19dc02900a8",
                     "missing": false
@@ -968,6 +1092,36 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Materials/ShotgunAccent.mat",
+                    "digest": "1cc4c2b573bba13460614893cf450b053c6b42bd18f9db42b1256c1519f69aae",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShotgunAccent.mat.meta",
+                    "digest": "a54eea506fb998d4683d215d9c9a0e02",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShotgunDark.mat",
+                    "digest": "a551a0a618046690e48aa6d290f318fa174154d6d611b8aee9684c2b36b559f5",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShotgunDark.mat.meta",
+                    "digest": "c6f5e58dec533e24ea6a4dcd8f72b286",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShotgunMetal.mat",
+                    "digest": "77a6057a3bafaf5973eb9cc035e681c9e7070ef52e8a3941106c1001f2a3c9ab",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/ShotgunMetal.mat.meta",
+                    "digest": "817be6b52fdb07c4b8d41c6761dbcb4c",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Materials/Smoke.mat",
                     "digest": "0427cb964fafb830791cd897770b3cd44e345f8faaad5a1c705be0b58522e88f",
                     "missing": false
@@ -975,6 +1129,66 @@
                 {
                     "path": "Assets/_Game/Materials/Smoke.mat.meta",
                     "digest": "5d840820311370a4fa91db22124cbe77",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlue.mat",
+                    "digest": "6243afee3c6666156bf93de8073163cbe92d660d754838e71b151ab09dea3165",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlue.mat.meta",
+                    "digest": "efc98e472707b364993cbc83c9edd174",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlueShield.mat",
+                    "digest": "0c0a8545bfa0964dfcc8c0e6b8017539e8affd6dd4da0598360923746db43589",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlueShield.mat.meta",
+                    "digest": "c0171e54fdc0f64499578d0b7e5fe701",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlueTrail.mat",
+                    "digest": "3f92c904232c1e5987032a0a947a6583ecaa2d7ef0817c2d6262dc6201277487",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamBlueTrail.mat.meta",
+                    "digest": "b0ab9e80406efa54babc0af0f8b05345",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRed.mat",
+                    "digest": "e3ead20cef3aa9d57db1b4496d7b61302f150acca0081bc5e14db99b0bbf6c26",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRed.mat.meta",
+                    "digest": "6db7e0e75cd59f046a95e3ca56691b74",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRedShield.mat",
+                    "digest": "586eb1bed180d19fa08320bca41f93b2789a38c4d09e50f10f0a55987ab64ce4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRedShield.mat.meta",
+                    "digest": "5f69566535bcedd408a67f22179a2b91",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRedTrail.mat",
+                    "digest": "4a1e08b1055a5a7efabf4a8356d3325c20cac43deaae86dfdd6c79223a28db8a",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Materials/TeamRedTrail.mat.meta",
+                    "digest": "5a702ad7e41f9b04aa188c268a09fc5e",
                     "missing": false
                 },
                 {
@@ -1028,8 +1242,18 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Prefabs/AmmoPickup.prefab",
+                    "digest": "083ec564caa7e23acd7a31f67410444319a4671dbda44b96ec5dc102ceeb3ffd",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/AmmoPickup.prefab.meta",
+                    "digest": "9a55feafafe06164cb708c31654445b5",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Prefabs/Ball.prefab",
-                    "digest": "d8d1e2565dfd7ce8642d2f242726db18da7e8ccf9baecdf4f8692b7cea327874",
+                    "digest": "9b7f62c6ee07118d1363b95676706e5778a3ab62689dcf078b36daf633096381",
                     "missing": false
                 },
                 {
@@ -1048,8 +1272,18 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Prefabs/HealthPickup.prefab",
+                    "digest": "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/HealthPickup.prefab.meta",
+                    "digest": "50df7b6af8a168d4c9e73b1c38864f37",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "ab634913c1210c5e79c365b2b3218fac2983494ec8cbeafdb5687c4abd882d27",
+                    "digest": "9f96e7017c230121b8a29bab7c1a2a4d0df6bb65582d50a3700e36732b8b4598",
                     "missing": false
                 },
                 {
@@ -1059,34 +1293,44 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Rocket.prefab",
-                    "digest": "c75e84391bf69dcdebe026c41d299491aa07e820cbbd5fba9cb04d015a9b8b5e",
+                    "digest": "e3b80d183ff75c4e024da873b4c60ae29b9f1770a2b7e615339379d2ee1cdf53",
                     "missing": false
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Rocket.prefab.meta",
                     "digest": "8cf33930ca4c1194a8901597f06610c0",
                     "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/ShotgunPickup.prefab",
+                    "digest": "df4179c99c442e1eec4163a45c25262c0e45ec01badb80be486aa9cd6e3cb9e8",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Prefabs/ShotgunPickup.prefab.meta",
+                    "digest": "052b0bad7e1c977438a11b8a680a6f9c",
+                    "missing": false
                 }
             ]
         },
         {
             "stage": "GameplayScene",
-            "schemaVersion": 7,
-            "contractVersion": "gameplay-scene-contract:7;serialized:1",
+            "schemaVersion": 8,
+            "contractVersion": "gameplay-scene-contract:14;serialized:5",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "c76a7d7d6acfebabe28a001801ada837df802e6f449bc551fdecdcdb0dfcf4b4",
-            "repositoryInputDigest": "48c0b84184da5b62a1c6e5b671e212af2790d8407d14b2adaa2263ffa2c96b0b",
-            "dependencyDigest": "ecf040a4cc4a52103f49176f96e8faa774e3b2eb61168fb4e89c0ad56d12e9d5",
-            "outputDigest": "9593e6a4316fe059a83751facf6578ac75c5579c0d4d2d16a83dc77775738b2b",
+            "inputDigest": "8eda448edf40997e4c685dba24ace80c04f5e10cd8d7677ee845cf9e09d77244",
+            "repositoryInputDigest": "1ca1c40414a52aceca5baf03bd3952ec76df465509a1af98013787ea94142ac5",
+            "dependencyDigest": "90c6dda33dfb98f2cc2d3009526a3c3bb38f214da28c8be167e51013d13f5c39",
+            "outputDigest": "5979e4e13b25601f81feb241819b2cdc019b2125fcc49833d0c2e23ff6ec18c0",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "priorInputDigest": "8eda448edf40997e4c685dba24ace80c04f5e10cd8d7677ee845cf9e09d77244",
+            "priorOutputDigest": "5979e4e13b25601f81feb241819b2cdc019b2125fcc49833d0c2e23ff6ec18c0",
             "profile": "",
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "30d2940139bb79d5fc9eefd649009df1c935824c934af4cce3746b4892af769c",
+                    "digest": "bbd7f3a96de8a72505cfa551637bec73bdfbeeb87cb848bad43769292367e5a9",
                     "missing": false
                 },
                 {
@@ -1106,7 +1350,7 @@
                 },
                 {
                     "path": "ProjectSettings/TagManager.asset",
-                    "digest": "309d71e5059d3377e7d5146eca99b65003017ba2be0db76e9b53738e1e31c843",
+                    "digest": "45234dfbf4ca341b3db5a47bd50fc16b336825398cacfdb879040a3821691a94",
                     "missing": false
                 },
                 {
@@ -1118,7 +1362,7 @@
         },
         {
             "stage": "Quality",
-            "schemaVersion": 7,
+            "schemaVersion": 8,
             "contractVersion": "quality-contract:3",
             "unityVersion": "6000.5.6f1",
             "inputDigest": "9263eeb28116f49ddef0005210d887b0d3ef2442600558e344490297f872e5bb",
@@ -1127,8 +1371,8 @@
             "outputDigest": "62a8289e7f97917f13843852da17a7ba05c04c98b3787626f5bc74fb227ad9f6",
             "predecessorDigests": [],
             "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "priorInputDigest": "9263eeb28116f49ddef0005210d887b0d3ef2442600558e344490297f872e5bb",
+            "priorOutputDigest": "62a8289e7f97917f13843852da17a7ba05c04c98b3787626f5bc74fb227ad9f6",
             "profile": "",
             "outputs": [
                 {
@@ -1205,17 +1449,20 @@
         },
         {
             "stage": "Lighting",
-            "schemaVersion": 7,
-            "contractVersion": "lighting-contract:3",
+            "schemaVersion": 8,
+            "contractVersion": "lighting-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "c1a592a78ab395718b1679cc4f2c661a03158653965b2449baeba1bb6ddc29e2",
-            "repositoryInputDigest": "c1a592a78ab395718b1679cc4f2c661a03158653965b2449baeba1bb6ddc29e2",
+            "inputDigest": "90c4767d742d26f9bd196df92f3bc0383508a3847aa2efb5d0ee184c5b3fed18",
+            "repositoryInputDigest": "90c4767d742d26f9bd196df92f3bc0383508a3847aa2efb5d0ee184c5b3fed18",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "predecessorDigests": [],
-            "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "staleReasons": [
+                "input-source-changed",
+                "input-changed"
+            ],
+            "priorInputDigest": "0bfff28b0640a1c8fec51affc8e74fab3bc10a2d997c228115e75fe7aa75bc06",
+            "priorOutputDigest": "5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245",
             "profile": "",
             "outputs": [
                 {
@@ -1242,19 +1489,22 @@
         },
         {
             "stage": "BakedOutput",
-            "schemaVersion": 7,
+            "schemaVersion": 8,
             "contractVersion": "baked-output-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "216ce9f82859530ea7b1086c9e47860f253ebd28ab6cfcf96ec227e96a701b1b",
-            "repositoryInputDigest": "b18a07c350ad882e3f553c2ee262539c641008df124996e84f10416fb9dc9d2b",
+            "inputDigest": "2ab9622bc7ce1b492b6066409a71826ee6599cfa8b6140491795553d8c660bdc",
+            "repositoryInputDigest": "e40be0723607d2f208f929a8e49653160561c69d415a83b4ae14e89650969d76",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "predecessorDigests": [
                 "Lighting:5113e7391df4892786a974bdb717f024326276e063e08e91f339405a73ae3245"
             ],
-            "staleReasons": [],
-            "priorInputDigest": "",
-            "priorOutputDigest": "",
+            "staleReasons": [
+                "input-source-changed",
+                "input-changed"
+            ],
+            "priorInputDigest": "16054c11f315033afeda4a68b02f12e952ffec161cc1c050c9b110b70bfe4c3a",
+            "priorOutputDigest": "ea0a59c369a035946e950ee60a35876b853ee974e7048538f3cd7664e8bb72ab",
             "profile": "Production",
             "outputs": [
                 {

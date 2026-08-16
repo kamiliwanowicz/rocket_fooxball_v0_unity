@@ -9,7 +9,6 @@ param(
     [string]$AttemptId,
     [string]$LedgerPath,
     [string]$ProbePath,
-    [string[]]$GeneratedPath = @(),
     [switch]$PlanOnly,
     [int]$TimeoutSeconds = 900
 )
@@ -31,7 +30,6 @@ $script:LeaseReleaseProofPath = $null
 $script:InvocationId = $null
 $script:PriorLedgerHistory = New-Object System.Collections.Generic.List[object]
 $script:PriorManifestHistory = New-Object System.Collections.Generic.List[object]
-$script:RequestedInventoryPaths = @()
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
@@ -67,7 +65,7 @@ $script:AuthoritativeInventory = @(
 # generated inventory. T4 probes still fingerprint these exact importer metas,
 # so compatibility is an explicit path set rather than a caller-expandable root.
 $script:ClosedImporterMetadataPaths = @(
-    'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta',
+    'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta', 'Assets/_Game/Models/FpsShotgun.fbx.meta', 'Assets/_Game/Models/Shotgun.fbx.meta',
     'Assets/_Game/Textures/RetroGrass.png.meta', 'Assets/_Game/Textures/RetroGrass_Normal.png.meta', 'Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroGrass_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroWall.png.meta', 'Assets/_Game/Textures/RetroWall_Normal.png.meta', 'Assets/_Game/Textures/RetroWall_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWall_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroTrim.png.meta', 'Assets/_Game/Textures/RetroTrim_Normal.png.meta', 'Assets/_Game/Textures/RetroTrim_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroTrim_Occlusion.png.meta',
@@ -83,6 +81,8 @@ $script:ClosedImporterMetadataPaths = @(
 $script:BuilderOutputContract = @(
     'Assets/_Game/Generated/MovementLabBuildManifest.json',
     'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab',
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab', 'Assets/_Game/Prefabs/AmmoPickup.prefab',
+    'Assets/_Game/Materials/ShotgunMetal.mat', 'Assets/_Game/Materials/ShotgunDark.mat', 'Assets/_Game/Materials/ShotgunAccent.mat', 'Assets/_Game/Materials/AmmoShell.mat',
     'Assets/_Game/Animations/WorldCharacter.controller', 'Assets/_Game/Animations/FpsKick.controller',
     'Assets/_Game/Scenes/MovementLab.unity', 'Assets/_Game/Scenes/MovementLab/LightingData.asset',
     'Assets/_Game/Lighting/MovementLabVolumeProfile.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings.asset', 'Assets/_Game/Lighting/MovementLabLightingManifest.json',
@@ -97,6 +97,8 @@ $script:BuilderOutputContract = @(
     'ProjectSettings/QualitySettings.asset', 'ProjectSettings/GraphicsSettings.asset', 'ProjectSettings/ProjectSettings.asset',
     'Assets/_Game/Generated/MovementLabBuildManifest.json.meta',
     'Assets/_Game/Prefabs/Player.prefab.meta', 'Assets/_Game/Prefabs/Ball.prefab.meta', 'Assets/_Game/Prefabs/Rocket.prefab.meta', 'Assets/_Game/Prefabs/ExplosionVfx.prefab.meta',
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
+    'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta',
     'Assets/_Game/Animations/WorldCharacter.controller.meta', 'Assets/_Game/Animations/FpsKick.controller.meta',
     'Assets/_Game/Scenes/MovementLab.unity.meta', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
     'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset.meta'
@@ -180,6 +182,32 @@ function Assert-DurableEvidencePath {
     return $full
 }
 
+function Assert-ShortWorkspacePath {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+    $full = Get-FullPath $Path
+    $workspaceRoot = 'C:\wt'
+    if (-not $full.StartsWith($workspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ($Label + ' must be under C:\wt: ' + $full)
+    }
+    return $full
+}
+
+function Assert-EvidencePathBudget {
+    param([Parameter(Mandatory = $true)][string]$EvidenceDirectory)
+    $deepest = Join-Path (Join-Path $EvidenceDirectory 'logs') 'movement-lab-stage-probe.json'
+    if ($deepest.Length -ge 260) {
+        throw ('Evidence path exceeds Windows 260-character limit (' + $deepest.Length + ' chars); use a shorter evidence root: ' + $deepest)
+    }
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $deepest) | Out-Null
+    try {
+        [IO.File]::WriteAllText($deepest, 'probe')
+        Remove-Item -LiteralPath $deepest -Force
+    } catch {
+        throw ('Evidence path not writable at deepest expected path: ' + $deepest + ' -> ' + $_.Exception.Message)
+    }
+    return $deepest
+}
+
 function Assert-OneLineValue {
     param([Parameter(Mandatory = $true)][string]$Name, [Parameter(Mandatory = $true)][string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value) -or $Value.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
@@ -213,7 +241,6 @@ function Test-ProbeInventoryMember {
 
 function Get-AuthoritativeGeneratedInventory {
     $paths = New-Object System.Collections.Generic.List[string]
-    $requestedSelection = New-Object System.Collections.Generic.List[string]
     foreach ($root in $script:AuthoritativeInventory) {
         $full = Join-Path $script:ProjectRoot $root
         if (Test-Path -LiteralPath $full -PathType Leaf) {
@@ -233,16 +260,6 @@ function Get-AuthoritativeGeneratedInventory {
         if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
         elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
     }
-    foreach ($requested in @($GeneratedPath)) {
-        $value = Assert-OneLineValue 'GeneratedPath' ([string]$requested)
-        if ([IO.Path]::IsPathRooted($value) -or -not (Test-InventoryMember $value)) { throw ('GeneratedPath is outside authoritative inventory: ' + $value) }
-        $normalized = $value.Replace('\', '/').TrimStart('/')
-        if (-not $requestedSelection.Contains($normalized)) { $requestedSelection.Add($normalized) }
-        $full = Join-Path $script:ProjectRoot $normalized
-        if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($normalized)) { $paths.Add($normalized) }
-        elseif (-not (Test-Path -LiteralPath $full) -and -not $paths.Contains($normalized + '=__MISSING__')) { $paths.Add($normalized + '=__MISSING__') }
-    }
-    $script:RequestedInventoryPaths = @($requestedSelection.ToArray())
     return @($paths.ToArray() | Sort-Object -Unique)
 }
 
@@ -723,7 +740,6 @@ function New-LedgerRow {
     $invalidationPathArray = [string[]]@($InvalidationPaths)
     $subsumesArray = [string[]]@($Subsumes)
     $generatedInventoryArray = [string[]]@(Get-AuthoritativeGeneratedInventory)
-    $requestedInventoryArray = [string[]]@($script:RequestedInventoryPaths)
     $generatedHashes = Get-GeneratedHashes
     [ordered]@{
         invocation_id = $script:InvocationId
@@ -737,7 +753,6 @@ function New-LedgerRow {
         input_digest = Get-InputDigest -Paths $inputPathArray
         environment_fingerprint = Get-EnvironmentFingerprint
         generated_inventory = $generatedInventoryArray
-        requested_inventory = $requestedInventoryArray
         generated_hashes = $generatedHashes
         generated_hash_digest = Get-GeneratedHashDigest $generatedHashes
         working_tree_digest = Get-WorkingTreeDigest
@@ -1368,15 +1383,10 @@ foreach ($pathArgument in @(
         elseif ($pathArgument.name -eq 'LedgerPath') { $ledgerPathPathSafe = $false }
     }
 }
-for ($generatedIndex = 0; $generatedIndex -lt @($GeneratedPath).Count; $generatedIndex++) {
-    $generatedValue = [string]$GeneratedPath[$generatedIndex]
-    if ([string]::IsNullOrWhiteSpace($generatedValue) -or $generatedValue.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) { Add-WorkflowViolation $preflightViolations ('preflight.argument.GeneratedPath[' + $generatedIndex + '].shape') 'GeneratedPath must be non-empty and one line.' }
-    elseif ([IO.Path]::IsPathRooted($generatedValue) -or -not (Test-InventoryMember $generatedValue)) { Add-WorkflowViolation $preflightViolations ('preflight.repository.GeneratedPath[' + $generatedIndex + '].scope') ('GeneratedPath is outside authoritative inventory: ' + $generatedValue) }
-}
 $evidenceBase = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
     Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
 } elseif ($evidenceRootPathSafe) {
-    Assert-DurableEvidencePath $EvidenceRoot 'EvidenceRoot'
+    Assert-DurableEvidencePath (Assert-ShortWorkspacePath $EvidenceRoot 'EvidenceRoot') 'EvidenceRoot'
 } else {
     Assert-DurableEvidencePath (Get-FullPath (Join-Path $commonGit ('movement-lab-proof\' + $attemptPathValue))) 'EvidenceRoot'
 }
@@ -1396,7 +1406,7 @@ $dirtyBefore = @(Get-NonGeneratedDirtyPaths)
 if ($Mode -eq 'ProductionPrepare' -and $dirtyBefore.Count -gt 0) { Add-WorkflowViolation $preflightViolations 'preflight.repository.dirtyScope' ('Non-generated source is dirty: ' + ($dirtyBefore -join ', ')) }
 Complete-WorkflowValidationPhase 'preflight' $preflightViolations
 
-New-Item -ItemType Directory -Force -Path $script:EvidenceDirectory | Out-Null
+Assert-EvidencePathBudget $script:EvidenceDirectory | Out-Null
 $evidenceItem = Get-Item -LiteralPath $script:EvidenceDirectory -Force
 if (($evidenceItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { throw ('Evidence invocation path may not be a junction or alias: ' + $script:EvidenceDirectory) }
 $canonicalEvidenceParent = Get-CanonicalPath (Split-Path -Parent $script:EvidenceDirectory)
@@ -1431,20 +1441,14 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
         'ProductionPrepare' {
-            # PlanOnly can validate an existing probe before recording any skipped Unity step.
-            # Executing runs keep probe generation order unchanged.
+            # PlanOnly can validate an existing probe before recording the
+            # single combined prepare/bake Unity step.
             if ($PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath -PathType Leaf)) {
                 $probeRecord = Read-ProbeContract
                 Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
             }
-            if (Test-CheckPending 'stage-probe') { Invoke-UnityStep 'Probe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
-            if ($null -eq $probeRecord) {
-                $probeRecord = Read-ProbeContract
-                Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
-            }
-            Invoke-UnityStep 'StaleAssembly' 'RocketFooxball.Editor.MovementLabBuilder.AssembleMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $true
-            if ($script:BakeCount -gt 0) { throw 'ProductionPrepare attempted a bake before production bake step.' }
-            Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabProbePath', $script:ProbeOutputPath) $true
+            Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabPrepareProduction', '-movementLabProbePath', $script:ProbeOutputPath) $true
+            if (Test-CheckPending 'stage-probe') { Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
             Mark-CheckExecuted 'production-bake'
             $productionBakeOutcome = Resolve-ProductionBakeOutcome
             $productionBakeRow = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1

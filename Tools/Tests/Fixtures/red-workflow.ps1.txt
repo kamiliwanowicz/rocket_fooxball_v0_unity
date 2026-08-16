@@ -1,5 +1,27 @@
 # Historical red baseline for harness red/green checks.
-# Mirrors pre-IDictionary property access from red workflow baseline.
+# Includes pre-IDictionary access and the removed R6 generated-path surface.
+param(
+    [string[]]$GeneratedPath = @()
+)
+
+$script:RequestedInventoryPaths = @()
+$script:ClosedImporterMetadataPaths = @(
+    'Assets/_Game/Models/FpsShotgun.fbx.meta',
+    'Assets/_Game/Models/Shotgun.fbx.meta'
+)
+$script:BuilderOutputContract = @(
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab', 'Assets/_Game/Prefabs/AmmoPickup.prefab',
+    'Assets/_Game/Materials/ShotgunMetal.mat', 'Assets/_Game/Materials/ShotgunDark.mat', 'Assets/_Game/Materials/ShotgunAccent.mat', 'Assets/_Game/Materials/AmmoShell.mat',
+    'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
+    'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta'
+)
+$legacyRow = [ordered]@{ requested_inventory = @() }
+
+function Assert-ShortWorkspacePath {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
+    return [System.IO.Path]::GetFullPath($Path)
+}
+
 function Get-ObjectPropertyValue {
     param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
     if ($null -eq $Object -or -not ($Object.PSObject.Properties.Name -contains $Name)) { return $null }

@@ -11,6 +11,7 @@ namespace RocketFooxball.Runtime.Input
 
         private bool jumpPressed;
         private bool kickPressed;
+        private bool shotgunPressed;
         private bool fireHeld;
         private bool gameplayInputEnabled = true;
         private bool releaseCursorRequested;
@@ -20,13 +21,17 @@ namespace RocketFooxball.Runtime.Input
         private InputAction lookAction;
         private InputAction jumpAction;
         private InputAction fireAction;
+        private InputAction shotgunFireAction;
         private InputAction kickAction;
         private InputAction releaseCursorAction;
         private InputAction captureCursorAction;
+        private InputAction matchTableAction;
 
         public Vector2 Move => gameplayInputEnabled && moveAction != null ? moveAction.ReadValue<Vector2>() : Vector2.zero;
         public Vector2 Look => gameplayInputEnabled && lookAction != null ? lookAction.ReadValue<Vector2>() : Vector2.zero;
         public bool FireHeld => gameplayInputEnabled && fireHeld;
+        /// <summary>Returns held match-table intent while this reader/action is active.</summary>
+        public bool MatchTableHeld => isActiveAndEnabled && matchTableAction != null && matchTableAction.enabled && matchTableAction.IsPressed();
         public bool CursorCaptured => Cursor.lockState == CursorLockMode.Locked;
         public bool GameplayInputEnabled => gameplayInputEnabled;
 
@@ -42,9 +47,11 @@ namespace RocketFooxball.Runtime.Input
             lookAction = actions.FindAction("Player/Look", true);
             jumpAction = actions.FindAction("Player/Jump", true);
             fireAction = actions.FindAction("Player/Fire", true);
+            shotgunFireAction = actions.FindAction("Player/ShotgunFire", true);
             kickAction = actions.FindAction("Player/Kick", true);
             releaseCursorAction = actions.FindAction("Player/ReleaseCursor", true);
             captureCursorAction = actions.FindAction("Player/CaptureCursor", true);
+            matchTableAction = actions.FindAction("Player/MatchTable", true);
         }
 
         private void OnEnable()
@@ -53,9 +60,11 @@ namespace RocketFooxball.Runtime.Input
             Enable(lookAction);
             Enable(jumpAction);
             Enable(fireAction);
+            Enable(shotgunFireAction);
             Enable(kickAction);
             Enable(releaseCursorAction);
             Enable(captureCursorAction);
+            Enable(matchTableAction);
             if (jumpAction != null)
             {
                 jumpAction.started += OnJumpStarted;
@@ -63,6 +72,10 @@ namespace RocketFooxball.Runtime.Input
             if (kickAction != null)
             {
                 kickAction.started += OnKickStarted;
+            }
+            if (shotgunFireAction != null)
+            {
+                shotgunFireAction.started += OnShotgunFireStarted;
             }
             if (releaseCursorAction != null)
             {
@@ -84,6 +97,10 @@ namespace RocketFooxball.Runtime.Input
             {
                 kickAction.started -= OnKickStarted;
             }
+            if (shotgunFireAction != null)
+            {
+                shotgunFireAction.started -= OnShotgunFireStarted;
+            }
             if (releaseCursorAction != null)
             {
                 releaseCursorAction.started -= OnReleaseCursorStarted;
@@ -96,9 +113,11 @@ namespace RocketFooxball.Runtime.Input
             Disable(lookAction);
             Disable(jumpAction);
             Disable(fireAction);
+            Disable(shotgunFireAction);
             Disable(kickAction);
             Disable(releaseCursorAction);
             Disable(captureCursorAction);
+            Disable(matchTableAction);
             ClearGameplayState();
             releaseCursorRequested = false;
             captureCursorRequested = false;
@@ -139,6 +158,13 @@ namespace RocketFooxball.Runtime.Input
             return result;
         }
 
+        public bool ConsumeShotgunPressed()
+        {
+            var result = shotgunPressed;
+            shotgunPressed = false;
+            return result;
+        }
+
         public bool ConsumeReleaseCursorRequested()
         {
             var result = releaseCursorRequested;
@@ -171,6 +197,7 @@ namespace RocketFooxball.Runtime.Input
         {
             jumpPressed = false;
             kickPressed = false;
+            shotgunPressed = false;
             fireHeld = false;
             suppressFireUntilRelease = fireAction != null && fireAction.IsPressed();
         }
@@ -196,6 +223,14 @@ namespace RocketFooxball.Runtime.Input
             if (gameplayInputEnabled)
             {
                 kickPressed = true;
+            }
+        }
+
+        private void OnShotgunFireStarted(InputAction.CallbackContext _)
+        {
+            if (gameplayInputEnabled && CursorCaptured)
+            {
+                shotgunPressed = true;
             }
         }
 

@@ -8,25 +8,90 @@ namespace RocketFooxball.Editor
     {
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
-        internal const int ManifestSchemaVersion = 7;
-        internal const int SerializedContractVersion = 1;
+        internal const int ManifestSchemaVersion = 8;
+        internal const int SerializedContractVersion = 5;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
         internal const string BallPrefabPath = "Assets/_Game/Prefabs/Ball.prefab";
         internal const string RocketPrefabPath = "Assets/_Game/Prefabs/Rocket.prefab";
         internal const string ExplosionPrefabPath = "Assets/_Game/Prefabs/ExplosionVfx.prefab";
+        internal const string HealthPickupPrefabPath = "Assets/_Game/Prefabs/HealthPickup.prefab";
+        internal const string ShotgunPickupPrefabPath = "Assets/_Game/Prefabs/ShotgunPickup.prefab";
+        internal const string AmmoPickupPrefabPath = "Assets/_Game/Prefabs/AmmoPickup.prefab";
         internal const string InputActionsPath = "Assets/InputSystem_Actions.inputactions";
         internal const string MaterialsPath = "Assets/_Game/Materials";
+        internal const string HealthPickupMaterialPath = MaterialsPath + "/HealthPickup.mat";
+        internal const string AmmoShellMaterialPath = MaterialsPath + "/AmmoShell.mat";
         internal const string TexturesPath = "Assets/_Game/Textures";
         internal const string ShadersPath = "Assets/_Game/Shaders";
         internal const string AnimationsPath = "Assets/_Game/Animations";
+        internal const string GeneratedPath = "Assets/_Game/Generated";
+        internal const string BlueCircleCueMeshPath = GeneratedPath + "/BlueCircleCueMesh.asset";
+        internal const string RedTriangleCueMeshPath = GeneratedPath + "/RedTriangleCueMesh.asset";
         internal const string LightingPath = "Assets/_Game/Lighting";
         internal const string BakedLightingPath = "Assets/_Game/Scenes/MovementLab";
         internal const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
-        internal const string BuildMarkerPrefix = "MovementLabGeneratedT7_";
+        internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
+        internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
+        internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
+        internal const string TimeManagerPath = "ProjectSettings/TimeManager.asset";
+        internal const string TagManagerPath = "ProjectSettings/TagManager.asset";
+        internal const string FpsShotgunModelPath = "Assets/_Game/Models/FpsShotgun.fbx";
+        internal const string ShotgunModelPath = "Assets/_Game/Models/Shotgun.fbx";
+        internal const string ShotgunMetalMaterialPath = MaterialsPath + "/ShotgunMetal.mat";
+        internal const string ShotgunDarkMaterialPath = MaterialsPath + "/ShotgunDark.mat";
+        internal const string ShotgunAccentMaterialPath = MaterialsPath + "/ShotgunAccent.mat";
+
+        internal const string HealthPickupsRootName = "HealthPickups";
+        internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
+        internal const string HealthPickupEastSouthName = "HealthPickup_EastSouth";
+        internal const float HealthPickupRespawnDelay = 15f;
+        internal const float HealthPickupRestoreFraction = 0.33f;
+        internal const float HealthPickupTriggerRadius = 1.50f;
+        internal const string ShotgunPickupsRootName = "ShotgunPickups";
+        internal const string AmmoPickupsRootName = "AmmoPickups";
+        internal const string ShotgunPickupName = "ShotgunPickup_Center";
+        internal const string AmmoPickupWestNorthName = "AmmoPickup_WestNorth";
+        internal const string AmmoPickupEastSouthName = "AmmoPickup_EastSouth";
+        internal const float ShotgunPickupRespawnDelay = 15f;
+        internal const float AmmoPickupRespawnDelay = 15f;
+        internal const int ShotgunPickupGrant = 8;
+        internal const int AmmoPickupGrant = 8;
+        internal const float ShotgunPickupTriggerRadius = 1.50f;
+        internal const float AmmoPickupTriggerRadius = 1.50f;
+        internal const int ShotgunShellCapacity = 16;
+        internal static readonly Vector3 ShotgunPickupPosition = new Vector3(0f, 1.10f, 14f);
+        internal static readonly Quaternion ShotgunPickupRotation = Quaternion.identity;
+        internal static readonly Vector3 AmmoPickupWestNorthPosition = new Vector3(-38f, 1.10f, 18f);
+        internal static readonly Vector3 AmmoPickupEastSouthPosition = new Vector3(38f, 1.10f, -18f);
+        internal static readonly Quaternion AmmoPickupWestNorthRotation = Quaternion.identity;
+        internal static readonly Quaternion AmmoPickupEastSouthRotation = Quaternion.Euler(0f, 180f, 0f);
+        internal static readonly Vector3 PickupCueBluePosition = new Vector3(-0.55f, 0.65f, 0f);
+        internal static readonly Vector3 PickupCueRedPosition = new Vector3(0.55f, 0.65f, 0f);
+        internal static readonly Vector3 PickupCueScale = Vector3.one * 0.80f;
+        internal static readonly Vector3 AmmoShellLeftPosition = new Vector3(-0.22f, 0.25f, 0f);
+        internal static readonly Vector3 AmmoShellRightPosition = new Vector3(0.22f, 0.25f, 0f);
+        internal static readonly Vector3 AmmoShellScale = new Vector3(0.16f, 0.32f, 0.16f);
+        internal static readonly Color AmmoShellBaseColor = new Color(0.90f, 0.45f, 0.08f, 1f);
+        internal static readonly Color AmmoShellEmissionColor = new Color(1f, 0.16f, 0.02f, 1f);
+        internal const float AmmoShellEmissionStrength = 1.25f;
+        internal static readonly Vector3 HealthPickupWestNorthPosition = new Vector3(-36f, 1.10f, -28f);
+        internal static readonly Vector3 HealthPickupEastSouthPosition = new Vector3(36f, 1.10f, 28f);
+        internal static readonly Quaternion HealthPickupWestNorthRotation = Quaternion.identity;
+        internal static readonly Quaternion HealthPickupEastSouthRotation = Quaternion.Euler(0f, 180f, 0f);
+        internal static readonly Vector3 HealthCrossHorizontalScale = new Vector3(1.40f, 0.30f, 0.30f);
+        internal static readonly Vector3 HealthCrossVerticalScale = new Vector3(0.30f, 1.40f, 0.30f);
+        internal static readonly Vector3 HealthCrossCoreScale = new Vector3(0.45f, 0.45f, 0.45f);
+
+        // GameplayScene owns these project-level physics names and collision
+        // settings. MaterialPrefab may bootstrap names needed by prefab roots;
+        // GameplayScene always reasserts and persists the contract.
+        internal const string ParticipantsLayerName = "Participants";
+        internal const string ProjectilesLayerName = "Projectiles";
+        internal const string LocalPlayerHiddenLayerName = "LocalPlayerHidden";
 
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
@@ -68,6 +133,8 @@ namespace RocketFooxball.Editor
             "Assets/_Game/Models/LowPolyCharacter.fbx",
             "Assets/_Game/Models/FpsKickRig.fbx",
             "Assets/_Game/Models/FpsRocketLauncher.fbx",
+            FpsShotgunModelPath,
+            ShotgunModelPath,
             TexturesPath + "/RetroGrass.png", TexturesPath + "/RetroGrass_Normal.png", TexturesPath + "/RetroGrass_MetallicSmoothness.png", TexturesPath + "/RetroGrass_Occlusion.png",
             TexturesPath + "/RetroWall.png", TexturesPath + "/RetroWall_Normal.png", TexturesPath + "/RetroWall_MetallicSmoothness.png", TexturesPath + "/RetroWall_Occlusion.png",
             TexturesPath + "/RetroTrim.png", TexturesPath + "/RetroTrim_Normal.png", TexturesPath + "/RetroTrim_MetallicSmoothness.png", TexturesPath + "/RetroTrim_Occlusion.png",
@@ -86,6 +153,7 @@ namespace RocketFooxball.Editor
         internal static readonly string[] MaterialPrefabOutputs =
         {
             PlayerPrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath,
+            HealthPickupPrefabPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath,
             AnimationsPath + "/WorldCharacter.controller", AnimationsPath + "/FpsKick.controller",
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", MaterialsPath + "/RocketHot.mat",
@@ -96,16 +164,23 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/ContainmentGridCeiling.mat", MaterialsPath + "/ContainmentGridLongWall.mat", MaterialsPath + "/ContainmentGridEndWall.mat",
             MaterialsPath + "/RetroSunnySky.mat", MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat",
-            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat"
+            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat",
+            ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentMaterialPath,
+            MaterialsPath + "/TeamBlue.mat", MaterialsPath + "/TeamRed.mat",
+            MaterialsPath + "/TeamBlueShield.mat", MaterialsPath + "/TeamRedShield.mat",
+            MaterialsPath + "/TeamBlueTrail.mat", MaterialsPath + "/TeamRedTrail.mat",
+            HealthPickupMaterialPath,
+            AmmoShellMaterialPath,
+            BlueCircleCueMeshPath, RedTriangleCueMeshPath
         };
 
         internal static readonly string[] GameplaySceneOutputs =
         {
             ScenePath,
-            "ProjectSettings/EditorBuildSettings.asset",
-            "ProjectSettings/DynamicsManager.asset",
-            "ProjectSettings/TimeManager.asset",
-            "ProjectSettings/TagManager.asset"
+            EditorBuildSettingsPath,
+            DynamicsManagerPath,
+            TimeManagerPath,
+            TagManagerPath
         };
 
         internal static readonly string[] QualityOutputs =

@@ -6,6 +6,15 @@ using RocketFooxball.Runtime.Physics;
 
 namespace RocketFooxball.Runtime.Movement
 {
+    public enum DashEndReason
+    {
+        Duration,
+        EnemyContact,
+        Wall,
+        SimulationDisabled,
+        Reset
+    }
+
     [RequireComponent(typeof(CharacterController))]
     [MovedFrom("RocketFooxball")]
     public sealed class PlayerMotor : MonoBehaviour
@@ -36,6 +45,12 @@ namespace RocketFooxball.Runtime.Movement
         [SerializeField, Min(0f)] private float jumpBufferTime = 0.10f;
         [SerializeField] private PlayerInputReader input;
 
+        [Header("Dash Kick")]
+        [SerializeField, Min(0f)] private float dashBurstSpeed = 12f;
+        [SerializeField, Min(0.01f)] private float dashDuration = 0.33f;
+        [SerializeField, Min(0f)] private float dashSteerRateDegrees = 180f;
+        [SerializeField, Min(1f)] private float dashSpeedCap = 30f;
+
         private const float MaxGroundedFallVelocity = -0.1f;
         private const float Epsilon = 0.000001f;
         private CharacterController controller;
@@ -48,6 +63,13 @@ namespace RocketFooxball.Runtime.Movement
         private bool hasGroundContact;
         private bool groundContactThisStep;
         private bool simulationEnabled = true;
+        private bool dashActive;
+        private float dashRemaining;
+        private float dashElapsed;
+        private Vector3 dashDirection;
+        private Vector3 dashContribution;
+        private Vector3 dashAim;
+        private bool airDashAvailable = true;
 
         /// <summary>Raised during CharacterController collision dispatch with actual contact data.</summary>
         public event Action<ControllerColliderHit> CollisionHit;
@@ -61,6 +83,11 @@ namespace RocketFooxball.Runtime.Movement
         public bool HasGroundContact => hasGroundContact;
         public Vector3 GroundNormal => hasGroundContact ? groundNormal : Vector3.up;
         public bool SimulationEnabled => simulationEnabled;
+        public bool IsDashing => dashActive;
+        public float DashRemaining => Mathf.Max(dashRemaining, 0f);
+        public float DashElapsed => Mathf.Max(dashElapsed, 0f);
+        public Vector3 DashDirection => dashDirection;
+        public bool AirDashAvailable => airDashAvailable;
 
         private void Awake()
         {
@@ -87,6 +114,25 @@ namespace RocketFooxball.Runtime.Movement
 
             groundContactThisStep = false;
             groundNormalThisStep = Vector3.up;
+
+            if (grounded)
+            {
+                airDashAvailable = true;
+            }
+
+            if (dashActive)
+            {
+                ApplyDashMovement(grounded, activeGroundNormal, deltaTime);
+                controller.Move(velocity * deltaTime);
+                ResolveGroundContactAfterMove();
+                dashElapsed += deltaTime;
+                dashRemaining = Mathf.Max(dashRemaining - deltaTime, 0f);
+                if (dashRemaining <= 0f)
+                {
+                    EndDash(DashEndReason.Duration, 1f);
+                }
+                return;
+            }
 
             if (input != null && input.ConsumeJumpPressed())
             {
@@ -167,12 +213,73 @@ namespace RocketFooxball.Runtime.Movement
             queuedExternalImpulse += impulse;
         }
 
+        /// <summary>Starts a bounded dash without replacing existing velocity.</summary>
+        public bool TryStartDash(Vector3 aim)
+        {
+            if (!simulationEnabled || dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            {
+                return false;
+            }
+
+            var grounded = controller != null && (controller.isGrounded || hasGroundContact);
+            if (!grounded && !airDashAvailable)
+            {
+                return false;
+            }
+
+            var activeGroundNormal = hasGroundContact ? groundNormal : Vector3.up;
+            var direction = ResolveDashDirection(aim, grounded, activeGroundNormal);
+            if (direction.sqrMagnitude <= Epsilon)
+            {
+                return false;
+            }
+
+            if (!grounded)
+            {
+                airDashAvailable = false;
+            }
+
+            var nextVelocity = MovementMath.ComposeDashVelocity(velocity, direction, dashBurstSpeed, dashSpeedCap);
+            dashContribution = nextVelocity - velocity;
+            velocity = nextVelocity;
+            dashDirection = dashContribution.sqrMagnitude > Epsilon ? dashContribution.normalized : direction;
+            dashAim = aim.normalized;
+            dashRemaining = dashDuration;
+            dashElapsed = 0f;
+            dashActive = true;
+            return true;
+        }
+
+        /// <summary>Supplies current camera aim for fixed-step dash steering.</summary>
+        public void SetDashAim(Vector3 aim)
+        {
+            if (!dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            {
+                return;
+            }
+
+            dashAim = aim.normalized;
+        }
+
+        /// <summary>Ends active dash and removes only requested tracked contribution.</summary>
+        public void EndDash(DashEndReason reason, float retainedContributionFraction)
+        {
+            if (!dashActive)
+            {
+                return;
+            }
+
+            velocity = MovementMath.RemoveContributionWithoutReversal(velocity, dashContribution, retainedContributionFraction);
+            ClearDashState();
+        }
+
         /// <summary>Enables or freezes fixed-step player simulation without changing transform or velocity.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
             simulationEnabled = enabled;
             if (!enabled)
             {
+                EndDash(DashEndReason.SimulationDisabled, 1f);
                 queuedExternalImpulse = Vector3.zero;
                 coyoteTimer = 0f;
                 jumpBufferTimer = 0f;
@@ -183,6 +290,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Clears movement state without moving the player.</summary>
         public void ClearQueuedState()
         {
+            EndDash(DashEndReason.SimulationDisabled, 1f);
             queuedExternalImpulse = Vector3.zero;
             coyoteTimer = 0f;
             jumpBufferTimer = 0f;
@@ -210,7 +318,65 @@ namespace RocketFooxball.Runtime.Movement
 
             velocity = Vector3.zero;
             ClearQueuedState();
+            ClearDashState();
+            airDashAvailable = true;
             input?.ClearGameplayState();
+        }
+
+        private void ApplyDashMovement(bool grounded, Vector3 activeGroundNormal, float deltaTime)
+        {
+            var baseVelocity = velocity - dashContribution;
+            if (grounded)
+            {
+                if (!hasGroundContact || activeGroundNormal.y >= 0.9999f)
+                {
+                    baseVelocity.y = Mathf.Max(baseVelocity.y, MaxGroundedFallVelocity);
+                }
+            }
+            else
+            {
+                baseVelocity.y -= GamePhysicsSettings.GravityMagnitude * deltaTime;
+            }
+
+            if (queuedExternalImpulse.sqrMagnitude > Epsilon)
+            {
+                baseVelocity += queuedExternalImpulse;
+                queuedExternalImpulse = Vector3.zero;
+            }
+
+            var aimDirection = ResolveDashDirection(dashAim, grounded, activeGroundNormal);
+            var steeredContribution = MovementMath.SteerContribution(dashContribution, aimDirection, dashSteerRateDegrees, deltaTime);
+            velocity = Vector3.ClampMagnitude(baseVelocity + steeredContribution, dashSpeedCap);
+            dashContribution = velocity - baseVelocity;
+            if (dashContribution.sqrMagnitude > Epsilon)
+            {
+                dashDirection = dashContribution.normalized;
+            }
+        }
+
+        private Vector3 ResolveDashDirection(Vector3 aim, bool grounded, Vector3 activeGroundNormal)
+        {
+            var direction = aim;
+            if (grounded)
+            {
+                direction = MovementMath.ProjectDirectionOnPlane(aim, activeGroundNormal);
+                if (direction.sqrMagnitude <= Epsilon)
+                {
+                    direction = MovementMath.ProjectDirectionOnPlane(transform.forward, activeGroundNormal);
+                }
+            }
+
+            return direction.sqrMagnitude > Epsilon ? direction.normalized : Vector3.zero;
+        }
+
+        private void ClearDashState()
+        {
+            dashActive = false;
+            dashRemaining = 0f;
+            dashElapsed = 0f;
+            dashDirection = Vector3.zero;
+            dashContribution = Vector3.zero;
+            dashAim = Vector3.zero;
         }
 
         private void ApplyGroundMovement(Vector3 strafeDirection, Vector3 forwardDirection, Vector3 activeGroundNormal, float deltaTime)

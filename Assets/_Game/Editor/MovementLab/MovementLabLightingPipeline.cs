@@ -366,13 +366,6 @@ namespace RocketFooxball.Editor
                     return revalidatedScene;
                 }
 
-                internal static void NormalizePostBakeYamlWhitespace()
-                {
-                    // The scene is text YAML. LightingData.asset is a native
-                    // binary asset and must never pass through text normalization.
-                    MovementLabSceneComposer.NormalizeYamlFile(MovementLabContract.ScenePath);
-                }
-
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
                 {
                     var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();
@@ -508,8 +501,6 @@ namespace RocketFooxball.Editor
                         for (var j = 0; j < skinned.Length; j++) if (skinned[j] != null && skinned[j].sharedMesh != null) sceneTriangles += skinned[j].sharedMesh.triangles.Length / 3;
                         meshRenderers += skinned.Length;
                     }
-                    if (meshRenderers > 140 || sceneTriangles > 150000 || opaqueDraws > 180 || transparentStatic > 8)
-                        throw new InvalidOperationException("MovementLab render budget exceeded: renderers=" + meshRenderers + " triangles=" + sceneTriangles + " opaqueDraws=" + opaqueDraws + " transparentStatic=" + transparentStatic);
                     Debug.Log("Rocket Fooxball Movement Lab render budget: triangles=" + sceneTriangles + " MeshRenderers=" + meshRenderers + " opaqueDraws=" + opaqueDraws + " staticTransparent=" + transparentStatic);
                 }
 

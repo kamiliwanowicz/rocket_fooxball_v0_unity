@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Feedback
 {
@@ -13,6 +14,7 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private Camera targetCamera;
         [SerializeField] private GameObject viewmodels;
         [SerializeField] private GameObject crosshairCanvas;
+        [SerializeField] private ParticipantState participant;
 
         [Header("Speed FOV")]
         [SerializeField, Min(1f)] private float baseFov = 75f;
@@ -23,12 +25,20 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField, Min(0.01f)] private float shakeDuration = 0.18f;
         [SerializeField, Min(0f)] private float shakeFrequency = 28f;
 
+        [Header("Dash Kick Impulse")]
+        [SerializeField, Min(0f)] private float dashKickImpulse = 0.025f;
+        [SerializeField, Min(0.01f)] private float dashKickImpulseDuration = 0.12f;
+
         [Header("Goal Celebration Orbit")]
         [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = 5.5f;
         [SerializeField, Min(0f)] private float celebrationOrbitHeight = 2.5f;
         [SerializeField, Min(0f)] private float celebrationLookHeight = 1.05f;
         [SerializeField, Min(0f)] private float celebrationOrbitDegrees = 360f;
         [SerializeField, Min(1f)] private float celebrationFov = 60f;
+
+        [Header("Spectator")]
+        [SerializeField] private Vector3 spectatorOffset = new Vector3(0f, 2.5f, -5f);
+        [SerializeField, Min(1f)] private float spectatorFov = 70f;
 
         private readonly CameraShakeModel shakeModel = new CameraShakeModel();
         private readonly GoalOrbitModel orbitModel = new GoalOrbitModel();
@@ -43,12 +53,25 @@ namespace RocketFooxball.Runtime.Feedback
         private bool viewmodelsWasActive;
         private bool crosshairWasActive;
         private bool celebrationStateCaptured;
+        private Transform spectatorTarget;
+        private bool spectatorTargetRelative;
+        private Transform spectatorOriginalParent;
+        private Vector3 spectatorOriginalLocalPosition;
+        private Quaternion spectatorOriginalLocalRotation;
+        private bool spectatorStateCaptured;
+        private bool spectatorViewmodelsWasActive;
+        private bool spectatorCrosshairWasActive;
+        private float dashKickImpulseElapsed;
+        private float dashKickImpulseStrength;
 
         public PlayerMotor Player => player;
+        public ParticipantState Participant => participant;
         public Camera TargetCamera => targetCamera;
         public float CurrentFov => targetCamera != null ? targetCamera.fieldOfView : baseFov;
         public Vector3 NeutralLocalPosition => neutralLocalPosition;
         public bool IsGoalCelebrating => orbitModel.IsActive;
+        public bool IsSpectating => spectatorTarget != null;
+        public Transform SpectatorTarget => spectatorTarget;
 
         private void Awake()
         {
@@ -81,17 +104,26 @@ namespace RocketFooxball.Runtime.Feedback
                 return;
             }
 
+            if (spectatorTarget != null)
+            {
+                WriteSpectatorFollow();
+                return;
+            }
+
             var horizontalSpeed = player != null ? player.HorizontalSpeed : 0f;
             var baseSpeed = player != null ? player.BaseSpeed : 0f;
             var hardCap = player != null ? player.HardCap : 0f;
             targetCamera.fieldOfView = SpeedFovModel.Evaluate(baseFov, maxFov, baseSpeed, hardCap, horizontalSpeed);
-            cameraTransform.localPosition = neutralLocalPosition + shakeModel.Step(Time.unscaledDeltaTime, shakeDuration, shakeAmplitude, shakeFrequency);
+            cameraTransform.localPosition = neutralLocalPosition +
+                                            shakeModel.Step(Time.unscaledDeltaTime, shakeDuration, shakeAmplitude, shakeFrequency) +
+                                            StepDashKickImpulse(Time.unscaledDeltaTime);
         }
 
         /// <summary>Detaches and orbits camera around frozen player for one goal celebration.</summary>
         public void BeginGoalCelebration(float duration)
         {
             CacheCameraTransform();
+            ExitSpectator();
             if (orbitModel.IsActive || targetCamera == null || cameraTransform == null || player == null)
             {
                 return;
@@ -164,6 +196,92 @@ namespace RocketFooxball.Runtime.Feedback
             celebrationStateCaptured = false;
         }
 
+        /// <summary>Follows a living ally using target-relative behind-follow.</summary>
+        public void SetSpectatorTarget(Transform target)
+        {
+            SetSpectatorTarget(target, true);
+        }
+
+        /// <summary>Follows a spectator target with optional target-relative offset.</summary>
+        public void SetSpectatorTarget(Transform target, bool targetRelative)
+        {
+            if (target == spectatorTarget && targetRelative == spectatorTargetRelative)
+            {
+                return;
+            }
+
+            if (target == null)
+            {
+                ExitSpectator();
+                return;
+            }
+
+            CacheCameraTransform();
+            if (targetCamera == null || cameraTransform == null)
+            {
+                return;
+            }
+
+            if (!spectatorStateCaptured)
+            {
+                spectatorOriginalParent = cameraTransform.parent;
+                spectatorOriginalLocalPosition = cameraTransform.localPosition;
+                spectatorOriginalLocalRotation = cameraTransform.localRotation;
+                spectatorViewmodelsWasActive = viewmodels != null && viewmodels.activeSelf;
+                spectatorCrosshairWasActive = crosshairCanvas != null && crosshairCanvas.activeSelf;
+                spectatorStateCaptured = true;
+            }
+
+            spectatorTarget = target;
+            spectatorTargetRelative = targetRelative;
+            cameraTransform.SetParent(null, true);
+            if (viewmodels != null)
+            {
+                viewmodels.SetActive(false);
+            }
+            if (crosshairCanvas != null)
+            {
+                crosshairCanvas.SetActive(false);
+            }
+            targetCamera.fieldOfView = Mathf.Max(spectatorFov, 1f);
+            WriteSpectatorFollow();
+        }
+
+        /// <summary>Follows a world-space target without inheriting its rotation.</summary>
+        public void SetSpectatorWorldTarget(Transform target) => SetSpectatorTarget(target, false);
+
+        public void BeginSpectator(Transform target) => SetSpectatorTarget(target);
+
+        public void BeginSpectator(Transform target, bool targetRelative) => SetSpectatorTarget(target, targetRelative);
+
+        /// <summary>Restores local camera parent and first-person overlays after respawn/reset.</summary>
+        public void ExitSpectator()
+        {
+            spectatorTarget = null;
+            spectatorTargetRelative = false;
+            if (!spectatorStateCaptured)
+            {
+                return;
+            }
+
+            if (cameraTransform != null)
+            {
+                cameraTransform.SetParent(spectatorOriginalParent, false);
+                cameraTransform.localPosition = spectatorOriginalLocalPosition;
+                cameraTransform.localRotation = spectatorOriginalLocalRotation;
+            }
+            if (viewmodels != null)
+            {
+                viewmodels.SetActive(spectatorViewmodelsWasActive);
+            }
+            if (crosshairCanvas != null)
+            {
+                crosshairCanvas.SetActive(spectatorCrosshairWasActive);
+            }
+            spectatorOriginalParent = null;
+            spectatorStateCaptured = false;
+        }
+
         /// <summary>Requests deterministic decaying positional shake. Rotation and aim remain unchanged.</summary>
         public void RequestBlastShake(float normalizedStrength)
         {
@@ -179,11 +297,26 @@ namespace RocketFooxball.Runtime.Feedback
             }
         }
 
+        /// <summary>Requests local down-and-back dash feedback without changing camera aim.</summary>
+        public void RequestDashKickImpulse(float normalizedStrength)
+        {
+            if (dashKickImpulse <= 0f || dashKickImpulseDuration <= 0f)
+            {
+                return;
+            }
+
+            dashKickImpulseStrength = Mathf.Clamp01(normalizedStrength);
+            dashKickImpulseElapsed = 0f;
+        }
+
         /// <summary>Ends celebration, restores neutral pose/FOV, and clears pending shake.</summary>
         public void ResetFeedback()
         {
             EndGoalCelebration();
+            ExitSpectator();
             shakeModel.Reset();
+            dashKickImpulseElapsed = 0f;
+            dashKickImpulseStrength = 0f;
             if (cameraTransform != null)
             {
                 cameraTransform.localPosition = neutralLocalPosition;
@@ -197,7 +330,30 @@ namespace RocketFooxball.Runtime.Feedback
 
         private void CacheCameraTransform()
         {
+            if (participant == null)
+            {
+                participant = GetComponent<ParticipantState>();
+            }
             cameraTransform = targetCamera != null ? targetCamera.transform : null;
+        }
+
+        private Vector3 StepDashKickImpulse(float deltaTime)
+        {
+            if (dashKickImpulseStrength <= 0f || dashKickImpulseDuration <= 0f)
+            {
+                return Vector3.zero;
+            }
+
+            dashKickImpulseElapsed += Mathf.Max(deltaTime, 0f);
+            var normalized = Mathf.Clamp01(dashKickImpulseElapsed / dashKickImpulseDuration);
+            var envelope = Mathf.Sin(normalized * Mathf.PI) * dashKickImpulseStrength;
+            if (normalized >= 1f)
+            {
+                dashKickImpulseElapsed = 0f;
+                dashKickImpulseStrength = 0f;
+            }
+
+            return new Vector3(0f, -dashKickImpulse, -dashKickImpulse) * envelope;
         }
 
         private void CacheNeutralState()
@@ -220,6 +376,22 @@ namespace RocketFooxball.Runtime.Feedback
             cameraTransform.position = position;
             cameraTransform.rotation = rotation;
             targetCamera.fieldOfView = Mathf.Max(celebrationFov, 1f);
+        }
+
+        private void WriteSpectatorFollow()
+        {
+            if (spectatorTarget == null || cameraTransform == null || targetCamera == null)
+            {
+                return;
+            }
+
+            var targetPosition = spectatorTarget.position;
+            var offset = spectatorTargetRelative ? spectatorTarget.rotation * spectatorOffset : spectatorOffset;
+            var position = targetPosition + offset;
+            var lookPoint = targetPosition + Vector3.up * Mathf.Max(celebrationLookHeight, 0.5f);
+            cameraTransform.position = position;
+            cameraTransform.rotation = Quaternion.LookRotation((lookPoint - position).normalized, Vector3.up);
+            targetCamera.fieldOfView = Mathf.Max(spectatorFov, 1f);
         }
     }
 }

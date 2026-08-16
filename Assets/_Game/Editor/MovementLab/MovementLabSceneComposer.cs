@@ -3,16 +3,18 @@ using System.IO;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Hud;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Rendering;
 using RocketFooxball.Runtime.Weapons;
+using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
@@ -37,6 +39,10 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabSceneComposer
     {
+                internal const float MatchDuration = 300f;
+                internal const float GoalSummaryDuration = 3f;
+                internal const float KickoffCountdownDuration = 3f;
+
                 // Stage-local entry points. The legacy monolithic method below is
                 // retained for compatibility/forced comparison; normal assembly
                 // uses these bounded operations through MovementLabStageRunner.
@@ -77,6 +83,12 @@ namespace RocketFooxball.Editor
                     var gridEndWallMaterial = GetOrCreateGridMaterial("ContainmentGridEndWall", new Vector2(22.5f, 10f));
                     var shieldBlueMaterial = GetOrCreateShieldMaterial("ShieldBlue", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
+                    var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
+                    var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
+                    var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
+                    var ammoShellMaterial = GetOrCreateAmmoShellMaterial();
+                    GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+                    GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
 
                     var rocketPrefab = BuildRocketPrefab(rocketMaterial, rocketHotMaterial, projectileGlowMaterial);
@@ -92,6 +104,14 @@ namespace RocketFooxball.Editor
                     var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    BuildHealthPickupPrefab(healthPickupMaterial);
+                    BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                    BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(ShotgunPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(AmmoPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
                 }
 
@@ -119,6 +139,8 @@ namespace RocketFooxball.Editor
                     var gridEndWallMaterial = LoadRequiredAsset<Material>(GridEndWallMaterialPath);
                     var shieldBlueMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ShieldBlue.mat");
                     var shieldRedMaterial = LoadRequiredAsset<Material>(MaterialsPath + "/ShieldRed.mat");
+                    var teamBlueMaterial = LoadRequiredAsset<Material>(TeamBlueMaterialPath);
+                    var teamRedMaterial = LoadRequiredAsset<Material>(TeamRedMaterialPath);
                     var rocketPrefab = LoadRequiredAsset<GameObject>(RocketPrefabPath);
                     var ballPrefab = LoadRequiredAsset<GameObject>(BallPrefabPath);
                     var playerPrefab = LoadRequiredAsset<GameObject>(PrefabPath);
@@ -130,10 +152,11 @@ namespace RocketFooxball.Editor
                         RegisterBuildScene();
                         UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
                         SetProjectFixedTimestep();
+                        EnsureGameplayLayersAndCollisionMatrix();
                         var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
                         var defaultCamera = Camera.main;
                         if (defaultCamera != null) UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
-                        var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial);
+                        var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
                         var shieldSetObject = new GameObject("GoalShieldSet");
                         var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
                         SetObjectArray(goalShieldSet, "colliders", arena.Shields);
@@ -152,50 +175,58 @@ namespace RocketFooxball.Editor
                         SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
                         SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
                         SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
-                        var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
-                        player.name = "Player";
-                        player.transform.SetPositionAndRotation(new Vector3(PlayerSpawnOffset, 0f, 0f), Quaternion.LookRotation(Vector3.left, Vector3.up));
+                        var participantStates = BuildParticipantRoster(playerPrefab);
+                        var localParticipant = participantStates[0];
+                        var player = localParticipant.gameObject;
+                        var spawnSet = BuildParticipantSpawnSet(arena);
                         var ball = (GameObject)PrefabUtility.InstantiatePrefab(ballPrefab);
                         ball.name = "Ball";
                         ball.transform.SetPositionAndRotation(new Vector3(0f, BallSpawnHeight, 0f), Quaternion.identity);
-                        var playerMotor = player.GetComponent<PlayerMotor>();
-                        var playerInput = player.GetComponent<PlayerInputReader>();
-                        var playerLook = player.GetComponent<PlayerLook>();
-                        var cameraFeedback = player.GetComponent<PlayerCameraFeedback>();
-                        var launcher = player.GetComponent<RocketLauncher>();
-                        var kick = player.GetComponent<BallKick>();
+                        var playerMotor = localParticipant.Motor;
+                        var playerInput = localParticipant.Input;
+                        var playerLook = localParticipant.Look;
+                        var cameraFeedback = localParticipant.CameraFeedback;
+                        var launcher = localParticipant.Launcher;
+                        var kick = localParticipant.Kick;
                         var ballMotor = ball.GetComponent<BallMotor>();
                         var ballBody = ball.GetComponent<Rigidbody>();
                         var ballCollider = ball.GetComponent<Collider>();
                         SetObjectReference(ballMotor, "body", ballBody);
                         SetObjectReference(ballMotor, "ballCollider", ballCollider);
-                        SetObjectReference(ballMotor, "player", playerMotor);
+                        SetObjectArray(ballMotor, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
                         SetObjectReference(ballMotor, "goalShieldSet", goalShieldSet);
-                        SetObjectReference(kick, "ball", ballMotor);
-                        SetObjectReference(launcher, "explosionResolver", explosionResolver);
-                        SetObjectReference(cameraFeedback, "player", playerMotor);
-                        SetObjectReference(cameraFeedback, "targetCamera", player.GetComponentInChildren<Camera>(true));
-                        SetObjectReference(cameraFeedback, "viewmodels", player.transform.Find("Head/Camera/Viewmodels").gameObject);
-                        SetObjectReference(cameraFeedback, "crosshairCanvas", player.transform.Find("Head/Camera/CrosshairCanvas").gameObject);
+                        for (var participantIndex = 0; participantIndex < participantStates.Length; participantIndex++)
+                        {
+                            var participant = participantStates[participantIndex];
+                            SetObjectReference(participant.Kick, "ball", ballMotor);
+                            SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
+                            SetObjectReference(participant.Shotgun, "ball", ballMotor);
+                            SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
+                            SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
+                        }
                         SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
                         SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
                         SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
                         SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
+                        SetEnum(arena.NorthGoal.Trigger, "defendingTeam", "Red");
+                        SetEnum(arena.SouthGoal.Trigger, "defendingTeam", "Blue");
                         var matchObject = new GameObject("MatchController");
                         var match = matchObject.AddComponent<MatchController>();
-                        SetObjectReference(match, "input", playerInput);
-                        SetObjectReference(match, "player", playerMotor);
-                        SetObjectReference(match, "playerLook", playerLook);
+                        SetObjectArray(match, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
+                        SetObjectReference(match, "localParticipant", localParticipant);
+                        SetObjectReference(match, "spawnSet", spawnSet);
                         SetObjectReference(match, "cameraFeedback", cameraFeedback);
                         SetObjectReference(match, "ball", ballMotor);
-                        SetObjectReference(match, "launcher", launcher);
-                        SetObjectReference(match, "kick", kick);
                         SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                        SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+                        SetFloat(match, "matchDuration", MatchDuration);
+                        SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                        SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                        SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
+                        BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                        BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                        BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
                         var hud = new GameObject("DebugHUD");
                         var hudComponent = hud.AddComponent<MovementDebugHud>();
                         SetObjectReference(hudComponent, "player", playerMotor);
@@ -203,12 +234,16 @@ namespace RocketFooxball.Editor
                         SetObjectReference(hudComponent, "launcher", launcher);
                         SetObjectReference(hudComponent, "kick", kick);
                         SetObjectReference(hudComponent, "match", match);
+                        var matchHudObject = new GameObject("MatchHUD");
+                        var matchHud = matchHudObject.AddComponent<MatchHud>();
+                        SetObjectReference(matchHud, "match", match);
+                        SetObjectReference(matchHud, "localParticipant", localParticipant);
+                        SetObjectReference(matchHud, "input", playerInput);
                         new GameObject(GetBuildMarkerName(builderSignature));
                         BindSceneEnvironment(scene, arena);
                         EditorSceneManager.SaveScene(scene, ScenePath);
                         RestoreLightmapSettingsDocument(preservedLightmapSettings);
                         SaveGameplayProjectSettings();
-                        NormalizeGameplayYamlWhitespace();
                     }
                     finally
                     {
@@ -278,18 +313,6 @@ namespace RocketFooxball.Editor
                     File.WriteAllText(path, restored, new UTF8Encoding(false));
                 }
 
-                private static void NormalizeGameplayYamlWhitespace()
-                {
-                    // Gameplay owns only the scene and its wiring-related
-                    // project settings. Do not normalize lighting/material
-                    // assets here: even byte-level cleanup would violate the
-                    // gameplay stage's read-only asset contract.
-                    for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
-                    {
-                        NormalizeYamlFile(MovementLabContract.GameplaySceneOutputs[i]);
-                    }
-                }
-
                 private static void SaveGameplayProjectSettings()
                 {
                     for (var i = 0; i < MovementLabContract.GameplaySceneOutputs.Length; i++)
@@ -306,6 +329,63 @@ namespace RocketFooxball.Editor
                     var asset = AssetDatabase.LoadAssetAtPath<T>(path);
                     if (asset == null) throw new InvalidOperationException("Required stage asset is missing: " + path);
                     return asset;
+                }
+
+                private static void BuildHealthPickupInstances(GameObject healthPickupPrefab, MatchController match)
+                {
+                    if (healthPickupPrefab == null) throw new InvalidOperationException("Health pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for health pickup scene wiring.");
+                    var root = new GameObject(HealthPickupsRootName);
+                    for (var i = 0; i < HealthPickupSpawns.Length; i++)
+                    {
+                        var definition = HealthPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(healthPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate health pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<HealthPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Health pickup prefab has no HealthPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
+                }
+
+                private static void BuildShotgunPickupInstances(GameObject shotgunPickupPrefab, MatchController match)
+                {
+                    if (shotgunPickupPrefab == null) throw new InvalidOperationException("Shotgun pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for shotgun pickup scene wiring.");
+                    var root = new GameObject(ShotgunPickupsRootName);
+                    for (var i = 0; i < ShotgunPickupSpawns.Length; i++)
+                    {
+                        var definition = ShotgunPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(shotgunPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate shotgun pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<ShotgunPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Shotgun pickup prefab has no ShotgunPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
+                }
+
+                private static void BuildAmmoPickupInstances(GameObject ammoPickupPrefab, MatchController match)
+                {
+                    if (ammoPickupPrefab == null) throw new InvalidOperationException("Ammo pickup prefab is required for scene composition.");
+                    if (match == null) throw new InvalidOperationException("MatchController is required for ammo pickup scene wiring.");
+                    var root = new GameObject(AmmoPickupsRootName);
+                    for (var i = 0; i < AmmoPickupSpawns.Length; i++)
+                    {
+                        var definition = AmmoPickupSpawns[i];
+                        var instance = PrefabUtility.InstantiatePrefab(ammoPickupPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Failed to instantiate ammo pickup prefab: " + definition.Name);
+                        instance.name = definition.Name;
+                        instance.transform.SetParent(root.transform, false);
+                        instance.transform.SetPositionAndRotation(definition.Position, definition.Rotation);
+                        var pickup = instance.GetComponent<AmmoPickup>();
+                        if (pickup == null) throw new InvalidOperationException("Ammo pickup prefab has no AmmoPickup component: " + definition.Name);
+                        SetObjectReference(pickup, "match", match);
+                    }
                 }
 
                 internal static void AssembleMovementLabUnstaged()
@@ -342,6 +422,11 @@ namespace RocketFooxball.Editor
                     var gridEndWallMaterial = GetOrCreateGridMaterial("ContainmentGridEndWall", new Vector2(22.5f, 10f));
                     var shieldBlueMaterial = GetOrCreateShieldMaterial("ShieldBlue", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
+                    var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
+                    var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
+                    var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
+                    GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
+                    GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
                     MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
 
                     var rocketPrefab = BuildRocketPrefab(rocketMaterial, rocketHotMaterial, projectileGlowMaterial);
@@ -357,10 +442,20 @@ namespace RocketFooxball.Editor
                     var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
                     if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
+                    var ammoShellMaterial = GetOrCreateAmmoShellMaterial();
+                    BuildHealthPickupPrefab(healthPickupMaterial);
+                    BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                    BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(ShotgunPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
+                    AssetDatabase.ImportAsset(AmmoPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
 
                     RegisterBuildScene();
                     UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
                     SetProjectFixedTimestep();
+                    EnsureGameplayLayersAndCollisionMatrix();
 
                     GameObject explosionPrefabProbe = null;
                     try
@@ -374,7 +469,7 @@ namespace RocketFooxball.Editor
                         UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
                     }
 
-                    var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldBlueMaterial, shieldRedMaterial);
+                    var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
                     var shieldSetObject = new GameObject("GoalShieldSet");
                     var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
                     SetObjectArray(goalShieldSet, "colliders", arena.Shields);
@@ -394,55 +489,63 @@ namespace RocketFooxball.Editor
                     SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
                     SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
 
-                    var player = (GameObject)PrefabUtility.InstantiatePrefab(playerPrefab);
-                    player.name = "Player";
-                    player.transform.SetPositionAndRotation(new Vector3(PlayerSpawnOffset, 0f, 0f), Quaternion.LookRotation(Vector3.left, Vector3.up));
+                    var participantStates = BuildParticipantRoster(playerPrefab);
+                    var localParticipant = participantStates[0];
+                    var player = localParticipant.gameObject;
+                    var spawnSet = BuildParticipantSpawnSet(arena);
 
                     var ball = (GameObject)PrefabUtility.InstantiatePrefab(ballPrefab);
                     ball.name = "Ball";
                     ball.transform.SetPositionAndRotation(new Vector3(0f, BallSpawnHeight, 0f), Quaternion.identity);
 
-                    var playerMotor = player.GetComponent<PlayerMotor>();
-                    var playerInput = player.GetComponent<PlayerInputReader>();
-                    var playerLook = player.GetComponent<PlayerLook>();
-                    var cameraFeedback = player.GetComponent<PlayerCameraFeedback>();
-                    var launcher = player.GetComponent<RocketLauncher>();
-                    var kick = player.GetComponent<BallKick>();
+                    var playerMotor = localParticipant.Motor;
+                    var playerInput = localParticipant.Input;
+                    var playerLook = localParticipant.Look;
+                    var cameraFeedback = localParticipant.CameraFeedback;
+                    var launcher = localParticipant.Launcher;
+                    var kick = localParticipant.Kick;
                     var ballMotor = ball.GetComponent<BallMotor>();
                     var ballBody = ball.GetComponent<Rigidbody>();
                     var ballCollider = ball.GetComponent<Collider>();
 
                     SetObjectReference(ballMotor, "body", ballBody);
                     SetObjectReference(ballMotor, "ballCollider", ballCollider);
-                    SetObjectReference(ballMotor, "player", playerMotor);
+                    SetObjectArray(ballMotor, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
                     SetObjectReference(ballMotor, "goalShieldSet", goalShieldSet);
-                    SetObjectReference(kick, "ball", ballMotor);
-                    SetObjectReference(launcher, "explosionResolver", explosionResolver);
-                    SetObjectReference(cameraFeedback, "player", playerMotor);
-                    SetObjectReference(cameraFeedback, "targetCamera", player.GetComponentInChildren<Camera>(true));
-                    SetObjectReference(cameraFeedback, "viewmodels", player.transform.Find("Head/Camera/Viewmodels").gameObject);
-                    SetObjectReference(cameraFeedback, "crosshairCanvas", player.transform.Find("Head/Camera/CrosshairCanvas").gameObject);
+                    for (var participantIndex = 0; participantIndex < participantStates.Length; participantIndex++)
+                    {
+                        var participant = participantStates[participantIndex];
+                        SetObjectReference(participant.Kick, "ball", ballMotor);
+                        SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
+                        SetObjectReference(participant.Shotgun, "ball", ballMotor);
+                        SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
+                        SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
+                    }
 
                     SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
                     SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
                     SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
                     SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
+                    SetEnum(arena.NorthGoal.Trigger, "defendingTeam", "Red");
+                    SetEnum(arena.SouthGoal.Trigger, "defendingTeam", "Blue");
 
                     var matchObject = new GameObject("MatchController");
                     var match = matchObject.AddComponent<MatchController>();
-                    SetObjectReference(match, "input", playerInput);
-                    SetObjectReference(match, "player", playerMotor);
-                    SetObjectReference(match, "playerLook", playerLook);
+                    SetObjectArray(match, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
+                    SetObjectReference(match, "localParticipant", localParticipant);
+                    SetObjectReference(match, "spawnSet", spawnSet);
                     SetObjectReference(match, "cameraFeedback", cameraFeedback);
                     SetObjectReference(match, "ball", ballMotor);
-                    SetObjectReference(match, "launcher", launcher);
-                    SetObjectReference(match, "kick", kick);
                     SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                     SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                    SetFloat(match, "goalFreezeDuration", GoalFreezeDuration);
+                    SetFloat(match, "matchDuration", MatchDuration);
+                    SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                    SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                    SetVector3(match, "playerResetPosition", new Vector3(PlayerSpawnOffset, 0f, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
+                    BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                    BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                    BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
 
                     var hud = new GameObject("DebugHUD");
                     var hudComponent = hud.AddComponent<MovementDebugHud>();
@@ -451,6 +554,11 @@ namespace RocketFooxball.Editor
                     SetObjectReference(hudComponent, "launcher", launcher);
                     SetObjectReference(hudComponent, "kick", kick);
                     SetObjectReference(hudComponent, "match", match);
+                    var matchHudObject = new GameObject("MatchHUD");
+                    var matchHud = matchHudObject.AddComponent<MatchHud>();
+                    SetObjectReference(matchHud, "match", match);
+                    SetObjectReference(matchHud, "localParticipant", localParticipant);
+                    SetObjectReference(matchHud, "input", playerInput);
 
                     new GameObject(GetBuildMarkerName(builderSignature));
 
@@ -465,11 +573,106 @@ namespace RocketFooxball.Editor
                         }
                     }
                     AssetDatabase.SaveAssets();
-                    NormalizeGeneratedYamlWhitespace();
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
-                    NormalizeGeneratedYamlWhitespace();
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                }
+
+                private static ParticipantState[] BuildParticipantRoster(GameObject playerPrefab)
+                {
+                    if (playerPrefab == null) throw new InvalidOperationException("Player prefab is required for six-slot roster composition.");
+                    if (ParticipantSlots == null || ParticipantSlots.Length != 6) throw new InvalidOperationException("Participant slot catalog must contain exactly six entries.");
+
+                    var roster = new ParticipantState[ParticipantSlots.Length];
+                    var hiddenLayer = EnsureLocalPlayerHiddenLayer();
+                    for (var i = 0; i < ParticipantSlots.Length; i++)
+                    {
+                        var slot = ParticipantSlots[i];
+                        var instance = PrefabUtility.InstantiatePrefab(playerPrefab) as GameObject;
+                        if (instance == null) throw new InvalidOperationException("Unable to instantiate Player prefab for slot " + slot.SlotId + ".");
+                        instance.name = slot.DisplayName;
+                        instance.transform.SetPositionAndRotation(slot.Position, slot.Rotation);
+                        var state = instance.GetComponent<ParticipantState>();
+                        if (state == null) throw new InvalidOperationException("Player prefab missing ParticipantState for slot " + slot.SlotId + ".");
+
+                        SetInteger(state, "slotId", slot.SlotId);
+                        SetString(state, "displayName", slot.DisplayName);
+                        SetEnum(state, "team", slot.Team == ParticipantTeam.Blue ? "Blue" : "Red");
+                        SetBool(state, "localParticipant", slot.IsLocal);
+                        SetObjectReference(state.Presentation, "participant", state);
+                        SetObjectReference(state.CameraFeedback, "participant", state);
+                        SetObjectReference(state.Launcher, "ownerParticipant", state);
+                        state.Presentation.ConfigureSlot(state);
+                        state.Presentation.SetLocalMode(slot.IsLocal);
+                        state.Presentation.SetAlive(true);
+                        state.Presentation.SetImmune(false);
+                        if (state.Input != null) state.Input.enabled = slot.IsLocal;
+                        if (state.Look != null) state.Look.enabled = slot.IsLocal;
+                        if (state.CameraFeedback != null) state.CameraFeedback.enabled = slot.IsLocal;
+                        var camera = instance.transform.Find("Head/Camera")?.GetComponent<Camera>();
+                        var listener = instance.transform.Find("Head/Camera")?.GetComponent<AudioListener>();
+                        if (camera != null) camera.enabled = slot.IsLocal;
+                        if (listener != null) listener.enabled = slot.IsLocal;
+                        var viewmodels = instance.transform.Find("Head/Camera/Viewmodels");
+                        if (viewmodels != null) viewmodels.gameObject.SetActive(slot.IsLocal);
+                        var crosshair = instance.transform.Find("Head/Camera/CrosshairCanvas");
+                        if (crosshair != null) crosshair.gameObject.SetActive(slot.IsLocal);
+                        var worldVisual = instance.transform.Find("WorldVisual");
+                        if (worldVisual != null) SetLayerRecursively(worldVisual.gameObject, slot.IsLocal ? hiddenLayer : 0);
+                        roster[i] = state;
+                    }
+                    return roster;
+                }
+
+                private static ParticipantSpawnSet BuildParticipantSpawnSet(ArenaBuild arena)
+                {
+                    if (arena == null || arena.NorthGoal == null || arena.SouthGoal == null)
+                        throw new InvalidOperationException("Arena goals are required for participant spawn set.");
+
+                    var root = new GameObject("ParticipantSpawnSet");
+                    var spawnSet = root.AddComponent<ParticipantSpawnSet>();
+                    var blue = new Transform[3];
+                    var red = new Transform[3];
+                    var teamBlueMaterial = LoadRequiredAsset<Material>(TeamBlueMaterialPath);
+                    var teamRedMaterial = LoadRequiredAsset<Material>(TeamRedMaterialPath);
+                    for (var i = 0; i < 3; i++)
+                    {
+                        var blueSlot = ParticipantSlots[i];
+                        var blueObject = new GameObject("BlueSpawn_" + i.ToString());
+                        blueObject.transform.SetParent(root.transform, false);
+                        blueObject.transform.SetPositionAndRotation(blueSlot.Position, blueSlot.Rotation);
+                        var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, new Vector3(0f, 0.02f, 0f));
+                        blueCue.transform.SetParent(blueObject.transform, false);
+                        blueCue.transform.localScale = Vector3.one * 1.4f;
+                        blue[i] = blueObject.transform;
+
+                        var redSlot = ParticipantSlots[i + 3];
+                        var redObject = new GameObject("RedSpawn_" + i.ToString());
+                        redObject.transform.SetParent(root.transform, false);
+                        redObject.transform.SetPositionAndRotation(redSlot.Position, redSlot.Rotation);
+                        var redCue = CreateShapeCue("RedTriangleCue", true, teamRedMaterial, new Vector3(0f, 0.02f, 0f));
+                        redCue.transform.SetParent(redObject.transform, false);
+                        redCue.transform.localScale = Vector3.one * 1.4f;
+                        red[i] = redObject.transform;
+                    }
+                    SetObjectArray(spawnSet, "blueCandidates", blue.Cast<UnityEngine.Object>().ToArray());
+                    SetObjectArray(spawnSet, "redCandidates", red.Cast<UnityEngine.Object>().ToArray());
+                    SetObjectReference(spawnSet, "blueEnemyGoal", arena.NorthGoal.Root.transform);
+                    SetObjectReference(spawnSet, "redEnemyGoal", arena.SouthGoal.Root.transform);
+                    var participantsLayer = LayerMask.NameToLayer("Participants");
+                    var projectilesLayer = LayerMask.NameToLayer("Projectiles");
+                    if (participantsLayer < 0 || projectilesLayer < 0) throw new InvalidOperationException("Participants and Projectiles layers must exist before spawn-set composition.");
+                    SetLayerMask(spawnSet, "visibilityMask", ~(1 << participantsLayer | 1 << projectilesLayer));
+                    SetFloat(spawnSet, "eyeHeight", 1.2f);
+                    SetFloat(spawnSet, "occupiedRadius", 2f);
+                    SetFloat(spawnSet, "ballDistanceWeight", 1f);
+                    SetFloat(spawnSet, "enemyGoalDistanceWeight", 0.5f);
+                    SetFloat(spawnSet, "nearestEnemyDistanceWeight", 1f);
+                    SetFloat(spawnSet, "noVisibleEnemyBonus", 4f);
+                    SetFloat(spawnSet, "visibleEnemyCountPenalty", 2f);
+                    SetFloat(spawnSet, "occupiedFallbackPenalty", 8f);
+                    SetFloat(spawnSet, "ballDistanceCap", 30f);
+                    SetFloat(spawnSet, "enemyGoalDistanceCap", 30f);
+                    SetFloat(spawnSet, "enemyDistanceCap", 30f);
+                    return spawnSet;
                 }
 
                 internal static void RegisterBuildScene()
@@ -492,6 +695,32 @@ namespace RocketFooxball.Editor
                     material.bounceCombine = PhysicsMaterialCombine.Maximum;
                     EditorUtility.SetDirty(material);
                     return material;
+                }
+
+                // GameplayScene owns TagManager/DynamicsManager repair. This
+                // runs before scene composition so stale project settings are
+                // fixed in same authoritative rebuild as scene wiring.
+                internal static void EnsureGameplayLayersAndCollisionMatrix()
+                {
+                    var participantsLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
+                    var projectilesLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
+                    var hiddenLayer = EnsureGameplayLayer(MovementLabContract.LocalPlayerHiddenLayerName);
+                    if (participantsLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
+                    {
+                        throw new InvalidOperationException("Gameplay layers could not be resolved.");
+                    }
+
+                    var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.DynamicsManagerPath);
+                    if (settings.Length == 0) throw new InvalidOperationException("DynamicsManager.asset unavailable.");
+
+                    // Unity 6000.5 does not expose m_LayerCollisionMatrix as a
+                    // writable SerializedProperty. Use the supported API, then
+                    // persist its PhysicsManager changes with other assets.
+                    UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, participantsLayer, false);
+                    UnityEngine.Physics.IgnoreLayerCollision(participantsLayer, projectilesLayer, false);
+                    UnityEngine.Physics.IgnoreLayerCollision(projectilesLayer, projectilesLayer, false);
+                    EditorUtility.SetDirty(settings[0]);
+                    AssetDatabase.SaveAssets();
                 }
 
                 internal static void SetProjectFixedTimestep()
@@ -560,78 +789,6 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("High quality camera state contract invalid.");
                     }
-                }
-
-                internal static void NormalizeGeneratedYamlWhitespace()
-                {
-                    // Unity emits empty serialized fields as `key: `; trim
-                    // trailing spaces while preserving YAML structure/GUIDs.
-                    for (var i = 0; i < GeneratedYamlAssetPaths.Length; i++)
-                    {
-                        NormalizeYamlFile(GeneratedYamlAssetPaths[i]);
-                        NormalizeYamlFile(GeneratedYamlAssetPaths[i] + ".meta");
-                    }
-                    // Importer metadata is protected input/output state. Do
-                    // not canonicalize it during bake/preview lifecycle work;
-                    // Unity may rewrite empty fields and create false drift.
-                }
-
-                internal static void NormalizeYamlFile(string path)
-                {
-                    if (!File.Exists(path)) return;
-                    if (!HasRecognizedTextYamlHeader(path))
-                    {
-                        Debug.LogWarning("Skipping YAML whitespace normalization for binary or unrecognized file: " + path);
-                        return;
-                    }
-
-                    var source = File.ReadAllText(path, Encoding.UTF8);
-                    // Empty YAML sequence entries are serialized as an indented
-                    // `- ` line. Keep that marker (and its indentation) intact;
-                    // trimming it makes Unity's YAML parser reject the document.
-                    var normalized = Regex.Replace(source, @"^(?![ \t]*-[ \t]*\r?$)(.*?)[ \t]+(?=\r?$)", match => match.Groups[1].Value, RegexOptions.Multiline);
-                    if (!string.Equals(source, normalized, StringComparison.Ordinal))
-                    {
-                        File.WriteAllText(path, normalized, new UTF8Encoding(false));
-                    }
-                }
-
-                private static bool HasRecognizedTextYamlHeader(string path)
-                {
-                    var yamlHeader = new byte[] { (byte)'%', (byte)'Y', (byte)'A', (byte)'M', (byte)'L' };
-                    var metaHeader = new byte[]
-                    {
-                        (byte)'f', (byte)'i', (byte)'l', (byte)'e', (byte)'F', (byte)'o', (byte)'r', (byte)'m',
-                        (byte)'a', (byte)'t', (byte)'V', (byte)'e', (byte)'r', (byte)'s', (byte)'i', (byte)'o',
-                        (byte)'n', (byte)':'
-                    };
-                    var probe = new byte[3 + metaHeader.Length];
-                    int bytesRead;
-                    using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                    {
-                        bytesRead = 0;
-                        while (bytesRead < probe.Length)
-                        {
-                            var read = stream.Read(probe, bytesRead, probe.Length - bytesRead);
-                            if (read == 0) break;
-                            bytesRead += read;
-                        }
-                    }
-
-                    var offset = bytesRead >= 3 && probe[0] == 0xef && probe[1] == 0xbb && probe[2] == 0xbf ? 3 : 0;
-                    if (HasBytePrefix(probe, bytesRead, offset, yamlHeader)) return true;
-                    return path.EndsWith(".meta", StringComparison.OrdinalIgnoreCase) &&
-                           HasBytePrefix(probe, bytesRead, offset, metaHeader);
-                }
-
-                private static bool HasBytePrefix(byte[] source, int sourceLength, int offset, byte[] expected)
-                {
-                    if (sourceLength - offset < expected.Length) return false;
-                    for (var i = 0; i < expected.Length; i++)
-                    {
-                        if (source[offset + i] != expected[i]) return false;
-                    }
-                    return true;
                 }
 
                 internal static void EnsureFolders()

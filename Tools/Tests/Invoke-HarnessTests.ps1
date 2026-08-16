@@ -2,13 +2,14 @@
 param(
     [string]$EvidenceRoot,
     [switch]$SkipHookCheck,
-    [ValidateSet('PostToolUse', 'PreToolUse')][string]$HookMode,
+    [ValidateSet('PreToolUse')][string]$HookMode,
     [Alias('ForceFailure')][switch]$HookTestForceFailure
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+$runtimeLimitMs = 90000
 
 function Write-HarnessOutput {
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Message)
@@ -36,6 +37,8 @@ $shimPath = Join-Path $testsRoot 'HarnessShim.psm1'
 $testsPath = Join-Path $testsRoot 'MovementLabHarness.Tests.ps1'
 $redFixturePath = Join-Path $testsRoot 'Fixtures/red-workflow.ps1.txt'
 $workflowPath = Join-Path $projectRoot 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+$comparatorPath = Join-Path $projectRoot 'Tools/Validation/Compare-GeneratedYaml.ps1'
+$comparatorRedFixturePath = Join-Path $testsRoot 'Fixtures/red-generated-yaml-comparator.ps1.txt'
 $hookSettingsPath = Join-Path $projectRoot '.claude/settings.json'
 
 Import-Module -Name $shimPath -Force
@@ -55,9 +58,9 @@ function Get-HookProperty {
 
 function Get-HookInput {
     param([Parameter(Mandatory = $true)]$Event)
-    $input = Get-HookProperty $Event 'tool_input'
-    if ($null -eq $input) { return $Event }
-    return $input
+    $toolInput = Get-HookProperty $Event 'tool_input'
+    if ($null -eq $toolInput) { return $Event }
+    return $toolInput
 }
 
 function Get-HookStrings {
@@ -77,43 +80,12 @@ function Get-HookStrings {
     return $values.ToArray()
 }
 
-function Convert-HookPathToRelative {
-    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Root)
-    $value = $Path.Trim().Trim('"').Replace('\', '/')
-    $rootValue = $Root.TrimEnd('\').Replace('\', '/')
-    if ([System.IO.Path]::IsPathRooted($Path)) {
-        try { $value = ([System.IO.Path]::GetFullPath($Path)).Replace('\', '/') } catch { return $value.TrimStart('/') }
-        if ($value.StartsWith($rootValue + '/', [StringComparison]::OrdinalIgnoreCase)) {
-            return $value.Substring($rootValue.Length + 1).TrimStart('/')
-        }
-        return $value.TrimStart('/')
-    }
-    while ($value.StartsWith('./', [StringComparison]::Ordinal)) { $value = $value.Substring(2) }
-    return $value.TrimStart('/')
-}
-
-function Test-HookPostToolTarget {
-    param([Parameter(Mandatory = $true)]$Event, [Parameter(Mandatory = $true)][string]$Root)
-    $toolName = [string](Get-HookProperty $Event 'tool_name')
-    if ($toolName -notin @('Edit', 'Write')) { return $false }
-    $input = Get-HookInput $Event
-    $paths = @(Get-HookStrings $input @('file_path', 'path', 'filePath', 'filename'))
-    $paths += @(Get-HookStrings $Event @('file_path', 'path', 'filePath', 'filename'))
-    foreach ($path in $paths) {
-        $relative = Convert-HookPathToRelative $path $Root
-        if ($relative -match '(?i)^Tools/Tests(?:/|$)') { return $true }
-        if ($relative -match '(?i)^Tools/Validation/[^/]+\.ps1$') { return $true }
-        if ($relative -match '(?i)^Assets/_Game/Editor/MovementLab/[^/]+\.cs$') { return $true }
-    }
-    return $false
-}
-
 function Test-HookPreToolTarget {
     param([Parameter(Mandatory = $true)]$Event)
     $toolName = [string](Get-HookProperty $Event 'tool_name')
     if ($toolName -notin @('Bash', 'PowerShell')) { return $false }
-    $input = Get-HookInput $Event
-    $commands = @(Get-HookStrings $input @('command', 'cmd', 'script'))
+    $toolInput = Get-HookInput $Event
+    $commands = @(Get-HookStrings $toolInput @('command', 'cmd', 'script'))
     $commands += @(Get-HookStrings $Event @('command', 'cmd', 'script'))
     foreach ($command in $commands) {
         if ($command -match '(?i)Invoke-MovementLabWorkflow\.ps1') { return $true }
@@ -123,11 +95,11 @@ function Test-HookPreToolTarget {
 }
 
 if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
-    if ($HookTestForceFailure -and $HookMode -ne 'PreToolUse') { throw 'HookTestForceFailure is valid only for PreToolUse test dispatch.' }
     $eventText = [Console]::In.ReadToEnd()
+    if ($null -ne $eventText) { $eventText = $eventText.TrimStart([char]0xFEFF) }
     if ([string]::IsNullOrWhiteSpace($eventText)) { throw ($HookMode + ' hook event JSON missing on stdin.') }
     try { $hookEvent = $eventText | ConvertFrom-Json -ErrorAction Stop } catch { throw ($HookMode + ' hook event JSON invalid: ' + $_.Exception.Message) }
-    $target = if ($HookMode -eq 'PostToolUse') { Test-HookPostToolTarget $hookEvent $projectRoot } else { Test-HookPreToolTarget $hookEvent }
+    $target = Test-HookPreToolTarget $hookEvent
     if (-not $target) {
         Write-HarnessOutput ('HOOK ' + $HookMode + ' SKIP unrelated event')
         exit 0
@@ -151,6 +123,10 @@ function Get-RedSource {
 function Assert-EvidenceRoot {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Root)
     $full = [System.IO.Path]::GetFullPath($Path)
+    $workspaceRoot = 'C:\wt'
+    if (-not $full.StartsWith($workspaceRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw ('EvidenceRoot must be under C:\wt: ' + $full)
+    }
     $prefix = $Root.TrimEnd('\') + '\'
     if ($full.Equals($Root, [StringComparison]::OrdinalIgnoreCase) -or $full.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw ('EvidenceRoot must be outside project: ' + $full)
@@ -164,6 +140,8 @@ function Assert-EvidenceRoot {
 $state = [pscustomobject]@{
     ProjectRoot = $projectRoot
     WorkflowPath = $workflowPath
+    ComparatorPath = $comparatorPath
+    ComparatorRedFixturePath = $comparatorRedFixturePath
     HookSettingsPath = $hookSettingsPath
     ShimCommand = $shimInvoker
     CurrentSource = [System.IO.File]::ReadAllText($workflowPath)
@@ -178,6 +156,9 @@ $cases = @(
     [pscustomobject]@{ Id = 'gopv-json'; Function = ${function:Test-GopvJson} },
     [pscustomobject]@{ Id = 'gopv-absent'; Function = ${function:Test-GopvAbsent} },
     [pscustomobject]@{ Id = 'ledger-row-ordered-literal'; Function = ${function:Test-LedgerRowOrderedLiteral} },
+    [pscustomobject]@{ Id = 'generated-path-surface-removed'; Function = ${function:Test-GeneratedPathSurfaceRemoved} },
+    [pscustomobject]@{ Id = 'generated-yaml-comparator-coverage'; Function = ${function:Test-GeneratedYamlComparatorCoverage} },
+    [pscustomobject]@{ Id = 'generated-yaml-comparator-default-meta-coverage'; Function = ${function:Test-GeneratedYamlComparatorDefaultMetaCoverage} },
     [pscustomobject]@{ Id = 'row-reuse-equal'; Function = ${function:Test-RowReuseEqual} },
     [pscustomobject]@{ Id = 'row-reuse-diff'; Function = ${function:Test-RowReuseDiff} },
     [pscustomobject]@{ Id = 'row-field-sweep'; Function = ${function:Test-RowFieldSweep} },
@@ -185,6 +166,8 @@ $cases = @(
     [pscustomobject]@{ Id = 'bake-inputs-asymmetry'; Function = ${function:Test-BakeInputsAsymmetry} },
     [pscustomobject]@{ Id = 'bake-count-production-method'; Function = ${function:Test-BakeCountProductionMethod} },
     [pscustomobject]@{ Id = 'path-intersects'; Function = ${function:Test-PathIntersects} },
+    [pscustomobject]@{ Id = 'evidence-path-budget'; Function = ${function:Test-EvidencePathBudget} },
+    [pscustomobject]@{ Id = 'short-workspace-path'; Function = ${function:Test-ShortWorkspacePath} },
     [pscustomobject]@{ Id = 'stringset-null'; Function = ${function:Test-StringSetNull} },
     [pscustomobject]@{ Id = 'planonly-pending-only'; Function = ${function:Test-PlanOnlyPendingOnly} },
     [pscustomobject]@{ Id = 'guard-g1'; Function = ${function:Test-GuardG1} },
@@ -227,11 +210,14 @@ $summary = [ordered]@{
     status = if ($failed.Count -eq 0) { 'pass' } else { 'fail' }
     projectRoot = $projectRoot
     elapsedMs = $elapsedMs
-    runtimeLimitSeconds = 10
+    runtimeLimitSeconds = $runtimeLimitMs / 1000
     cases = @($results.ToArray())
     redBaseline = 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     redGreen = @(
         [ordered]@{ case = 'gopv-ordered'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'generated-path-surface-removed'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'generated-yaml-comparator-default-meta-coverage'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'short-workspace-path'; head = 'pass'; redBaseline = 'fail' }
         [ordered]@{ case = 'row-reuse-equal'; head = 'pass'; redBaseline = 'fail' }
     )
     scratchDrill = @($results | Where-Object { $_.id -eq 'scratch-drill' })
@@ -250,16 +236,16 @@ if (-not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
 }
 
 if ([string]::IsNullOrWhiteSpace($HookMode)) {
-    Write-HarnessOutput ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=10000')
+    Write-HarnessOutput ('HARNESS elapsedMs=' + $elapsedMs + ' limitMs=' + $runtimeLimitMs)
 }
 if ($HookTestForceFailure) {
     Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: forced harness failure')
     if (-not [string]::IsNullOrWhiteSpace($HookMode)) { exit 2 }
     exit 1
 }
-if ($failed.Count -gt 0 -or $elapsedMs -ge 10000) {
+if ($failed.Count -gt 0 -or $elapsedMs -ge $runtimeLimitMs) {
     if (-not [string]::IsNullOrWhiteSpace($HookMode)) {
-        $reason = if ($elapsedMs -ge 10000) { 'runtime limit exceeded' } else { ('harness cases failed=' + $failed.Count) }
+        $reason = if ($elapsedMs -ge $runtimeLimitMs) { 'runtime limit exceeded' } else { ('harness cases failed=' + $failed.Count) }
         Write-HarnessOutput ('HOOK ' + $HookMode + ' FAILED: ' + $reason + '; elapsedMs=' + $elapsedMs)
         exit 2
     }

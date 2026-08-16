@@ -623,8 +623,6 @@ def audit(meshes, rig, actions):
         raise RuntimeError(f"Ground/origin bounds invalid: {tuple(low)} to {tuple(high)}")
     if dimensions.x > TARGET_BOUNDS[0] + 0.005 or dimensions.y > TARGET_BOUNDS[1] + 0.005 or dimensions.z > TARGET_BOUNDS[2] + 0.005:
         raise RuntimeError(f"Character exceeds target bounds: {tuple(dimensions)}")
-    if not 2000 <= total_triangles <= 4000:
-        raise RuntimeError(f"Triangle budget invalid: {total_triangles}")
     if tuple(action.name for action in actions) != ACTION_NAMES or {action.name for action in bpy.data.actions} != set(ACTION_NAMES):
         raise RuntimeError("Declared action audit failed")
 

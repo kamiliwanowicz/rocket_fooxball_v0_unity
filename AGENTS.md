@@ -41,6 +41,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Critical gameplay simulation -> fixed-step code. Shared physics configuration -> `GamePhysicsSettings`.
 - Device input -> Input System -> `PlayerInputReader` intent -> gameplay components. No legacy `UnityEngine.Input` polling.
 - Runtime code -> `RocketFooxball.Runtime`, no `UnityEditor`. Editor tooling -> `RocketFooxball.Editor` with explicit assembly references. Rendering concern owns URP-only behaviour so core gameplay stays testable without URP or editor code.
+- Project namespace segment shadows same-named `UnityEngine` type inside it: `RocketFooxball.Runtime.Physics` shadows `UnityEngine.Physics` -> `CS0234`. Fully qualify (`UnityEngine.Physics.Raycast`, `UnityEngine.Physics.IgnoreCollision`). Same risk for `Rendering`, `Animations`, `Audio`.
 - One state owner per concern. Callers request operations; owners mutate their own state. Leaf components report narrow events upward and never own match-wide state such as score or coordinated reset. Match concern is the single owner of score, match state machine (`Playing -> GoalFreeze -> Reset -> Playing`), input gate, and reset timing; triggers only raise events, owners execute their own reset.
 - Wiring is direct serialized references plus narrow callbacks. No event bus, DI container, or speculative service layer — PoC favours traceable references over indirection. Runtime components never search the scene for gameplay owners; same-object required components may use `GetComponent` fallback; missing serialized dependency -> log exact composition error and disable component. Diagnostics-only components are the sole exception and may keep discovery fallback.
 - Frame ownership: gameplay physics, impulses, cooldowns, goal crossing -> `FixedUpdate`; input sampling, look, freeze timers -> `Update`; camera pose/FOV/shake -> `LateUpdate`.
@@ -50,33 +51,38 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 
 - Preserve `.meta` files and GUIDs. Move or delete asset and `.meta` together.
 - Prefer `MovementLabBuilder` or Unity Editor APIs over direct serialized-YAML edits.
+- Prefer public runtime/editor API over private serialized project-setting fields: `UnityEngine.Physics.IgnoreLayerCollision(a, b, false)` + dirty/save `PhysicsManager`, not `m_LayerCollisionMatrix` writes. Read live `SerializedProperty.propertyType` under pinned Unity version before trusting remembered layout; `LayerMask` reports `SerializedPropertyType.LayerMask`, assign through `intValue`.
+- Generated-manifest schema migration is separate state transition, not incremental stage write: keep legacy manifest resumable -> run full non-lighting pass -> persist/reload outputs -> write complete migrated manifest -> resume strict per-stage probing. Never write partial current-schema state before every newly declared output exists.
 - Builder-owned change -> edit source/builder -> rebuild -> validate -> inspect diff. Manual generated-asset edits are not authoritative.
 - Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
+- Generated YAML stays in Unity-native serialization form. Unity writes empty scalars as `key: ` (trailing space); never post-process generated asset or `.meta` bytes to strip it. A counter-normalizer has no fixed point — Unity re-adds the space on the next import/save, so every run dirties unrelated generated files in both directions. Comparators already `TrimEnd()` each line, so the trailing space carries no semantic weight.
 - Atomic generated-file replacement: one helper owns it — `File.Replace(` may appear only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`, and every `Tools/Validation/*.ps1` must parse clean. Harness guards enforce both; a partially written generated asset corrupts the import cache, so scattering raw replaces is a hard no.
-- Capture pre/post Git status. Reject GUID churn, broken asset/`.meta` pairing, and unrelated reserialization. Accept builder-owned generated YAML reserialization, `fileID`/whitespace changes, and bake nondeterminism; review generated churn semantically and keep it in separate commit `chore: regenerate MovementLab outputs`. Remove only newly generated IDE files.
+- Capture pre/post Git status. Classify changed generated output from authoritative inventory + exact task declaration; ownership affects scope only. Every changed authoritative output needs exact coverage: comparator path/output, `SEMANTIC:`, `DANGLING:`, GUID stability, asset/`.meta` pairing; attach at checkpoint/reviewer even when separate regeneration commit excludes raw diff. Changed bytes -> run comparator -> accept only canonical-equal + no `DANGLING:` increase + no GUID churn + intact asset/`.meta` pairing; comparator-unsupported -> reject until supported; otherwise reject. Keep generated churn in separate `chore: regenerate MovementLab outputs` commit. Remove only newly generated IDE files.
 
 ## Unity execution
 
 - Tooling: no Computer Use or related `sky.documentation` / `node_repl` tools.
-- Unity worktrees: use short paths such as `C:\wt\<id>`. Existing long path -> verified junction or `subst` drive. Use same short project path for all Unity commands and process checks.
-- Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture exit code -> confirm process and project lock release.
-- Harness pre-gate: before any Unity-mutating workflow, run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1` harness-unit suite; finish in `<10s` without Unity process or project lock. Failure or timeout blocks Unity.
+- Orchestrator-created worktrees, junctions, evidence aliases, scratch roots, fixtures, and temporary directories on `C:` -> descendants of `C:\wt` only. Never create `C:\<name>` or use Windows temp directories for project tooling. Durable evidence may stay under Git-common run root; short alias stays under `C:\wt`.
+- Unity worktrees: use short `C:\wt\<id>` path or verified junction/subst alias there. Use same short project path for all Unity commands and process checks. Create short evidence alias such as `C:\wt\<id>e` before worker dispatch and probe deepest expected path. Workflow `Assert-EvidencePathBudget` rejects over-long evidence path and write-probes before lease, Unity, or product mutation.
+- Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture `.ExitCode` -> confirm process and project lock release. Direct `Unity.exe` / `& Unity.exe` invocation or polling instead of `-Wait` -> prohibited.
+- Failure classification: decide pass/fail from process exit code, workflow result JSON, Unity exception, compile errors, and semantic validation result. Never fail from keyword-only log scan. Known-benign here: `[Licensing::Module] LicensingClient has failed validation; ignoring`, `[Licensing::Module] Error: Access token is unavailable; failed to update`, `d3d12: failed to query info queue interface (0x80004002).`
+- Harness pre-gate: non-Claude before any Unity-mutating workflow -> run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`; finish `<90s` without Unity process or project lock. Failure or timeout blocks Unity. Claude -> `.claude` `PreToolUse` runs same gate before recognized Unity-mutating workflow/Unity command; do not add manual Claude run.
 - Harness red baseline: `Tools/Tests/Fixtures/` holds deliberately broken copies of guarded scripts. Missing fixture throws instead of silently skipping. Guard cases must pass at HEAD and fail against their fixture, proving the guard can still detect regressions. Edit a guarded workflow script -> update its fixture so it stays red, else harness self-check breaks.
-- Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees.
+- Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees. New worktree -> provision its own private `Library/` before first Unity mutation; preserve across retries.
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
 - `dotnet build`: optional fast preflight against current Unity-generated project files; never authoritative Unity compile proof.
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
 - Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild.
 - Production bake gate: bake entry point owns skip/rebuild from current lighting inputs. Valid skip emits source-defined digest marker and zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Copy marker from source, never retype.
-- Integrity gates: source/input digests decide staleness and bake reuse. Generated-output bytes/hashes provide provenance only; never gate rebuild, acceptance, or nondeterminism.
+- Integrity gates: source/input digests decide staleness and bake reuse. Generated-output bytes/hashes provide provenance only; never gate rebuild, acceptance, or nondeterminism. Digest text inputs from canonical Git blob bytes (`git hash-object`) or newline-normalized bytes. Raw worktree bytes differ by CRLF/LF across checkouts (`.gitattributes` -> `*.cs text`, unity YAML `eol=lf`) and produce false staleness plus unowned regeneration churn.
 - Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Invariant: full build and semantic validate both fail unless a production bake is already current -> bake first.
 
 ## Unity tests direction
 
-- `com.unity.test-framework` already installed; no project test assemblies yet.
-- Target: EditMode NUnit tests for deterministic pure runtime logic only (bot decisions, match state machine, scoring, cooldown math). First test assembly -> `Assets/_Game/Scripts/Tests/EditMode/` + test asmdef referencing `RocketFooxball.Runtime`; create when next touching pure gameplay logic.
+- `com.unity.test-framework` already installed; project EditMode test assembly: `Assets/_Game/Scripts/Tests/EditMode/RocketFooxball.EditModeTests.asmdef`.
+- Target: EditMode NUnit tests for deterministic pure runtime logic only (bot decisions, match state machine, scoring, cooldown math). The test assembly references `RocketFooxball.Runtime`.
 - Skip: PlayMode tests, coverage goals, feel/physics assertions (playtests own feel), MonoBehaviour wiring tests (builder validator owns wiring).
 - Tests grow only where regression would break playtests.
 
@@ -87,6 +93,8 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Movement, input, generated-lab, or other builder-generated change -> run builder protocol.
 - Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process proves references persisted to disk. Do not require second builds.
 - Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
+- Validator scope matches owner scope: contract assertions run against owning subtree. New presentation object never invalidates unrelated owner's contract.
+- Render budgets are report-only. Renderer counts, triangle counts, opaque passes, transparent statics, and texture memory are measured and logged/manifested, never enforced. No build, import, validate, or Blender generate step fails on a budget. Do not reintroduce a budget throw without explicit user instruction.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
 - Project or package changes: restart Unity when required; confirm affected renderer, input, build-scene, and assembly configuration.
 - Documentation-only changes: inspect diff; Unity launch unnecessary.
@@ -97,3 +105,4 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 ## Code clarity
 
 - Write self-documenting code. Add short comments or class/method descriptions only for non-obvious intent.
+- Reference shared contract constants through owning type (`MovementLabContract.HealthPickupEastSouthRotation`), never unqualified.

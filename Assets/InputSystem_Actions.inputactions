@@ -42,6 +42,15 @@
                     "initialStateCheck": false
                 },
                 {
+                    "name": "ShotgunFire",
+                    "type": "Button",
+                    "id": "f75e2f4a-0f80-4d83-9a8d-c73a5d6d14cf",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
                     "name": "Kick",
                     "type": "Button",
                     "id": "f4938cc6-64df-45f7-93de-2b6e0bf6f5c8",
@@ -63,6 +72,15 @@
                     "name": "CaptureCursor",
                     "type": "Button",
                     "id": "d7d7a84e-a5cf-4b2a-b7ec-1a9f0a33c10f",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "MatchTable",
+                    "type": "Button",
+                    "id": "c15f83ad-0f95-44f2-9f5e-4cfe9a0f2bd5",
                     "expectedControlType": "Button",
                     "processors": "",
                     "interactions": "",
@@ -204,8 +222,30 @@
                 },
                 {
                     "name": "",
-                    "id": "e7a4b39f-0bf4-49a6-85be-d871f11eb875",
+                    "id": "2f8d6ac8-3d13-4db4-9b2b-e3aa4fef11aa",
                     "path": "<Mouse>/rightButton",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "ShotgunFire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "4c686716-8ce5-4c46-99ef-1538d0c2411b",
+                    "path": "<Gamepad>/leftTrigger",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Gamepad",
+                    "action": "ShotgunFire",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "e7a4b39f-0bf4-49a6-85be-d871f11eb875",
+                    "path": "<Keyboard>/f",
                     "interactions": "",
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
@@ -243,6 +283,17 @@
                     "processors": "",
                     "groups": ";Keyboard&Mouse",
                     "action": "CaptureCursor",
+                    "isComposite": false,
+                    "isPartOfComposite": false
+                },
+                {
+                    "name": "",
+                    "id": "b8a8bc7b-14f4-4c5c-bd8c-02c4cb726104",
+                    "path": "<Keyboard>/tab",
+                    "interactions": "",
+                    "processors": "",
+                    "groups": ";Keyboard&Mouse",
+                    "action": "MatchTable",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

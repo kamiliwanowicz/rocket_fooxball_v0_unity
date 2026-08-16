@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Match
 {
@@ -24,6 +25,7 @@ namespace RocketFooxball.Runtime.Match
 
         [Header("Goal")]
         [SerializeField] private GoalSide goalSide;
+        [SerializeField] private ParticipantTeam defendingTeam = ParticipantTeam.Red;
         [SerializeField] private Vector3 planeNormal = Vector3.forward;
         [SerializeField, Min(0.1f)] private float openingHalfWidth = 18f;
         [SerializeField, Min(0f)] private float openingMinHeight = 0f;
@@ -38,6 +40,8 @@ namespace RocketFooxball.Runtime.Match
         private const float PlaneDeadband = 0.0001f;
 
         public GoalSide Side => goalSide;
+        /// <summary>Team defending this goal. Opposite team receives a goal on crossing.</summary>
+        public ParticipantTeam DefendingTeam => defendingTeam;
         public bool EntryLatched => entryLatched;
         public Collider OpeningTrigger => openingTrigger;
         public event Action<GoalTrigger> GoalCrossed;

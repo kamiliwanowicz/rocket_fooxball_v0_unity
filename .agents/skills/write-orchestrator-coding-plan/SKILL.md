@@ -27,7 +27,7 @@ Required dispatch fields:
 - covered `REQ-*` IDs and objective;
 - exact accepted 40-character `baseline_sha`;
 - dependencies: accepted upstream integration SHAs or `None`;
-- candidate design scope, produced downstream contract, and size check;
+- candidate design scope and produced downstream contract;
 - forecast owned/protected paths;
 - checks and validation boundary;
 - reserved artifact path under `<git-common-dir>/loop-orchestrator/<run-id>/plans/<plan-id>/<attempt-id>.md`;
@@ -39,12 +39,12 @@ Reserved artifact path is create-once. Confirm destination absent. Write complet
 
 Result status:
 
-- `ready`: artifact created at exact reserved path; return path, run/plan/attempt IDs, baseline, covered requirements, dependencies, and owned/protected paths.
+- `ready`: artifact created at exact reserved path; return path, run/plan/attempt IDs, and owned/protected paths.
 - `needs_user`: return one material question and safe facts; create no accepted artifact. User response requires fresh attempt ID and reserved path.
 - `blocked`: return exact blocker, evidence, and one needed LP action/recheck; create no accepted artifact.
 - decomposition mismatch: return `blocked` with needed LP action `fresh task-breakdown`; planner never creates/splits candidates.
 
-After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binding copies source once into attempt snapshot and verifies accepted digest/size. Planner never claims digest acceptance.
+After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binds accepted plan artifact in place at reserved path and reverifies accepted digest/size; later digest change -> `blocked`. Planner never claims digest acceptance.
 
 Dependent candidate planning begins only after LP supplies observed accepted upstream integration SHA. Never plan against forecast or invented downstream baseline.
 
@@ -62,19 +62,40 @@ Use exact `sol_medium` subagents when repository evidence spans separable areas 
 
 - Dispatch with `fork_turns: "none"`. Give each subagent one self-contained, bounded question with relevant paths, symbols, constraints, and required evidence.
 - Require read-only analysis: no edits, implementation, plan drafting, staging, commits, branch/worktree mutation, or project-mutating validation.
-- Prompt and result use `$llm-oriented-markdowns`: terse facts, exact paths/symbols/commands, observed gaps, no speculative plan content.
+- Prompt and result are terse AI-to-AI text: exact paths/symbols/commands, observed gaps, no prose, no narration, no speculative plan content.
 - Parallel dispatch only for independent questions. Planner owns synthesis and plan claims.
 - Conflicting or consequential subagent evidence -> planner inspects source directly before recording claim.
+- Subagent returns exactly this template; no text before or after:
+
+```markdown
+# Analysis Result
+
+Status: complete | blocked
+Assigned Agent: [exact agent identity]
+Profile: sol_medium
+Question: [bounded dispatched question]
+Findings: [`exact path/symbol` -> observed fact]
+Gaps: [missing evidence or None]
+Blocker: [exact blocker when blocked; otherwise None]
+```
 
 ## Plan shape
 
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
-- Size by reasoning and proof load, never lines/files: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary.
+- Build the dependency/ownership graph before drafting task order. Identify stable contracts, shared files/symbols, generated outputs, mutation environments, review boundaries, and final proof consumers.
+- Maximize safe parallel implementation. Extract independent core work into sibling lanes, then assign shared integration, wiring, or aggregation to a named fan-in task that alone owns the shared surface. Keep coupled work together when no stable contract separates it.
+- Give parallel sibling tasks disjoint owned files and symbols plus stable, predeclared input/output contracts. Overlapping ownership, shared generated output, migration state, Unity/project mutation environment, or shared validation environment requires serialization unless the repository supplies an isolation mechanism.
+- Justify every sequential edge with a concrete data, contract, ownership, mutation, review, or validation dependency. Do not serialize an unrelated lane behind another lane's checkpoint; let its per-worker review proceed independently and join only where a consumer or final gate needs every predecessor.
+- Fan in all source producers and accepted reviews/fixes before the production-final owner starts the shared final phase. Within that sole-owner phase, order producer mutation before its generated-output gate, then run the remaining exact-SHA proof; never require an output gate before the mutation that creates its outputs.
+- Size primarily by reasoning and proof load: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary. Volume is coarse tripwire, not the rule.
 - Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
-- Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
+- Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. Task obviously containing two separable builds -> prefer split. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
+- New gameplay mechanic default seam: `pure logic + types -> lifecycle/integration -> scene/prefab composition`. Default, not mandatory.
 - Execution graph and checkpoints must satisfy [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md#review-checkpoints). Encode named tasks/workers, dependencies, serial/parallel lanes, joins, review gates, and any grouped-review rationale.
 - Candidate dependencies: accepted SHAs supplied by LP.
+
+Split anchors: prefab/scene wiring + few call sites -> usually one task; new MonoBehaviour + one-system integration -> cohesive task; full mechanic with separable state/lifecycle/integration -> split; whole subsystem -> split; bulk repetitive generation/config -> one task when split harms execution.
 
 ## Implementation design gate
 
@@ -82,7 +103,7 @@ Before writing artifact, ask what worker would still need to figure out. Resolve
 
 Ready task lets worker follow recorded design using only local coding judgment. Product/architecture choice missing from repository -> `needs_user`. Repository evidence gap -> LP `blocked`. Excess design surface -> decomposition mismatch.
 
-After design detail, apply `Plan shape` sizing/splitting rules. Record slice boundary in template. No meaningful independent acceptance -> fold.
+After design detail, apply `Plan shape` splitting rules. No meaningful independent acceptance -> fold.
 
 Example: `record walkable hit normal, project velocity along ramp, preserve launch velocity` remains too broad until plan explains concrete contact state, projection/order, ramp-exit handling, and separation from wall handling.
 
@@ -92,18 +113,20 @@ Example: `record walkable hit normal, project velocity along ramp, preserve laun
 
 ### Check contract
 
-Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
+Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected discriminatory evidence>`. Do not require full ledger fields for ordinary checks. `production-final` checks use full machine-readable rows: `check_id`, `tier`, `mutates_project`, `input_paths`, `input_digest`, `environment_fingerprint`, `invalidation_paths`, `subsumes`, `run_point`, and `evidence`; execution state adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
 
 ### Validation authoring rules
 
 - Plans follow `AGENTS.md` visual-proof policy. Task-specific source-asset previews required by applicable skills, including [`$use-blender`](../use-blender/SKILL.md), remain allowed as supplementary proof.
 - Plan Unity checks from [`AGENTS.md`](../../../AGENTS.md) -> `Unity execution`; `Validation`, including required pre-gates and generated-output proof policy.
+- Builder task -> trace authoritative builder inventory before plan write. Task `owns` lists each produced builder output, exact path per output; include derived outputs such as cue-mesh assets. Do not hide produced outputs behind broad inventory glob. Unknown output path -> `blocked` in LP mode, unresolved evidence in direct mode. Classifier combines inventory + exact task declarations; declaration absent inventory requires builder-source evidence as `declared-new`.
+- Expensive proof contract: `same_dispatch` -> named task owner runs proof before return; `orchestrator_phase` -> execution orchestrator runs shared proof after `checks` names exact checkpoint/final trigger, declared source fan-in, declared outputs, accepted review/fixes; `None` -> no expensive proof. Every non-`None` mode names one `expensive_proof_owner`; `orchestrator_phase` names trigger checkpoint/final boundary in `checks`. Never use narrative run-point wording or workflow path-selection flag.
 
 Execution route:
 
-`accepted source artifact -> LP-bound attempt snapshot + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
+`accepted plan artifact -> LP-bound in place at reserved path + isolated worktree -> exact sol_high execution orchestrator using $orchestrate-implementation -> implementation/review/fix/final validation -> clean committed execution SHA -> merging agent`
 
-Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates.
+Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as execution contract. Do not duplicate worker/reviewer prompt templates. Reference review/fix gates by link only; never copy thresholds or numeric constants into plan.
 
 ## Output shape
 
@@ -128,12 +151,6 @@ Dependencies: [accepted full SHAs or None]
 - in: [behavior/files]
 - out: [non-goal]
 
-## Repository Findings
-- observed: `[path]` -> [symbol/fact]
-- gap: [missing behavior]
-- constraint: [repository rule]
-- proposed: `[path]` -> [purpose]
-
 ## Decisions
 - assumption: [minor assumption]
 - decision: [chosen approach and reason]
@@ -147,27 +164,23 @@ Dependencies: [accepted full SHAs or None]
 
 ## Tasks
 ### T1: [coherent result]
-- objective: [single bounded implementation outcome]
-- slice_boundary: [dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
+- objective: [single bounded implementation outcome; dominant behavior/invariant; coupled edits included; independent work excluded; one proof boundary]
 - covered_requirements: [REQ-* list or direct request slice]
 - owner: [identity]
-- depends_on: [accepted SHA or None]
-- owns: `[exact paths]`
+- dependencies: `[predecessor task/checkpoint -> concrete reason work cannot start earlier]` or `None`
+- parallel_contract: `[stable input/output symbols plus disjointness from sibling ownership]` or `None`
+- owns: `[exact paths or tight globs]`
 - protected: `[exact paths/symbols]`
-- read_paths: `[exact paths/symbols]`
+- read_paths: `[exact path/symbol -> reason]`
 - validation_environment: `[bounded environment and lease]`
 - unity_mutation: `true | false`
 - expensive_proof_owner: `[one identity or None]`
-- expensive_proof_run_point: `[checkpoint/final boundary or None]`
-- proof_invalidation_paths: `[paths that invalidate proof]`
-- focused_reads: `[exact paths/symbols and reason]`
+- expensive_proof_execution: `same_dispatch | orchestrator_phase | None`
 - implementation: [ordered coding details; include exact symbols, logic, order, integration, and edge handling only where needed]
 - done when: [observable acceptance]
-- checks: ordinary -> `proof: <command> -> <expected>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
-- proof: [discriminatory evidence]
+- checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, result, evidence, invalidation, and full check contract fields
 - review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
-- return_evidence: [changed symbols/paths, check output, proof record, residual risk]
 
 ## Execution Assignments
 - workers: [task ID -> worker identity -> bounded outcome; parallel lane when any]
@@ -180,17 +193,8 @@ Dependencies: [accepted full SHAs or None]
 - invalidation: [edits requiring rerun]
 
 ## Handoff
-- changed paths: [list]
 - residual risks: [list or None]
 - authority: [integration and user-branch approval]
-
-## Done Criteria
-- template fields complete; every covered requirement maps to task, owner, check, proof;
-- tasks meet `Plan shape` and `Implementation design gate`;
-- Execution Graph includes every task/checkpoint once; all dependencies, parallel lanes, joins explicit;
-- exact baseline and dependencies are factual;
-- execution route uses immutable attempt-bound snapshot and `$orchestrate-implementation`;
-- final checks bind clean committed head or blocker names needed action.
 ```
 
 ## LP result template
@@ -204,10 +208,6 @@ Run ID: [run_id]
 Plan ID: [plan_id]
 Attempt ID: [attempt_id]
 Assigned Agent: [exact identity]
-Profile: sol_high
-Baseline SHA: [full SHA]
-Covered Requirements: [REQ-* list]
-Dependencies: [full SHA list or None]
 Owned Paths: [exact paths]
 Protected Paths: [exact paths]
 Artifact Path: [exact path or None]
@@ -222,5 +222,6 @@ Needed LP Action or Recheck: [one action/fact or None]
 - Verify every Markdown link and target heading.
 - Run worker-decision audit; unresolved repository-significant choice prevents `ready`.
 - Verify template completeness plus `Plan shape` and `Implementation design gate`.
+- Verify every sequential edge has an explicit dependency reason, every parallel lane has disjoint ownership and a stable contract, and shared integration plus final proof occur only after their required fan-in.
 - Verify LP artifact path is new, complete, and accepted destination was never overwritten.
 - Verify direct mode preserves existing repository plans and returns path only.

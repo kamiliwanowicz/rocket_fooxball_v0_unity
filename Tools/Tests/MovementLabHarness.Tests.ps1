@@ -1,5 +1,6 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+$script:HarnessScratchRoot = 'C:\wt'
 
 function New-HarnessPass {
     param([AllowEmptyString()][string]$Message = 'ok')
@@ -52,7 +53,6 @@ function Set-HarnessRowStubs {
         function script:Get-EnvironmentFingerprint { return 'environment' }
         function script:Get-WorkingTreeDigest { return 'working-tree' }
         $script:InvocationId = 'fixture-invocation'
-        $script:RequestedInventoryPaths = @('Assets/_Game/Generated/fixture.json')
     }
     & $Module $setup | Out-Null
 }
@@ -184,6 +184,139 @@ function Test-LedgerRowOrderedLiteral {
     $ast = Get-HarnessFunctionAst $State.CurrentSource 'New-LedgerRow'
     if ($ast.Extent.Text -notmatch '(?im)\[ordered\]\s*@\{') { return New-HarnessFail 'New-LedgerRow is not backed by [ordered] literal' }
     return New-HarnessPass '[ordered] row literal'
+}
+
+function Test-GeneratedPathSurfaceRemoved {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $findLegacySurface = {
+        param([string]$Source)
+        $ast = Get-HarnessAst $Source
+        $generatedPathVariables = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            [string]$Node.VariablePath.UserPath -ceq 'GeneratedPath'
+        }, $true))
+        $requestedInventoryVariables = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
+            [string]$Node.VariablePath.UserPath -ceq 'RequestedInventoryPaths'
+        }, $true))
+        $requestedInventoryFields = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
+            [string]$Node.Value -ceq 'requested_inventory'
+        }, $true))
+        return $generatedPathVariables.Count + $requestedInventoryVariables.Count + $requestedInventoryFields.Count
+    }
+
+    $headCount = [int](& $findLegacySurface $State.CurrentSource)
+    if ($headCount -ne 0) { return New-HarnessFail ('legacy generated-path surface remains at ' + $headCount + ' site(s)') }
+    $redSource = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $State.RedSource -ErrorAction Stop).Path)
+    $redCount = [int](& $findLegacySurface $redSource)
+    if ($redCount -eq 0) { return New-HarnessFail 'red baseline does not retain the legacy generated-path surface' }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s)')
+}
+
+function Test-GeneratedYamlComparatorCoverage {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $paths = @(
+        'Assets/_Game/Animations/FpsKick.controller',
+        'Assets/_Game/Generated/BlueCircleCueMesh.asset'
+    )
+    $quotedPaths = @($paths | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ', '
+    $command = "& '" + $State.ComparatorPath.Replace("'", "''") + "' -Base 'HEAD' -Head 'WORKTREE' -Path @(" + $quotedPaths + ')'
+    $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -Command $command 2>&1)
+    if ($LASTEXITCODE -ne 0) { return New-HarnessFail ('comparator rejected supported controller/cue paths: ' + ($output -join ' | ')) }
+    foreach ($path in $paths) {
+        if (($output -join "`n") -notmatch [regex]::Escape('== ' + $path)) {
+            return New-HarnessFail ('comparator omitted supported generated path: ' + $path)
+        }
+        if (($output -join "`n") -notmatch '(?m)^SEMANTIC: ' -or ($output -join "`n") -notmatch '(?m)^DANGLING: ') {
+            return New-HarnessFail 'comparator output contract omitted SEMANTIC or DANGLING.'
+        }
+    }
+
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $uncovered = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $State.ComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/_Game/Generated/NotAuthoritative.asset' 2>&1)
+        $uncoveredExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($uncoveredExitCode -eq 0 -or ($uncovered -join "`n") -notmatch 'Requested path is uncovered') {
+        return New-HarnessFail ('uncovered generated-path request did not fail closed: ' + ($uncovered -join ' | '))
+    }
+    try {
+        $ErrorActionPreference = 'Continue'
+        $outsideInventory = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $State.ComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/InputSystem_Actions.inputactions' 2>&1)
+        $outsideInventoryExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+    }
+    if ($outsideInventoryExitCode -eq 0 -or ($outsideInventory -join "`n") -notmatch 'outside the authoritative generated inventory') {
+        return New-HarnessFail ('non-authoritative requested path did not fail closed: ' + ($outsideInventory -join ' | '))
+    }
+    return New-HarnessPass 'controller/cue paths covered; uncovered and non-authoritative requests rejected'
+}
+
+function Test-GeneratedYamlComparatorDefaultMetaCoverage {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $fixtureRoot = Join-Path $script:HarnessScratchRoot ('generated-yaml-comparator-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $validationDirectory = Join-Path $fixtureRoot 'Tools/Validation'
+        $materialsDirectory = Join-Path $fixtureRoot 'Assets/_Game/Materials'
+        [IO.Directory]::CreateDirectory($validationDirectory) | Out-Null
+        [IO.Directory]::CreateDirectory($materialsDirectory) | Out-Null
+        Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1') -Force
+        Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $validationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
+        $materialPath = Join-Path $materialsDirectory 'Fixture.mat'
+        $metaPath = $materialPath + '.meta'
+        [IO.File]::WriteAllText($materialPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Fixture`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($metaPath, "fileFormatVersion: 2`nguid: 11111111111111111111111111111111`n", (New-Object Text.UTF8Encoding($false)))
+        & git -C $fixtureRoot init --quiet 2>$null
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git initialization failed' }
+        & git -C $fixtureRoot config core.autocrlf false 2>$null
+        & git -C $fixtureRoot config user.email 'harness@example.invalid' 2>$null
+        & git -C $fixtureRoot config user.name 'Harness' 2>$null
+        & git -C $fixtureRoot add . 2>$null
+        & git -C $fixtureRoot commit --quiet -m 'fixture baseline' 2>$null
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git baseline commit failed' }
+        [IO.File]::AppendAllText($materialPath, "  m_ShaderKeywords: CHANGED`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($metaPath, "timeCreated: 1`n", (New-Object Text.UTF8Encoding($false)))
+
+        $fixtureComparator = Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1'
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $fixtureComparator -Base 'HEAD' -Head 'WORKTREE' 2>&1)
+        if ($LASTEXITCODE -ne 0) { return New-HarnessFail ('default comparator fixture failed: ' + ($output -join ' | ')) }
+        $text = $output -join "`n"
+        foreach ($path in @('Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta')) {
+            if ($text -notmatch [regex]::Escape('== ' + $path)) { return New-HarnessFail ('default comparator omitted changed authoritative path: ' + $path) }
+        }
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+unsupported metadata.*?semantic\s+NOT CHECKED') {
+            return New-HarnessFail 'default comparator did not explicitly report modified authoritative .meta as NOT CHECKED'
+        }
+        if ($text -notmatch '(?m)^COVERAGE: 2/2 authoritative changed paths reported; semantic checked 1; NOT CHECKED 1$') {
+            return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
+        }
+    } finally {
+        Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $currentSource = [IO.File]::ReadAllText($State.ComparatorPath)
+    $redSource = [IO.File]::ReadAllText($State.ComparatorRedFixturePath)
+    $legacyGate = 'if ($explicitPathRequest -or $basePresent -ne $headPresent)'
+    if ($currentSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'current comparator retains the legacy default .meta omission gate' }
+    if ($redSource.IndexOf($legacyGate, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail 'red comparator fixture does not retain the legacy default .meta omission gate' }
+    if ($currentSource -notmatch '(?s)if \(\$coverageKind -cne ''supported text''\).*?\$reportedPathCount\+\+.*?semantic\s+NOT CHECKED') {
+        return New-HarnessFail 'unsupported metadata branch does not unconditionally report default coverage and NOT CHECKED status'
+    }
+    if ($currentSource -notmatch '(?m)^Write-Output \(''COVERAGE: '' \+ \$reportedPathCount \+ ''/'' \+ \$selected.Count') {
+        return New-HarnessFail 'coverage summary does not account for every selected authoritative changed path'
+    }
+    return New-HarnessPass 'modified .meta default-report branch and all-path coverage summary present; red fixture retains omission gate'
 }
 
 function Test-RowReuseEqual {
@@ -386,6 +519,50 @@ function Test-PathIntersects {
         return New-HarnessPass 'exact/descendant/ancestor and sibling-prefix cases'
     } finally {
         if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Test-EvidencePathBudget {
+    param([Parameter(Mandatory = $true)]$State)
+    $module = $null
+    $root = Join-Path $script:HarnessScratchRoot ('harness-evidence-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $module = & $State.ShimCommand $State.CurrentSource @('Assert-EvidencePathBudget') @()
+        $deepest = [string](Invoke-HarnessModuleFunction $module 'Assert-EvidencePathBudget' @{ EvidenceDirectory = $root })
+        if (-not (Test-Path -LiteralPath $root -PathType Container)) { return New-HarnessFail 'short evidence directory not provisioned' }
+        if (Test-Path -LiteralPath $deepest) { return New-HarnessFail ('probe file left behind: ' + $deepest) }
+        $long = Join-Path $root ('x' * [Math]::Max(1, 260 - $root.Length))
+        $threw = $false
+        try { Invoke-HarnessModuleFunction $module 'Assert-EvidencePathBudget' @{ EvidenceDirectory = $long } | Out-Null } catch { $threw = $true }
+        if (-not $threw) { return New-HarnessFail 'over-long evidence directory accepted' }
+        if (Test-Path -LiteralPath $long) { return New-HarnessFail 'over-long evidence directory was created before the budget check' }
+        return New-HarnessPass 'deepest-path budget rejected before mkdir; short root probed and cleaned'
+    } finally {
+        if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-ShortWorkspacePath {
+    param([Parameter(Mandatory = $true)]$State)
+    $currentModule = $null
+    $redModule = $null
+    try {
+        $currentModule = & $State.ShimCommand $State.CurrentSource @('Get-FullPath', 'Assert-ShortWorkspacePath') @()
+        $accepted = [string](Invoke-HarnessModuleFunction $currentModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\wt\fixture'; Label = 'Fixture' })
+        if ($accepted -cne 'C:\wt\fixture') { return New-HarnessFail ('C:\wt child path changed: ' + $accepted) }
+        $currentRejected = $false
+        try { Invoke-HarnessModuleFunction $currentModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\evidence'; Label = 'EvidenceRoot' } | Out-Null } catch { $currentRejected = $true }
+        if (-not $currentRejected) { return New-HarnessFail 'root-level C:\evidence path accepted' }
+
+        $redModule = & $State.ShimCommand $State.RedSource @('Assert-ShortWorkspacePath') @()
+        $redRejected = $false
+        try { Invoke-HarnessModuleFunction $redModule 'Assert-ShortWorkspacePath' @{ Path = 'C:\evidence'; Label = 'EvidenceRoot' } | Out-Null } catch { $redRejected = $true }
+        if ($redRejected) { return New-HarnessFail 'red baseline no longer accepts root-level evidence path' }
+        return New-HarnessPass 'C:\wt child accepted; C:\ root sibling rejected; red baseline remains permissive'
+    } finally {
+        if ($null -ne $currentModule) { Remove-Module -ModuleInfo $currentModule -Force -ErrorAction SilentlyContinue }
+        if ($null -ne $redModule) { Remove-Module -ModuleInfo $redModule -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -620,11 +797,10 @@ function Test-HookSettings {
         return $hook
     }
 
-    $postHook = $null
     $preHook = $null
     try {
-        $postHook = Get-ConfiguredHook 'PostToolUse' 'Edit|Write' 'PostToolUse'
         $preHook = Get-ConfiguredHook 'PreToolUse' 'Bash|PowerShell' 'PreToolUse'
+        if ($settings.hooks.PSObject.Properties.Name -contains 'PostToolUse') { throw 'PostToolUse harness hook must be absent' }
     } catch {
         return New-HarnessFail $_.Exception.Message
     }
@@ -641,7 +817,7 @@ function Test-HookSettings {
             if ($value.Contains('${CLAUDE_PROJECT_DIR}')) { $value.Replace('${CLAUDE_PROJECT_DIR}', $State.ProjectRoot) } else { $value }
         })
         if ($ForceFailure) { $arguments += '-HookTestForceFailure' }
-        $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('RocketFooxballHook-' + [guid]::NewGuid().ToString('N'))
+        $fixtureRoot = Join-Path $script:HarnessScratchRoot ('RocketFooxballHook-' + [guid]::NewGuid().ToString('N'))
         [System.IO.Directory]::CreateDirectory($fixtureRoot) | Out-Null
         $process = $null
         $quoteArgument = {
@@ -695,61 +871,67 @@ function Test-HookSettings {
         }
     }
 
-    $postTestsTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Tools/Tests/MovementLabHarness.Tests.ps1"}}'
-    $postValidationTarget = '{"tool_name":"Write","tool_input":{"file_path":"Tools/Validation/Invoke-MovementLabWorkflow.ps1"}}'
-    $postEditorTarget = '{"tool_name":"Edit","tool_input":{"file_path":"Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs"}}'
-    $postUnrelated = '{"tool_name":"Edit","tool_input":{"file_path":"README.md"}}'
+    # Nested hook failures otherwise surface as a bare exit code; the real child error is only
+    # reachable from -EvidenceRoot JSON. Fold the child's own output into the fail message.
+    function Get-HookFailureDetail {
+        param([Parameter(Mandatory = $true)]$Result)
+        $label = 'stderr'
+        $detail = [string]$Result.stderr
+        if ([string]::IsNullOrWhiteSpace($detail)) {
+            $label = 'stdout'
+            $detail = (@($Result.stdout) -join ' ')
+        }
+        $detail = (($detail -replace '\s+', ' ')).Trim()
+        if ([string]::IsNullOrWhiteSpace($detail)) { return '; child output empty' }
+        if ($detail.Length -gt 200) { $detail = $detail.Substring(0, 197) + '...' }
+        return ('; ' + $label + '=' + $detail)
+    }
+
     $preWorkflowTarget = '{"tool_name":"Bash","tool_input":{"command":"powershell -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode Fast -PlanOnly"}}'
     $preUnityTarget = '{"tool_name":"PowerShell","tool_input":{"command":"C:\\Unity\\Editor\\Unity.exe -batchmode -quit"}}'
     $preUnrelated = '{"tool_name":"PowerShell","tool_input":{"command":"Get-Date"}}'
+    # Process.StandardInput inherits [Console]::InputEncoding and flushes that encoding's preamble
+    # when Start() sets AutoFlush. Under an active UTF-8 console (chcp 65001) the preamble is a
+    # 3-byte BOM that lands ahead of the event JSON and makes every nested hook reject stdin.
+    # Swapping in a preamble-free UTF-8 keeps code page 65001 unchanged; other code pages already
+    # report an empty preamble and are left alone.
+    $previousInputEncoding = $null
+    if ([Console]::InputEncoding.GetPreamble().Length -gt 0) {
+        $previousInputEncoding = [Console]::InputEncoding
+        [Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+    }
     try {
-        $postTestsPending = Start-HookFixture $postHook $postTestsTarget
-        $postValidationPending = Start-HookFixture $postHook $postValidationTarget
-        $postEditorPending = Start-HookFixture $postHook $postEditorTarget
-        $postUnrelatedPending = Start-HookFixture $postHook $postUnrelated
         $preWorkflowPending = Start-HookFixture $preHook $preWorkflowTarget
         $preUnityPending = Start-HookFixture $preHook $preUnityTarget
         $preUnrelatedPending = Start-HookFixture $preHook $preUnrelated
         $preForcedPending = Start-HookFixture $preHook $preWorkflowTarget -ForceFailure
-        $postTestsResult = Complete-HookFixture $postTestsPending
-        $postValidationResult = Complete-HookFixture $postValidationPending
-        $postEditorResult = Complete-HookFixture $postEditorPending
-        $postUnrelatedResult = Complete-HookFixture $postUnrelatedPending
         $preWorkflowResult = Complete-HookFixture $preWorkflowPending
         $preUnityResult = Complete-HookFixture $preUnityPending
         $preUnrelatedResult = Complete-HookFixture $preUnrelatedPending
         $preForcedResult = Complete-HookFixture $preForcedPending
     } catch {
         return New-HarnessFail $_.Exception.Message
+    } finally {
+        if ($null -ne $previousInputEncoding) { [Console]::InputEncoding = $previousInputEncoding }
     }
     $State.HookExecution = [ordered]@{
-        postTestsExit = $postTestsResult.exitCode
-        postValidationExit = $postValidationResult.exitCode
-        postEditorExit = $postEditorResult.exitCode
-        postUnrelatedExit = $postUnrelatedResult.exitCode
         preWorkflowExit = $preWorkflowResult.exitCode
         preUnityExit = $preUnityResult.exitCode
         preUnrelatedExit = $preUnrelatedResult.exitCode
         preForcedExit = $preForcedResult.exitCode
-        postTestsStderr = $postTestsResult.stderr.Trim()
         preForcedStderr = $preForcedResult.stderr.Trim()
     }
     foreach ($fixture in @(
-        [pscustomobject]@{ Name = 'Tools/Tests'; Result = $postTestsResult },
-        [pscustomobject]@{ Name = 'Tools/Validation'; Result = $postValidationResult },
-        [pscustomobject]@{ Name = 'MovementLab C#'; Result = $postEditorResult },
         [pscustomobject]@{ Name = 'workflow PreToolUse'; Result = $preWorkflowResult },
         [pscustomobject]@{ Name = 'Unity PreToolUse'; Result = $preUnityResult }
     )) {
-        if ($fixture.Result.exitCode -ne 0) { return New-HarnessFail ($fixture.Name + ' target hook exited ' + $fixture.Result.exitCode) }
-        if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout') }
-        if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness') }
+        if ($fixture.Result.exitCode -ne 0) { return New-HarnessFail ($fixture.Name + ' target hook exited ' + $fixture.Result.exitCode + (Get-HookFailureDetail $fixture.Result)) }
+        if ($fixture.Result.stdout.Count -ne 0) { return New-HarnessFail ($fixture.Name + ' target emitted stdout' + (Get-HookFailureDetail $fixture.Result)) }
+        if ($fixture.Result.stderr -notmatch '(?i)HOOK .* PASS: harness cases=') { return New-HarnessFail ($fixture.Name + ' target did not run harness' + (Get-HookFailureDetail $fixture.Result)) }
     }
-    if ($postUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PostToolUse hook exited ' + $postUnrelatedResult.exitCode) }
-    if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode) }
-    if ($postUnrelatedResult.stdout.Count -ne 0 -or $postUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PostToolUse event did not skip cleanly' }
-    if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail 'unrelated PreToolUse event did not skip cleanly' }
-    if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2') }
-    if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail 'forced PreToolUse fixture lacked concise stderr failure' }
-    return New-HarnessPass 'exec-form hooks; three PostToolUse targets; workflow/Unity PreToolUse targets; skips and exit-2 failure'
+    if ($preUnrelatedResult.exitCode -ne 0) { return New-HarnessFail ('unrelated PreToolUse hook exited ' + $preUnrelatedResult.exitCode + (Get-HookFailureDetail $preUnrelatedResult)) }
+    if ($preUnrelatedResult.stdout.Count -ne 0 -or $preUnrelatedResult.stderr -notmatch '(?i)SKIP unrelated event') { return New-HarnessFail ('unrelated PreToolUse event did not skip cleanly' + (Get-HookFailureDetail $preUnrelatedResult)) }
+    if ($preForcedResult.exitCode -ne 2) { return New-HarnessFail ('forced failing PreToolUse hook exited ' + $preForcedResult.exitCode + ', expected 2' + (Get-HookFailureDetail $preForcedResult)) }
+    if ($preForcedResult.stdout.Count -ne 0 -or $preForcedResult.stderr -notmatch '(?i)forced harness failure') { return New-HarnessFail ('forced PreToolUse fixture lacked concise stderr failure' + (Get-HookFailureDetail $preForcedResult)) }
+    return New-HarnessPass 'one PreToolUse hook; workflow/Unity targets; nested hook check skipped; unrelated skip and exit-2 failure'
 }

@@ -1,13 +1,13 @@
 using UnityEngine;
 using RocketFooxball.Runtime.Ball;
-using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Weapons
 {
     /// <summary>Fixed-capacity, closest-surface target selection for one blast.</summary>
     public sealed class ExplosionTargetCollector
     {
-        private readonly PlayerMotor[] playerTargets;
+        private readonly ParticipantState[] playerTargets;
         private readonly Collider[] playerColliders;
         private readonly float[] playerDistances;
         private readonly BallMotor[] ballTargets;
@@ -16,7 +16,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         public ExplosionTargetCollector(int playerCapacity, int ballCapacity)
         {
-            playerTargets = new PlayerMotor[playerCapacity];
+            playerTargets = new ParticipantState[playerCapacity];
             playerColliders = new Collider[playerCapacity];
             playerDistances = new float[playerCapacity];
             ballTargets = new BallMotor[ballCapacity];
@@ -36,9 +36,14 @@ namespace RocketFooxball.Runtime.Weapons
             ballCount = 0;
         }
 
-        public void AddPlayer(PlayerMotor target, Collider collider, Vector3 origin, bool directImpact = false)
+        public void AddPlayer(ParticipantState target, Collider collider, Vector3 origin, bool directImpact = false)
         {
             Add(target, collider, origin, directImpact, playerTargets, playerColliders, playerDistances, ref playerCount);
+        }
+
+        public void AddParticipant(ParticipantState target, Collider collider, Vector3 origin, bool directImpact = false)
+        {
+            AddPlayer(target, collider, origin, directImpact);
         }
 
         public void AddBall(BallMotor target, Collider collider, Vector3 origin, bool directImpact = false)
@@ -46,7 +51,8 @@ namespace RocketFooxball.Runtime.Weapons
             Add(target, collider, origin, directImpact, ballTargets, ballColliders, ballDistances, ref ballCount);
         }
 
-        public PlayerMotor GetPlayer(int index) => playerTargets[index];
+        public ParticipantState GetPlayer(int index) => playerTargets[index];
+        public ParticipantState GetParticipant(int index) => playerTargets[index];
         public BallMotor GetBall(int index) => ballTargets[index];
         public Collider GetPlayerCollider(int index) => playerColliders[index];
         public Collider GetBallCollider(int index) => ballColliders[index];
