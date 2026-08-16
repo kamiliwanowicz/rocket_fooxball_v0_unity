@@ -15,6 +15,8 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That((int)MatchRules.MatchState.OpeningCountdown, Is.EqualTo(3));
             Assert.That((int)MatchRules.MatchState.KickoffCountdown, Is.EqualTo(4));
             Assert.That((int)MatchRules.MatchState.Final, Is.EqualTo(5));
+            Assert.That((int)MatchRules.MatchState.Setup, Is.EqualTo(6));
+            Assert.That((int)MatchRules.MatchState.Paused, Is.EqualTo(7));
         }
 
         [Test]
@@ -41,6 +43,18 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(MatchRules.CountdownNumber(MatchRules.MatchState.OpeningCountdown, 2.4f), Is.EqualTo(3));
             Assert.That(MatchRules.CountdownNumber(MatchRules.MatchState.KickoffCountdown, 0.2f), Is.EqualTo(1));
             Assert.That(MatchRules.CountdownNumber(MatchRules.MatchState.Final, 2f), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void PausedTimerGateOnlyStopsPausedState()
+        {
+            foreach (var state in (MatchRules.MatchState[])System.Enum.GetValues(typeof(MatchRules.MatchState)))
+            {
+                Assert.That(
+                    MatchRules.ShouldAdvancePausedTimer(state),
+                    Is.EqualTo(state != MatchRules.MatchState.Paused),
+                    state.ToString());
+            }
         }
 
         [Test]
