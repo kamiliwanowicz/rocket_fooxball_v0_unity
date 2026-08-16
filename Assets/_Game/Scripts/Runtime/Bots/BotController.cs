@@ -2,6 +2,7 @@ using UnityEngine;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Movement;
+using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Weapons;
 
@@ -14,6 +15,21 @@ namespace RocketFooxball.Runtime.Bots
     {
         private const float ExpectedMaxPitchDegrees = 89f;
         private const float ExpectedJumpProbeDistance = 4f;
+        private const float ObservationMemorySeconds = 1.5f;
+        private const float EmergencyCrossingWindowSeconds = 2.5f;
+        private const float EmergencyTowardGoalSpeed = 0.5f;
+        private const float EmergencyCrossingLateralLimit = 18f;
+        private const float EmergencyCrossingHeightLimit = 7f;
+        private const float EmergencyCloseProgressLimit = 12f;
+        private const float EmergencyCloseLateralLimit = 22f;
+        private const float EmergencyCloseHeightLimit = 10f;
+        private const float EmergencyFallbackDistance = 12f;
+        private const float EmergencyFallbackLane = 28f;
+        private const float SupportProgressOffset = 12f;
+        private const float SupportLateralLane = 28f;
+        private const float EnemyOpportunityDistance = 30f;
+        private const float PredictionLookaheadSeconds = 0.25f;
+        private const float DirectionEpsilon = 0.000001f;
         private const int MaxPickupCandidates = 5;
         private const string CompositionError =
             "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, and exact 89-degree/4-meter tuning.";
@@ -48,7 +64,7 @@ namespace RocketFooxball.Runtime.Bots
         private bool decisionScheduled;
         private BotReactedSnapshot reactedSnapshot;
 
-        // These owners are populated by the decision/aim/action phase in the next slice.
+        // Navigation is owned here; aim and consumer action remain intentionally inactive in this slice.
         private BotTargetSelection activeTarget = BotTargetSelection.None;
         private BotNavigationSteeringResult navigationSteering = BotNavigationSteeringResult.Invalid;
         private BotAimSolution ballAim = BotAimSolution.Invalid;
@@ -56,6 +72,7 @@ namespace RocketFooxball.Runtime.Bots
         private BotCombatResult lastCombatResult = BotCombatResult.None;
         private Vector3 storedAimDirection;
         private Vector3 storedSteeringDirection;
+        private Vector3 storedActionFacing;
         private bool hasAim;
         private bool hasRoute;
 
@@ -106,6 +123,8 @@ namespace RocketFooxball.Runtime.Bots
             {
                 RunDecision(gameplayTime);
             }
+
+            UpdateNavigationAndMovement(gameplayTime);
         }
 
         public bool SetDifficulty(BotDifficulty nextDifficulty)
@@ -201,15 +220,960 @@ namespace RocketFooxball.Runtime.Bots
             if (!reactedSnapshot.HasData)
             {
                 decisionScheduled = false;
+                activeTarget = BotTargetSelection.None;
+                ClearMotion();
                 return;
             }
 
-            // Decision ownership is intentionally a no-op in this slice. It still advances
-            // its own deterministic schedule so later phases cannot double-run a slot.
             decisionOrdinal++;
             nextDecisionTime = gameplayTime +
                 BotDifficultyRules.GetDecisionDelay(difficulty, participant.SlotId, decisionOrdinal);
             decisionScheduled = IsFinite(nextDecisionTime);
+
+            if (!decisionScheduled || !IsFinite(gameplayTime))
+            {
+                activeTarget = BotTargetSelection.None;
+                ClearMotion();
+                return;
+            }
+
+            BuildTargetSelection(gameplayTime);
+        }
+
+        private void BuildTargetSelection(float decisionTime)
+        {
+            var selection = BotTargetSelection.None;
+            if (!TryGetFieldBasis(reactedSnapshot, out var fieldForward, out var fieldLateral, out var fieldLength))
+            {
+                activeTarget = selection;
+                storedActionFacing = Vector3.zero;
+                ClearMotion();
+                return;
+            }
+
+            var hasBall = TryGetBallEstimate(
+                reactedSnapshot,
+                decisionTime,
+                0f,
+                out var ballPosition,
+                out var ballEffectiveAge,
+                out var ballExpiry);
+            var hasValidBallInOwnHalf = hasBall && IsBallInOwnHalf(
+                ballPosition,
+                reactedSnapshot.OwnGoalPosition,
+                fieldForward,
+                fieldLength);
+
+            TryAddEmergencyTarget(
+                ref selection,
+                decisionTime,
+                fieldForward,
+                fieldLateral,
+                fieldLength,
+                hasBall,
+                ballPosition,
+                ballEffectiveAge,
+                ballExpiry,
+                hasValidBallInOwnHalf);
+            TryAddRoleTarget(
+                ref selection,
+                decisionTime,
+                fieldForward,
+                fieldLateral,
+                fieldLength,
+                hasBall,
+                ballPosition,
+                ballEffectiveAge,
+                ballExpiry,
+                hasValidBallInOwnHalf);
+            TryAddPickupTargets(ref selection, decisionTime, hasValidBallInOwnHalf);
+            TryAddEnemyTargets(ref selection, decisionTime);
+
+            if (!selection.HasTarget && hasBall && !reactedSnapshot.Ball.IsVisible)
+            {
+                var fallbackPosition = PredictBall(
+                    reactedSnapshot.Ball,
+                    decisionTime,
+                    reactedSnapshot.GameplayTime,
+                    0.35f);
+                ProbeAndConsider(
+                    ref selection,
+                    new BotTargetKey(BotTargetKind.BallFallback, 0),
+                    BotTargetRules.BallFallbackScore,
+                    fallbackPosition,
+                    fallbackPosition,
+                    MinExpiry(ObservationExpiry(decisionTime, ballEffectiveAge), nextDecisionTime),
+                    hasValidBallInOwnHalf);
+            }
+
+            activeTarget = selection;
+            if (activeTarget.HasTarget)
+            {
+                storedActionFacing = GetFiniteFacing(
+                    activeTarget.ActionPosition - GetCurrentPosition(),
+                    activeTarget.NavigationPosition - GetCurrentPosition());
+            }
+            else
+            {
+                storedActionFacing = GetFiniteFacing(
+                    reactedSnapshot.EnemyGoalPosition - GetCurrentPosition(),
+                    transform.forward);
+            }
+
+            ClearMotion();
+        }
+
+        private bool TryGetFieldBasis(
+            BotReactedSnapshot snapshot,
+            out Vector3 fieldForward,
+            out Vector3 fieldLateral,
+            out float fieldLength)
+        {
+            fieldForward = Vector3.zero;
+            fieldLateral = Vector3.zero;
+            fieldLength = 0f;
+            var goalDelta = snapshot.EnemyGoalPosition - snapshot.OwnGoalPosition;
+            if (!IsFinite(goalDelta) || goalDelta.sqrMagnitude <= DirectionEpsilon)
+            {
+                return false;
+            }
+
+            fieldLength = goalDelta.magnitude;
+            fieldForward = goalDelta / fieldLength;
+            fieldLateral = Vector3.Cross(Vector3.up, fieldForward);
+            if (!IsFinite(fieldLateral) || fieldLateral.sqrMagnitude <= DirectionEpsilon)
+            {
+                return false;
+            }
+
+            fieldLateral.Normalize();
+            return IsFinite(fieldForward) && IsFinite(fieldLength) && fieldLength > 0f;
+        }
+
+        private bool TryGetBallEstimate(
+            BotReactedSnapshot snapshot,
+            float decisionTime,
+            float horizon,
+            out Vector3 predictedPosition,
+            out float effectiveAge,
+            out float expiresAt)
+        {
+            predictedPosition = Vector3.zero;
+            effectiveAge = 0f;
+            expiresAt = 0f;
+            var observation = snapshot.Ball;
+            if (!observation.HasObservation || !IsFinite(observation.Position))
+            {
+                return false;
+            }
+
+            effectiveAge = GetEffectiveAge(observation.AgeSeconds, decisionTime, snapshot.GameplayTime);
+            if (!IsFinite(effectiveAge) || effectiveAge > ObservationMemorySeconds)
+            {
+                return false;
+            }
+
+            expiresAt = decisionTime + Mathf.Max(ObservationMemorySeconds - effectiveAge, 0f);
+            predictedPosition = PredictBall(observation, decisionTime, snapshot.GameplayTime, horizon);
+            return IsFinite(predictedPosition) && IsFinite(expiresAt) && expiresAt >= decisionTime;
+        }
+
+        private Vector3 PredictBall(
+            BotBallObservation observation,
+            float decisionTime,
+            float snapshotTime,
+            float horizon)
+        {
+            if (!IsFinite(observation.Position))
+            {
+                return Vector3.zero;
+            }
+
+            var effectiveAge = GetEffectiveAge(observation.AgeSeconds, decisionTime, snapshotTime);
+            var safeHorizon = IsFinite(horizon) ? Mathf.Max(horizon, 0f) : 0f;
+            var age = effectiveAge + safeHorizon;
+            if (!IsFinite(effectiveAge) || !IsFinite(age) || age < 0f || !IsFinite(observation.Velocity))
+            {
+                return observation.Position;
+            }
+
+            var velocity = observation.Velocity;
+            if (observation.IsGrounded)
+            {
+                velocity.y = 0f;
+                var groundedPosition = observation.Position + velocity * age;
+                groundedPosition.y = observation.Position.y;
+                return IsFinite(groundedPosition) ? groundedPosition : observation.Position;
+            }
+
+            var airbornePosition = observation.Position + velocity * age +
+                Vector3.down * (GamePhysicsSettings.GravityMagnitude * age * age * 0.5f);
+            return IsFinite(airbornePosition) ? airbornePosition : observation.Position;
+        }
+
+        private Vector3 PredictBallVelocity(
+            BotBallObservation observation,
+            float decisionTime,
+            float snapshotTime)
+        {
+            if (!IsFinite(observation.Velocity))
+            {
+                return Vector3.zero;
+            }
+
+            var effectiveAge = GetEffectiveAge(observation.AgeSeconds, decisionTime, snapshotTime);
+            var velocity = observation.Velocity;
+            if (observation.IsGrounded)
+            {
+                velocity.y = 0f;
+                return velocity;
+            }
+
+            velocity += Vector3.down * (GamePhysicsSettings.GravityMagnitude * effectiveAge);
+            return IsFinite(velocity) ? velocity : Vector3.zero;
+        }
+
+        private static float GetEffectiveAge(float observationAge, float decisionTime, float snapshotTime)
+        {
+            var age = IsFinite(observationAge) && observationAge >= 0f ? observationAge : 0f;
+            var elapsed = decisionTime - snapshotTime;
+            if (!IsFinite(elapsed) || elapsed < 0f)
+            {
+                elapsed = 0f;
+            }
+
+            var effectiveAge = age + elapsed;
+            return IsFinite(effectiveAge) && effectiveAge >= 0f ? effectiveAge : float.PositiveInfinity;
+        }
+
+        private static bool IsBallInOwnHalf(
+            Vector3 ballPosition,
+            Vector3 ownGoalPosition,
+            Vector3 fieldForward,
+            float fieldLength)
+        {
+            if (!IsFinite(ballPosition) || !IsFinite(ownGoalPosition) || !IsFinite(fieldForward) ||
+                !IsFinite(fieldLength) || fieldLength <= 0f)
+            {
+                return false;
+            }
+
+            var progress = Vector3.Dot(ballPosition - ownGoalPosition, fieldForward);
+            return IsFinite(progress) && progress >= 0f && progress <= fieldLength * 0.5f;
+        }
+
+        private static float ObservationExpiry(float decisionTime, float effectiveAge)
+        {
+            if (!IsFinite(decisionTime) || !IsFinite(effectiveAge))
+            {
+                return -1f;
+            }
+
+            return decisionTime + Mathf.Max(ObservationMemorySeconds - effectiveAge, 0f);
+        }
+
+        private static float MinExpiry(float sourceExpiry, float nextDecision)
+        {
+            if (!IsFinite(sourceExpiry) || !IsFinite(nextDecision))
+            {
+                return -1f;
+            }
+
+            return Mathf.Min(sourceExpiry, nextDecision);
+        }
+
+        private void TryAddEmergencyTarget(
+            ref BotTargetSelection selection,
+            float decisionTime,
+            Vector3 fieldForward,
+            Vector3 fieldLateral,
+            float fieldLength,
+            bool hasBall,
+            Vector3 ballPosition,
+            float ballEffectiveAge,
+            float ballExpiry,
+            bool hasValidBallInOwnHalf)
+        {
+            if (!hasBall)
+            {
+                return;
+            }
+
+            var ballVelocity = PredictBallVelocity(
+                reactedSnapshot.Ball,
+                decisionTime,
+                reactedSnapshot.GameplayTime);
+            var progress = Vector3.Dot(
+                ballPosition - reactedSnapshot.OwnGoalPosition,
+                fieldForward);
+            var lateral = Vector3.Dot(
+                ballPosition - reactedSnapshot.OwnGoalPosition,
+                fieldLateral);
+            var towardOwnGoalSpeed = Vector3.Dot(ballVelocity, -fieldForward);
+            var height = ballPosition.y;
+
+            var hasCrossingDanger = IsFinite(progress) && IsFinite(lateral) && IsFinite(height) &&
+                IsFinite(towardOwnGoalSpeed) && towardOwnGoalSpeed >= EmergencyTowardGoalSpeed &&
+                progress >= 0f && progress / towardOwnGoalSpeed >= 0f &&
+                progress / towardOwnGoalSpeed <= EmergencyCrossingWindowSeconds &&
+                Mathf.Abs(lateral) <= EmergencyCrossingLateralLimit &&
+                height >= 0f && height <= EmergencyCrossingHeightLimit;
+            var hasCloseDanger = IsFinite(progress) && IsFinite(lateral) && IsFinite(height) &&
+                progress >= 0f && progress <= EmergencyCloseProgressLimit &&
+                Mathf.Abs(lateral) <= EmergencyCloseLateralLimit &&
+                height >= 0f && height <= EmergencyCloseHeightLimit;
+            if (!hasCrossingDanger && !hasCloseDanger)
+            {
+                return;
+            }
+
+            var crossingTime = hasCrossingDanger ? progress / towardOwnGoalSpeed : 0f;
+            var horizon = hasCrossingDanger
+                ? Mathf.Clamp(crossingTime - 0.20f, 0f, 0.75f)
+                : 0.35f;
+            var emergencyPosition = PredictBall(
+                reactedSnapshot.Ball,
+                decisionTime,
+                reactedSnapshot.GameplayTime,
+                horizon);
+            var expiry = MinExpiry(ballExpiry, nextDecisionTime);
+            if (!IsFinite(expiry) || decisionTime > expiry)
+            {
+                return;
+            }
+
+            var key = new BotTargetKey(BotTargetKind.OwnGoalEmergency, 0);
+            if (ProbeAndConsider(
+                ref selection,
+                key,
+                BotTargetRules.OwnGoalEmergencyScore,
+                emergencyPosition,
+                emergencyPosition,
+                expiry,
+                hasValidBallInOwnHalf))
+            {
+                return;
+            }
+
+            var fallbackLane = GetNearestFallbackLane(lateral);
+            var fallbackPosition = reactedSnapshot.OwnGoalPosition +
+                fieldForward * EmergencyFallbackDistance +
+                fieldLateral * fallbackLane;
+            ProbeAndConsider(
+                ref selection,
+                key,
+                BotTargetRules.OwnGoalEmergencyScore,
+                fallbackPosition,
+                fallbackPosition,
+                expiry,
+                hasValidBallInOwnHalf);
+        }
+
+        private void TryAddRoleTarget(
+            ref BotTargetSelection selection,
+            float decisionTime,
+            Vector3 fieldForward,
+            Vector3 fieldLateral,
+            float fieldLength,
+            bool hasBall,
+            Vector3 ballPosition,
+            float ballEffectiveAge,
+            float ballExpiry,
+            bool hasValidBallInOwnHalf)
+        {
+            switch (reactedSnapshot.Role)
+            {
+                case BotRole.Defender:
+                    TryAddDefenderTarget(
+                        ref selection,
+                        decisionTime,
+                        fieldForward,
+                        fieldLateral,
+                        fieldLength,
+                        hasBall,
+                        ballPosition,
+                        ballExpiry,
+                        hasValidBallInOwnHalf);
+                    break;
+                case BotRole.Attacker:
+                    if (hasBall)
+                    {
+                        var attackerPosition = PredictBall(
+                            reactedSnapshot.Ball,
+                            decisionTime,
+                            reactedSnapshot.GameplayTime,
+                            0.50f);
+                        ProbeAndConsider(
+                            ref selection,
+                            new BotTargetKey(BotTargetKind.AttackerBall, 0),
+                            BotTargetRules.AttackerBallScore,
+                            attackerPosition,
+                            attackerPosition,
+                            MinExpiry(ballExpiry, nextDecisionTime),
+                            hasValidBallInOwnHalf);
+                    }
+                    break;
+                case BotRole.Support:
+                    TryAddSupportTarget(
+                        ref selection,
+                        decisionTime,
+                        fieldForward,
+                        fieldLateral,
+                        fieldLength,
+                        hasBall,
+                        ballPosition,
+                        ballExpiry,
+                        hasValidBallInOwnHalf);
+                    break;
+            }
+        }
+
+        private void TryAddDefenderTarget(
+            ref BotTargetSelection selection,
+            float decisionTime,
+            Vector3 fieldForward,
+            Vector3 fieldLateral,
+            float fieldLength,
+            bool hasBall,
+            Vector3 ballPosition,
+            float ballExpiry,
+            bool hasValidBallInOwnHalf)
+        {
+            var lane = 0f;
+            if (hasBall)
+            {
+                lane = Mathf.Clamp(
+                    Vector3.Dot(ballPosition - reactedSnapshot.OwnGoalPosition, fieldLateral),
+                    -SupportLateralLane,
+                    SupportLateralLane);
+            }
+
+            var coveragePosition = reactedSnapshot.OwnGoalPosition +
+                fieldForward * Mathf.Min(EmergencyFallbackDistance, Mathf.Max(fieldLength, 0f)) +
+                fieldLateral * lane;
+            var expiry = hasBall ? MinExpiry(ballExpiry, nextDecisionTime) : nextDecisionTime;
+            ProbeAndConsider(
+                ref selection,
+                new BotTargetKey(BotTargetKind.DefenderCoverage, 0),
+                BotTargetRules.DefenderCoverageScore,
+                coveragePosition,
+                coveragePosition,
+                expiry,
+                hasValidBallInOwnHalf);
+        }
+
+        private void TryAddSupportTarget(
+            ref BotTargetSelection selection,
+            float decisionTime,
+            Vector3 fieldForward,
+            Vector3 fieldLateral,
+            float fieldLength,
+            bool hasBall,
+            Vector3 ballPosition,
+            float ballExpiry,
+            bool hasValidBallInOwnHalf)
+        {
+            var allyA = reactedSnapshot.AllyA;
+            if (!hasBall || !allyA.HasObservation || !allyA.IsAlive || !IsFinite(allyA.Position) ||
+                !IsFinite(fieldLength) || fieldLength <= 0f)
+            {
+                return;
+            }
+
+            var ballProgress = Vector3.Dot(
+                ballPosition - reactedSnapshot.OwnGoalPosition,
+                fieldForward);
+            var minProgress = Mathf.Min(24f, fieldLength * 0.5f);
+            var maxProgress = Mathf.Max(minProgress, fieldLength - 24f);
+            var supportProgress = Mathf.Clamp(ballProgress - SupportProgressOffset, minProgress, maxProgress);
+            var attackerLateral = Vector3.Dot(
+                allyA.Position - reactedSnapshot.OwnGoalPosition,
+                fieldLateral);
+            var supportLane = 0f;
+            if (IsFinite(attackerLateral) && Mathf.Abs(attackerLateral) > DirectionEpsilon)
+            {
+                supportLane = Mathf.Clamp(-attackerLateral, -SupportLateralLane, SupportLateralLane);
+            }
+            else
+            {
+                supportLane = participant.SlotId % 2 == 0 ? SupportLateralLane : -SupportLateralLane;
+            }
+
+            var supportPosition = reactedSnapshot.OwnGoalPosition +
+                fieldForward * supportProgress + fieldLateral * supportLane;
+            ProbeAndConsider(
+                ref selection,
+                new BotTargetKey(BotTargetKind.SupportLane, 0),
+                BotTargetRules.SupportLaneScore,
+                supportPosition,
+                supportPosition,
+                MinExpiry(ballExpiry, nextDecisionTime),
+                hasValidBallInOwnHalf);
+        }
+
+        private static float GetNearestFallbackLane(float lateral)
+        {
+            var bestLane = -EmergencyFallbackLane;
+            var bestDistance = float.PositiveInfinity;
+            for (var i = -1; i <= 1; i++)
+            {
+                var lane = i * EmergencyFallbackLane;
+                var distance = Mathf.Abs(lateral - lane);
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestLane = lane;
+                }
+            }
+
+            return bestLane;
+        }
+
+        private void TryAddPickupTargets(
+            ref BotTargetSelection selection,
+            float decisionTime,
+            bool hasValidBallInOwnHalf)
+        {
+            TryAddPickupTarget(ref selection, reactedSnapshot.Pickup0, decisionTime, hasValidBallInOwnHalf);
+            TryAddPickupTarget(ref selection, reactedSnapshot.Pickup1, decisionTime, hasValidBallInOwnHalf);
+            TryAddPickupTarget(ref selection, reactedSnapshot.Pickup2, decisionTime, hasValidBallInOwnHalf);
+            TryAddPickupTarget(ref selection, reactedSnapshot.Pickup3, decisionTime, hasValidBallInOwnHalf);
+            TryAddPickupTarget(ref selection, reactedSnapshot.Pickup4, decisionTime, hasValidBallInOwnHalf);
+        }
+
+        private void TryAddPickupTarget(
+            ref BotTargetSelection selection,
+            BotTargetCandidate pickup,
+            float decisionTime,
+            bool hasValidBallInOwnHalf)
+        {
+            if (!BotTargetRules.IsValid(pickup) || decisionTime > pickup.ExpiresAt)
+            {
+                return;
+            }
+
+            var expiry = MinExpiry(pickup.ExpiresAt, nextDecisionTime);
+            if (!IsFinite(expiry) || decisionTime > expiry)
+            {
+                return;
+            }
+
+            ProbeAndConsider(
+                ref selection,
+                pickup.Key,
+                pickup.Score,
+                pickup.NavigationPosition,
+                pickup.ActionPosition,
+                expiry,
+                hasValidBallInOwnHalf);
+        }
+
+        private void TryAddEnemyTargets(ref BotTargetSelection selection, float decisionTime)
+        {
+            var hasVisible = false;
+            var hasRecent = false;
+            var visibleObservation = default(BotParticipantObservation);
+            var recentObservation = default(BotParticipantObservation);
+            var visiblePosition = Vector3.zero;
+            var recentPosition = Vector3.zero;
+            var visibleDistance = float.PositiveInfinity;
+            var recentDistance = float.PositiveInfinity;
+            var origin = reactedSnapshot.Self.HasObservation && IsFinite(reactedSnapshot.Self.Position)
+                ? reactedSnapshot.Self.Position
+                : GetCurrentPosition();
+
+            ConsiderEnemy(
+                reactedSnapshot.EnemyA,
+                decisionTime,
+                origin,
+                ref hasVisible,
+                ref visibleObservation,
+                ref visiblePosition,
+                ref visibleDistance,
+                ref hasRecent,
+                ref recentObservation,
+                ref recentPosition,
+                ref recentDistance);
+            ConsiderEnemy(
+                reactedSnapshot.EnemyB,
+                decisionTime,
+                origin,
+                ref hasVisible,
+                ref visibleObservation,
+                ref visiblePosition,
+                ref visibleDistance,
+                ref hasRecent,
+                ref recentObservation,
+                ref recentPosition,
+                ref recentDistance);
+            ConsiderEnemy(
+                reactedSnapshot.EnemyC,
+                decisionTime,
+                origin,
+                ref hasVisible,
+                ref visibleObservation,
+                ref visiblePosition,
+                ref visibleDistance,
+                ref hasRecent,
+                ref recentObservation,
+                ref recentPosition,
+                ref recentDistance);
+
+            if (hasVisible)
+            {
+                TryAddEnemyCandidate(
+                    ref selection,
+                    visibleObservation,
+                    visiblePosition,
+                    decisionTime);
+            }
+            if (hasRecent)
+            {
+                TryAddEnemyCandidate(
+                    ref selection,
+                    recentObservation,
+                    recentPosition,
+                    decisionTime);
+            }
+        }
+
+        private void ConsiderEnemy(
+            BotParticipantObservation observation,
+            float decisionTime,
+            Vector3 origin,
+            ref bool hasVisible,
+            ref BotParticipantObservation visibleObservation,
+            ref Vector3 visiblePosition,
+            ref float visibleDistance,
+            ref bool hasRecent,
+            ref BotParticipantObservation recentObservation,
+            ref Vector3 recentPosition,
+            ref float recentDistance)
+        {
+            if (!observation.HasObservation || !observation.IsAlive || observation.IsLocalParticipant ||
+                !IsFinite(observation.Position) || !IsFinite(observation.Velocity))
+            {
+                return;
+            }
+
+            var effectiveAge = GetEffectiveAge(
+                observation.AgeSeconds,
+                decisionTime,
+                reactedSnapshot.GameplayTime);
+            if (!IsFinite(effectiveAge) || effectiveAge > ObservationMemorySeconds)
+            {
+                return;
+            }
+
+            var predictedPosition = observation.Position + observation.Velocity *
+                (effectiveAge + PredictionLookaheadSeconds);
+            if (!IsFinite(predictedPosition))
+            {
+                predictedPosition = observation.Position;
+            }
+
+            var distance = Vector3.Distance(origin, predictedPosition);
+            if (!IsFinite(distance) || distance > EnemyOpportunityDistance)
+            {
+                return;
+            }
+
+            if (observation.IsVisible)
+            {
+                if (!hasVisible || IsCloserEnemy(predictedPosition, observation.SlotId, visiblePosition, visibleObservation.SlotId, origin, distance, visibleDistance))
+                {
+                    hasVisible = true;
+                    visibleObservation = observation;
+                    visiblePosition = predictedPosition;
+                    visibleDistance = distance;
+                }
+            }
+            else if (!hasRecent || IsCloserEnemy(predictedPosition, observation.SlotId, recentPosition, recentObservation.SlotId, origin, distance, recentDistance))
+            {
+                hasRecent = true;
+                recentObservation = observation;
+                recentPosition = predictedPosition;
+                recentDistance = distance;
+            }
+        }
+
+        private static bool IsCloserEnemy(
+            Vector3 candidatePosition,
+            int candidateSlot,
+            Vector3 currentPosition,
+            int currentSlot,
+            Vector3 origin,
+            float candidateDistance,
+            float currentDistance)
+        {
+            if (!IsFinite(candidateDistance))
+            {
+                return false;
+            }
+            if (!IsFinite(currentDistance))
+            {
+                return true;
+            }
+
+            var candidateComputedDistance = Vector3.Distance(origin, candidatePosition);
+            var currentComputedDistance = Vector3.Distance(origin, currentPosition);
+            if (candidateComputedDistance != currentComputedDistance)
+            {
+                return candidateComputedDistance < currentComputedDistance;
+            }
+
+            return candidateSlot < currentSlot;
+        }
+
+        private void TryAddEnemyCandidate(
+            ref BotTargetSelection selection,
+            BotParticipantObservation observation,
+            Vector3 predictedPosition,
+            float decisionTime)
+        {
+            var effectiveAge = GetEffectiveAge(
+                observation.AgeSeconds,
+                decisionTime,
+                reactedSnapshot.GameplayTime);
+            var expiry = MinExpiry(ObservationExpiry(decisionTime, effectiveAge), nextDecisionTime);
+            if (!IsFinite(expiry) || decisionTime > expiry)
+            {
+                return;
+            }
+
+            ProbeAndConsider(
+                ref selection,
+                new BotTargetKey(BotTargetKind.EnemyOpportunity, observation.SlotId),
+                BotTargetRules.ScoreForEnemy(observation.IsVisible),
+                predictedPosition,
+                predictedPosition,
+                expiry,
+                false);
+        }
+
+        private bool ProbeAndConsider(
+            ref BotTargetSelection selection,
+            BotTargetKey key,
+            float score,
+            Vector3 navigationPosition,
+            Vector3 actionPosition,
+            float expiresAt,
+            bool hasValidBallInOwnHalf)
+        {
+            if (navigator == null || !IsFinite(navigationPosition) || !IsFinite(actionPosition) ||
+                !IsFinite(score) || !IsFinite(expiresAt) || expiresAt < 0f)
+            {
+                return false;
+            }
+
+            if (!navigator.TryProbeTarget(navigationPosition, out var projectedTarget, out var routeCost) ||
+                !IsFinite(projectedTarget) || !IsFinite(routeCost) || routeCost < 0f)
+            {
+                return false;
+            }
+
+            BotTargetRules.GetActionFlags(
+                key.Kind,
+                hasValidBallInOwnHalf,
+                out var suppressParticipantCombat,
+                out var preferBallActions);
+            var candidate = new BotTargetCandidate(
+                key,
+                score,
+                projectedTarget,
+                actionPosition,
+                suppressParticipantCombat,
+                preferBallActions,
+                true,
+                routeCost,
+                expiresAt);
+            selection = BotTargetRules.Consider(selection, candidate);
+            return true;
+        }
+
+        private void UpdateNavigationAndMovement(float gameplayTime)
+        {
+            if (!compositionValid || !simulationEnabled || paused)
+            {
+                return;
+            }
+
+            if (!activeTarget.HasTarget || !BotTargetRules.IsValid(activeTarget) ||
+                !IsFinite(gameplayTime) || gameplayTime > activeTarget.ExpiresAt)
+            {
+                activeTarget = BotTargetSelection.None;
+                storedActionFacing = reactedSnapshot.HasData
+                    ? GetFiniteFacing(reactedSnapshot.EnemyGoalPosition - GetCurrentPosition(), transform.forward)
+                    : GetFiniteFacing(transform.forward, Vector3.forward);
+                ClearMotion();
+                ApplyFacing(storedActionFacing);
+                return;
+            }
+
+            if (navigator == null || !IsFinite(activeTarget.NavigationPosition))
+            {
+                ClearMotion();
+                ApplyFacing(storedActionFacing);
+                return;
+            }
+
+            navigationSteering = navigator.EvaluateSteering(activeTarget.NavigationPosition);
+            if (navigationSteering.Status == BotNavigationStatus.Invalid ||
+                navigationSteering.Status == BotNavigationStatus.Unreachable)
+            {
+                ClearMotion();
+                ApplyFacing(storedActionFacing);
+                return;
+            }
+
+            var worldSteering = navigationSteering.WorldDirection;
+            var flatSteering = NormalizeHorizontal(worldSteering);
+            if (navigationSteering.Status == BotNavigationStatus.Following &&
+                IsFinite(flatSteering) && flatSteering.sqrMagnitude > DirectionEpsilon)
+            {
+                storedSteeringDirection = flatSteering;
+                hasRoute = true;
+                ApplyFacing(worldSteering);
+                ApplyMoveIntent(flatSteering);
+                return;
+            }
+
+            storedSteeringDirection = Vector3.zero;
+            hasRoute = navigationSteering.Status == BotNavigationStatus.Following;
+            if (motor != null)
+            {
+                motor.SetMoveIntent(Vector2.zero);
+            }
+            ApplyFacing(storedActionFacing);
+        }
+
+        private void ApplyMoveIntent(Vector3 worldSteering)
+        {
+            if (motor == null || !IsFinite(worldSteering))
+            {
+                return;
+            }
+
+            var normalized = NormalizeHorizontal(worldSteering);
+            if (!IsFinite(normalized) || normalized.sqrMagnitude <= DirectionEpsilon)
+            {
+                motor.SetMoveIntent(Vector2.zero);
+                return;
+            }
+
+            normalized.Normalize();
+            var move = new Vector2(
+                Vector3.Dot(transform.right, normalized),
+                Vector3.Dot(transform.forward, normalized));
+            if (!IsFinite(move))
+            {
+                motor.SetMoveIntent(Vector2.zero);
+                return;
+            }
+
+            motor.SetMoveIntent(Vector2.ClampMagnitude(move, 1f));
+        }
+
+        private void ApplyFacing(Vector3 steeringDirection)
+        {
+            var worldDirection = steeringDirection;
+            if (!IsFinite(worldDirection) || worldDirection.sqrMagnitude <= DirectionEpsilon)
+            {
+                worldDirection = storedActionFacing;
+            }
+            if (!IsFinite(worldDirection) || worldDirection.sqrMagnitude <= DirectionEpsilon)
+            {
+                worldDirection = reactedSnapshot.HasData
+                    ? reactedSnapshot.EnemyGoalPosition - GetCurrentPosition()
+                    : transform.forward;
+            }
+
+            var horizontal = new Vector3(worldDirection.x, 0f, worldDirection.z);
+            if (!IsFinite(horizontal) || horizontal.sqrMagnitude <= DirectionEpsilon)
+            {
+                var storedHorizontal = new Vector3(storedActionFacing.x, 0f, storedActionFacing.z);
+                if (IsFinite(storedHorizontal) && storedHorizontal.sqrMagnitude > DirectionEpsilon)
+                {
+                    horizontal = storedHorizontal;
+                }
+            }
+
+            if (IsFinite(horizontal) && horizontal.sqrMagnitude > DirectionEpsilon)
+            {
+                transform.rotation = Quaternion.LookRotation(horizontal.normalized, Vector3.up);
+            }
+
+            if (head == null)
+            {
+                return;
+            }
+
+            var horizontalMagnitude = Mathf.Sqrt(worldDirection.x * worldDirection.x + worldDirection.z * worldDirection.z);
+            var pitch = 0f;
+            if (IsFinite(worldDirection) && IsFinite(horizontalMagnitude))
+            {
+                pitch = Mathf.Clamp(
+                    -Mathf.Atan2(worldDirection.y, horizontalMagnitude) * Mathf.Rad2Deg,
+                    -maxPitchDegrees,
+                    maxPitchDegrees);
+            }
+
+            if (!IsFinite(pitch))
+            {
+                pitch = 0f;
+            }
+            head.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+        }
+
+        private void ClearMotion()
+        {
+            if (navigator != null)
+            {
+                navigator.ClearRoute();
+            }
+
+            navigationSteering = BotNavigationSteeringResult.Invalid;
+            storedSteeringDirection = Vector3.zero;
+            hasRoute = false;
+            if (motor != null)
+            {
+                motor.SetMoveIntent(Vector2.zero);
+            }
+        }
+
+        private Vector3 GetCurrentPosition()
+        {
+            return IsFinite(transform.position) ? transform.position : Vector3.zero;
+        }
+
+        private static Vector3 NormalizeHorizontal(Vector3 value)
+        {
+            if (!IsFinite(value))
+            {
+                return Vector3.zero;
+            }
+
+            var horizontal = new Vector3(value.x, 0f, value.z);
+            if (horizontal.sqrMagnitude <= DirectionEpsilon)
+            {
+                return Vector3.zero;
+            }
+
+            horizontal.Normalize();
+            return horizontal;
+        }
+
+        private static Vector3 GetFiniteFacing(Vector3 preferred, Vector3 fallback)
+        {
+            if (IsFinite(preferred) && preferred.sqrMagnitude > DirectionEpsilon)
+            {
+                return preferred.normalized;
+            }
+            if (IsFinite(fallback) && fallback.sqrMagnitude > DirectionEpsilon)
+            {
+                return fallback.normalized;
+            }
+            return Vector3.forward;
         }
 
         private BotReactedSnapshot CaptureReaction()
@@ -479,8 +1443,10 @@ namespace RocketFooxball.Runtime.Bots
             lastCombatResult = BotCombatResult.None;
             storedAimDirection = Vector3.zero;
             storedSteeringDirection = Vector3.zero;
+            storedActionFacing = Vector3.zero;
             hasAim = false;
             hasRoute = false;
+            ClearMotion();
         }
 
         private bool ValidateComposition()
@@ -522,6 +1488,11 @@ namespace RocketFooxball.Runtime.Bots
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(Vector2 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y);
         }
 
         private static bool IsFinite(float value)
