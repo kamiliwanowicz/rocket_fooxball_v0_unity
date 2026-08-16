@@ -55,6 +55,25 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void UnseenGapBreaksVisibleTransitionEligibility()
+        {
+            var available = BotPerceptionMemory.UpdatePickup(
+                default(BotPickupMemoryState), true, true, 15f, 0f);
+            var unseenState = BotPerceptionMemory.UpdatePickup(
+                available, false, false, 15f, 0.02f);
+            var unseen = BotPerceptionMemory.PublishPickup(
+                1, BotPickupKind.Health, Vector3.zero, unseenState, false, false, 0.02f);
+
+            Assert.That(unseenState.HasWitnessedRespawn, Is.False);
+            Assert.That(unseen.HasObservation, Is.False);
+
+            var unavailable = BotPerceptionMemory.UpdatePickup(
+                unseenState, true, false, 15f, 0f);
+            Assert.That(unavailable.HasWitnessedRespawn, Is.False);
+            Assert.That(unavailable.Remaining, Is.EqualTo(0f));
+        }
+
+        [Test]
         public void VisibleAvailableClearsTimerAndVisibleUnavailableAfterDueClearsWitness()
         {
             var witnessed = new BotPickupMemoryState(true, false, true, 0f);

@@ -71,15 +71,16 @@ namespace RocketFooxball.Runtime.Bots
             if (!validDelay)
             {
                 return new BotPickupMemoryState(
-                    prior.HasPriorVisibleSample,
-                    prior.PriorVisibleAvailable,
+                    false,
+                    false,
                     false,
                     0f);
             }
 
             if (!prior.HasWitnessedRespawn)
             {
-                return prior;
+                // An unseen sample breaks consecutive-visible transition eligibility.
+                return new BotPickupMemoryState(false, false, false, 0f);
             }
 
             // At zero seconds the bot may believe the pickup has returned, but it must
