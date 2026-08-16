@@ -479,7 +479,7 @@ namespace RocketFooxball.Runtime.Hud
 
             if (GUI.Button(new Rect(760f, 680f, 400f, 88f), "START", buttonStyle) && match.TryStartConfiguredMatch())
             {
-                RestoreFinalCursorOverride();
+                RestoreFinalCursorOverrideForGameplay();
             }
         }
 
@@ -496,7 +496,7 @@ namespace RocketFooxball.Runtime.Hud
 
             if (GUI.Button(new Rect(760f, 665f, 400f, 88f), "RESUME", buttonStyle) && match.TryResumeMatch())
             {
-                RestoreFinalCursorOverride();
+                RestoreFinalCursorOverrideForGameplay();
             }
         }
 
@@ -817,6 +817,13 @@ namespace RocketFooxball.Runtime.Hud
             Cursor.lockState = previousCursorLockState;
             Cursor.visible = previousCursorVisible;
             finalCursorOverride = false;
+        }
+
+        private void RestoreFinalCursorOverrideForGameplay()
+        {
+            RestoreFinalCursorOverride();
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
 }
