@@ -44,7 +44,7 @@ Result status:
 - `blocked`: return exact blocker, evidence, and one needed LP action/recheck; create no accepted artifact.
 - decomposition mismatch: return `blocked` with needed LP action `fresh task-breakdown`; planner never creates/splits candidates.
 
-After planner stops, LP computes SHA-256 and byte size and records acceptance in state. Execution binds accepted plan artifact in place at reserved path and reverifies accepted digest/size; later digest change -> `blocked`. Planner never claims digest acceptance.
+After planner stops, LP records acceptance in state. Execution binds accepted plan artifact in place at reserved create-once path; never edit accepted artifact.
 
 Dependent candidate planning begins only after LP supplies observed accepted upstream integration SHA. Never plan against forecast or invented downstream baseline.
 
@@ -115,12 +115,14 @@ Common mismatch probes:
 Default: one coherent direct execution plan for assigned candidate. Planner does not decompose into separate plans.
 
 - `START` requires execution `start_sha == Baseline`; dependency SHAs must already be integrated. Never dispatch stale plan against different source.
+- Baseline = execution start_sha; planning/docs paths may differ from product ancestor.
 - Build the dependency/ownership graph before drafting task order. Identify stable contracts, shared files/symbols, generated outputs, mutation environments, review boundaries, and final proof consumers.
 - Maximize safe parallel implementation. Extract independent core work into sibling lanes, then assign shared integration, wiring, or aggregation to a named fan-in task that alone owns the shared surface. Keep coupled work together when no stable contract separates it.
 - Give parallel sibling tasks disjoint owned files and symbols plus stable, predeclared input/output contracts. Overlapping ownership, shared generated output, migration state, Unity/project mutation environment, or shared validation environment requires serialization unless the repository supplies an isolation mechanism.
 - Justify every sequential edge with a concrete data, contract, ownership, mutation, review, or validation dependency. Do not serialize an unrelated lane behind another lane's checkpoint; let its per-worker review proceed independently and join only where a consumer or final gate needs every predecessor.
 - Fan in all source producers and accepted reviews/fixes before the production-final owner starts the shared final phase. Within that sole-owner phase, order producer mutation before its generated-output gate, then run the remaining exact-SHA proof; never require an output gate before the mutation that creates its outputs.
 - Size primarily by reasoning and proof load: one dominant behavior or invariant, cohesive path, bounded failure domain, one review risk model, one proof boundary. Volume is coarse tripwire, not the rule.
+- Tripwire: task expected >600 changed LOC, or >3 named behaviors, or `implementation` recipe >4k chars -> split or record explicit rationale in task objective.
 - Fold incidental edits sharing dependencies, lifecycle, paths, or validation when no independent done condition/proof. Keep separate only for distinct material risk or independent acceptance.
 - Split at stable contract, state ownership, failure domain, or validation barrier for independently reasoned mechanisms, unrelated edge policy, distinct proof workflow, or reviewer risk model. Merge thin slices; split overloaded slices. Task obviously containing two separable builds -> prefer split. No stable meaningful split within worker-review capacity -> decomposition mismatch; LP mode -> `blocked`, needed action `fresh task-breakdown`.
 - New gameplay mechanic default seam: `pure logic + types -> lifecycle/integration -> scene/prefab composition`. Default, not mandatory.
@@ -164,6 +166,7 @@ Ordinary task checks (`fast|development`) use exactly one line: `proof: <command
 
 - Plans follow `AGENTS.md` visual-proof policy. Task-specific source-asset previews required by applicable skills, including [`$use-blender`](../use-blender/SKILL.md), remain allowed as supplementary proof.
 - Plan Unity checks from [`AGENTS.md`](../../../AGENTS.md) -> `Unity execution`; `Validation`, including required pre-gates and generated-output proof policy.
+- Builder-affecting plan validation order = `pure source fan-in -> targeted EditMode rules tests -> Editor compile-only gate -> ProductionPrepare -> generated review -> final full EditMode -> ProductionValidate`; plan never prohibits pre-`ProductionPrepare` compile; `ProductionPrepare` never first compiler or first test runner; comparator selects zero generated paths -> plan requires no regeneration commit, `sourceFreezeSha` is generated boundary.
 - Builder-affecting work -> trace authoritative builder inventory before plan write. Source-only tasks list exact affected outputs in `implementation` but own source only. One generation task owns every produced output, exact path per output; include derived outputs such as cue-mesh assets. Do not hide outputs behind broad inventory glob. Unknown output path -> LP `blocked`; direct mode stops without plan artifact. Classifier combines inventory + exact task declarations; declaration absent inventory requires builder-source evidence as `declared-new`.
 - Expensive proof contract: `same_dispatch` -> task worker runs proof before return; `expensive_proof_owner` derives to task owner. `orchestrator_phase` -> execution orchestrator runs shared proof after `checks` names exact checkpoint/final trigger, declared source fan-in, declared outputs, accepted review/fixes; `expensive_proof_owner` derives to `execution-orchestrator`. `None` -> owner `None`. Never use narrative run-point wording or workflow path-selection flag.
 
@@ -175,7 +178,7 @@ Use [`$orchestrate-implementation`](../orchestrate-implementation/SKILL.md) as e
 
 ## Output shape
 
-Every written plan uses `Status: accepted`. Document status does not claim LP digest acceptance.
+Every written plan uses `Status: accepted`. Document status does not claim LP acceptance.
 
 Plan `owner`/assignment identity means stable task slot plus required profile, such as `worker-T1 (luna_max)`, not future runtime agent ID.
 

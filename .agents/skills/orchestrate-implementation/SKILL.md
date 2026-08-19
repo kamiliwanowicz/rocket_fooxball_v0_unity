@@ -20,7 +20,7 @@ Never switch mode. Partial/ambiguous LP handoff -> `blocked` before mutation.
 
 - `run_id`, stable `plan_id`, unique `attempt_id`
 - identity, role `execution orchestrator`, profile `sol_high`
-- plan artifact absolute path, lowercase SHA-256, byte size; no separate provenance copy in this mode
+- plan artifact absolute path; no separate provenance copy in this mode
 - requirement IDs, objective, dependency SHAs
 - immutable `start_sha`, branch, isolated worktree
 - owned/protected paths, checks, proof boundary, evidence locations
@@ -33,25 +33,19 @@ Missing/mismatched field -> `blocked` before child dispatch or product mutation.
 
 Plan artifact = authoritative plan file, both modes. "Snapshot" = user-direct pinned copy only. Mode asymmetry deliberate.
 
-`lp-dispatched` -> no copy. LP-bound plan artifact is authority; its path is create-once + unique per attempt, so bound digest alone enforces immutability. Verify in place: recompute hash + size with `$p` = plan artifact path; compare to bound values.
+`lp-dispatched` -> LP-bound artifact at create-once path is sole authority. No copy.
 
-`user-direct` -> copy plan artifact exactly once into the absent executions path, because the user-supplied source is mutable and not create-once:
+`user-direct` -> mutable source. Copy exact bytes once into absent executions path:
 
-1. Destination must be absent immediately before copy.
+1. Destination absent immediately before copy.
 2. Copy exact bytes once; never overwrite.
 3. Source path leaves execution authority after the copy binds.
 
-Copy/hash/size commands (`Copy-Item` user-direct only):
+Copy command (`Copy-Item` user-direct only):
 
 ```powershell
 Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop
-(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()
-(Get-Item $p).Length
 ```
-
-`$p` is the plan artifact integrity target (`lp-dispatched`) or each source/snapshot integrity target (`user-direct`). Integrity rechecks use hash + item metadata only; never load bytes into context.
-
-Plan artifact digest/size mismatch, either mode -> `blocked`.
 
 ## User-direct bootstrap
 
@@ -69,11 +63,11 @@ Before first child dispatch:
 
 - plan-worktree `HEAD` is `start_sha`; capture status
 - unowned pre-existing changes -> preserve/exclude; overlap with owned path -> `blocked`
-- `lp-dispatched` -> verify LP identity/role/profile, plan artifact path/digest/size in place, dependencies, worktree/branch, ownership, Git authority
-- `user-direct` -> verify attempt identity, pinned snapshot through pinned integrity procedure, created worktree/branch, ownership, branch-only Git boundary
+- `lp-dispatched` -> verify LP identity/role/profile, plan artifact present at bound path, dependencies, worktree/branch, ownership, Git authority
+- `user-direct` -> verify attempt identity, pinned snapshot present, created worktree/branch, ownership, branch-only Git boundary
 - verify bound dependency list; for each SHA run `git merge-base --is-ancestor <dependency_sha> <start_sha>`
 
-Plan artifact identity/digest/size mismatch, missing dependency, or non-ancestor dependency -> `blocked`; no child dispatch/product mutation. Final return rechecks the active-mode plan artifact through pinned integrity procedure.
+Missing dependency or non-ancestor dependency -> `blocked`; no child dispatch/product mutation.
 
 ## Frozen code boundary
 
@@ -99,9 +93,9 @@ Recovery preserves bound objective, requirements, ownership, dependencies, Git a
 
 ### Repeated-struggle takeover
 
-Same material issue survives two failed approaches/rechecks by current child -> orchestrator diagnoses repository/evidence, reproduces failure, gives targeted guidance. Guided recheck fails -> interrupt child, wait terminal, retire result, close lane barrier, restore only verified task-owned edits outside `protected_paths` and every slice in `bound_concurrent_fanout_peer_owned_paths` with `git restore --source=<dispatch_snapshot_sha> -- <exact task-owned paths>`, dispatch fresh role-appropriate child with new `execution_id`.
+Same material issue survives two failed approaches/rechecks by current child -> orchestrator diagnoses repository/evidence, reproduces failure, gives targeted guidance. Guided recheck fails -> interrupt child, wait terminal, discard its result, close lane barrier, restore only verified task-owned edits outside `protected_paths` and every slice in `bound_concurrent_fanout_peer_owned_paths` with `git restore --source=<dispatch_snapshot_sha> -- <exact task-owned paths>`, dispatch fresh role-appropriate child with new `execution_id`.
 
-Current child stays assigned for isolated blocker, rescue, scope correction, confusion, large task/context. Wider recurring issue -> investigator; same unowned-churn path set across two dispatches is a repository defect -> dispatch investigator directly, never retire and replace the writer; `fix_found` -> fresh standard writer from its contract; exposed wider in-scope recovery -> fresh exact `sol_high` recovery writer. `no_reasonable_fix`, failed/out-of-bounds recovery -> `blocked`.
+Current child stays assigned for isolated blocker, rescue, scope correction, confusion, large task/context. Wider recurring issue -> investigator; same unowned-churn path set across two dispatches is a repository defect -> dispatch investigator directly, never discard and replace writer; `fix_found` -> fresh standard writer from its contract; exposed wider in-scope recovery -> fresh exact `sol_high` recovery writer. `no_reasonable_fix`, failed/out-of-bounds recovery -> `blocked`.
 
 ## Proof environment
 
@@ -117,6 +111,8 @@ Production-final gate: declare `expected_status`; compare observed status. Two c
 
 Workflow invocation/order -> [workflow harness precondition](../loop-orchestrator/references/state-and-recovery.md#workflow-harness-precondition).
 
+Evidence files carry attempt-specific names with attempt/SHA discriminator; never overwrite prior-attempt evidence, failed attempts included.
+
 Success extraction only: `status`, `exactSha`, evidence `result`/`path`, `evidenceManifestSha256`, `bakeCount`, `lockReleaseProof`. Failure evidence may retain full JSON + exit + log. `ProductionPrepare` bake budget -> [production-bake gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate).
 
 ## Gate remediation
@@ -128,7 +124,9 @@ Success extraction only: `status`, `exactSha`, evidence `result`/`path`, `eviden
 
 ## Generated output gate
 
-Classifier -> union current inventory + task-declared outputs, each builder-traced; source `inventory | declared-new | both`, scope `owned | inventory-exception`. Outside union, untraced declaration, inventory-unknown unowned -> reject/`blocked`. Coverage -> exact changed set; per-path source/scope; selected set; matching headers; `SEMANTIC:`, `DANGLING:`, `GUID:`, `PAIRS:`, `UNSUPPORTED:`. Run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <writer-slice-base-sha> -Head WORKTREE -FailOnDangling`. Builder-traced task-declared semantic changes are valid review evidence. Accept only complete coverage, zero unknown types, no dangling increase, stable existing GUIDs, intact asset/`.meta` pairs. Binary hashes bind provenance only. Never infer coverage from glob, raw-diff exclusion, separate-regeneration commit. Comparator failure, incomplete coverage, unknown type, dangling increase, GUID churn, broken pair -> reject/`blocked`.
+Canonical rule -> [`AGENTS.md`](../../../AGENTS.md) `Unity asset safety`.
+
+Run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <writer-slice-base-sha> -Head WORKTREE -FailOnDangling`. Never infer coverage from glob, raw-diff exclusion, separate-regeneration commit. Accept or reject through canonical rule.
 
 ## Child dispatch contract
 
@@ -186,7 +184,7 @@ Reviewer/investigator return acceptance -> verify exact `frozen_sha` object stil
 
 ## Child return contract
 
-Child returns exact template only; unrepresentable fact -> `Blocker`. Writer/reviewer return metadata or format defect -> preserve immutable original report, then use `followup_task` on same child for return-only correction. Correction preserves original status, verdict/findings, changed paths, checks, blockers, and evidence verbatim; no implementation, review, or check rerun. Accept only when corrected identity/scope matches registry; otherwise reject and preserve evidence only. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
+Templates below = requested return shape. Deviation never blocks, never dispatches correction, never spends follow-up turn. Orchestrator extracts facts from report as-is and verifies material claims against Git/live observation. Unrepresentable fact -> `Blocker` field. Reject late, interrupted, replaced, duplicate, foreign, out-of-scope, role-mutation-inconsistent result. Reviewer/investigator result remains eligible when unrelated lanes move status/`HEAD` after its frozen range was bound.
 
 Writer:
 
@@ -227,15 +225,15 @@ Evidence: [observable evidence or None]
 Needed Action or Recheck: [one action/fact or None]
 ```
 
-## Child lifecycle gate
+## Child lifecycle
 
-- registry -> agent ID, `execution_id`, role, `running | correction-pending | returned | retired`
-- one dispatch -> one substantive child turn; writer/reviewer return-only correction -> `followup_task` same child; other follow-up -> fresh child
-- terminal return required; messages/files/partial reports while running -> progress evidence only
-- valid terminal return -> capture immutable report, mark `returned`, retire immediately; eligible return defect -> capture original, mark `correction-pending`, request return-only correction
-- replaced/cancelled/unneeded -> interrupt, await terminal, capture late evidence, retire before replacement
-- hung -> inspect task-owned edits, interrupt, await terminal, retire, restore writer barrier, then replace
-- exit -> `list_agents`; interrupt running descendants; await terminal; recheck. Complete requires zero running + all registry entries retired
+- one dispatch -> one substantive child turn; further work -> fresh child
+- terminal return required; messages/files while running -> progress evidence only
+- valid terminal return -> capture immutable report; nothing to mark
+- dependent dispatch waits for terminal child return
+- replaced/cancelled/unneeded child -> interrupt, await terminal, capture late evidence before replacement dispatch; prevents two writers on same paths
+- hung child -> inspect task-owned edits, interrupt, await terminal, restore writer barrier, replace
+- exit/completion -> `list_agents`; interrupt running descendants; await terminal. Complete requires zero running children, checked live
 
 Repeated struggle -> [Repeated-struggle takeover](#repeated-struggle-takeover). Quiet reporting: kickoff, material checkpoint/fix/validation/blocker/completion, required heartbeat only.
 
@@ -245,8 +243,8 @@ Reviewer dispatch requires every covered writer:
 
 1. Terminal return; child not running.
 2. Capture `status: complete`, identity, checks, `Changed Paths:`; compare exact report to `git diff --name-only` for writer slice. Apply [generated output gate](#generated-output-gate); outside owned set otherwise -> reject, barrier open.
-3. Mark `returned`, retire; covered registry has zero running.
-4. Close writer barrier. Build generated-output coverage evidence from every changed authoritative output, owned or inventory-exception. Regeneration -> separate commit before `review_base_sha`; stage/commit reviewed source paths only; resolve exact `frozen_sha`; attach coverage evidence to reviewer; verify scope + unrelated status. If separation impossible, declare exact builder-generated excluded slice; raw generated slice stays outside raw review, never semantic-evidence review.
+3. Every covered writer terminal; zero covered children running (live check).
+4. Close writer barrier. Build generated-output coverage evidence from every changed authoritative output, owned or inventory-exception. Regeneration -> separate commit before `review_base_sha`; comparator selects zero generated paths -> no regeneration commit, `sourceFreezeSha` is generated boundary, attach evidence only; stage/commit reviewed source paths only; resolve exact `frozen_sha`; attach coverage evidence to reviewer; verify scope + unrelated status. If separation impossible, declare exact builder-generated excluded slice; raw generated slice stays outside raw review, never semantic-evidence review.
 5. Dispatch reviewer bound to `review_base_sha..frozen_sha`.
 
 Per-worker checkpoint -> one writer. Grouped checkpoint -> every named writer + join condition. Fix re-review uses same barrier. Timing/group rules -> [Review checkpoints](#review-checkpoints).
@@ -280,9 +278,9 @@ Final verification runs pending/invalidated rows only; exact-SHA evidence reusab
 2. Process every terminal writer -> inspect `Unowned Churn`, then verify report/files/Git/scope/checks/identity. Handle recurrence before next writer dispatch; same unowned-churn path set across two dispatches -> investigator directly, not writer replacement. Eligible complete writer -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
 3. Reviewer result -> verify reviewer return acceptance; accept verdict + qualifying Critical/High only. No accepted finding -> checkpoint accepted. Accepted finding -> fresh narrow fix writer.
 4. Fix -> barrier -> scope verify -> commit/freeze -> rerun invalidated rows -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
-5. Final exact committed `HEAD`: pending/invalidated checks, plan artifact integrity, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
+5. Final exact committed `HEAD`: pending/invalidated checks, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
 
-Required unowned non-generated edit, decomposition change, dependency drift, plan artifact mismatch, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
+Required unowned non-generated edit, decomposition change, dependency drift, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
 
 ## Completion routing
 
@@ -299,7 +297,7 @@ Attempt ID: [attempt_id]
 Assigned Agent: [exact agent identity]
 Role: execution orchestrator
 Profile: [exact profile]
-Plan Artifact: [exact path] -> accepted [digest]/[bytes] -> observed [digest]/[bytes]
+Plan Artifact: [exact path]
 Plan Source Provenance: [exact path in user-direct; otherwise None]
 Start SHA: [exact 40-character lowercase SHA]
 Dependencies: [full SHA list or None]
@@ -324,4 +322,4 @@ Changed Path Count: [n]
 
 `lp-dispatched` -> LP verifies facts, derives final changed-path set/count, dispatches merger. `user-direct` -> user; integration remains explicit authority.
 
-`complete` requires matching plan artifact, committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned diff plus generated-output gate, every writer through checkpoint review/fix/re-review, final checks passing, lifecycle gate satisfied.
+`complete` requires committed descendant `HEAD`, owned paths clean, initial unrelated status preserved, owned diff plus generated-output gate, every writer through checkpoint review/fix/re-review, final checks passing, zero running children.

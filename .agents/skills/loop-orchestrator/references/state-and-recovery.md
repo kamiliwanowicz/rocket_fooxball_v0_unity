@@ -14,9 +14,9 @@ LP is sole state writer. Breakdown, planner, execution orchestrator, workers, re
 
 Truth priority:
 
-`observed Git + live-agent facts -> attempt-bound plan artifact bytes -> state claims -> agent prose`
+`observed Git + live-agent facts -> attempt-bound artifact at create-once reserved path -> state claims -> agent prose`
 
-State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative plan artifact digest.
+State routes work; it never overrides Git ancestry, HEAD, branch/worktree identity, clean status, path diff, live ownership, or authoritative plan artifact at create-once reserved path.
 
 ## Atomic write
 
@@ -63,8 +63,6 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - decision: single_plan | multi_sequential | multi_parallel | hybrid | None
 - baseline: [full SHA]
 - result artifact: [absolute reserved path or None]
-- result artifact sha256: [lowercase digest or None]
-- result artifact bytes: [integer or None]
 - comments: [returned material caveats or None]
 - integration order: [plan_id list or None]
 
@@ -79,8 +77,6 @@ Blocker: [active blocker + evidence + recheck/action or None]
 - owned paths: [exact paths]
 - protected paths: [exact paths]
 - plan artifact: [absolute path or None]
-- plan artifact sha256: [lowercase digest or None]
-- plan artifact bytes: [integer or None]
 - branch: [exact name or None]
 - worktree: [absolute path or None]
 - accepted execution SHA: [full SHA or None]
@@ -157,10 +153,6 @@ Blocked:
 
 `planning | executing | done -> blocked -> blocked while fact unresolved -> prior active stage (fresh attempt_id after observed recheck)`
 
-Plan artifact digest mismatch:
-
-`planned | executing | done -> blocked`; record observed digest/size, mutate no product worktree, stop mutation. Recovery from `planned` needs fresh planning attempt at new reserved artifact path; from `executing | done` needs fresh execution attempt.
-
 Merge:
 
 `done -> merged` only after merging agent result matches observed integration Git facts. Merge blocker keeps plan `done` when plan output remains accepted; record integration `blocked`. Plan status `blocked` applies only when plan artifact/execution acceptance itself fails.
@@ -183,16 +175,14 @@ After result, stop role when required; verify result against live identity, Git/
 Breakdown acceptance:
 
 1. Stop breakdown. Verify returned artifact path equals reserved path and exists create-once.
-2. Compute digest/size exactly as planner acceptance step 2.
-3. Record breakdown artifact path/digest/size, comments, decision, and `ready` atomically. State stores no candidate bodies.
-4. Read artifact sections on demand for `plan_id` assignment and planner dispatch binding.
+2. Record breakdown artifact path, comments, decision, and `ready` atomically. State stores no candidate bodies.
+3. Read artifact sections on demand for `plan_id` assignment and planner dispatch binding.
 
 Planner acceptance:
 
 1. Stop planner. Verify reserved artifact exists + create-once.
-2. For `$p`, compute exact values: `(Get-FileHash -Algorithm SHA256 -Path $p).Hash.ToLowerInvariant()`; `(Get-Item $p).Length`.
-3. Record plan artifact path/digest/size + `planned` atomically.
-4. Bind that path as sole plan authority for execution dispatch. Never read artifact bytes through agent.
+2. Record plan artifact path + `planned` atomically.
+3. Bind that path as sole plan authority for execution dispatch. Never read artifact bytes through agent.
 
 Merge acceptance records expected/observed pre-merge head, ordered accepted inputs, merged inputs, final SHA, checks, and clean status.
 
@@ -200,7 +190,7 @@ Merge acceptance records expected/observed pre-merge head, ordered accepted inpu
 
 Rule manifest: exact source paths + SHA-256 for instructions, skills, profiles, templates, repository rules used by bound plan/execution dispatch. LP records active manifest before planner/execution dispatch. Plan artifact remains immutable across rule revision.
 
-Hot-swap gate: accepted review checkpoint; covered children retired; writer barrier closed; frozen checkpoint SHA clean; no active child. LP detects revision -> records pending manifest -> same live execution orchestrator rereads changed sources + bound plan -> LP records reconciliation. No orchestrator retirement solely for rule revision.
+Hot-swap gate: accepted review checkpoint; covered children returned terminal; writer barrier closed; frozen checkpoint SHA clean; no active child. LP detects revision -> records pending manifest -> same live execution orchestrator rereads changed sources + bound plan -> LP records reconciliation. No orchestrator replacement solely for rule revision.
 
 Reconciliation: changed sources, old/new manifests, checkpoint, affected task/check/profile/ownership/check rules, accepted-checkpoint invalidation, evidence, `compatible | blocked` verdict. `compatible` -> plan satisfies new rules; no authority/product-scope expansion; recheck every invalidated accepted checkpoint before next writer. LP promotes pending manifest atomically; same execution orchestrator continues. `blocked` -> exact conflict + fresh planner action; no plan rewrite, mixed-rule checkpoint, or new dispatch.
 
@@ -229,7 +219,7 @@ Complete gate -> record drift `accepted`, promote exact drift SHA to last accept
 
 1. Locate intended unique run directory from current context/user input. Never choose another run by similarity.
 2. Parse full state. Validate readable structure, matching `run_id`, stable IDs, phase/status values, and required fields.
-3. Rehash recorded breakdown artifact when breakdown status is `ready`, and bound plan artifact for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Breakdown artifact missing or digest mismatch -> breakdown `blocked`; fresh breakdown attempt at new reserved path; already-accepted plans keep their bound plan artifacts.
+3. Verify recorded breakdown artifact exists when breakdown status is `ready`, and bound plan artifact exists for every plan at or past `planned`. Rehash each recorded `check-ledger.json` and compare state digest before resume or merge. Breakdown artifact missing -> breakdown `blocked`; fresh breakdown attempt at new reserved path; already-accepted plans keep their bound plan artifacts.
 4. Inspect each exact branch/worktree recorded for current run: existence, branch binding, `HEAD` descent from `start_sha`, `start_sha..HEAD` path scope, clean status, and operation state. Source-branch ref remains outside execution recovery.
 5. Inspect live agents: identity, status, current assignment, writer ownership.
 6. Replace stale state claims with verified facts through atomic write. Preserve reachable accepted commits.
@@ -243,7 +233,7 @@ Missing or corrupt state:
 - write repaired state for same run only when run identity is independently proven;
 - otherwise create new unique `run_id` and directory, link recovered accepted SHAs/artifacts as explicit inputs, never reuse corrupt directory.
 
-Bound plan artifact digest/size mismatch blocks execution; the plan artifact is sole authority. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
+Missing bound plan artifact blocks execution; artifact at create-once reserved path is sole authority. Dirty/moving worktree blocks acceptance. Git/live facts override stale state.
 
 ## Recovery scenarios
 
@@ -252,7 +242,6 @@ Bound plan artifact digest/size mismatch blocks execution; the plan artifact is 
 - sequential: prerequisite becomes `merged`; recorded integration SHA becomes dependent planner baseline; dependent planning starts afterward.
 - user wait: role returns `needs_user`; status `awaiting_user`; state holds one question; response creates fresh attempt and returns to role stage.
 - blocker: role returns `blocked`; status remains blocked across resume until named fact recheck passes; fresh attempt follows.
-- plan artifact digest mismatch: status `blocked`; no execution dispatch/product mutation; from `planned` fresh planning attempt at new reserved artifact path; from `executing | done` fresh execution attempt.
 - source-branch drift after worktree creation: no transition; use bound `start_sha..plan_head` comparison.
 - target drift: integration status `blocked`; record expected/observed full SHAs; default retry starts from last recorded accepted integration SHA and replays remaining accepted inputs; gated drift retention requires recorded evidence/authority; user branch unchanged.
 
