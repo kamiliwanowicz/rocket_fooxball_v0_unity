@@ -2,29 +2,42 @@
 
 ## Authority
 
-- Status: accepted design handoff.
-- Purpose: input for repository-grounded coding plan.
-- Scope: gameplay rules and player-facing behavior. Implementation architecture unresolved.
-- Preserve locked decisions below. Treat listed tuning targets as playtest starting points.
+- Status: accepted design + post-implementation status handoff.
+- Product implementation: merged through `490ad49ddbacb53d7ee6ae6ece3ece79a6d54e52`; later branch commits docs-only.
+- Automated proof: 114/114 EditMode tests, generated-output acceptance, separate-process semantic validation.
+- Purpose: identify shipped behavior, remaining code, pending playtest/tuning, deferred scope.
+- Preserve locked decisions below. Treat tuning targets as playtest starting points.
 
 ## Implementation status legend
 
 Every `##` section below carries `Status:` line. Meaning:
 
-- `DONE phase-1` -> shipped on `shotgun_design_and_match_foundation`, verified in repo. Do not re-plan. Tuning values may still change.
+- `DONE automated` -> shipped through bots run, automated validation passed. Human playtest may remain.
 - `PARTIAL` -> some clauses shipped, rest open. `done:` / `todo:` name exact split.
 - `TODO` -> nothing shipped.
+- `PLAYTEST PENDING` -> code + automated proof complete; feel/readability/tuning unverified by human playtest.
 
-Phase-1 scope authority -> [`3v3-phase1-match-foundation-handoff.md`](3v3-phase1-match-foundation-handoff.md) `In scope` + `Out of scope`.
-Remaining-run planning guidance -> [`3v3-phase2-shotgun-and-bots-planning-helper.md`](3v3-phase2-shotgun-and-bots-planning-helper.md).
+Aggregate: match foundation, vitals, dash-kick, health/shotgun/ammo pickups, shotgun weapon/economy/presentation, five bots, custom graph navigation, perception/memory, roles, combat, difficulty setup, pause semantics, generated scene composition complete. Remaining code = shotgun/ammo HUD widget + temporary hit marker. Remaining proof = five-minute 3v3 playtest + tuning. Deferred = multiplayer, production combat audio, generic right-hand replacement framework.
 
-Aggregate: phase 1 delivered match foundation + vitals + dash-kick + health pickups + HUD + shotgun mesh. Remaining = shotgun as weapon (integration, economy, HUD) + bots (navigation, perception, decisions, difficulty) + difficulty setup UI.
+## Remaining work
+
+Status: PARTIAL
+
+- code:
+  - shotgun/ammo live HUD states: hidden, stored-shell dim icon/count, owned icon/count, empty dim state
+  - temporary visual hit marker wired from `ShotgunWeapon.HitConfirmed`
+- playtest:
+  - five bots activate, navigate floor/ramps/drops/gates, contest/defend/score
+  - bots use rockets, dash-kick, shotgun, pickups, enemy knockback, High rocket jump
+  - Low/Medium/High setup + locked pause display work during real match
+  - shotgun damage/spread/pump/ball impulse, rocket knockback, bot reaction/aim/roles/pickup etiquette feel fair
+- deferred, not blockers: dry-fire/hit-confirmation audio, multiplayer, generic right-hand replacement framework, combat assists, production UI refactor
 
 ## Product boundary
 
-Status: PARTIAL
-- done: six participant slots exist, human occupies one Blue slot, teams globally fixed Blue/Red.
-- todo: five non-human slots remain inert avatars -> zero AI, zero input. Bot brain absent.
+Status: DONE automated; PLAYTEST PENDING
+- done: six active participant slots; one local Blue human + two Blue bots vs three Red bots; fixed Blue/Red teams; five nonlocal slots use bot controllers.
+- remaining: human playtest confirms active 3v3 behavior and tuning.
 
 - PoC roster: one human + two allied bots vs three enemy bots.
 - Human team: Blue. Opponent team: Red.
@@ -34,12 +47,12 @@ Status: PARTIAL
 
 ## Match rules
 
-Status: DONE phase-1
-- clock, pause semantics, winner order, frag tiebreak, negative frags, killing-blow credit, self/arena death penalty, goal credit, own-goal attribution all shipped.
-- caveat: frag rules exercised only by human kills so far. Inert avatars never kill -> killer-side paths unproven until bots land.
+Status: DONE automated; PLAYTEST PENDING
+- done: clock, full pause freeze, winner order, frag tiebreak, negative frags, killing-blow credit, self/arena death penalty, goal credit, own-goal attribution.
+- remaining: playtest confirms bot-caused rocket/shotgun/dash deaths and score presentation.
 
 - Match duration: five minutes.
-- Live clock: continues during individual death/respawn; pauses during goal summary and kickoff countdown.
+- Live clock: continues during individual death/respawn; pauses during goal summary, kickoff countdown, and explicit `Paused` state.
 - Clock reaches zero -> play stops immediately.
 - Winner order:
   1. Higher goal score.
@@ -53,9 +66,9 @@ Status: DONE phase-1
 
 ## Match flow
 
-Status: PARTIAL
-- done: start reset + countdown, goal stop + summary + reset + countdown, goal-reset health/position/dead-return/pickup-restore/timer-reset, no post-kickoff immunity, match end screen with `Rematch` + `Exit`.
-- todo: goal-reset clause "carried shotgun and shotgun ammo removed" -> needs shotgun ownership state to exist first.
+Status: DONE automated; PLAYTEST PENDING
+- done: setup -> start reset/countdown; goal stop/summary/reset/countdown; health/position/dead return; shotgun + shells cleared; pickups restored; timers reset; no post-kickoff immunity; final `Rematch` + `Exit`.
+- remaining: playtest confirms complete reset flow under active bots/projectiles/pickups.
 
 - Match start -> reset positions/state -> three-second `3... 2... 1... GO` countdown.
 - Goal -> stop play -> three-second summary -> reset positions/state -> three-second countdown.
@@ -69,9 +82,9 @@ Status: PARTIAL
 
 ## Controls and hands
 
-Status: PARTIAL
-- done: LMB rocket launcher, `F` dash-kick, automatic pickup collection (health only), rocket stays core weapon.
-- todo: RMB shotgun action, right-hand shotgun ownership, no-shotgun -> RMB inert rule.
+Status: DONE automated; PLAYTEST PENDING
+- done: LMB rocket, RMB shotgun when owned, `F` dash-kick, automatic pickup collection, no-shotgun RMB inert, first-person + world shotgun visibility.
+- remaining: input/hand feel review.
 
 - LMB -> left-hand rocket launcher.
 - RMB -> right-hand shotgun when owned.
@@ -82,10 +95,9 @@ Status: PARTIAL
 
 ## Health, damage, death
 
-Status: PARTIAL
-- done: max health `100`, no regen, no friendly damage, no friendly rocket knockback, own rocket propels with zero self-damage, enemy rocket damage + `50%` knockback fraction, two-hit kill target, dash-kick enemy damage + shove, no overhead health, no directional indicator, personal HUD icon + bar + numeric.
-- todo: every shotgun clause (damage, zero propulsion/knockback/stun).
-- caveat: enemy-rocket knockback fraction never felt in play -> inert avatars do not fire. First real validation happens in bots run.
+Status: DONE automated; PLAYTEST PENDING
+- done: full clause set including shotgun enemy damage, zero shotgun player propulsion/knockback/stun, enemy rocket knockback, relationship gates, dynamic death weapon identity.
+- remaining: damage, knockback, and two-hit targets need feel validation against active bots.
 
 - Maximum health: `100`.
 - Health regeneration: none.
@@ -108,10 +120,9 @@ Status: PARTIAL
 
 ## Death and respawn
 
-Status: PARTIAL
-- done: five-second wait, spectator view, death overlay (killer + weapon + table + countdown, killed player only), safest-spawn selection, two-second immunity, shield effect + HUD marker, pass-through + non-blocking rules, immunity cancel on fire / kick / ball contact.
-- todo: immunity cancel on weapon pickup and ammo pickup -> blocked on shotgun + ammo pickups existing.
-- note: death overlay weapon field currently hard-populated with rocket launcher. Shotgun work must feed real weapon identity.
+Status: DONE automated; PLAYTEST PENDING
+- done: full clause set; shotgun/ammo pickups cancel immunity; death overlay receives rocket/shotgun/dash weapon identity.
+- remaining: spectator readability, spawn safety, immunity clarity under 3v3 load.
 
 - Death wait: five seconds.
 - Death view: spectator view follows ball or ally behind overlay.
@@ -128,10 +139,9 @@ Status: PARTIAL
 
 ## Arena pickups
 
-Status: PARTIAL
-- done: two mirrored health spawns, one-third restore, no overheal, full-health cannot consume, `15s` respawn, automatic collection, model hides while unavailable, no return warning, goal-reset restore.
-- todo: contested neutral shotgun spawn, two mirrored ammo spawns, ammo clauses (eight shells, 16 cap, collectible without shotgun, overflow discarded, at-cap cannot consume).
-- reuse: health pickup respawn/eligibility pattern is intended template for both new spawn types.
+Status: DONE automated; PLAYTEST PENDING
+- done: two health, one neutral shotgun, two mirrored ammo spawns; `15s` respawn; automatic collection; hide/restore flow; eight-shell grants; 16-shell cap; pre-collection; overflow discard; at-cap rejection.
+- remaining: placement/readability/contest timing playtest.
 
 - Layout:
   - One contested neutral shotgun spawn.
@@ -153,8 +163,9 @@ Status: PARTIAL
 
 ## Shotgun economy
 
-Status: TODO
-- nothing shipped. No shell state, no carried-weapon state, no shotgun spawn.
+Status: DONE automated; PLAYTEST PENDING
+- done: carried state, shell state, neutral recurring pickup, mirrored ammo, death/goal clearing, empty retention, restock, visibility, saturation rules.
+- remaining: saturation/economy feel review.
 
 - Shotgun spawn returns `15s` after every collection, regardless of active carried shotguns.
 - Multiple active shotguns: allowed; no arena-wide cap.
@@ -173,10 +184,9 @@ Status: TODO
 
 ## Shotgun behavior
 
-Status: TODO
-- only asset exists: `Tools/Blender/generate_fps_shotgun.py` -> `Assets/_Game/Models/FpsShotgun.fbx` + `Assets/_Game/Models/Shotgun.fbx`.
-- meshes are unintegrated -> no import-pipeline registration, no material, no prefab mount, no hand attachment, no pickup placement.
-- zero weapon behavior: no fire, spread, pump delay, damage curve, ball force, empty state.
+Status: DONE automated; PLAYTEST PENDING
+- done: model import/materials, prefab mounts, pickup placement, deterministic spread, distance falloff, pump gate/presentation, enemy damage, capped ball impulse, empty retention, bot programmatic fire.
+- remaining: feel/tuning; dry-fire audio deferred.
 
 - Purpose: close combat + easier hits against airborne players + secondary ball control.
 - Damage curve: high close-range damage, moderate medium-range damage, weak beyond intended range.
@@ -195,9 +205,10 @@ Status: TODO
 
 ## Shotgun HUD and feedback
 
-Status: TODO
-- live HUD exists but carries timer + goals + health only. No shotgun widget, no shell count, no hit marker.
-- `Global kill feed: none` -> already satisfied by omission.
+Status: PARTIAL
+- done: first-person/world shotgun visibility, recoil/pump presentation, `ShotgunWeapon.HitConfirmed` event, no global kill feed.
+- todo: live shotgun/ammo widget, shell count, empty dim state, stored-ammo-without-weapon state, temporary visual hit marker.
+- deferred: dry-fire sound + audio replacement for temporary hit marker.
 
 - No shotgun + zero shells -> shotgun HUD hidden.
 - No shotgun + stored shells -> dim shotgun icon + shell count.
@@ -208,7 +219,7 @@ Status: TODO
 
 ## Dash-kick
 
-Status: DONE phase-1
+Status: DONE automated; PLAYTEST PENDING
 - full clause set shipped: `F` input, forward dash + extended leg, ball-independent activation, camera-set direction with limited steering, no homing, momentum preservation + speed cap, three-second cooldown, one air use until grounded, enemy damage/shove, friendly no-op, wall stop, ball control response, first-person + world presentation, restrained camera impulse.
 - open: feel values are unplayed. Preserved-vs-replaced `BallKick` tuning recorded during phase 1; treat regressions as tuning, not re-plan.
 
@@ -236,10 +247,10 @@ Status: DONE phase-1
 
 ## Bots
 
-Status: TODO
-- done only: bot identity surface -> short unique names, team color, no difficulty suffix, five non-human slots present with full vitals/collision/presentation.
-- todo: everything behavioral -> navigation, perception, memory, role assignment, priorities, aim/prediction, weapon use, dash use, difficulty tiers, error model, pickup etiquette, pre-match difficulty selection, pause-screen difficulty display.
-- largest unresolved area in project. No `Runtime/Bots` code, no navmesh baked, no navigation package.
+Status: DONE automated; PLAYTEST PENDING
+- done: five nonlocal controllers; deterministic reaction/decision/aim error; custom multi-level graph navigation; ledge/gate/drop handling; per-observer perception + pickup memory; dynamic roles; football-first targets; rockets/dash/shotgun/rocket jump; human pickup etiquette; Low/Medium/High setup; locked pause display; full pause/reset/death lifecycle.
+- implementation note: custom serialized graph by design; no NavMesh package required.
+- remaining: five-minute 3v3 playtest + tuning only.
 
 - Same health, damage, movement, pickup, weapon, death, respawn, immunity, scoring rules as humans.
 - Allied bots: fixed Medium difficulty.
@@ -262,9 +273,9 @@ Status: TODO
 
 ## Team readability
 
-Status: PARTIAL
-- done: Blue/Red identity on avatars, goals, spawns, HUD, markers, rocket trails, impact accents, immunity effects; shape/symbol cue; natural explosion with restrained team accent.
-- todo: same treatment extended to shotgun pickup, ammo pickup, shotgun world model, and any bot-specific marker introduced later.
+Status: DONE automated; PLAYTEST PENDING
+- done: Blue/Red identity across existing surfaces; shotgun pickup, ammo pickup, shotgun world model integrated; no bot-specific marker introduced.
+- remaining: human visual readability review.
 
 - Blue/Red identity applied to avatars, goals, spawns, HUD, markers, rocket trails, impact accents, immunity effects.
 - Shape/symbol cues supplement color for color-blind readability.
@@ -273,8 +284,8 @@ Status: PARTIAL
 ## HUD and summaries
 
 Status: PARTIAL
-- done: live HUD (timer + goals + health), frags hidden from live HUD, `Tab` hold table with goals/frags/deaths, goal summary with own-goal attribution, death summary scoped to killed player, opening rules screen, final summary with deciding rule.
-- todo: shotgun/ammo widget in live HUD, hit marker, pre-match difficulty selection screen, pause screen showing difficulty.
+- done: timer/goals/health, hidden live frags, `Tab` table, goal/death/final summaries, dynamic death weapon, setup difficulty selection, pause screen with locked difficulty.
+- todo: shotgun/ammo widget + temporary hit marker.
 
 - Normal live HUD: timer + team goals + personal health + shotgun/ammo state.
 - Team frags hidden from persistent live HUD.
@@ -288,9 +299,10 @@ Status: PARTIAL
 
 ## Planning guardrails
 
-Status: ACTIVE for remaining run
-- vertical-slice guardrail is satisfied for match flow, damage/death/respawn, health pickups, dash-kick, scoring, summaries.
-- still binding for shotgun + bot roles + difficulty.
+Status: ACTIVE for HUD follow-up + playtest
+- gameplay vertical slice implemented through bots run.
+- binding code scope: shotgun/ammo HUD + temporary hit marker only.
+- tuning changes require playtest evidence; do not reopen settled architecture without defect.
 
 - Preserve football-first bot priorities despite frag tiebreak.
 - Keep rockets default focus despite intentional shotgun accumulation.
@@ -301,10 +313,11 @@ Status: ACTIVE for remaining run
 
 ## Planning completion criteria
 
-Status: ACTIVE for remaining run
-- applies to remaining scope only. Sections marked `DONE phase-1` need no candidate owner.
+Status: DONE for bots run; ACTIVE for HUD follow-up
+- bot coding plan executed and validated. Completed sections need no candidate owner.
+- next code plan, if requested, owns only shotgun/ammo HUD + temporary hit marker.
 
-- Coding plan accounts for every locked rule without reopening settled decisions.
-- Coding plan separates PoC work from deferred multiplayer/audio/right-hand expansion.
-- Coding plan identifies repository owners, generated-asset impacts, Unity validation, playtest tuning gates.
-- Any codebase conflict with this handoff surfaced explicitly before implementation.
+- completed bot plan preserved locked rules without reopening settled decisions.
+- completed bot plan separated PoC work from deferred multiplayer/audio/right-hand expansion.
+- completed bot plan bound repository owners, generated assets, Unity validation, playtest tuning gate.
+- no unresolved codebase conflict blocks remaining HUD follow-up or playtest.
