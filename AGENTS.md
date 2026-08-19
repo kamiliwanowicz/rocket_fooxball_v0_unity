@@ -18,6 +18,12 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 - Spend effort on issues likely to break playtests, builds, integration, project assets, or iteration speed.
 - Defer broad abstraction, speculative future-proofing, production hardening, exhaustive edge-case handling, and untargeted polish unless required for core-loop reliability or explicitly requested.
 
+## Instruction issues
+
+- Trigger: `AGENTS.md` rule or orchestration instruction unclear, contradictory, infeasible, or causing orchestration issues.
+- Action: flag user clearly. Never silently bypass.
+- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification.
+
 ## Repository map
 
 Layout is discoverable by convention; list directories instead of trusting any enumeration here.
