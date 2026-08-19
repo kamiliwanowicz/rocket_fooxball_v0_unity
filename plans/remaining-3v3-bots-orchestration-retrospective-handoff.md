@@ -1,6 +1,6 @@
 # Remaining 3v3 Bots Orchestration Retrospective Handoff
 
-Status: investigation handoff
+Status: decisions adopted 2026-08-19; sections below carry `Decision:` entries superseding prior `Investigate:` lists
 Audience: agents reviewing orchestration and planning skills
 Run: `remaining-3v3-bots` / `20260816-0710c140`
 Outcome: complete, validated, fast-forward merged into `bots`
@@ -38,6 +38,16 @@ Outcome: complete, validated, fast-forward merged into `bots`
 - early disjoint tasks used parallel fan-out
 - T9 per-slice reviews caught real defects; combined integration review caught cross-slice defects
 
+## Adopted Decisions 2026-08-19 (scope)
+
+Review verdict: Unity safety gates earned, keep. Orchestration ceremony partly self-inflicted cost. Skill set stays; ceremony shrinks.
+
+- keep all skills: `loop-orchestrator`, `task-breakdown`, `write-orchestrator-coding-plan`, `orchestrate-implementation`, merging agent. No skill deletion, no single-skill consolidation.
+- cut plan-artifact SHA-256 + byte-size ceremony: no repeated rehash/rebind at artifact gate, execution dispatch, final return, resume. Create-once path + Git commit provide integrity. Remove digest/size fields from state shape, handoff contracts, acceptance steps.
+- return templates: keep as requested output shape. Deviation from template never blocks, never triggers correction dispatch. Delete return-only correction protocol (`orchestrate-implementation` child return contract); orchestrator reads report as-is, extracts facts.
+- drop child lifecycle registry (`running | correction-pending | returned | retired` bookkeeping). Replacement rule: dependent dispatch waits for terminal child return; hung child -> interrupt, await terminal, replace. No retirement state, no retirement turns.
+- generated-output rule dedup: one canonical statement in `AGENTS.md` `Unity asset safety`. `loop-orchestrator` builder-generated output evidence section, `orchestrate-implementation` generated output gate, `code-reviewer.md` step 3 -> link to canonical rule, keep only role-specific command/scope line. Four divergent restatements -> drift risk.
+
 ## Primary Issue: Planning Decomposition
 
 Original T9 assigned full `BotController` integration to one worker and one checkpoint. Final `BotController.cs`: 2,082 lines. T9 mixed:
@@ -66,13 +76,7 @@ Other oversized candidates:
 - T3: about 1,098 inserted lines across role + target rules/tests
 - T11: 31 changed paths; implementation contract over 10k characters
 
-Planning skill investigation:
-
-- add task-size lint based on behavioral concerns, owned source files, expected changed LOC, final-file size, implementation-contract size
-- one owned file != one worker when file joins several independent behaviors
-- preserve one state owner while extracting pure helpers where useful
-- require explicit grouping rationale when task crosses multiple concerns
-- split before plan acceptance; avoid runtime graph mutation
+Decision 2026-08-19: adopt as soft tripwire in planner prose, not new gate/schema. Rule (~4 lines in `write-orchestrator-coding-plan` plan shape): task expected `>600` changed LOC, or `>3` named behaviors, or implementation contract `>4k` chars -> split or record explicit rationale. Keep: one owned file != one worker when file joins independent behaviors; split before plan acceptance. Drop: formal lint machinery, final-file-size metrics.
 
 ## Primary Issue: Validation Sequencing
 
@@ -104,16 +108,13 @@ Required future order:
 
 ProductionPrepare must not become first compiler/test runner. Cheap source proof before generated boundary prevents generated-review invalidation.
 
+Decision 2026-08-19: adopt order above as written. ~2-line rule change in planning skill validation authoring; replaces early-compile prohibition. Highest wall-clock ROI; implement first.
+
 ## Generated No-Op Boundary
 
 ProductionPrepare r2 reported zero changed paths. Orchestration still created empty commit `490ad49` named `chore: regenerate MovementLab outputs` because plan required separate generated commit.
 
-Investigate:
-
-- add no-op generation attestation mode
-- allow `sourceFreezeSha` as final generated boundary when comparator selects 0 paths
-- bind workflow/comparator/transition evidence without empty commit
-- use evidence-only CP12 review for no-op generation
+Decision 2026-08-19: simplest form only. Comparator selects 0 paths -> no commit; `sourceFreezeSha` is final generated boundary; CP12 review evidence-only. No attestation mode. ~2 lines.
 
 ## Evidence and Context Gaps
 
@@ -130,32 +131,30 @@ Durable run evidence: 28 files, about 5.61 MiB. Missing:
 
 Final EditMode rerun overwrote earlier failed XML/log. Three failures remain only in conversation summary. Prompt scope and per-agent wall time cannot be audited.
 
-Orchestration skill investigation:
-
-- persist append-only run ledger under run evidence root
-- record execution ID, agent/profile/role, prompt hash + bytes, dispatch/return timestamps, frozen SHAs, result hash, changed paths, checks, findings, fix links, lifecycle state
-- use attempt-specific evidence filenames; never overwrite failed proof
-- emit completion metrics: critical path, agent wait time, retry count, invalidated checks, review finding rate
+Decision 2026-08-19: drop ledger proposal — prompt hashes, timestamps, result hashes, fix-link graph, completion metrics = telemetry for audience of one; also reintroduces lifecycle bookkeeping dropped below. Keep one piece: attempt-specific evidence filenames; never overwrite failed proof (~1 line). Prompt-scope/wall-time audit accepted as non-goal.
 
 ## Lifecycle Inefficiency
 
 Stale `cp5_review` entry required follow-up turn returning `Status: retired`. Registry bookkeeping triggered unnecessary model work.
 
-Investigate:
+Decision 2026-08-19: delete registry, not improve it. Retirement text exists only because skill invented registry tools do not back. Registry entry held only agent ID, `execution_id`, role, state `running | correction-pending | returned | retired`; all facts observable live from agent tools + Git.
 
-- terminal child return -> local/persisted registry state `retired`
-- no follow-up model turn solely for retirement text
-- align skill lifecycle language with available collaboration tools
+Delete: four-state machine; explicit `returned`/`retired` marking; `correction-pending` state (dies with correction protocol); completion condition `all registry entries retired`; reviewer-acceptance cross-check against registry.
+
+Keep as plain rules, no registry backing:
+
+- dependent dispatch waits for terminal child return
+- hung child -> interrupt, await terminal, replace
+- replaced/cancelled child -> interrupt, await terminal before dispatching replacement (prevents two writers on same paths)
+- completion requires zero running children, checked live via agent tools
+
+Zero bookkeeping turns.
 
 ## Baseline Ambiguity
 
 Pinned plan says worktree starts exactly at `c275c092...`; actual start SHA `b1cd22fc...`. Delta contains only planning skill + accepted plan. Product risk: none. Contract ambiguity: real.
 
-Planning schema improvement:
-
-- `product_baseline_sha`: product dependency ancestor
-- `launch_head_sha`: actual execution start containing accepted plan
-- `allowed_bootstrap_delta`: exact planning/docs paths between both SHAs
+Decision 2026-08-19: drop 3-field schema. Product risk was none; 3 fields per plan describe docs-only delta. Replacement one-liner in planning skill: `Baseline = execution start_sha; planning/docs paths may differ from product ancestor`.
 
 ## Explicit Non-Goal: Review LOC Rule
 
@@ -173,21 +172,21 @@ Preserve current rule in `.agents/skills/orchestrate-implementation/SKILL.md`:
 - `fix_loc > 200` or `finding_count > 3` -> fresh fix re-review
 - otherwise advance accepted head
 
-## Investigation Priority
+## Implementation Priority (decided 2026-08-19)
 
-1. planning task-size/decomposition gate
-2. source-green-before-generation validation ladder
-3. durable orchestration ledger + immutable failed evidence
-4. no-op generated-boundary semantics
-5. tool-compatible child retirement
-6. product baseline vs launch SHA schema
+1. validation ladder reorder + no-op generated boundary (~4 lines total, immediate wall-clock payback)
+2. ceremony removal: plan-artifact digest/size ceremony, child lifecycle registry, return-template correction protocol
+3. generated-output rule dedup to `AGENTS.md`
+4. task-size tripwire in planner + attempt-specific evidence filenames
 
 ## Acceptance for Follow-Up Skill Work
 
-- planner rejects or explicitly justifies T9-sized single-worker task
+- planner splits or explicitly justifies T9-sized single-worker task via size tripwire
 - runtime decomposition rule unnecessary for equivalent future plan because slices predeclared
 - targeted tests + compile complete before ProductionPrepare
-- zero-change generation creates no misleading regeneration commit
-- failed and successful proof attempts both retained
-- retrospective reconstructs agent timing/findings from durable ledger without chat history
+- zero-change generation creates no commit; `sourceFreezeSha` serves as boundary
+- failed and successful proof attempts both retained via attempt-specific filenames
+- no plan-artifact rehash/rebind steps remain in skills or state shape
+- no child registry states or retirement turns remain; template deviation never blocks or dispatches correction
+- generated-output rule stated once in `AGENTS.md`; skills link only
 - existing LOC/finding re-review thresholds unchanged
