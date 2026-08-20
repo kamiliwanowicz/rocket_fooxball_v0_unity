@@ -325,6 +325,32 @@ SURFACE_PHASES = {
 }
 
 
+# Weapon maps are authored from explicit readability targets so the scalar
+# Blender path and the NumPy path have one source of truth.  The ranges are
+# inclusive authoring bounds; PNG quantization may move a boundary by one u8.
+WEAPON_READABILITY_TARGETS = {
+    "metal": {
+        "palette": ((0.18, 0.12, 0.075), (0.50, 0.36, 0.21), (0.78, 0.60, 0.36)),
+        "metallic": 0.65,
+        "smoothness": (0.52, 0.74),
+        "ao": (0.78, 0.94),
+        "luminance": (0.12, 0.22, 0.42),
+    },
+    "dark": {
+        "palette": ((0.045, 0.055, 0.070), (0.14, 0.16, 0.19), (0.32, 0.35, 0.38)),
+        "metallic": 0.05,
+        "smoothness": (0.38, 0.58),
+        "ao": (0.78, 0.94),
+        "luminance": (0.045, 0.09, 0.22),
+    },
+}
+
+WEAPON_FAMILY_OUTPUTS = {
+    "weapon-metal": ("RetroWeaponMetal", "RetroWeaponMetal_Normal", "RetroWeaponMetal_MetallicSmoothness", "RetroWeaponMetal_Occlusion"),
+    "weapon-dark": ("RetroWeaponDark", "RetroWeaponDark_Normal", "RetroWeaponDark_MetallicSmoothness", "RetroWeaponDark_Occlusion"),
+}
+
+
 def _surface_fields(kind: str, u: float, v: float):
     """Return base RGB, height, metallic, smoothness, AO for one tiled material."""
     u %= 1.0
@@ -365,20 +391,38 @@ def _surface_fields(kind: str, u: float, v: float):
         base = tuple(clamp01(value * (0.90 + n01 * 0.14)) for value in base)
         height = 0.49 + n * 0.035 + (0.07 if yellow else -0.015)
         return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - (0.10 if yellow else 0.0)
-    palettes = {
-        "metal": ((0.12, 0.085, 0.055), (0.40, 0.29, 0.16), (0.70, 0.51, 0.27)),
-        "dark": ((0.014, 0.020, 0.028), (0.065, 0.075, 0.086), (0.16, 0.17, 0.17)),
-        "accent": ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028)),
-    }
-    shadow, base_colour, highlight = palettes[kind]
+    if kind in WEAPON_READABILITY_TARGETS:
+        shadow, base_colour, highlight = WEAPON_READABILITY_TARGETS[kind]["palette"]
+    else:
+        # Accent remains on its existing authored contract.
+        shadow, base_colour, highlight = ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028))
     value = round(n01 * 8.0) / 8.0
-    base = tuple(mix(shadow[i], base_colour[i], value) for i in range(3))
-    base = tuple(mix(value, highlight[i], max(0.0, value - 0.58) / 0.42) for i, value in enumerate(base))
+    if kind in WEAPON_READABILITY_TARGETS:
+        # Use all three palette stops.  The old weapon colours never reached
+        # their highlight because the base stop was below the 0.58 threshold.
+        if value <= 0.58:
+            palette_amount = value / 0.58
+            base = tuple(mix(shadow[i], base_colour[i], palette_amount) for i in range(3))
+        else:
+            palette_amount = (value - 0.58) / 0.42
+            base = tuple(mix(base_colour[i], highlight[i], palette_amount) for i in range(3))
+    else:
+        base = tuple(mix(shadow[i], base_colour[i], value) for i in range(3))
+        base = tuple(mix(value, highlight[i], max(0.0, value - 0.58) / 0.42) for i, value in enumerate(base))
     grid = 1.0 if (u * 16.0) % 1.0 < 0.025 or (v * 16.0) % 1.0 < 0.025 else 0.0
     base = tuple(mix(value, shadow[i], grid * 0.45) for i, value in enumerate(base))
     height = 0.50 + n * 0.09 + grid * 0.035
-    metallic = {"metal": 0.82, "dark": 0.64, "accent": 0.52}[kind]
-    return base, height, metallic, 0.64 + n01 * 0.25, 0.88 - grid * 0.16
+    if kind in WEAPON_READABILITY_TARGETS:
+        targets = WEAPON_READABILITY_TARGETS[kind]
+        smooth_min, smooth_max = targets["smoothness"]
+        metallic = targets["metallic"]
+        smoothness = smooth_min + n01 * (smooth_max - smooth_min)
+        ao_min, ao_max = targets["ao"]
+        # Keep seam relief while staying inside the declared AO range.
+        ao_range = ao_max - ao_min
+        ao = ao_min + ao_range * 0.25 + n01 * ao_range * 0.75 - grid * ao_range * 0.25
+        return base, height, metallic, smoothness, ao
+    return base, height, 0.52, 0.64 + n01 * 0.25, 0.88 - grid * 0.16
 
 
 def _surface_normal(kind: str, u: float, v: float):
@@ -430,23 +474,39 @@ def _surface_fields_array(kind: str, u, v):
         base = np.clip(base * (0.90 + n01[..., None] * 0.14), 0.0, 1.0)
         height = 0.49 + n * 0.035 + np.where(yellow > 0.0, 0.07, -0.015)
         return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - yellow * 0.10
-    palettes = {
-        "metal": ((0.12, 0.085, 0.055), (0.40, 0.29, 0.16), (0.70, 0.51, 0.27)),
-        "dark": ((0.014, 0.020, 0.028), (0.065, 0.075, 0.086), (0.16, 0.17, 0.17)),
-        "accent": ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028)),
-    }
-    shadow, base_colour, highlight = (np.array(values, dtype=np.float64) for values in palettes[kind])
+    if kind in WEAPON_READABILITY_TARGETS:
+        palette = WEAPON_READABILITY_TARGETS[kind]["palette"]
+    else:
+        # Accent remains on its existing authored contract.
+        palette = ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028))
+    shadow, base_colour, highlight = (np.array(values, dtype=np.float64) for values in palette)
     value = np.rint(n01 * 8.0) / 8.0
-    base = shadow + (base_colour - shadow) * value[..., None]
-    # Scalar code shadows ``value`` with each channel's interpolated value in
-    # the highlight pass; retain that per-channel amount here.
-    highlight_amount = np.clip((base - 0.58) / 0.42, 0.0, 1.0)
-    base = base + (highlight - base) * highlight_amount
+    if kind in WEAPON_READABILITY_TARGETS:
+        # Mirror the scalar two-segment palette interpolation above.
+        low_amount = np.clip(value / 0.58, 0.0, 1.0)
+        high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
+        low_base = shadow + (base_colour - shadow) * low_amount[..., None]
+        high_base = base_colour + (highlight - base_colour) * high_amount[..., None]
+        base = np.where((value <= 0.58)[..., None], low_base, high_base)
+    else:
+        base = shadow + (base_colour - shadow) * value[..., None]
+        # Scalar code shadows ``value`` with each channel's interpolated value in
+        # the highlight pass; retain that per-channel amount here.
+        highlight_amount = np.clip((base - 0.58) / 0.42, 0.0, 1.0)
+        base = base + (highlight - base) * highlight_amount
     grid = np.logical_or(np.mod(u * 16.0, 1.0) < 0.025, np.mod(v * 16.0, 1.0) < 0.025).astype(np.float64)
     base = base * (1.0 - grid[..., None] * 0.45) + shadow * (grid[..., None] * 0.45)
     height = 0.50 + n * 0.09 + grid * 0.035
-    metallic = {"metal": 0.82, "dark": 0.64, "accent": 0.52}[kind]
-    return base, height, np.full_like(n, metallic), 0.64 + n01 * 0.25, 0.88 - grid * 0.16
+    if kind in WEAPON_READABILITY_TARGETS:
+        targets = WEAPON_READABILITY_TARGETS[kind]
+        smooth_min, smooth_max = targets["smoothness"]
+        metallic = np.full_like(n, targets["metallic"])
+        smoothness = smooth_min + n01 * (smooth_max - smooth_min)
+        ao_min, ao_max = targets["ao"]
+        ao_range = ao_max - ao_min
+        ao = ao_min + ao_range * 0.25 + n01 * ao_range * 0.75 - grid * ao_range * 0.25
+        return base, height, metallic, smoothness, ao
+    return base, height, np.full_like(n, 0.52), 0.64 + n01 * 0.25, 0.88 - grid * 0.16
 
 
 def generate_surface_maps(kind: str, width: int, height: int):
@@ -1355,6 +1415,121 @@ def audit_explosion_semantics(rgba, width=128, height=128):
     }
 
 
+def _weapon_readability_family_audit(kind, generated):
+    """Check palette, PBR channel ranges, dimensions, and base luminance."""
+    family_id = "weapon-" + kind
+    expected_names = WEAPON_FAMILY_OUTPUTS[family_id]
+    targets = WEAPON_READABILITY_TARGETS[kind]
+    entries = {name: generated.get(name) for name in expected_names}
+    complete = all(entry is not None for entry in entries.values())
+    dimensions = {name: (list(entry["dimensions"]) if entry is not None else None) for name, entry in entries.items()}
+    dimensions_ok = complete and all(value == [2048, 2048] for value in dimensions.values())
+    if not complete:
+        return {
+            "pass": False,
+            "gates": {
+                "dimensions": False,
+                "base_palette": False,
+                "base_luminance": False,
+                "metallic": False,
+                "smoothness": False,
+                "ao": False,
+            },
+            "dimensions": dimensions,
+            "base_luminance": None,
+            "base_palette": None,
+            "metallic": None,
+            "smoothness": None,
+            "ao": None,
+        }
+
+    width, height = entries[expected_names[0]]["dimensions"]
+    base = _rgba_view(entries[expected_names[0]]["buffer"], width, height)
+    base_rgb = base[:, :, :3].astype(np.float64) / 255.0
+    luminance = base_rgb[:, :, 0] * 0.2126 + base_rgb[:, :, 1] * 0.7152 + base_rgb[:, :, 2] * 0.0722
+    base_luminance = {
+        "mean": float(np.mean(luminance)),
+        "range": [float(np.min(luminance)), float(np.max(luminance))],
+        "span": float(np.max(luminance) - np.min(luminance)),
+    }
+    luminance_floor, luminance_mean, luminance_peak = targets["luminance"]
+    luminance_gates = {
+        "floor": base_luminance["range"][0] >= luminance_floor - (1.0 / 255.0),
+        "mean": base_luminance["mean"] >= luminance_mean,
+        "peak": base_luminance["range"][1] >= luminance_peak,
+        "contrast": base_luminance["span"] >= 0.20,
+    }
+
+    palette = targets["palette"]
+    base_ranges = [[int(np.min(base[:, :, channel])), int(np.max(base[:, :, channel]))] for channel in range(3)]
+    palette_bounds = {
+        "shadow": [u8(value) for value in palette[0]],
+        "highlight": [u8(value) for value in palette[2]],
+        "ranges": base_ranges,
+    }
+    palette_gates = {
+        "within_shadow_highlight": all(
+            base_ranges[channel][0] >= palette_bounds["shadow"][channel] - 1
+            and base_ranges[channel][1] <= palette_bounds["highlight"][channel] + 1
+            for channel in range(3)
+        ),
+        "base_stop_reached": all(
+            base_ranges[channel][1] >= u8(palette[1][channel]) - 1 for channel in range(3)
+        ),
+    }
+
+    metallic_array = _rgba_view(entries[expected_names[2]]["buffer"], width, height)
+    occlusion_array = _rgba_view(entries[expected_names[3]]["buffer"], width, height)
+    metallic_range = [float(np.min(metallic_array[:, :, 0])) / 255.0, float(np.max(metallic_array[:, :, 0])) / 255.0]
+    smoothness_range = [float(np.min(metallic_array[:, :, 3])) / 255.0, float(np.max(metallic_array[:, :, 3])) / 255.0]
+    ao_values = occlusion_array[:, :, :3].astype(np.float64) / 255.0
+    ao_range = [float(np.min(ao_values)), float(np.max(ao_values))]
+    tolerance = (1.0 / 255.0) + 1e-6
+    metallic_target = targets["metallic"]
+    smoothness_target = targets["smoothness"]
+    ao_target = targets["ao"]
+    metallic_gate = metallic_range[0] >= metallic_target - tolerance and metallic_range[1] <= metallic_target + tolerance
+    smoothness_gate = smoothness_range[0] >= smoothness_target[0] - tolerance and smoothness_range[1] <= smoothness_target[1] + tolerance
+    ao_gate = ao_range[0] >= ao_target[0] - tolerance and ao_range[1] <= ao_target[1] + tolerance
+    gates = {
+        "dimensions": dimensions_ok,
+        "base_palette": all(palette_gates.values()),
+        "base_luminance": all(luminance_gates.values()),
+        "metallic": metallic_gate,
+        "smoothness": smoothness_gate,
+        "ao": ao_gate,
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "dimensions": dimensions,
+        "base_palette": {"target": [list(values) for values in palette], **palette_bounds, "gates": palette_gates},
+        "base_luminance": {**base_luminance, "target": [luminance_floor, luminance_mean, luminance_peak], "gates": luminance_gates},
+        "metallic": {"range": metallic_range, "target": metallic_target},
+        "smoothness": {"range": smoothness_range, "target": list(smoothness_target)},
+        "ao": {"range": ao_range, "target": list(ao_target)},
+    }
+
+
+def audit_weapon_readability(generated, selected_families=None):
+    """Audit only the weapon families requested by the current generator run."""
+    selected = set(selected_families or FAMILY_IDS)
+    selected_weapon_families = tuple(family_id for family_id in ("weapon-metal", "weapon-dark") if family_id in selected)
+    expected_names = {name for family_id in selected_weapon_families for name in WEAPON_FAMILY_OUTPUTS[family_id]}
+    actual_names = {name for name in generated if name in {name for values in WEAPON_FAMILY_OUTPUTS.values() for name in values}}
+    selected_family_execution = actual_names == expected_names
+    families = {family_id.removeprefix("weapon-"): _weapon_readability_family_audit(family_id.removeprefix("weapon-"), generated) for family_id in selected_weapon_families}
+    family_gates = {kind: result["pass"] for kind, result in families.items()}
+    gates = {"selected_family_execution": selected_family_execution, **family_gates}
+    return {
+        "pass": bool(selected_weapon_families) and all(gates.values()),
+        "gates": gates,
+        "selected_families": list(selected_weapon_families),
+        "selected_family_execution": {"expected": sorted(expected_names), "actual": sorted(actual_names), "pass": selected_family_execution},
+        "families": families,
+    }
+
+
 def run_semantic_audits(generated, frames=None, selected_families=None):
     """Run only semantic checks whose family buffers were selected/generated."""
     selected = set(selected_families or FAMILY_IDS)
@@ -1384,6 +1559,8 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
             "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
             "metallic_r_max": wall_metallic_r_max,
         }
+    if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
+        checks["weapon_readability"] = audit_weapon_readability(generated, selected)
     normal_maps = {}
     for name, entry in generated.items():
         if entry["map_type"] == "normal":
