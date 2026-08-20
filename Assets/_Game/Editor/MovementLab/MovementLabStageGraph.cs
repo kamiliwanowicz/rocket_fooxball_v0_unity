@@ -133,7 +133,10 @@ namespace RocketFooxball.Editor
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs"
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs"
                      ,"Assets/_Game/Scripts/Runtime/Ball/BallKick.cs"
-                     ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
                  }), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
@@ -175,7 +178,14 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs",
                      "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
-                     "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
+                      "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Hud/MatchHud.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfxSpawner.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Participants/ParticipantSpawnSet.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Bots/BotController.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs"
                  })),
                 new[]
                 {
@@ -1149,7 +1159,7 @@ namespace RocketFooxball.Editor
 
         private static string[] Concat(string[] first, string[] second)
         {
-            return (first ?? Array.Empty<string>()).Concat(second ?? Array.Empty<string>()).ToArray();
+            return (first ?? Array.Empty<string>()).Concat(second ?? Array.Empty<string>()).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         private sealed class StageDefinition

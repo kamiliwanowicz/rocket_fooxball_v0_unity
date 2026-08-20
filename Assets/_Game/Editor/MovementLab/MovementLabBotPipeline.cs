@@ -99,7 +99,7 @@ namespace RocketFooxball.Editor
                 SetFloat(navigator, "verticalArrivalDistance", 0.65f);
                 SetFloat(navigator, "lookaheadDistance", 3f);
                 SetFloat(navigator, "targetReplanDistance", 1.5f);
-                SetFloat(navigator, "corridorMargin", 1f);
+                SetFloat(navigator, "corridorMargin", BotNavigationGraph.ExpectedControllerClearance);
                 SetFloat(navigator, "ledgeProbeDistance", 1.5f);
                 SetFloat(navigator, "ledgeProbeDepth", 2.5f);
 
@@ -129,17 +129,19 @@ namespace RocketFooxball.Editor
                 SetObjectReference(controller, "roleCoordinator", coordinator);
                 SetLayerMask(controller, "combatObstacleMask", obstacleMask);
                 SetFloat(controller, "maxPitchDegrees", 89f);
-                SetFloat(controller, "jumpProbeDistance", 4f);
+                SetFloat(controller, "jumpProbeDistance", BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance);
             }
 
             SetEnum(blueCoordinator, "team", "Blue");
             SetObjectReference(blueCoordinator, "match", match);
+            SetObjectReference(blueCoordinator, "navigationGraph", graph);
             SetObjectArray(blueCoordinator, "participants", roster.Take(3).Cast<UnityEngine.Object>().ToArray());
             SetObjectArray(blueCoordinator, "perceptions", new[] { roster[1].GetComponent<BotPerception>(), roster[2].GetComponent<BotPerception>() }.Cast<UnityEngine.Object>().ToArray());
             SetCoordinatorTuning(blueCoordinator);
 
             SetEnum(redCoordinator, "team", "Red");
             SetObjectReference(redCoordinator, "match", match);
+            SetObjectReference(redCoordinator, "navigationGraph", graph);
             SetObjectArray(redCoordinator, "participants", roster.Skip(3).Take(3).Cast<UnityEngine.Object>().ToArray());
             SetObjectArray(redCoordinator, "perceptions", new[] { roster[3].GetComponent<BotPerception>(), roster[4].GetComponent<BotPerception>(), roster[5].GetComponent<BotPerception>() }.Cast<UnityEngine.Object>().ToArray());
             SetCoordinatorTuning(redCoordinator);
@@ -256,7 +258,7 @@ namespace RocketFooxball.Editor
                 ValidateReference(controller, "roleCoordinator", participant.Team == ParticipantTeam.Blue ? blueCoordinator : redCoordinator, "BotController.roleCoordinator");
                 ValidateSerializedLayerMask(controller, "combatObstacleMask", LayerMaskMaskWithout(MovementLabContract.ParticipantsLayerName, MovementLabContract.ProjectilesLayerName), "BotController.combatObstacleMask");
                 ValidateSerializedFloat(controller, "maxPitchDegrees", 89f, "BotController.maxPitchDegrees");
-                ValidateSerializedFloat(controller, "jumpProbeDistance", 4f, "BotController.jumpProbeDistance");
+                ValidateSerializedFloat(controller, "jumpProbeDistance", BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance, "BotController.jumpProbeDistance");
                 ValidateReference(input, "actions", inputAsset, "PlayerInputReader.actions");
             }
 
@@ -311,9 +313,9 @@ namespace RocketFooxball.Editor
             nodes.Add(new BotNavigationNodeRecord(28, new Vector3(-34f, 0f, 2f), BotNavigationArea.Floor, 1.5f));
             nodes.Add(new BotNavigationNodeRecord(29, new Vector3(34f, 0f, -2f), BotNavigationArea.Floor, 1.5f));
             nodes.Add(new BotNavigationNodeRecord(30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, 0.5f));
+            nodes.Add(new BotNavigationNodeRecord(31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
             nodes.Add(new BotNavigationNodeRecord(32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, 0.5f));
+            nodes.Add(new BotNavigationNodeRecord(33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
             return nodes.ToArray();
         }
 
@@ -403,6 +405,11 @@ namespace RocketFooxball.Editor
             serialized.FindProperty("controllerSlopeLimit").floatValue = BotNavigationGraph.ExpectedControllerSlopeLimit;
             serialized.FindProperty("controllerStepOffset").floatValue = BotNavigationGraph.ExpectedControllerStepOffset;
             serialized.FindProperty("controllerSkinWidth").floatValue = BotNavigationGraph.ExpectedControllerSkinWidth;
+            var bounds = serialized.FindProperty("arenaBounds");
+            if (bounds == null) throw new InvalidOperationException("BotNavigationGraph arena bounds property is missing.");
+            bounds.FindPropertyRelative("center").vector3Value = BotNavigationGraph.ExpectedArenaCenter;
+            bounds.FindPropertyRelative("halfLength").floatValue = BotNavigationGraph.ExpectedArenaHalfLength;
+            bounds.FindPropertyRelative("halfWidth").floatValue = BotNavigationGraph.ExpectedArenaHalfWidth;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 
@@ -473,9 +480,13 @@ namespace RocketFooxball.Editor
             ValidateNode(graph.GetNode(28), 28, new Vector3(-34f, 0f, 2f), BotNavigationArea.Floor, 1.5f);
             ValidateNode(graph.GetNode(29), 29, new Vector3(34f, 0f, -2f), BotNavigationArea.Floor, 1.5f);
             ValidateNode(graph.GetNode(30), 30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(31), 31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, 0.5f);
+            ValidateNode(graph.GetNode(31), 31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius);
             ValidateNode(graph.GetNode(32), 32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(33), 33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, 0.5f);
+            ValidateNode(graph.GetNode(33), 33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius);
+            if (graph.ArenaBounds == null || graph.ArenaBounds.Center != BotNavigationGraph.ExpectedArenaCenter ||
+                Mathf.Abs(graph.ArenaBounds.HalfLength - BotNavigationGraph.ExpectedArenaHalfLength) > 0.001f ||
+                Mathf.Abs(graph.ArenaBounds.HalfWidth - BotNavigationGraph.ExpectedArenaHalfWidth) > 0.001f)
+                throw new InvalidOperationException("Bot arena bounds must match the authored 65 by 45 field.");
             var expectedWestLow = rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, -8f);
             var expectedWestHigh = rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, 8f);
             var expectedEastLow = rampEast.position + rampEast.rotation * new Vector3(0f, 0.25f, -8f);
@@ -586,7 +597,7 @@ namespace RocketFooxball.Editor
 
         private static void ValidateNavigatorTuning(BotNavigator navigator)
         {
-            if (navigator.ArrivalDistance != 0.75f || navigator.VerticalArrivalDistance != 0.65f || navigator.LookaheadDistance != 3f || navigator.TargetReplanDistance != 1.5f || navigator.CorridorMargin != 1f || navigator.LedgeProbeDistance != 1.5f || navigator.LedgeProbeDepth != 2.5f)
+            if (navigator.ArrivalDistance != 0.75f || navigator.VerticalArrivalDistance != 0.65f || navigator.LookaheadDistance != 3f || navigator.TargetReplanDistance != 1.5f || navigator.CorridorMargin != BotNavigationGraph.ExpectedControllerClearance || navigator.LedgeProbeDistance != 1.5f || navigator.LedgeProbeDepth != 2.5f)
                 throw new InvalidOperationException("BotNavigator tuning mismatch.");
         }
 
@@ -594,6 +605,8 @@ namespace RocketFooxball.Editor
         {
             ValidateSerializedEnum(coordinator, "team", (int)team, "BotTeamRoleCoordinator.team");
             ValidateReference(coordinator, "match", match, "BotTeamRoleCoordinator.match");
+            var graph = UnityEngine.Object.FindObjectsByType<BotNavigationGraph>(FindObjectsInactive.Include, FindObjectsSortMode.None).SingleOrDefault();
+            ValidateReference(coordinator, "navigationGraph", graph, "BotTeamRoleCoordinator.navigationGraph");
             ValidateReferenceArray(coordinator, "participants", participants.Cast<UnityEngine.Object>().ToArray(), "BotTeamRoleCoordinator.participants");
             ValidateReferenceArray(coordinator, "perceptions", perceptions.Cast<UnityEngine.Object>().ToArray(), "BotTeamRoleCoordinator.perceptions");
             ValidateSerializedFloat(coordinator, "evaluationInterval", 0.5f, "BotTeamRoleCoordinator.evaluationInterval");

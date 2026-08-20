@@ -173,8 +173,9 @@ namespace RocketFooxball.Editor
                         SetFloat(explosionResolver, "occludedForce", 0.25f);
                         SetFloat(explosionResolver, "playerUpBias", 0.18f);
                         SetFloat(explosionResolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
-                        SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
-                        SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                         SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
+                         SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                         SetFloat(explosionResolver, "enemyRocketImpulseMultiplier", 1f);
                         SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
                         var participantStates = BuildParticipantRoster(playerPrefab);
                         var localParticipant = participantStates[0];
@@ -220,11 +221,12 @@ namespace RocketFooxball.Editor
                         SetObjectReference(match, "ball", ballMotor);
                         SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                        SetFloat(match, "matchDuration", MatchDuration);
-                        SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                         SetFloat(match, "matchDuration", MatchDuration);
+                         SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                        SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                        SetVector3(match, "resetLookTarget", Vector3.zero);
+                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                         SetVector3(match, "resetLookTarget", Vector3.zero);
+                         WirePresentationSceneReferences(participantStates, localParticipant, match);
                         var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
                         var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
                         var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
@@ -498,8 +500,9 @@ namespace RocketFooxball.Editor
                     SetFloat(explosionResolver, "occludedForce", 0.25f);
                     SetFloat(explosionResolver, "playerUpBias", 0.18f);
                     SetFloat(explosionResolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
-                    SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
-                    SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                     SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
+                     SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                     SetFloat(explosionResolver, "enemyRocketImpulseMultiplier", 1f);
                     SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
 
                     var participantStates = BuildParticipantRoster(playerPrefab);
@@ -551,11 +554,12 @@ namespace RocketFooxball.Editor
                     SetObjectReference(match, "ball", ballMotor);
                     SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                     SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                    SetFloat(match, "matchDuration", MatchDuration);
-                    SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                     SetFloat(match, "matchDuration", MatchDuration);
+                     SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                     SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                    SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                    SetVector3(match, "resetLookTarget", Vector3.zero);
+                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                     SetVector3(match, "resetLookTarget", Vector3.zero);
+                     WirePresentationSceneReferences(participantStates, localParticipant, match);
                     var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
                     var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
                     var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
@@ -612,7 +616,8 @@ namespace RocketFooxball.Editor
                         SetInteger(state, "slotId", slot.SlotId);
                         SetString(state, "displayName", slot.DisplayName);
                         SetEnum(state, "team", slot.Team == ParticipantTeam.Blue ? "Blue" : "Red");
-                        SetBool(state, "localParticipant", slot.IsLocal);
+                         SetBool(state, "localParticipant", slot.IsLocal);
+                         SetFloat(state, "deathWait", slot.IsLocal ? LocalRespawnDelay : BotRespawnDelay);
                         SetObjectReference(state.Presentation, "participant", state);
                         SetObjectReference(state.CameraFeedback, "participant", state);
                         SetObjectReference(state.Launcher, "ownerParticipant", state);
@@ -635,8 +640,37 @@ namespace RocketFooxball.Editor
                         if (worldVisual != null) SetLayerRecursively(worldVisual.gameObject, slot.IsLocal ? hiddenLayer : 0);
                         roster[i] = state;
                     }
-                    return roster;
-                }
+                     return roster;
+                 }
+
+                 private static void WirePresentationSceneReferences(ParticipantState[] roster, ParticipantState localParticipant, MatchController match)
+                 {
+                     if (roster == null || localParticipant == null || match == null)
+                         throw new InvalidOperationException("Presentation scene wiring requires the complete roster, local participant, and match.");
+
+                     var localCamera = localParticipant.transform.Find("Head/Camera")?.GetComponent<Camera>();
+                     if (localCamera == null)
+                         throw new InvalidOperationException("Presentation scene wiring requires the local participant camera.");
+
+                     for (var i = 0; i < roster.Length; i++)
+                     {
+                         var participant = roster[i];
+                         if (participant == null || participant.Presentation == null)
+                             throw new InvalidOperationException("Presentation scene wiring requires every participant presentation.");
+
+                         var isEnemy = participant.Team != localParticipant.Team;
+                         SetObjectReference(participant.Presentation, "localParticipant", localParticipant);
+                         SetObjectReference(participant.Presentation, "match", match);
+                         SetObjectReference(participant.Presentation, "nicknameCamera", localCamera);
+                         SetBool(participant.Presentation, "showNickname", isEnemy);
+                         SetBool(participant.Presentation, "spawnCorpseOnDeath", isEnemy);
+                         var nameplate = participant.transform.Find("Nameplate")?.GetComponent<TextMesh>();
+                         if (nameplate == null)
+                             throw new InvalidOperationException("Presentation scene wiring requires Nameplate TextMesh: " + participant.DisplayName);
+                         nameplate.text = participant.DisplayName;
+                         participant.Presentation.ConfigureSlot(participant);
+                     }
+                 }
 
                 private static ParticipantSpawnSet BuildParticipantSpawnSet(ArenaBuild arena)
                 {
@@ -677,7 +711,7 @@ namespace RocketFooxball.Editor
                     var projectilesLayer = LayerMask.NameToLayer("Projectiles");
                     if (participantsLayer < 0 || projectilesLayer < 0) throw new InvalidOperationException("Participants and Projectiles layers must exist before spawn-set composition.");
                     SetLayerMask(spawnSet, "visibilityMask", ~(1 << participantsLayer | 1 << projectilesLayer));
-                    SetFloat(spawnSet, "eyeHeight", 1.2f);
+                     SetFloat(spawnSet, "eyeHeight", 2.4f);
                     SetFloat(spawnSet, "occupiedRadius", 2f);
                     SetFloat(spawnSet, "ballDistanceWeight", 1f);
                     SetFloat(spawnSet, "enemyGoalDistanceWeight", 0.5f);

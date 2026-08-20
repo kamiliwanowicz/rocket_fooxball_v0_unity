@@ -498,7 +498,7 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootUpwardImpulseScale", context.Resolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootHighSpeedVerticalRedirect", context.Resolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", 50f);
-                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", 0.5f);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", 1f);
             }
 
             var goals = UnityEngine.Object.FindObjectsByType<GoalTrigger>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -636,8 +636,9 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitRadius", context.CameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitHeight", context.CameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationLookHeight", context.CameraFeedback, "celebrationLookHeight", CelebrationLookHeight);
-                CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitDegrees", context.CameraFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
-                CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationFov", context.CameraFeedback, "celebrationFov", CelebrationFov);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitDegrees", context.CameraFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationFov", context.CameraFeedback, "celebrationFov", CelebrationFov);
+                 CaptureSerializedVector(accumulator, "gameplay/serialized", "PlayerCameraFeedback.spectatorOffset", context.CameraFeedback, "spectatorOffset", PlayerCameraFeedback.ExpectedSpectatorOffset);
             }
             if (context.QualityRuntime != null)
                 CaptureReference(accumulator, "gameplay/wiring", "GraphicsQualityRuntime.targetCamera", context.QualityRuntime, "targetCamera", context.Camera);
@@ -720,7 +721,7 @@ namespace RocketFooxball.Editor
                 });
                 accumulator.Capture("gameplay/contract", "MatchController.public-surface", ValidateMatchPublicContract);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabSceneComposer.MatchDuration);
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalSummaryDuration", context.Match, "goalSummaryDuration", MovementLabSceneComposer.GoalSummaryDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalCelebrationOrbitDuration", context.Match, "goalCelebrationOrbitDuration", MovementLabSceneComposer.GoalSummaryDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
@@ -1334,9 +1335,12 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Participants/Projectiles collision matrix must remain enabled.");
             });
 
-            var localCameraCount = 0;
-            var localAudioCount = 0;
-            for (var i = 0; i < context.Participants.Length; i++)
+             var localCameraCount = 0;
+             var localAudioCount = 0;
+             var localParticipant = context.Participants.FirstOrDefault(item => item != null && item.IsLocalParticipant);
+             var localCamera = localParticipant != null ? localParticipant.GetComponentInChildren<Camera>(true) : null;
+             var sceneMatch = context.Match != null ? context.Match : context.MatchObject != null ? context.MatchObject.GetComponent<MatchController>() : null;
+             for (var i = 0; i < context.Participants.Length; i++)
             {
                 var participant = context.Participants[i];
                 var expected = ParticipantSlots[i];
@@ -1379,13 +1383,14 @@ namespace RocketFooxball.Editor
                       ValidateReference(participant.Presentation, "fpsShotgunVisual", participantFpsShotgun, expected.DisplayName + ".presentation.fpsShotgunVisual");
                       ValidateReference(participant.Presentation, "worldShotgunVisual", participantWorldShotgun, expected.DisplayName + ".presentation.worldShotgunVisual");
                       ValidateReference(participant.Presentation, "shotgun", participant.Shotgun, expected.DisplayName + ".presentation.shotgun");
-                     MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
+                      ValidateSceneParticipantComposition(participant, localParticipant, sceneMatch, localCamera, expected.DisplayName);
+                      MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
                      MovementLabPrefabPipeline.ValidateImportedVisual(participantWorldShotgun.gameObject, ShotgunModelPath, expected.DisplayName + ".WorldShotgunVisual");
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantFpsShotgun.gameObject);
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantWorldShotgun.gameObject);
                  });
                  CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", 100f);
-                 CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", 5f);
+                  CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", expected.IsLocal ? LocalRespawnDelay : BotRespawnDelay);
                  CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", 2f);
                  CaptureSerializedInteger(accumulator, "scene/roster", "shotgun-capacity:" + expected.SlotId, participant, "shotgunShellCapacity", 16);
                 var camera = participant.GetComponentInChildren<Camera>(true);
@@ -1430,11 +1435,75 @@ namespace RocketFooxball.Editor
 
             if (context.SpawnSet != null)
             {
-                CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
-            }
-        }
+                 CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
+             }
+         }
 
-        private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
+         private static void ValidateSceneParticipantComposition(ParticipantState participant,
+             ParticipantState localParticipant, MatchController match, Camera localCamera, string label)
+         {
+             if (participant == null || localParticipant == null || match == null || localCamera == null || participant.Presentation == null)
+                 throw new InvalidOperationException(label + " presentation composition dependencies are missing.");
+
+             if (Vector3.Distance(participant.transform.localScale, Vector3.one) > 0.001f)
+                 throw new InvalidOperationException(label + " root scale must remain unit scale.");
+
+             var controller = participant.GetComponent<CharacterController>();
+             if (controller == null || Mathf.Abs(controller.radius - PlayerControllerRadius) > 0.001f ||
+                 Mathf.Abs(controller.height - PlayerControllerHeight) > 0.001f ||
+                 Vector3.Distance(controller.center, PlayerControllerCenter) > 0.001f ||
+                 Mathf.Abs(controller.skinWidth - PlayerControllerSkinWidth) > 0.001f)
+                 throw new InvalidOperationException(label + " CharacterController composition mismatch.");
+
+             var head = participant.transform.Find("Head");
+             var worldVisual = participant.transform.Find("WorldVisual");
+             if (head == null || Vector3.Distance(head.localPosition, new Vector3(0f, PlayerHeadHeight, 0f)) > 0.001f)
+                 throw new InvalidOperationException(label + " Head height must match the enlarged player contract.");
+             if (worldVisual == null || Vector3.Distance(worldVisual.localScale, Vector3.one * WorldVisualScale) > 0.001f)
+                 throw new InvalidOperationException(label + " WorldVisual scale must be doubled.");
+
+             var blueCue = participant.transform.Find("BlueCircleCue");
+             var redCue = participant.transform.Find("RedTriangleCue");
+             var blueShield = participant.transform.Find("ImmunityShield/BlueImmunityShield");
+             var redShield = participant.transform.Find("ImmunityShield/RedImmunityShield");
+             if (blueCue == null || redCue == null || blueShield == null || redShield == null ||
+                 Vector3.Distance(blueCue.localScale, new Vector3(0.84f, 0.84f, 2f)) > 0.001f ||
+                 Vector3.Distance(redCue.localScale, Vector3.one * 2f) > 0.001f ||
+                 Vector3.Distance(blueShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f ||
+                 Vector3.Distance(redShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f)
+                 throw new InvalidOperationException(label + " team cue/immunity scale contract invalid.");
+
+             var isEnemy = participant.Team != localParticipant.Team;
+             if (blueCue.gameObject.activeSelf != (participant.Team == ParticipantTeam.Blue) ||
+                 redCue.gameObject.activeSelf != (participant.Team == ParticipantTeam.Red))
+                 throw new InvalidOperationException(label + " team cue activation mismatch.");
+
+             var nameplate = participant.transform.Find("Nameplate");
+             var nameplateText = nameplate != null ? nameplate.GetComponent<TextMesh>() : null;
+             if (nameplate == null || nameplateText == null ||
+                 Vector3.Distance(nameplate.localPosition, new Vector3(0f, NameplateHeight, 0f)) > 0.001f ||
+                 nameplate.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                 nameplateText.text != participant.DisplayName)
+                 throw new InvalidOperationException(label + " Nameplate must be collider-free, raised, and use immutable DisplayName.");
+
+             var presentation = participant.Presentation;
+             ValidateReference(presentation, "localParticipant", localParticipant, label + ".presentation.localParticipant");
+             ValidateReference(presentation, "match", match, label + ".presentation.match");
+             ValidateReference(presentation, "nicknameCamera", localCamera, label + ".presentation.nicknameCamera");
+             ValidateReference(presentation, "nicknameVisual", nameplate.gameObject, label + ".presentation.nicknameVisual");
+             ValidateReference(presentation, "nicknameText", nameplateText, label + ".presentation.nicknameText");
+             var serialized = new SerializedObject(presentation);
+             var showNickname = serialized.FindProperty("showNickname");
+             var spawnCorpse = serialized.FindProperty("spawnCorpseOnDeath");
+             var corpseLifetime = serialized.FindProperty("corpseLifetime");
+             if (showNickname == null || showNickname.propertyType != SerializedPropertyType.Boolean || showNickname.boolValue != isEnemy ||
+                 spawnCorpse == null || spawnCorpse.propertyType != SerializedPropertyType.Boolean || spawnCorpse.boolValue != isEnemy ||
+                 corpseLifetime == null || corpseLifetime.propertyType != SerializedPropertyType.Float || Mathf.Abs(corpseLifetime.floatValue - 30f) > 0.001f ||
+                 nameplate.gameObject.activeSelf != isEnemy)
+                 throw new InvalidOperationException(label + " nickname/corpse enemy-only policy mismatch.");
+         }
+
+         private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
         {
             var spawnSet = context.SpawnSet;
             accumulator.Capture("scene/spawn-set", "arrays", () =>
@@ -1456,7 +1525,8 @@ namespace RocketFooxball.Editor
                 var expectedMask = ~(1 << participantLayer | 1 << projectilesLayer);
                 if (spawnSet.VisibilityMask.value != expectedMask) throw new InvalidOperationException("ParticipantSpawnSet visibility mask must exclude Participants and Projectiles.");
             });
-            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", 2f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "eyeHeight", spawnSet, "eyeHeight", 2.4f);
+             CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", 2f);
             CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", 1f);
             CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", 0.5f);
             CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", 1f);

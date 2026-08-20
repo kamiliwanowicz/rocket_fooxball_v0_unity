@@ -9,7 +9,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 6;
+        internal const int SerializedContractVersion = 7;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -96,16 +96,25 @@ namespace RocketFooxball.Editor
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
         internal const float BallSpawnHeight = BallRadius;
-        internal const float BlastRadius = 5.85f;
-        internal const float BlastVisualScale = 1.30f;
+        internal const float BlastRadius = 11.7f;
         internal const float GoalAxisPosition = 64f;
         internal const float PlayerSpawnOffset = 12f;
-        internal const float GoalFreezeDuration = 5f;
-        internal const float CelebrationOrbitRadius = 5.5f;
-        internal const float CelebrationOrbitHeight = 2.5f;
-        internal const float CelebrationLookHeight = 1.05f;
+        internal const float CelebrationOrbitRadius = 11f;
+        internal const float CelebrationOrbitHeight = 5f;
+        internal const float CelebrationLookHeight = 2.1f;
         internal const float CelebrationOrbitDegrees = 360f;
         internal const float CelebrationFov = 60f;
+        internal const float PlayerControllerRadius = 0.8f;
+        internal const float PlayerControllerHeight = 3.6f;
+        internal static readonly Vector3 PlayerControllerCenter = new Vector3(0f, 1.8f, 0f);
+        internal const float PlayerControllerSkinWidth = 0.08f;
+        internal const float WorldVisualScale = 2f;
+        internal const float PlayerHeadHeight = 3.1f;
+        internal const float TeamCueScaleMultiplier = 2f;
+        internal const float ImmunityShieldScaleMultiplier = 2f;
+        internal const float NameplateHeight = 4.1f;
+        internal const float LocalRespawnDelay = 8f;
+        internal const float BotRespawnDelay = 5f;
         internal const float RocketTrailLifetime = 0.55f;
         internal const float RocketTrailRateOverDistance = 1.5f;
         internal const float RocketTrailStartSize = 0.70f;
