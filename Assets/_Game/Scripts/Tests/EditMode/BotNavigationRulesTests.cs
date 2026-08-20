@@ -92,7 +92,7 @@ namespace RocketFooxball.Tests.EditMode
             var nodes = new[]
             {
                 new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                new BotNavigationNodeRecord(1, new Vector3(1f, 0.34f, 0f), BotNavigationArea.Floor, 1f)
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.38f, 0f), BotNavigationArea.Floor, 1f)
             };
             var edges = new[] { Edge(0, 0, 1, 2f) };
 
@@ -108,7 +108,7 @@ namespace RocketFooxball.Tests.EditMode
             var nodes = new[]
             {
                 new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                new BotNavigationNodeRecord(1, new Vector3(1f, 0.35f, 0f), BotNavigationArea.Floor, 1f)
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.39f, 0f), BotNavigationArea.Floor, 1f)
             };
             var edges = new[] { Edge(0, 0, 1, 2f) };
 
@@ -125,7 +125,7 @@ namespace RocketFooxball.Tests.EditMode
                 SetPrivateField(graph, "nodes", new[]
                 {
                     new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.35f, 0f), BotNavigationArea.Floor, 1f)
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.39f, 0f), BotNavigationArea.Floor, 1f)
                 });
                 SetPrivateField(graph, "edges", new[] { Edge(0, 0, 1, 2f) });
 
@@ -134,7 +134,7 @@ namespace RocketFooxball.Tests.EditMode
                 SetPrivateField(graph, "nodes", new[]
                 {
                     new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.34f, 0f), BotNavigationArea.Floor, 1f)
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.38f, 0f), BotNavigationArea.Floor, 1f)
                 });
 
                 Assert.That(graph.TryValidate(out _), Is.True);

@@ -11,11 +11,11 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void CornerEntryRequiresContinuousDwell()
         {
-            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 0f), 0.5f);
+            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 40f), 0.5f);
             Assert.That(state.Active, Is.False);
             Assert.That(state.DwellSeconds, Is.EqualTo(0.5f).Within(0.0001f));
 
-            state = Advance(state, new Vector3(60f, 4f, 0f), 0.25f);
+            state = Advance(state, new Vector3(60f, 4f, 40f), 0.25f);
             Assert.That(state.Active, Is.True);
             Assert.That(state.DwellSeconds, Is.EqualTo(BotCornerRules.EnterDwellSeconds).Within(0.0001f));
         }
@@ -23,8 +23,8 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void LeavingEntryWindowBeforeDwellResetsTimer()
         {
-            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 0f), 0.5f);
-            state = Advance(state, new Vector3(50f, 4f, 0f), 0.1f);
+            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 40f), 0.5f);
+            state = Advance(state, new Vector3(50f, 4f, 40f), 0.1f);
             Assert.That(state.Active, Is.False);
             Assert.That(state.DwellSeconds, Is.EqualTo(0f));
         }
@@ -32,11 +32,11 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void ActiveStateUsesExitHysteresis()
         {
-            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 0f), 0.75f);
-            state = Advance(state, new Vector3(50f, 4f, 0f), 0.01f);
+            var state = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 40f), 0.75f);
+            state = Advance(state, new Vector3(50f, 4f, 40f), 0.01f);
             Assert.That(state.Active, Is.True);
 
-            state = Advance(state, new Vector3(46f, 4f, 0f), 0.01f);
+            state = Advance(state, new Vector3(46f, 4f, 40f), 0.01f);
             Assert.That(state.Active, Is.False);
             Assert.That(state.DwellSeconds, Is.EqualTo(0f));
         }
@@ -72,8 +72,8 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void ExpiredOrInvalidObservationResetsState()
         {
-            var active = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 0f), 0.75f);
-            var expired = Sample(0, new Vector3(60f, 4f, 0f), BotCornerRules.ObservationMemorySeconds + 0.01f);
+            var active = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 40f), 0.75f);
+            var expired = Sample(0, new Vector3(60f, 4f, 40f), BotCornerRules.ObservationMemorySeconds + 0.01f);
             var state = BotCornerRules.Advance(active, Bounds, 0.1f, false, expired);
             Assert.That(state.Active, Is.False);
 
@@ -87,13 +87,13 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void ExplicitResetClearsStateEvenWithFreshBall()
         {
-            var active = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 0f), 0.75f);
+            var active = Advance(BotCornerState.Inactive, new Vector3(60f, 4f, 40f), 0.75f);
             var reset = BotCornerRules.Advance(
                 active,
                 Bounds,
                 0.1f,
                 true,
-                Sample(0, new Vector3(60f, 4f, 0f), 0f));
+                Sample(0, new Vector3(60f, 4f, 40f), 0f));
             Assert.That(reset.Active, Is.False);
             Assert.That(reset.DwellSeconds, Is.EqualTo(0f));
             Assert.That(reset.Corner, Is.EqualTo(Vector3.zero));
