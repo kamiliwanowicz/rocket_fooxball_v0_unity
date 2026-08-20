@@ -214,13 +214,13 @@ namespace RocketFooxball.Editor
                     viewmodels.localRotation = Quaternion.identity;
                     // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
                     var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(-0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
-                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
-                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
+                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
                     var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent);
                     RemovePhysicsComponents(weaponVisual);
-                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
-                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
+                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
                     var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
                     var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
@@ -783,6 +783,25 @@ namespace RocketFooxball.Editor
                     ConfigureExplosionGradient(smoke, new[] { new GradientColorKey(new Color(0.52f, 0.49f, 0.44f, 1f), 0f), new GradientColorKey(new Color(0.20f, 0.19f, 0.18f, 1f), 1f) }, new[] { new GradientAlphaKey(0.30f, 0f), new GradientAlphaKey(0f, 1f) });
                     ConfigureExplosionSize(smoke, 0.55f, 1.40f);
                     systems.Add(smoke);
+                    var blastRadiusCue = CreateExplosionSystem(root.transform, "BlastRadiusCue", explosionMaterial, 1, 0.28f, 0.28f, 9f, 0f, 1, 0f, 0f);
+                    blastRadiusCue.transform.localPosition = Vector3.zero;
+                    blastRadiusCue.transform.localRotation = Quaternion.identity;
+                    blastRadiusCue.transform.localScale = Vector3.one;
+                    var cueMain = blastRadiusCue.main;
+                    cueMain.simulationSpace = ParticleSystemSimulationSpace.Local;
+                    cueMain.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                    var cueShape = blastRadiusCue.shape;
+                    cueShape.enabled = false;
+                    var cueRenderer = blastRadiusCue.GetComponent<ParticleSystemRenderer>();
+                    cueRenderer.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+                    cueRenderer.alignment = ParticleSystemRenderSpace.World;
+                    cueRenderer.sharedMaterial = explosionMaterial;
+                    ConfigureExplosionIdentity(blastRadiusCue, 0xF005u, 3);
+                    ConfigureExplosionGradient(blastRadiusCue,
+                        new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                        new[] { new GradientAlphaKey(0.22f, 0f), new GradientAlphaKey(0f, 1f) });
+                    ConfigureExplosionSize(blastRadiusCue, 0.15f, 1f);
+                    systems.Add(blastRadiusCue);
 
                     var effect = root.AddComponent<ExplosionVfx>();
                     SetObjectArray(effect, "particleSystems", systems.ToArray());
@@ -1977,24 +1996,30 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Explosion VFX prefab root must remain unit scale; runtime owns radius scaling.");
                     }
                     if (Mathf.Abs(ExplosionVfx.ReferenceVisualRadius - 4.5f) > 0.001f ||
-                        Mathf.Abs(ExplosionVfx.ComputeVisualScale(BlastRadius) - 2.6f) > 0.001f)
+                        Mathf.Abs(ExplosionVfx.ReferenceVisualDiameter - 9f) > 0.001f ||
+                        Mathf.Abs(ExplosionVfx.ComputeVisualScale(BlastRadius) - 2.6f) > 0.001f ||
+                        Mathf.Abs(ExplosionVfx.ComputeVisualRadius(ExplosionVfx.ReferenceVisualDiameter, BlastRadius) - BlastRadius) > 0.001f)
                         throw new InvalidOperationException("Explosion VFX reference radius/reach contract invalid.");
                     var effect = Require(prefab.GetComponent<ExplosionVfx>(), "ExplosionVfx");
                     var systems = prefab.GetComponentsInChildren<ParticleSystem>(true);
-                    if (systems.Length != 4) throw new InvalidOperationException("Explosion VFX must contain Flash/FireballBody/Sparks/Smoke systems.");
+                    if (systems.Length != 5) throw new InvalidOperationException("Explosion VFX must contain exactly Flash/FireballBody/Sparks/Smoke/BlastRadiusCue systems.");
                     var emitted = 0;
                     ParticleSystem flash = null;
                     ParticleSystem fire = null;
                     ParticleSystem sparks = null;
                     ParticleSystem smoke = null;
+                    ParticleSystem blastRadiusCue = null;
+                    var systemNames = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < systems.Length; i++)
                     {
                         var system = systems[i];
+                        if (system == null || !systemNames.Add(system.name)) throw new InvalidOperationException("Explosion VFX system names must be unique and exact.");
                         if (system.name == "Flash") flash = system;
                         else if (system.name == "FireballBody") fire = system;
                         else if (system.name == "Sparks") sparks = system;
-                        if (system.name == "Smoke") smoke = system;
-                        if (system.name != "Flash" && system.name != "FireballBody" && system.name != "Sparks" && system.name != "Smoke") throw new InvalidOperationException("Unknown explosion system: " + system.name);
+                        else if (system.name == "Smoke") smoke = system;
+                        else if (system.name == "BlastRadiusCue") blastRadiusCue = system;
+                        else throw new InvalidOperationException("Unknown explosion system: " + system.name);
                         var emission = system.emission;
                         var bursts = new ParticleSystem.Burst[emission.burstCount];
                         emission.GetBursts(bursts);
@@ -2007,10 +2032,10 @@ namespace RocketFooxball.Editor
                         var sheet = system.textureSheetAnimation;
                         if (!sheet.enabled || sheet.numTilesX != 4 || sheet.numTilesY != 4 || sheet.animation != ParticleSystemAnimationType.WholeSheet) throw new InvalidOperationException("Explosion texture-sheet contract invalid: " + system.name);
                     }
-                    if (emitted != 37) throw new InvalidOperationException("Explosion burst count must total 37.");
-                    if (flash == null || fire == null || sparks == null || smoke == null ||
-                        fire.emission.burstCount != 1 || sparks.emission.burstCount != 1 || smoke.emission.burstCount != 1 ||
-                        GetBurstParticleCount(fire) != 20 || GetBurstParticleCount(sparks) != 10 || GetBurstParticleCount(smoke) != 6 ||
+                    if (systemNames.Count != 5 || emitted != 38) throw new InvalidOperationException("Explosion VFX must contain the exact five systems and total 38 burst particles.");
+                    if (flash == null || fire == null || sparks == null || smoke == null || blastRadiusCue == null ||
+                        fire.emission.burstCount != 1 || sparks.emission.burstCount != 1 || smoke.emission.burstCount != 1 || blastRadiusCue.emission.burstCount != 1 ||
+                        GetBurstParticleCount(fire) != 20 || GetBurstParticleCount(sparks) != 10 || GetBurstParticleCount(smoke) != 6 || GetBurstParticleCount(blastRadiusCue) != 1 ||
                         Mathf.Abs(flash.main.startLifetime.constantMax - 0.13f) > 0.01f || Mathf.Abs(fire.main.startLifetime.constantMin - 0.40f) > 0.01f ||
                         Mathf.Abs(fire.main.startLifetime.constantMax - 0.56f) > 0.01f || Mathf.Abs(sparks.main.startLifetime.constantMin - 0.20f) > 0.01f ||
                         Mathf.Abs(sparks.main.startLifetime.constantMax - 0.32f) > 0.01f || Mathf.Abs(smoke.main.startLifetime.constantMin - 0.62f) > 0.01f ||
@@ -2034,21 +2059,52 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Explosion VFX tuning contract invalid.");
                     }
-                    var renderer = prefab.GetComponentsInChildren<Renderer>(true);
-                    for (var i = 0; i < renderer.Length; i++) if (renderer[i].GetComponent<Collider>() != null || renderer[i].GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Explosion VFX must not contain physics.");
+                    var cueMain = blastRadiusCue.main;
+                    var cueRenderer = blastRadiusCue.GetComponent<ParticleSystemRenderer>();
+                    var cueSize = blastRadiusCue.sizeOverLifetime;
+                    var cueSizeCurve = cueSize.size.curve;
+                    var cueSizeKeys = cueSizeCurve == null ? Array.Empty<Keyframe>() : cueSizeCurve.keys;
+                    var cueGradient = blastRadiusCue.colorOverLifetime.color.gradient;
+                    var cueAlphaKeys = cueGradient == null ? Array.Empty<GradientAlphaKey>() : cueGradient.alphaKeys;
+                    var cuePeakAlpha = 0f;
+                    for (var i = 0; i < cueAlphaKeys.Length; i++) cuePeakAlpha = Mathf.Max(cuePeakAlpha, cueAlphaKeys[i].alpha);
+                    if (cueMain.startLifetime.constantMin < 0.279f || cueMain.startLifetime.constantMax > 0.281f ||
+                        cueMain.startSpeed.constantMin != 0f || cueMain.startSpeed.constantMax != 0f ||
+                        Mathf.Abs(cueMain.startSize.constantMin - 9f) > 0.001f || Mathf.Abs(cueMain.startSize.constantMax - 9f) > 0.001f ||
+                        Mathf.Abs(cueMain.startSize.constantMin - ExplosionVfx.ReferenceVisualDiameter) > 0.001f ||
+                        Vector3.Distance(blastRadiusCue.transform.localPosition, Vector3.zero) > 0.001f || Quaternion.Angle(blastRadiusCue.transform.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(blastRadiusCue.transform.localScale, Vector3.one) > 0.001f ||
+                        cueMain.maxParticles != 1 || cueMain.loop || cueMain.playOnAwake || !blastRadiusCue.emission.enabled ||
+                        cueMain.simulationSpace != ParticleSystemSimulationSpace.Local || cueMain.scalingMode != ParticleSystemScalingMode.Hierarchy ||
+                        !cueSize.enabled || cueSize.size.mode != ParticleSystemCurveMode.Curve || Mathf.Abs(cueSize.size.curveMultiplier - 1f) > 0.001f ||
+                        cueSizeKeys.Length != 2 || Mathf.Abs(cueSizeKeys[0].time) > 0.001f || Mathf.Abs(cueSizeKeys[0].value - 0.15f) > 0.001f ||
+                        Mathf.Abs(cueSizeKeys[1].time - 1f) > 0.001f || Mathf.Abs(cueSizeKeys[1].value - 1f) > 0.001f ||
+                        cueRenderer == null || cueRenderer.renderMode != ParticleSystemRenderMode.HorizontalBillboard ||
+                        cueRenderer.alignment != ParticleSystemRenderSpace.World || cueRenderer.sortingOrder != 3 ||
+                        blastRadiusCue.useAutoRandomSeed || blastRadiusCue.randomSeed != 0xF005u || blastRadiusCue.shape.enabled ||
+                        cueGradient == null || !GradientColorsMatch(cueGradient, new[] { Color.white, Color.white }) || cueAlphaKeys.Length < 2 ||
+                        cueAlphaKeys[0].time > 0.001f || cueAlphaKeys[cueAlphaKeys.Length - 1].time < 0.999f ||
+                        Mathf.Abs(cueAlphaKeys[cueAlphaKeys.Length - 1].alpha) > 0.001f || cuePeakAlpha > 0.22f)
+                    {
+                        throw new InvalidOperationException("Explosion BlastRadiusCue tuning contract invalid.");
+                    }
+                    if (prefab.GetComponentsInChildren<Collider>(true).Length != 0 || prefab.GetComponentsInChildren<Rigidbody>(true).Length != 0)
+                        throw new InvalidOperationException("Explosion VFX must not contain physics.");
                     if (prefab.GetComponentsInChildren<Light>(true).Length != 0) throw new InvalidOperationException("Explosion VFX must not contain lights.");
                     var flashMaterial = flash.GetComponent<ParticleSystemRenderer>().sharedMaterial;
                     var sparksMaterial = sparks.GetComponent<ParticleSystemRenderer>().sharedMaterial;
                     var expectedFlashMaterial = AssetDatabase.LoadAssetAtPath<Material>(ExplosionAdditiveMaterialPath);
                     var expectedSparksMaterial = AssetDatabase.LoadAssetAtPath<Material>(ExplosionSparksMaterialPath);
-                    if (flashMaterial != expectedFlashMaterial || sparksMaterial != expectedSparksMaterial || fire.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Explosion.mat") || smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Smoke.mat") ||
+                    var expectedExplosionMaterial = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Explosion.mat");
+                    if (flashMaterial != expectedFlashMaterial || sparksMaterial != expectedSparksMaterial || fire.GetComponent<ParticleSystemRenderer>().sharedMaterial != expectedExplosionMaterial || blastRadiusCue.GetComponent<ParticleSystemRenderer>().sharedMaterial != expectedExplosionMaterial || smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Smoke.mat") ||
+                        expectedExplosionMaterial == null || expectedExplosionMaterial.shader == null || expectedExplosionMaterial.shader.name != "RocketFooxball/RetroParticle" ||
                         flashMaterial == null || sparksMaterial == null || flashMaterial.shader == null || sparksMaterial.shader == null || flashMaterial.shader.name != "RocketFooxball/RetroAdditiveParticle" || sparksMaterial.shader.name != "RocketFooxball/RetroAdditiveParticle" || Mathf.Abs(flashMaterial.GetFloat("_Intensity") - 3.0f) > 0.001f || Mathf.Abs(sparksMaterial.GetFloat("_Intensity") - 2.0f) > 0.001f)
                     {
                         throw new InvalidOperationException("Explosion material routing/intensity contract invalid.");
                     }
                     var serialized = new SerializedObject(effect);
                     var configured = serialized.FindProperty("particleSystems");
-                    if (configured == null || !configured.isArray || configured.arraySize != 4) throw new InvalidOperationException("ExplosionVfx.particleSystems must contain four systems.");
+                    if (configured == null || !configured.isArray || configured.arraySize != 5) throw new InvalidOperationException("ExplosionVfx.particleSystems must contain five systems.");
                 }
 
                 internal static int GetBurstParticleCount(ParticleSystem system)

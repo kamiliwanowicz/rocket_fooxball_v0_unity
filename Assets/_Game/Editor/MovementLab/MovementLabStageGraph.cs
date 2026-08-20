@@ -66,13 +66,13 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:3";
-        private const string MaterialContract = "material-prefab-contract:10";
+        private const string MaterialContract = "material-prefab-contract:11";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
         private const string GameplayContract = "gameplay-scene-contract:15";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
-        private const string LightingContract = "lighting-contract:4";
+        private const string LightingContract = "lighting-contract:5";
         private const string BakedContract = "baked-output-contract:4";
 
         // Development can deterministically omit only lightmap variants 3/4;
@@ -102,7 +102,7 @@ namespace RocketFooxball.Editor
                 MovementLabContractCatalog.GeneratedImporterMetadataPaths, includeUnityVersion: true),
             new StageDefinition(MovementLabStage.MaterialPrefab, new[] { MovementLabStage.Importer }, Array.Empty<MovementLabStage>(),
                 MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
-                WithMetas(new[]
+                Concat(new[] { "Tools/Blender/generate_retro_textures.py" }, WithMetas(new[]
                 {
                     MovementLabContract.InputActionsPath,
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
@@ -137,7 +137,7 @@ namespace RocketFooxball.Editor
                       ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
                       ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs"
                       ,"Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
-                 }), MovementLabContract.ImportedAssetPaths,
+                  })), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
                 GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
