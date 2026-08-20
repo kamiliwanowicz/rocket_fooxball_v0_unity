@@ -32,6 +32,9 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
+                private const float ProductionAmbientIntensity = 1.4f;
+                private const float ProductionSunShadowStrength = 0.82f;
+
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
                 // asset are authored by the lighting-owned pipeline methods
@@ -54,7 +57,7 @@ namespace RocketFooxball.Editor
                     sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
                     sun.lightmapBakeType = LightmapBakeType.Mixed;
                     sun.shadows = LightShadows.Soft;
-                    sun.shadowStrength = 1f;
+                    sun.shadowStrength = ProductionSunShadowStrength;
                     sun.shadowBias = 0.05f;
                     sun.shadowNormalBias = 0.4f;
                     sun.cullingMask = -1;
@@ -68,7 +71,7 @@ namespace RocketFooxball.Editor
                     RenderSettings.skybox = skyMaterial;
                     RenderSettings.sun = sun;
                     RenderSettings.ambientMode = AmbientMode.Skybox;
-                    RenderSettings.ambientIntensity = 1f;
+                    RenderSettings.ambientIntensity = ProductionAmbientIntensity;
                     RenderSettings.fog = true;
                     RenderSettings.fogColor = SkyHorizonColor;
                     RenderSettings.fogMode = FogMode.Linear;
@@ -373,8 +376,9 @@ namespace RocketFooxball.Editor
                     if (sun == null || sunData == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - 1.1f) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
-                        sun.color != SunColor || Mathf.Abs(sun.shadowStrength - 1f) > 0.001f ||
-                        Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
+                        sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
+                        Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f ||
+                        Mathf.Abs(RenderSettings.ambientIntensity - ProductionAmbientIntensity) > 0.001f)
                     {
                         throw new InvalidOperationException("MovementLab mixed sun contract invalid.");
                     }
