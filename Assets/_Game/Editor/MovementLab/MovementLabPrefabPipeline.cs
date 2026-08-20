@@ -253,7 +253,7 @@ namespace RocketFooxball.Editor
                     SetObjectReference(launcher, "aimCamera", camera);
                     SetObjectReference(launcher, "spawnPoint", muzzle);
                      SetObjectReference(launcher, "projectilePrefab", rocketPrefab.GetComponent<RocketProjectile>());
-                     SetFloat(launcher, "firingInterval", 0.70f);
+                     SetFloat(launcher, "firingInterval", 0.90f);
                      SetObjectReference(shotgun, "input", input);
                      SetObjectReference(shotgun, "look", look);
                      SetObjectReference(shotgun, "aimCamera", camera);

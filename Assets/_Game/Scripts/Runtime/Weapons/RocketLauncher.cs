@@ -21,7 +21,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private ParticipantState ownerParticipant;
 
         [Header("Firing")]
-        [SerializeField, Min(0.05f)] private float firingInterval = 0.70f;
+        [SerializeField, Min(0.05f)] private float firingInterval = 0.90f;
         [SerializeField, Min(0f)] private float spawnOffset = 0.35f;
 
         private readonly List<RocketProjectile> activeProjectiles = new List<RocketProjectile>(16);

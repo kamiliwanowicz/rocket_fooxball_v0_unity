@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Runtime.Ball
@@ -30,6 +31,7 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField, Min(0f)] private float meaningfulContactSpeedThreshold = 1f;
 
         private const float Epsilon = 0.000001f;
+        private const float AdditionalGravityFraction = 0.2f;
         private Vector3 queuedContactAssistImpulse;
         private Vector3 queuedExternalImpulse;
         private bool groundedContact;
@@ -132,6 +134,12 @@ namespace RocketFooxball.Runtime.Ball
             if (queuedImpulse.sqrMagnitude > Epsilon)
             {
                 body.AddForce(queuedImpulse, ForceMode.Impulse);
+            }
+
+            // Supported balls keep normal sleep behaviour instead of being woken by a force every step.
+            if (!grounded && !body.IsSleeping())
+            {
+                body.AddForce(Vector3.down * (GamePhysicsSettings.GravityMagnitude * AdditionalGravityFraction), ForceMode.Acceleration);
             }
 
             if (grounded)

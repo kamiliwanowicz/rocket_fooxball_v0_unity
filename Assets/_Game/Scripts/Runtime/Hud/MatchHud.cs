@@ -147,6 +147,8 @@ namespace RocketFooxball.Runtime.Hud
         private GUIStyle titleStyle;
         private GUIStyle bigStyle;
         private GUIStyle tableHeaderStyle;
+        private GUIStyle tableHeaderNumberStyle;
+        private GUIStyle tableNumberStyle;
         private GUIStyle buttonStyle;
         private GUIStyle healthFillStyle;
 
@@ -469,7 +471,12 @@ namespace RocketFooxball.Runtime.Hud
             var x = rect.x + 30f;
             var y = rect.y + 22f;
             var width = rect.width - 60f;
-            DrawText(new Rect(x, y, width, 38f), "PLAYER                         GOALS       FRAGS       DEATHS", tableHeaderStyle, Color.white);
+            var playerWidth = width * 0.58f;
+            var numberWidth = (width - playerWidth) / 3f;
+            DrawText(new Rect(x, y, playerWidth, 38f), "PLAYER", tableHeaderStyle, Color.white);
+            DrawText(new Rect(x + playerWidth, y, numberWidth, 38f), "GOALS", tableHeaderNumberStyle, Color.white);
+            DrawText(new Rect(x + playerWidth + numberWidth, y, numberWidth, 38f), "FRAGS", tableHeaderNumberStyle, Color.white);
+            DrawText(new Rect(x + playerWidth + numberWidth * 2f, y, numberWidth, 38f), "DEATHS", tableHeaderNumberStyle, Color.white);
             y += 52f;
             for (var i = 0; i < TableRowCount; i++)
             {
@@ -480,11 +487,11 @@ namespace RocketFooxball.Runtime.Hud
                     playerName = "YOU  " + playerName;
                 }
 
-                var rowText = TeamMarker(stats.Team) + " " + playerName.PadRight(31) +
-                              stats.Goals.ToString().PadLeft(7) +
-                              stats.Frags.ToString().PadLeft(13) +
-                              stats.Deaths.ToString().PadLeft(14);
-                DrawText(new Rect(x, y, width, 42f), rowText, labelStyle, TeamColor(stats.Team));
+                var color = TeamColor(stats.Team);
+                DrawText(new Rect(x, y, playerWidth, 42f), TeamMarker(stats.Team) + " " + playerName, labelStyle, color);
+                DrawText(new Rect(x + playerWidth, y, numberWidth, 42f), stats.Goals.ToString(), tableNumberStyle, color);
+                DrawText(new Rect(x + playerWidth + numberWidth, y, numberWidth, 42f), stats.Frags.ToString(), tableNumberStyle, color);
+                DrawText(new Rect(x + playerWidth + numberWidth * 2f, y, numberWidth, 42f), stats.Deaths.ToString(), tableNumberStyle, color);
                 y += 52f;
             }
         }
@@ -763,6 +770,14 @@ namespace RocketFooxball.Runtime.Hud
             {
                 fontSize = 22,
                 fontStyle = FontStyle.Bold
+            };
+            tableHeaderNumberStyle = new GUIStyle(tableHeaderStyle)
+            {
+                alignment = TextAnchor.MiddleCenter
+            };
+            tableNumberStyle = new GUIStyle(labelStyle)
+            {
+                alignment = TextAnchor.MiddleCenter
             };
             buttonStyle = new GUIStyle(GUI.skin.button)
             {
