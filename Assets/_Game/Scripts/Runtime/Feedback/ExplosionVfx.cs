@@ -72,7 +72,8 @@ namespace RocketFooxball.Runtime.Feedback
             }
             if (flash != null)
             {
-                flash.main.startColor = GetFlashColor(team);
+                var flashMain = flash.main;
+                flashMain.startColor = GetFlashColor(team);
             }
 
             for (var i = 0; i < systems.Length; i++)
