@@ -2105,6 +2105,22 @@ namespace RocketFooxball.Editor
                     var serialized = new SerializedObject(effect);
                     var configured = serialized.FindProperty("particleSystems");
                     if (configured == null || !configured.isArray || configured.arraySize != 5) throw new InvalidOperationException("ExplosionVfx.particleSystems must contain five systems.");
+                    var expectedSystems = new[] { flash, fire, sparks, smoke, blastRadiusCue };
+                    for (var i = 0; i < expectedSystems.Length; i++)
+                    {
+                        var expectedSystem = expectedSystems[i];
+                        var configuredElement = configured.GetArrayElementAtIndex(i);
+                        var configuredSystem = configuredElement.propertyType == SerializedPropertyType.ObjectReference
+                            ? configuredElement.objectReferenceValue as ParticleSystem
+                            : null;
+                        if (configuredSystem == null || configuredSystem != expectedSystem)
+                        {
+                            throw new InvalidOperationException("ExplosionVfx.particleSystems[" + i + "] must reference the ordered " + expectedSystem.name + " system.");
+                        }
+
+                        ValidatePrefabReference(effect, "particleSystems.Array.data[" + i + "]", expectedSystem,
+                            "ExplosionVfx.particleSystems[" + i + "]");
+                    }
                 }
 
                 internal static int GetBurstParticleCount(ParticleSystem system)
