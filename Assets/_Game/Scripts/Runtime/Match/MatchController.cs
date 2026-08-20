@@ -40,8 +40,9 @@ namespace RocketFooxball.Runtime.Match
 
         [Header("Match Timing")]
         [SerializeField, Min(0.1f)] private float matchDuration = 300f;
+        [FormerlySerializedAs("goalSummaryDuration")]
         [FormerlySerializedAs("goalFreezeDuration")]
-        [SerializeField, Min(0f)] private float goalSummaryDuration = 3f;
+        [SerializeField, Min(0f)] private float goalCelebrationOrbitDuration = 3f;
         [SerializeField, Min(0f)] private float kickoffCountdownDuration = 3f;
 
         [Header("Reset")]
@@ -141,6 +142,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void OnDisable()
         {
+            localParticipant?.Input?.CancelAnyButtonPress();
             if (northGoal != null)
             {
                 northGoal.GoalCrossed -= OnGoalCrossed;
@@ -173,10 +175,9 @@ namespace RocketFooxball.Runtime.Match
                     break;
                 }
                 case MatchRules.MatchState.GoalFreeze:
-                    phaseRemaining = MatchRules.AdvancePhase(phaseRemaining, Time.unscaledDeltaTime);
-                    if (phaseRemaining <= 0f)
+                    if (localParticipant?.Input?.ConsumeAnyButtonPress() == true)
                     {
-                        CompleteGoalSummary();
+                        DismissGoalFreeze();
                     }
                     break;
                 case MatchRules.MatchState.OpeningCountdown:
@@ -241,14 +242,20 @@ namespace RocketFooxball.Runtime.Match
             hasLastGoalSummary = true;
             StatsChanged?.Invoke();
 
-            SetState(MatchRules.MatchState.GoalFreeze);
-            phaseRemaining = Mathf.Max(goalSummaryDuration, 0f);
-            ApplyGameplayGate(false);
-            DestroyAllProjectiles();
-            GetCameraFeedback()?.BeginGoalCelebration(phaseRemaining);
+            EnterGoalFreeze();
         }
 
-        private void CompleteGoalSummary()
+        private void EnterGoalFreeze()
+        {
+            SetState(MatchRules.MatchState.GoalFreeze);
+            phaseRemaining = 0f;
+            ApplyGameplayGate(false);
+            DestroyAllProjectiles();
+            GetCameraFeedback()?.BeginGoalCelebration(Mathf.Max(goalCelebrationOrbitDuration, 0f));
+            localParticipant?.Input?.ArmAnyButtonPress();
+        }
+
+        private void DismissGoalFreeze()
         {
             PerformCoordinatedReset(MatchResetReason.Goal);
             SetCountdown(MatchRules.MatchState.KickoffCountdown);
@@ -456,6 +463,7 @@ namespace RocketFooxball.Runtime.Match
                 return false;
             }
 
+            localParticipant?.Input?.CancelAnyButtonPress();
             ExitRequested?.Invoke();
             Application.Quit();
             return true;
@@ -475,6 +483,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void PerformCoordinatedReset(MatchResetReason reason)
         {
+            localParticipant?.Input?.CancelAnyButtonPress();
             ClearMatchPause();
             SetState(MatchRules.MatchState.Reset, true);
             phaseRemaining = 0f;
