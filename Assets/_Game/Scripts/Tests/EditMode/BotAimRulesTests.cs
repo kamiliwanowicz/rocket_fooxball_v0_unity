@@ -69,5 +69,66 @@ namespace RocketFooxball.Tests.EditMode
                 0,
                 0).IsValid, Is.False);
         }
+
+        [Test]
+        public void AerialMissOffsetIsStablePerDecisionAndPerpendicularWithFixedMagnitude()
+        {
+            const int slotId = 2;
+            const int ordinal = 11;
+            var origin = new Vector3(1f, 2f, 3f);
+            var ball = new Vector3(12f, 8f, -4f);
+            var first = BotAimRules.GetAerialMissOffset(
+                BotDifficulty.Medium,
+                origin,
+                ball,
+                false,
+                slotId,
+                ordinal);
+            var second = BotAimRules.GetAerialMissOffset(
+                BotDifficulty.Medium,
+                origin,
+                ball,
+                false,
+                slotId,
+                ordinal);
+
+            Assert.That(second, Is.EqualTo(first));
+            if (first.sqrMagnitude > 0f)
+            {
+                var axis = (ball - origin).normalized;
+                Assert.That(Vector3.Dot(first.normalized, axis), Is.EqualTo(0f).Within(0.0001f));
+                Assert.That(first.magnitude, Is.EqualTo(7f).Within(0.0001f));
+            }
+            Assert.That(BotAimRules.GetAerialMissOffset(
+                BotDifficulty.Medium,
+                origin,
+                ball,
+                true,
+                slotId,
+                ordinal), Is.EqualTo(Vector3.zero));
+        }
+
+        [Test]
+        public void DirectAndInterceptAimCanReuseTheSameBallOffset()
+        {
+            var origin = Vector3.zero;
+            var target = new Vector3(0f, 2f, 10f);
+            var offset = new Vector3(3f, 0f, 0f);
+            var direct = BotAimRules.SolveDirectAim(origin, target, offset, 0f, 0, 0);
+            var intercept = BotAimRules.SolveInterceptAim(
+                origin,
+                target,
+                Vector3.zero,
+                offset,
+                20f,
+                0f,
+                0f,
+                0,
+                0);
+
+            Assert.That(direct.IsValid, Is.True);
+            Assert.That(intercept.IsValid, Is.True);
+            Assert.That(intercept.Direction, Is.EqualTo(direct.Direction));
+        }
     }
 }

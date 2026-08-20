@@ -8,10 +8,20 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void DifficultyTuplesAreExactAndUnknownFallsBackToMedium()
         {
-            AssertParameters(BotDifficulty.Low, 0.45f, 0.35f, 0.12f, 7f, 0.35f);
-            AssertParameters(BotDifficulty.Medium, 0.22f, 0.20f, 0.06f, 3f, 0.15f);
-            AssertParameters(BotDifficulty.High, 0.10f, 0.12f, 0.03f, 1.5f, 0.06f);
-            AssertParameters((BotDifficulty)99, 0.22f, 0.20f, 0.06f, 3f, 0.15f);
+            AssertParameters(BotDifficulty.Low, 0.45f, 0.35f, 0.12f, 7f, 0.35f, 0.70f, 8f);
+            AssertParameters(BotDifficulty.Medium, 0.22f, 0.20f, 0.06f, 3f, 0.15f, 0.50f, 7f);
+            AssertParameters(BotDifficulty.High, 0.10f, 0.12f, 0.03f, 1.5f, 0.06f, 0.30f, 6f);
+            AssertParameters((BotDifficulty)99, 0.22f, 0.20f, 0.06f, 3f, 0.15f, 0.50f, 7f);
+        }
+
+        [Test]
+        public void AerialMissRollUsesItsOwnStableChannel()
+        {
+            var first = BotDifficultyRules.ShouldMissAerialBall(BotDifficulty.Low, 4, 8);
+            var second = BotDifficultyRules.ShouldMissAerialBall(BotDifficulty.Low, 4, 8);
+            Assert.That(second, Is.EqualTo(first));
+            Assert.That(BotDifficultyRules.StableHash(4, 8, BotSampleChannel.AerialMissRoll),
+                Is.Not.EqualTo(BotDifficultyRules.StableHash(4, 8, BotSampleChannel.AerialMissAzimuth)));
         }
 
         [Test]
@@ -47,7 +57,9 @@ namespace RocketFooxball.Tests.EditMode
             float decision,
             float jitter,
             float noise,
-            float prediction)
+            float prediction,
+            float aerialChance,
+            float aerialMagnitude)
         {
             var actual = BotDifficultyRules.GetParameters(difficulty);
             Assert.That(actual.ReactionSeconds, Is.EqualTo(reaction));
@@ -55,6 +67,8 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(actual.ScheduleJitterSeconds, Is.EqualTo(jitter));
             Assert.That(actual.AimNoiseDegrees, Is.EqualTo(noise));
             Assert.That(actual.PredictionErrorFraction, Is.EqualTo(prediction));
+            Assert.That(actual.AerialMissChance, Is.EqualTo(aerialChance));
+            Assert.That(actual.AerialMissMagnitude, Is.EqualTo(aerialMagnitude));
         }
     }
 }
