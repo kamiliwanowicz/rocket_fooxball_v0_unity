@@ -140,6 +140,7 @@ namespace RocketFooxball.Runtime.Bots
         public const float ExpectedControllerSkinWidth = 0.08f;
         public const float ExpectedControllerEffectiveRadius = ExpectedControllerRadius - ExpectedControllerSkinWidth;
         public const float ExpectedControllerClearance = ExpectedControllerEffectiveRadius;
+        public const float ExpectedRocketJumpGroundProbeDistance = 8f;
         public const float ExpectedGoalRecessSafeRadius = 1f;
         public const float ExpectedArenaHalfLength = 65f;
         public const float ExpectedArenaHalfWidth = 45f;

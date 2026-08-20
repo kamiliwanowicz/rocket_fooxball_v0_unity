@@ -146,6 +146,38 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void GraphValidationAndFindPathShareEffectiveRadiusBoundary()
+        {
+            var graphObject = new GameObject("BotNavigationEffectiveRadiusBoundaryGraph");
+            try
+            {
+                var nodes = new[]
+                {
+                    new BotNavigationNodeRecord(0, Vector3.zero, BotNavigationArea.Floor, 0.72f),
+                    new BotNavigationNodeRecord(1, new Vector3(0.5f, 0f, 0f), BotNavigationArea.Floor, 0.72f)
+                };
+                var edges = new[]
+                {
+                    new BotNavigationEdgeRecord(0, 0, 1, BotNavigationTraversal.Walk, 0.5f, 0.72f, null)
+                };
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                SetPrivateField(graph, "nodes", nodes);
+                SetPrivateField(graph, "edges", edges);
+
+                Assert.That(graph.TryValidate(out var graphReason), Is.True, graphReason);
+                Assert.That(
+                    Find(nodes, edges, 0, 1, new[] { true }, 2, out var path, out var pathCount, out _),
+                    Is.EqualTo(BotPathStatus.Success));
+                Assert.That(pathCount, Is.EqualTo(2));
+                Assert.That(path, Is.EqualTo(new[] { 0, 1 }));
+            }
+            finally
+            {
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        [Test]
         public void DoubledControllerAndArenaContractsExposeExactGeometry()
         {
             Assert.That(BotNavigationGraph.ExpectedControllerRadius, Is.EqualTo(0.8f));
@@ -153,7 +185,26 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(BotNavigationGraph.ExpectedControllerCenter, Is.EqualTo(new Vector3(0f, 1.8f, 0f)));
             Assert.That(BotNavigationGraph.ExpectedControllerSkinWidth, Is.EqualTo(0.08f));
             Assert.That(BotNavigationGraph.ExpectedControllerEffectiveRadius, Is.EqualTo(0.72f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance, Is.EqualTo(8f));
             Assert.That(BotNavigationGraph.ExpectedGoalRecessSafeRadius, Is.EqualTo(1f));
+
+            var botObject = new GameObject("BotNavigationRocketJumpProbeContractTest");
+            try
+            {
+                botObject.SetActive(false);
+                var bot = botObject.AddComponent<BotController>();
+                var jumpProbeField = typeof(BotController).GetField(
+                    "jumpProbeDistance",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(jumpProbeField, Is.Not.Null);
+                Assert.That(
+                    (float)jumpProbeField.GetValue(bot),
+                    Is.EqualTo(BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance).Within(0.0001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(botObject);
+            }
 
             var graphObject = new GameObject("BotNavigationContractTestGraph");
             try

@@ -14,7 +14,7 @@ namespace RocketFooxball.Runtime.Bots
     public sealed class BotController : MonoBehaviour
     {
         private const float ExpectedMaxPitchDegrees = 89f;
-        private const float ExpectedJumpProbeDistance = 4f;
+        private const float ExpectedJumpProbeDistance = BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance;
         private const float ObservationMemorySeconds = 1.5f;
         private const float EmergencyCrossingWindowSeconds = 2.5f;
         private const float EmergencyTowardGoalSpeed = 0.5f;
@@ -33,7 +33,7 @@ namespace RocketFooxball.Runtime.Bots
         private const int MaxPickupCandidates = 5;
         private const float CombatTargetDistanceEpsilon = 0.05f;
         private const string CompositionError =
-            "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, and exact 89-degree/4-meter tuning.";
+            "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, and exact 89-degree/8-meter tuning.";
 
         [Header("References")]
         [SerializeField] private ParticipantState participant;
