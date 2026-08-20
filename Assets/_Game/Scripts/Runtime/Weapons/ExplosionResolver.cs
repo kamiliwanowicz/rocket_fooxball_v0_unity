@@ -47,6 +47,7 @@ namespace RocketFooxball.Runtime.Weapons
         {
             explosionVfxSpawner?.Play(origin);
             targets.Clear();
+            var sourceParticipant = source != null ? source.OwnerParticipant : null;
 
             var overlapCount = UnityEngine.Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
             AddImpactTarget(impactCollider, origin);
@@ -72,8 +73,8 @@ namespace RocketFooxball.Runtime.Weapons
                 }
             }
 
-            DispatchPlayers(origin, impactCollider, source != null ? source.OwnerParticipant : null);
-            DispatchBalls(origin, impactCollider);
+            DispatchPlayers(origin, impactCollider, sourceParticipant);
+            DispatchBalls(origin, impactCollider, sourceParticipant);
         }
 
         private void AddImpactTarget(Collider impactCollider, Vector3 origin)
@@ -130,7 +131,7 @@ namespace RocketFooxball.Runtime.Weapons
             }
         }
 
-        private void DispatchBalls(Vector3 origin, Collider impactCollider)
+        private void DispatchBalls(Vector3 origin, Collider impactCollider, ParticipantState sourceParticipant)
         {
             for (var i = 0; i < targets.BallCount; i++)
             {
@@ -146,7 +147,10 @@ namespace RocketFooxball.Runtime.Weapons
                 var target = targets.GetBall(i);
                 if (BlastMath.TryGetBallDirection(target.transform.position, closestPoint, origin, out var direction))
                 {
-                    target.QueueImpulse(direction * (ballImpulseStrength * strength));
+                    if (target.QueueImpulse(direction * (ballImpulseStrength * strength)))
+                    {
+                        target.RecordParticipantTouch(sourceParticipant);
+                    }
                 }
             }
         }

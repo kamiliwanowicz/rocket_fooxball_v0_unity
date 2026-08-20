@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Diagnostics;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
@@ -224,9 +225,12 @@ namespace RocketFooxball.Editor
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                         SetVector3(match, "resetLookTarget", Vector3.zero);
-                        BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
-                        BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
-                        BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
+                        var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                        var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                        var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
+                        var pickups = healthPickups.Cast<ArenaPickup>().Concat(shotgunPickups).Concat(ammoPickups).ToArray();
+                        MovementLabBotPipeline.ComposeScene(participantStates, match, ballMotor, pickups,
+                            arena.NorthGoal.Trigger, arena.SouthGoal.Trigger, arena.NorthGoal.Shield, arena.SouthGoal.Shield);
                         var hud = new GameObject("DebugHUD");
                         var hudComponent = hud.AddComponent<MovementDebugHud>();
                         SetObjectReference(hudComponent, "player", playerMotor);
@@ -331,11 +335,12 @@ namespace RocketFooxball.Editor
                     return asset;
                 }
 
-                private static void BuildHealthPickupInstances(GameObject healthPickupPrefab, MatchController match)
+                private static HealthPickup[] BuildHealthPickupInstances(GameObject healthPickupPrefab, MatchController match)
                 {
                     if (healthPickupPrefab == null) throw new InvalidOperationException("Health pickup prefab is required for scene composition.");
                     if (match == null) throw new InvalidOperationException("MatchController is required for health pickup scene wiring.");
                     var root = new GameObject(HealthPickupsRootName);
+                    var result = new HealthPickup[HealthPickupSpawns.Length];
                     for (var i = 0; i < HealthPickupSpawns.Length; i++)
                     {
                         var definition = HealthPickupSpawns[i];
@@ -347,14 +352,17 @@ namespace RocketFooxball.Editor
                         var pickup = instance.GetComponent<HealthPickup>();
                         if (pickup == null) throw new InvalidOperationException("Health pickup prefab has no HealthPickup component: " + definition.Name);
                         SetObjectReference(pickup, "match", match);
+                        result[i] = pickup;
                     }
+                    return result;
                 }
 
-                private static void BuildShotgunPickupInstances(GameObject shotgunPickupPrefab, MatchController match)
+                private static ShotgunPickup[] BuildShotgunPickupInstances(GameObject shotgunPickupPrefab, MatchController match)
                 {
                     if (shotgunPickupPrefab == null) throw new InvalidOperationException("Shotgun pickup prefab is required for scene composition.");
                     if (match == null) throw new InvalidOperationException("MatchController is required for shotgun pickup scene wiring.");
                     var root = new GameObject(ShotgunPickupsRootName);
+                    var result = new ShotgunPickup[ShotgunPickupSpawns.Length];
                     for (var i = 0; i < ShotgunPickupSpawns.Length; i++)
                     {
                         var definition = ShotgunPickupSpawns[i];
@@ -366,14 +374,17 @@ namespace RocketFooxball.Editor
                         var pickup = instance.GetComponent<ShotgunPickup>();
                         if (pickup == null) throw new InvalidOperationException("Shotgun pickup prefab has no ShotgunPickup component: " + definition.Name);
                         SetObjectReference(pickup, "match", match);
+                        result[i] = pickup;
                     }
+                    return result;
                 }
 
-                private static void BuildAmmoPickupInstances(GameObject ammoPickupPrefab, MatchController match)
+                private static AmmoPickup[] BuildAmmoPickupInstances(GameObject ammoPickupPrefab, MatchController match)
                 {
                     if (ammoPickupPrefab == null) throw new InvalidOperationException("Ammo pickup prefab is required for scene composition.");
                     if (match == null) throw new InvalidOperationException("MatchController is required for ammo pickup scene wiring.");
                     var root = new GameObject(AmmoPickupsRootName);
+                    var result = new AmmoPickup[AmmoPickupSpawns.Length];
                     for (var i = 0; i < AmmoPickupSpawns.Length; i++)
                     {
                         var definition = AmmoPickupSpawns[i];
@@ -385,7 +396,9 @@ namespace RocketFooxball.Editor
                         var pickup = instance.GetComponent<AmmoPickup>();
                         if (pickup == null) throw new InvalidOperationException("Ammo pickup prefab has no AmmoPickup component: " + definition.Name);
                         SetObjectReference(pickup, "match", match);
+                        result[i] = pickup;
                     }
+                    return result;
                 }
 
                 internal static void AssembleMovementLabUnstaged()
@@ -543,9 +556,12 @@ namespace RocketFooxball.Editor
                     SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                     SetVector3(match, "resetLookTarget", Vector3.zero);
-                    BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
-                    BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
-                    BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
+                    var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
+                    var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
+                    var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
+                    var pickups = healthPickups.Cast<ArenaPickup>().Concat(shotgunPickups).Concat(ammoPickups).ToArray();
+                    MovementLabBotPipeline.ComposeScene(participantStates, match, ballMotor, pickups,
+                        arena.NorthGoal.Trigger, arena.SouthGoal.Trigger, arena.NorthGoal.Shield, arena.SouthGoal.Shield);
 
                     var hud = new GameObject("DebugHUD");
                     var hudComponent = hud.AddComponent<MovementDebugHud>();

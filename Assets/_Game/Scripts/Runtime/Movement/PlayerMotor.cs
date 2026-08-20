@@ -56,6 +56,9 @@ namespace RocketFooxball.Runtime.Movement
         private CharacterController controller;
         private Vector3 velocity;
         private Vector3 queuedExternalImpulse;
+        private Vector2 requestedMove;
+        private bool moveIntentPending;
+        private bool jumpRequestPending;
         private Vector3 groundNormal = Vector3.up;
         private Vector3 groundNormalThisStep = Vector3.up;
         private float coyoteTimer;
@@ -70,6 +73,7 @@ namespace RocketFooxball.Runtime.Movement
         private Vector3 dashContribution;
         private Vector3 dashAim;
         private bool airDashAvailable = true;
+        private bool paused;
 
         /// <summary>Raised during CharacterController collision dispatch with actual contact data.</summary>
         public event Action<ControllerColliderHit> CollisionHit;
@@ -94,19 +98,37 @@ namespace RocketFooxball.Runtime.Movement
             controller = GetComponent<CharacterController>();
         }
 
+        private void OnDisable()
+        {
+            paused = false;
+            ClearProgrammaticInput();
+        }
+
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             if (controller == null)
             {
+                ClearProgrammaticInput();
                 return;
             }
 
             if (!simulationEnabled)
             {
+                ClearProgrammaticInput();
                 input?.ClearGameplayState();
                 queuedExternalImpulse = Vector3.zero;
                 return;
             }
+
+            var hasProgrammaticMove = moveIntentPending;
+            var programmaticMove = requestedMove;
+            var programmaticJump = jumpRequestPending;
+            ClearProgrammaticInput();
 
             var deltaTime = Time.fixedDeltaTime;
             var grounded = controller.isGrounded || hasGroundContact;
@@ -134,7 +156,8 @@ namespace RocketFooxball.Runtime.Movement
                 return;
             }
 
-            if (input != null && input.ConsumeJumpPressed())
+            var deviceJump = input != null && input.ConsumeJumpPressed();
+            if (programmaticJump || deviceJump)
             {
                 jumpBufferTimer = jumpBufferTime;
             }
@@ -149,7 +172,7 @@ namespace RocketFooxball.Runtime.Movement
             }
             jumpBufferTimer = Mathf.Max(jumpBufferTimer - deltaTime, 0f);
 
-            var move = input != null ? input.Move : Vector2.zero;
+            var move = hasProgrammaticMove ? programmaticMove : (input != null ? input.Move : Vector2.zero);
             var strafeDirection = Mathf.Abs(move.x) > 0.001f ? transform.right * Mathf.Sign(move.x) : Vector3.zero;
             var forwardDirection = Mathf.Abs(move.y) > 0.001f ? transform.forward * Mathf.Sign(move.y) : Vector3.zero;
             var jumpedThisStep = TryConsumeJump(grounded, strafeDirection + forwardDirection);
@@ -176,7 +199,7 @@ namespace RocketFooxball.Runtime.Movement
 
         private void OnControllerColliderHit(ControllerColliderHit hit)
         {
-            if (hit == null)
+            if (paused || hit == null)
             {
                 return;
             }
@@ -205,7 +228,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Queues an additive fixed-step impulse. Invalid or gated impulses are ignored.</summary>
         public void AddExternalImpulse(Vector3 impulse)
         {
-            if (!simulationEnabled || !IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
+            if (paused || !simulationEnabled || !IsFinite(impulse) || impulse.sqrMagnitude <= Epsilon)
             {
                 return;
             }
@@ -213,10 +236,35 @@ namespace RocketFooxball.Runtime.Movement
             queuedExternalImpulse += impulse;
         }
 
+        /// <summary>Queues the latest valid one-step movement intent.</summary>
+        public bool SetMoveIntent(Vector2 move)
+        {
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(move))
+            {
+                return false;
+            }
+
+            requestedMove = Vector2.ClampMagnitude(move, 1f);
+            moveIntentPending = true;
+            return true;
+        }
+
+        /// <summary>Queues one jump request for the next enabled fixed step.</summary>
+        public bool RequestJump()
+        {
+            if (paused || !isActiveAndEnabled || !simulationEnabled)
+            {
+                return false;
+            }
+
+            jumpRequestPending = true;
+            return true;
+        }
+
         /// <summary>Starts a bounded dash without replacing existing velocity.</summary>
         public bool TryStartDash(Vector3 aim)
         {
-            if (!simulationEnabled || dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            if (paused || !simulationEnabled || dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -253,7 +301,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Supplies current camera aim for fixed-step dash steering.</summary>
         public void SetDashAim(Vector3 aim)
         {
-            if (!dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
+            if (paused || !dashActive || !MovementMath.IsFinite(aim) || aim.sqrMagnitude <= Epsilon)
             {
                 return;
             }
@@ -264,7 +312,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Ends active dash and removes only requested tracked contribution.</summary>
         public void EndDash(DashEndReason reason, float retainedContributionFraction)
         {
-            if (!dashActive)
+            if (paused || !dashActive)
             {
                 return;
             }
@@ -279,10 +327,28 @@ namespace RocketFooxball.Runtime.Movement
             simulationEnabled = enabled;
             if (!enabled)
             {
+                paused = false;
                 EndDash(DashEndReason.SimulationDisabled, 1f);
                 queuedExternalImpulse = Vector3.zero;
+                ClearProgrammaticInput();
                 coyoteTimer = 0f;
                 jumpBufferTimer = 0f;
+                input?.ClearGameplayState();
+            }
+        }
+
+        /// <summary>Freezes fixed-step movement while preserving velocity, dash, timers, impulse, and ground state.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
+            {
+                ClearProgrammaticInput();
                 input?.ClearGameplayState();
             }
         }
@@ -292,6 +358,7 @@ namespace RocketFooxball.Runtime.Movement
         {
             EndDash(DashEndReason.SimulationDisabled, 1f);
             queuedExternalImpulse = Vector3.zero;
+            ClearProgrammaticInput();
             coyoteTimer = 0f;
             jumpBufferTimer = 0f;
             groundContactThisStep = false;
@@ -303,6 +370,7 @@ namespace RocketFooxball.Runtime.Movement
         /// <summary>Resets position, facing, velocity, jump buffers, impulses, and collision state.</summary>
         public void ResetState(Vector3 worldPosition, Quaternion worldRotation)
         {
+            paused = false;
             var wasControllerEnabled = controller != null && controller.enabled;
             if (controller != null && wasControllerEnabled)
             {
@@ -377,6 +445,13 @@ namespace RocketFooxball.Runtime.Movement
             dashDirection = Vector3.zero;
             dashContribution = Vector3.zero;
             dashAim = Vector3.zero;
+        }
+
+        private void ClearProgrammaticInput()
+        {
+            requestedMove = Vector2.zero;
+            moveIntentPending = false;
+            jumpRequestPending = false;
         }
 
         private void ApplyGroundMovement(Vector3 strafeDirection, Vector3 forwardDirection, Vector3 activeGroundNormal, float deltaTime)
@@ -510,6 +585,11 @@ namespace RocketFooxball.Runtime.Movement
         private static bool IsFinite(Vector3 value)
         {
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(Vector2 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y);
         }
 
         private static bool IsFinite(float value)

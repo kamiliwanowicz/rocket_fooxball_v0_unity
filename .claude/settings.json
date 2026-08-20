@@ -1,21 +1,14 @@
 {
   "hooks": {
-    "PreToolUse": [
+    "SessionStart": [
       {
-        "matcher": "Bash|PowerShell",
+        "matcher": "startup|resume|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
-            "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/Tools/Tests/Invoke-HarnessTests.ps1",
-              "-HookMode",
-              "PreToolUse"
-            ]
+            "command": "node \"${CLAUDE_PROJECT_DIR}/scripts/agent-context.mjs\"",
+            "statusMessage": "Loading AGENTS.md and project skills...",
+            "timeout": 15
           }
         ]
       }

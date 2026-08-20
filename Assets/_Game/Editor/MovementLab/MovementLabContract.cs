@@ -9,7 +9,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 5;
+        internal const int SerializedContractVersion = 6;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -183,6 +183,19 @@ namespace RocketFooxball.Editor
             TagManagerPath
         };
 
+        // T12 owns this complete generated inventory. The manifest remains an
+        // orchestration artifact and is intentionally excluded from stage
+        // fingerprints above.
+        internal static readonly string[] T12GameplaySceneOutputs =
+        {
+            ScenePath,
+            ManifestPath,
+            EditorBuildSettingsPath,
+            DynamicsManagerPath,
+            TimeManagerPath,
+            TagManagerPath
+        };
+
         internal static readonly string[] QualityOutputs =
         {
             GraphicsQualityConfigurator.HighPipelinePath,
@@ -206,6 +219,20 @@ namespace RocketFooxball.Editor
             BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
             BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr",
             LightingManifestPath
+        };
+
+        internal static readonly string[] T12ProductionBakeOutputs =
+        {
+            LightingSettingsPath,
+            VolumeProfilePath,
+            LightingManifestPath,
+            BakedLightingPath + "/LightingData.asset",
+            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
+            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
+            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
         };
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();

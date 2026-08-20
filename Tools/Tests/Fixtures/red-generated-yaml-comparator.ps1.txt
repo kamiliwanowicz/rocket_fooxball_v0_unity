@@ -3,3 +3,9 @@
 if ($explicitPathRequest -or $basePresent -ne $headPresent) {
     Write-Output '  semantic   NOT CHECKED'
 }
+
+# Historical red baseline also treated image/light data and unknown generated files as the same
+# unsupported bucket, with no byte/hash provenance, GUID evidence, or asset/.meta pair coverage.
+$coverageKind = 'unsupported binary'
+Write-Output '  kind       unsupported metadata'
+Write-Output 'COVERAGE: selected paths only'

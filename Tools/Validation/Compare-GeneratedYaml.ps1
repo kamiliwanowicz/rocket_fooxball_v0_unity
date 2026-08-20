@@ -1,5 +1,5 @@
 # Semantic comparison of builder-generated Unity YAML between two Git revisions.
-# Reads blobs through `git show` only; never touches the working tree.
+# Reads committed blobs through Git; reads working-tree files only when revision is `WORKTREE`.
 # Unity YAML is line-structured, so line/regex parsing is deliberate here: no general YAML parser.
 [CmdletBinding()]
 param(
@@ -148,6 +148,8 @@ function Test-AuthoritativeInventoryMember {
 function Get-PathCoverageKind {
     param([Parameter(Mandatory = $true)][string]$RelativePath)
 
+    if ($RelativePath -match '(?i)(^|/)LightingData\.asset$') { return 'binary provenance' }
+
     switch ([IO.Path]::GetExtension($RelativePath).ToLowerInvariant()) {
         '.unity' { return 'supported text' }
         '.prefab' { return 'supported text' }
@@ -155,8 +157,10 @@ function Get-PathCoverageKind {
         '.controller' { return 'supported text' }
         '.asset' { return 'supported text' }
         '.json' { return 'supported text' }
-        '.meta' { return 'unsupported metadata' }
-        default { return 'unsupported binary' }
+        '.meta' { return 'metadata' }
+        '.png' { return 'binary provenance' }
+        '.exr' { return 'binary provenance' }
+        default { return 'unsupported' }
     }
 }
 
@@ -201,6 +205,143 @@ function Get-BlobLines {
     $result = Invoke-GitCapture @('show', ($Revision + ':' + $RelativePath))
     if ($result.ExitCode -ne 0) { return $null }
     return ,@($result.Lines)
+}
+
+function Get-BlobProvenance {
+    param([Parameter(Mandatory = $true)][string]$Revision, [Parameter(Mandatory = $true)][string]$RelativePath)
+
+    if ($Revision -ceq 'WORKTREE') {
+        $full = Join-Path $script:RepoRoot $RelativePath
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { return $null }
+        $item = Get-Item -LiteralPath $full -ErrorAction Stop
+        $result = Invoke-GitCapture -Arguments @('hash-object', ('--path=' + $RelativePath), $full)
+        if ($result.ExitCode -ne 0 -or @($result.Lines).Count -ne 1) {
+            throw ('Unable to hash WORKTREE binary path: ' + $RelativePath)
+        }
+        return [pscustomobject]@{
+            Present = $true
+            Bytes = [int64]$item.Length
+            Identity = ([string]$result.Lines[0]).Trim()
+            Source = 'WORKTREE git hash-object --path=' + $RelativePath
+        }
+    }
+
+    $objectPath = $Revision + ':' + $RelativePath
+    $identityResult = Invoke-GitCapture -Arguments @('rev-parse', '--verify', $objectPath)
+    if ($identityResult.ExitCode -ne 0 -or @($identityResult.Lines).Count -ne 1) { return $null }
+    $sizeResult = Invoke-GitCapture -Arguments @('cat-file', '-s', $objectPath)
+    if ($sizeResult.ExitCode -ne 0 -or @($sizeResult.Lines).Count -ne 1) {
+        throw ('Unable to read committed binary size: ' + $objectPath)
+    }
+    return [pscustomobject]@{
+        Present = $true
+        Bytes = [int64]([string]$sizeResult.Lines[0]).Trim()
+        Identity = ([string]$identityResult.Lines[0]).Trim()
+        Source = $Revision + ':' + $RelativePath
+    }
+}
+
+function Get-MetadataAnalysis {
+    param([AllowNull()][AllowEmptyCollection()][string[]]$Lines)
+
+    if ($null -eq $Lines) {
+        return [pscustomobject]@{ Present = $false; Valid = $false; Guid = ''; MatchCount = 0 }
+    }
+    $text = $Lines -join "`n"
+    $guidMatches = @([regex]::Matches($text, '(?im)^\s*guid:\s*(\S*)\s*$'))
+    $guidValue = if ($guidMatches.Count -eq 1) { [string]$guidMatches[0].Groups[1].Value } else { '' }
+    $valid = $guidMatches.Count -eq 1 -and $guidValue -match '^[0-9a-fA-F]{32}$'
+    $guid = if ($valid) { $guidValue.ToLowerInvariant() } else { '' }
+    return [pscustomobject]@{
+        Present = $true
+        Valid = $valid
+        Guid = $guid
+        MatchCount = $guidMatches.Count
+    }
+}
+
+function Get-PartnerPath {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+    if ($RelativePath.EndsWith('.meta', [StringComparison]::OrdinalIgnoreCase)) {
+        return $RelativePath.Substring(0, $RelativePath.Length - 5)
+    }
+    return $RelativePath + '.meta'
+}
+
+function Test-AssetPairPath {
+    param([Parameter(Mandatory = $true)][string]$RelativePath)
+    $normalized = $RelativePath.Replace('\', '/')
+    return $normalized.StartsWith('Assets/', [StringComparison]::OrdinalIgnoreCase)
+}
+
+function Get-PairState {
+    param(
+        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$AssetPaths,
+        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$MetadataPaths,
+        [Parameter(Mandatory = $true)][string]$AssetPath
+    )
+    $assetPresent = $AssetPaths.Contains($AssetPath)
+    $metadataPresent = $MetadataPaths.Contains($AssetPath + '.meta')
+    if ($assetPresent -and $metadataPresent) { return 'both-present' }
+    if (-not $assetPresent -and -not $metadataPresent) { return 'both-absent' }
+    return 'one-sided'
+}
+
+function Get-PresentRevisionPathSet {
+    param(
+        [Parameter(Mandatory = $true)][string]$Revision,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Paths
+    )
+    $present = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($relative in $Paths) {
+        if ($Revision -ceq 'WORKTREE') {
+            $full = Join-Path $script:RepoRoot $relative
+            if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+        }
+        [void]$present.Add($relative)
+    }
+    return $present
+}
+
+function Get-GuidComparison {
+    param([Parameter(Mandatory = $true)]$Base, [Parameter(Mandatory = $true)]$Head)
+    if (-not $Base.Present -and -not $Head.Present) {
+        return [pscustomobject]@{ Status = 'none'; Detail = '' }
+    }
+    if (-not $Base.Present) {
+        $status = if ($Head.Valid) { 'added' } else { 'invalid' }
+        $detail = if ($Head.Valid) { 'added ' + $Head.Guid } else { 'invalid' }
+        return [pscustomobject]@{ Status = $status; Detail = $detail }
+    }
+    if (-not $Head.Present) {
+        $status = if ($Base.Valid) { 'removed' } else { 'invalid' }
+        $detail = if ($Base.Valid) { 'removed ' + $Base.Guid } else { 'invalid' }
+        return [pscustomobject]@{ Status = $status; Detail = $detail }
+    }
+    if (-not $Base.Valid -or -not $Head.Valid) {
+        return [pscustomobject]@{ Status = 'invalid'; Detail = 'invalid (expected exactly one 32-hex guid)' }
+    }
+    if ($Base.Guid -ceq $Head.Guid) {
+        return [pscustomobject]@{ Status = 'stable'; Detail = 'stable ' + $Head.Guid }
+    }
+    return [pscustomobject]@{ Status = 'churn'; Detail = 'churn ' + $Base.Guid + ' -> ' + $Head.Guid }
+}
+
+function Format-ByteDelta {
+    param([AllowNull()]$Base, [AllowNull()]$Head)
+    $baseText = if ($null -eq $Base) { 'absent' } else { [string]$Base.Bytes }
+    $headText = if ($null -eq $Head) { 'absent' } else { [string]$Head.Bytes }
+    if ($null -eq $Base -or $null -eq $Head) { return $baseText + ' -> ' + $headText }
+    $delta = $Head.Bytes - $Base.Bytes
+    $sign = if ($delta -gt 0) { '+' } else { '' }
+    return $baseText + ' -> ' + $headText + ' (' + $sign + $delta + ')'
+}
+
+function Format-IdentityDelta {
+    param([AllowNull()]$Base, [AllowNull()]$Head)
+    $baseText = if ($null -eq $Base) { 'absent' } else { [string]$Base.Identity }
+    $headText = if ($null -eq $Head) { 'absent' } else { [string]$Head.Identity }
+    return $baseText + ' -> ' + $headText
 }
 
 function Read-YamlDocuments {
@@ -729,12 +870,70 @@ $totalHeadDangling = 0
 $reportedPathCount = 0
 $semanticCheckedPathCount = 0
 $notCheckedPathCount = 0
+$unsupportedPathCount = 0
+$guidCounts = [ordered]@{ stable = 0; churn = 0; added = 0; removed = 0; invalid = 0 }
+$pairCounts = [ordered]@{ intact = 0; broken = 0 }
+
+$basePresentPathSet = Get-PresentRevisionPathSet $Base $basePaths
+$headPresentPathSet = Get-PresentRevisionPathSet $Head $headPaths
+$baseMetadataPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+$headMetadataPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($relative in $basePresentPathSet) {
+    if ($relative.EndsWith('.meta', [StringComparison]::OrdinalIgnoreCase)) { [void]$baseMetadataPathSet.Add($relative) }
+}
+foreach ($relative in $headPresentPathSet) {
+    if ($relative.EndsWith('.meta', [StringComparison]::OrdinalIgnoreCase)) { [void]$headMetadataPathSet.Add($relative) }
+}
+$pairMap = New-Object 'System.Collections.Generic.Dictionary[string,object]' ([StringComparer]::OrdinalIgnoreCase)
+foreach ($relative in $selected) {
+    $assetPath = if ($relative.EndsWith('.meta', [StringComparison]::OrdinalIgnoreCase)) { Get-PartnerPath $relative } else { [string]$relative }
+    if (-not $pairMap.ContainsKey($assetPath)) {
+        if (-not (Test-AssetPairPath $assetPath)) {
+            # ProjectSettings files are standalone Unity YAML and have no .meta partner.
+            $pairMap.Add($assetPath, [pscustomobject]@{
+                AssetPath = $assetPath
+                MetadataPath = ''
+                BaseState = 'not-applicable'
+                HeadState = 'not-applicable'
+                Status = 'not-applicable'
+                BaseMetadata = $null
+                HeadMetadata = $null
+                Guid = [pscustomobject]@{ Status = 'none'; Detail = '' }
+            })
+            continue
+        }
+        $metaPath = $assetPath + '.meta'
+        $baseMeta = Get-MetadataAnalysis (Get-BlobLines $Base $metaPath)
+        $headMeta = Get-MetadataAnalysis (Get-BlobLines $Head $metaPath)
+        $baseState = Get-PairState $basePresentPathSet $baseMetadataPathSet $assetPath
+        $headState = Get-PairState $headPresentPathSet $headMetadataPathSet $assetPath
+        $guid = Get-GuidComparison $baseMeta $headMeta
+        $pairStatus = if ($baseState -eq 'one-sided' -or $headState -eq 'one-sided') { 'broken' } else { 'intact' }
+        $pairMap.Add($assetPath, [pscustomobject]@{
+            AssetPath = $assetPath
+            MetadataPath = $metaPath
+            BaseState = $baseState
+            HeadState = $headState
+            Status = $pairStatus
+            BaseMetadata = $baseMeta
+            HeadMetadata = $headMeta
+            Guid = $guid
+        })
+        $pairCounts[$pairStatus] = $pairCounts[$pairStatus] + 1
+        if ($guid.Status -ne 'none') { $guidCounts[$guid.Status] = $guidCounts[$guid.Status] + 1 }
+    }
+}
 
 foreach ($relative in $selected) {
     $coverageKind = Get-PathCoverageKind $relative
-    if ($coverageKind -cne 'supported text') {
-        $basePresent = $basePathSet.Contains($relative)
-        $headPresent = $headPathSet.Contains($relative)
+    $basePresent = $basePresentPathSet.Contains($relative)
+    $headPresent = $headPresentPathSet.Contains($relative)
+    $assetPath = if ($relative.EndsWith('.meta', [StringComparison]::OrdinalIgnoreCase)) { Get-PartnerPath $relative } else { [string]$relative }
+    $pairInfo = $pairMap[$assetPath]
+
+    if ($coverageKind -ceq 'binary provenance') {
+        $baseBinary = Get-BlobProvenance $Base $relative
+        $headBinary = Get-BlobProvenance $Head $relative
         $reportedPathCount++
         $notCheckedPathCount++
         Write-Output ''
@@ -743,18 +942,71 @@ foreach ($relative in $selected) {
         Write-Output '  semantic   NOT CHECKED'
         if (-not $basePresent) { Write-Output '  presence   ADDED in head' }
         elseif (-not $headPresent) { Write-Output '  presence   REMOVED in head' }
+        else { Write-Output '  presence   present in both revisions' }
+        Write-Output ('  bytes      ' + (Format-ByteDelta $baseBinary $headBinary))
+        Write-Output ('  blob       ' + (Format-IdentityDelta $baseBinary $headBinary))
+        Write-Output ('  provenance ' + $(if ($null -eq $baseBinary -or $null -eq $headBinary) { 'presence change only' } elseif ($baseBinary.Identity -ceq $headBinary.Identity) { 'same (provenance only)' } else { 'changed (provenance only)' }))
+        Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
+        if ($pairInfo.Guid.Status -ne 'none') { Write-Output ('  guid       ' + $pairInfo.Guid.Detail) }
+        continue
+    }
+
+    if ($coverageKind -eq 'metadata') {
+        $baseMeta = $null
+        $headMeta = $null
+        $reportedPathCount++
+        $notCheckedPathCount++
+        Write-Output ''
+        Write-Output ('== ' + $relative)
+        Write-Output '  kind       metadata'
+        Write-Output '  semantic   NOT CHECKED'
+        if (-not $basePresent) { Write-Output '  presence   ADDED in head' }
+        elseif (-not $headPresent) { Write-Output '  presence   REMOVED in head' }
+        else { Write-Output '  presence   present in both revisions' }
+        if ($pairInfo.Status -ne 'not-applicable') {
+            $baseMeta = Get-MetadataAnalysis (Get-BlobLines $Base $relative)
+            $headMeta = Get-MetadataAnalysis (Get-BlobLines $Head $relative)
+            $metadataGuid = Get-GuidComparison $baseMeta $headMeta
+            if ($metadataGuid.Status -ne 'none') { Write-Output ('  guid       ' + $metadataGuid.Detail) }
+        }
+        Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
         continue
     }
 
     $baseAnalysis = Get-Analysis (Get-BlobLines $Base $relative)
     $headAnalysis = Get-Analysis (Get-BlobLines $Head $relative)
-    if ($null -eq $baseAnalysis -and $null -eq $headAnalysis) { continue }
+    if ($coverageKind -eq 'unsupported') {
+        $reportedPathCount++
+        $notCheckedPathCount++
+        $unsupportedPathCount++
+        Write-Output ''
+        Write-Output ('== ' + $relative)
+        Write-Output '  kind       unsupported'
+        Write-Output '  semantic   NOT CHECKED'
+        if (-not $basePresent) { Write-Output '  presence   ADDED in head' }
+        elseif (-not $headPresent) { Write-Output '  presence   REMOVED in head' }
+        else { Write-Output '  presence   present in both revisions' }
+        Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
+        if ($pairInfo.Guid.Status -ne 'none') { Write-Output ('  guid       ' + $pairInfo.Guid.Detail) }
+        continue
+    }
+
+    if ($null -eq $baseAnalysis -and $null -eq $headAnalysis) {
+        $reportedPathCount++
+        $notCheckedPathCount++
+        Write-Output ''
+        Write-Output ('== ' + $relative)
+        Write-Output '  kind       supported text'
+        Write-Output '  semantic   NOT CHECKED'
+        Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
+        continue
+    }
     $reportedPathCount++
     $semanticCheckedPathCount++
     Write-Output ''
     Write-Output ('== ' + $relative)
-    if ($null -eq $baseAnalysis) { Write-Output '  presence   ADDED in head'; $anyChanged = $true; $totalHeadDangling += $headAnalysis.Dangling; Write-Output ('  dangling   ' + $headAnalysis.Dangling); continue }
-    if ($null -eq $headAnalysis) { Write-Output '  presence   REMOVED in head'; $anyChanged = $true; $totalBaseDangling += $baseAnalysis.Dangling; continue }
+    if ($null -eq $baseAnalysis) { Write-Output '  kind       supported text'; Write-Output '  presence   ADDED in head'; Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')'); $anyChanged = $true; $totalHeadDangling += $headAnalysis.Dangling; Write-Output ('  dangling   ' + $headAnalysis.Dangling); continue }
+    if ($null -eq $headAnalysis) { Write-Output '  kind       supported text'; Write-Output '  presence   REMOVED in head'; Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')'); $anyChanged = $true; $totalBaseDangling += $baseAnalysis.Dangling; continue }
 
     $totalBaseDangling += $baseAnalysis.Dangling
     $totalHeadDangling += $headAnalysis.Dangling
@@ -764,6 +1016,8 @@ foreach ($relative in $selected) {
         Write-Output ('  kind       non-yaml text')
         Write-Output ('  lines      ' + (Format-Delta $baseAnalysis.DocCount $headAnalysis.DocCount))
         Write-Output ('  canonical  ' + $verdict)
+        Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
+        if ($pairInfo.Guid.Status -ne 'none') { Write-Output ('  guid       ' + $pairInfo.Guid.Detail) }
         if ($verdict -ceq 'CHANGED') { $anyChanged = $true }
         continue
     }
@@ -782,6 +1036,8 @@ foreach ($relative in $selected) {
     Write-Output ('  dangling   ' + (Format-Delta $baseAnalysis.Dangling $headAnalysis.Dangling))
     Write-Output ('  instances  ' + $baseAnalysis.Instances.Count + ' -> ' + $headAnalysis.Instances.Count + ', changed ' + $instanceChanges.Count)
     Write-Output ('  canonical  ' + $verdict)
+    Write-Output ('  pair       ' + $pairInfo.Status + ' (' + $pairInfo.BaseState + ' -> ' + $pairInfo.HeadState + ')')
+    if ($pairInfo.Guid.Status -ne 'none') { Write-Output ('  guid       ' + $pairInfo.Guid.Detail) }
 
     if ($VerbosePreference -ne 'SilentlyContinue') {
         Write-Output ('  docs       ' + (Format-Delta $baseAnalysis.DocCount $headAnalysis.DocCount))
@@ -801,6 +1057,9 @@ Write-Output ''
 Write-Output ('COVERAGE: ' + $reportedPathCount + '/' + $selected.Count + ' authoritative changed paths reported; semantic checked ' + $semanticCheckedPathCount + '; NOT CHECKED ' + $notCheckedPathCount)
 Write-Output ('SEMANTIC: ' + $(if ($anyChanged) { 'changed' } else { 'identical' }))
 Write-Output ('DANGLING: ' + $totalHeadDangling + ' (base ' + $totalBaseDangling + ')')
+Write-Output ('GUID: stable ' + $guidCounts.stable + '; churn ' + $guidCounts.churn + '; added ' + $guidCounts.added + '; removed ' + $guidCounts.removed + '; invalid ' + $guidCounts.invalid)
+Write-Output ('PAIRS: intact ' + $pairCounts.intact + '; broken ' + $pairCounts.broken)
+Write-Output ('UNSUPPORTED: ' + $unsupportedPathCount)
 
 if ($FailOnDangling -and $totalHeadDangling -gt $totalBaseDangling) { exit 1 }
 exit 0

@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using UnityEngine.Serialization;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Participants;
 
@@ -21,7 +22,9 @@ namespace RocketFooxball.Runtime.Match
             Reset = 2,
             OpeningCountdown = 3,
             KickoffCountdown = 4,
-            Final = 5
+            Final = 5,
+            Setup = 6,
+            Paused = 7
         }
 
         [Header("Roster")]
@@ -45,7 +48,7 @@ namespace RocketFooxball.Runtime.Match
         [SerializeField] private Vector3 ballResetPosition = new Vector3(0f, 2.16f, 0f);
         [SerializeField] private Vector3 resetLookTarget = Vector3.zero;
 
-        private MatchRules.MatchState state = MatchRules.MatchState.Reset;
+        private MatchRules.MatchState state = MatchRules.MatchState.Setup;
         private float matchTimeRemaining;
         private float phaseRemaining;
         private MatchParticipantStats[] stats = Array.Empty<MatchParticipantStats>();
@@ -56,6 +59,9 @@ namespace RocketFooxball.Runtime.Match
         private MatchOutcome outcome = MatchOutcome.InProgress;
         private MatchDecisionRule decisionRule = MatchDecisionRule.None;
         private bool compositionValid;
+        private BotDifficulty selectedEnemyDifficulty = BotDifficulty.Medium;
+        private BotDifficulty lockedEnemyDifficulty = BotDifficulty.Medium;
+        private bool difficultyLocked;
 
         public MatchState State => (MatchState)state;
         public bool GameplayEnabled => MatchRules.IsGameplayEnabled(state);
@@ -71,6 +77,9 @@ namespace RocketFooxball.Runtime.Match
         public bool HasLastGoalSummary => hasLastGoalSummary;
         public MatchOutcome Outcome => outcome;
         public MatchDecisionRule DecisionRule => decisionRule;
+        public BotDifficulty SelectedEnemyDifficulty => selectedEnemyDifficulty;
+        public BotDifficulty LockedEnemyDifficulty => lockedEnemyDifficulty;
+        public bool DifficultyLocked => difficultyLocked;
 
         // Compatibility surface used by the existing diagnostics HUD.
         public float FreezeRemaining => state == MatchRules.MatchState.GoalFreeze ? PhaseRemaining : 0f;
@@ -85,12 +94,16 @@ namespace RocketFooxball.Runtime.Match
         public event Action StatsChanged;
         public event Action<MatchResetReason> CoordinatedResetRequested;
         public event Action ExitRequested;
+        public event Action<bool> PauseChanged;
 
         private void Awake()
         {
             matchTimeRemaining = Mathf.Max(matchDuration, 0f);
             phaseRemaining = 0f;
-            state = MatchRules.MatchState.Reset;
+            state = MatchRules.MatchState.Setup;
+            selectedEnemyDifficulty = BotDifficulty.Medium;
+            lockedEnemyDifficulty = BotDifficulty.Medium;
+            difficultyLocked = false;
             compositionValid = ValidateComposition();
             if (!compositionValid)
             {
@@ -108,7 +121,7 @@ namespace RocketFooxball.Runtime.Match
                 return;
             }
 
-            BeginNewMatch(MatchResetReason.MatchStart);
+            EnterSetup(false);
         }
 
         private void OnEnable()
@@ -173,6 +186,9 @@ namespace RocketFooxball.Runtime.Match
                     {
                         EnterPlaying();
                     }
+                    break;
+                case MatchRules.MatchState.Setup:
+                case MatchRules.MatchState.Paused:
                     break;
             }
         }
@@ -262,6 +278,29 @@ namespace RocketFooxball.Runtime.Match
             StatsChanged?.Invoke();
         }
 
+        private void EnterSetup(bool clearPreviousMatch)
+        {
+            selectedEnemyDifficulty = BotDifficulty.Medium;
+            lockedEnemyDifficulty = BotDifficulty.Medium;
+            difficultyLocked = false;
+            matchTimeRemaining = Mathf.Max(matchDuration, 0f);
+            phaseRemaining = 0f;
+
+            if (clearPreviousMatch)
+            {
+                BlueGoals = 0;
+                RedGoals = 0;
+                ClearStats();
+                hasLastGoalSummary = false;
+                lastGoalSummary = default(MatchGoalSummary);
+                outcome = MatchOutcome.InProgress;
+                decisionRule = MatchDecisionRule.None;
+            }
+
+            SetState(MatchRules.MatchState.Setup);
+            ApplyGameplayGate(false);
+        }
+
         private void BeginNewMatch(MatchResetReason reason)
         {
             matchTimeRemaining = Mathf.Max(matchDuration, 0f);
@@ -299,10 +338,87 @@ namespace RocketFooxball.Runtime.Match
             FlowChanged?.Invoke((MatchState)next);
         }
 
+        public bool TrySelectEnemyDifficulty(BotDifficulty difficulty)
+        {
+            if (!compositionValid || !MatchRules.CanSelectEnemyDifficulty(state, difficultyLocked, difficulty))
+            {
+                return false;
+            }
+
+            selectedEnemyDifficulty = difficulty;
+            return true;
+        }
+
+        public bool TryStartConfiguredMatch()
+        {
+            if (!compositionValid || !MatchRules.CanStartConfiguredMatch(state, difficultyLocked, selectedEnemyDifficulty))
+            {
+                return false;
+            }
+
+            lockedEnemyDifficulty = selectedEnemyDifficulty;
+            difficultyLocked = true;
+            BeginNewMatch(MatchResetReason.MatchStart);
+            return true;
+        }
+
+        public bool TryPauseMatch()
+        {
+            if (!compositionValid || !MatchRules.CanPauseMatch(state, matchTimeRemaining))
+            {
+                return false;
+            }
+
+            SetState(MatchRules.MatchState.Paused);
+            SetGoalPollingEnabled(false);
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(true);
+                }
+            }
+            ball?.SetPaused(true);
+            PauseChanged?.Invoke(true);
+            return true;
+        }
+
+        public bool TryResumeMatch()
+        {
+            if (!compositionValid || !MatchRules.CanResumeMatch(state))
+            {
+                return false;
+            }
+
+            SetGoalPollingEnabled(true);
+            ball?.SetPaused(false);
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(false);
+                }
+            }
+            SetState(MatchRules.MatchState.Playing);
+            ReconcileParticipantCollisions();
+            PauseChanged?.Invoke(false);
+            return true;
+        }
+
+        public BotDifficulty GetBotDifficulty(ParticipantTeam participantTeam)
+        {
+            if (!difficultyLocked || localParticipant == null)
+            {
+                return BotDifficulty.Medium;
+            }
+
+            return MatchRules.ResolveBotDifficulty(participantTeam, localParticipant.Team, lockedEnemyDifficulty);
+        }
+
         /// <summary>Manual coordinated reset followed by kickoff countdown.</summary>
         public void ResetMatch()
         {
-            if (!compositionValid)
+            if (!compositionValid || state == MatchRules.MatchState.Setup || state == MatchRules.MatchState.Paused || state == MatchRules.MatchState.Final)
             {
                 return;
             }
@@ -311,10 +427,10 @@ namespace RocketFooxball.Runtime.Match
             SetCountdown(MatchRules.MatchState.KickoffCountdown);
         }
 
-        /// <summary>Starts a fresh match from any non-final state for legacy callers.</summary>
+        /// <summary>Starts a fresh match from active legacy flow states; setup, pause, and final are explicit flows.</summary>
         public void ResetMatchAndScore()
         {
-            if (!compositionValid)
+            if (!compositionValid || state == MatchRules.MatchState.Setup || state == MatchRules.MatchState.Paused || state == MatchRules.MatchState.Final)
             {
                 return;
             }
@@ -324,12 +440,12 @@ namespace RocketFooxball.Runtime.Match
 
         public bool TryStartRematch()
         {
-            if (!compositionValid || state != MatchRules.MatchState.Final)
+            if (!compositionValid || !MatchRules.CanStartRematch(state))
             {
                 return false;
             }
 
-            BeginNewMatch(MatchResetReason.Rematch);
+            EnterSetup(true);
             return true;
         }
 
@@ -359,6 +475,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void PerformCoordinatedReset(MatchResetReason reason)
         {
+            ClearMatchPause();
             SetState(MatchRules.MatchState.Reset, true);
             phaseRemaining = 0f;
             ApplyGameplayGate(false);
@@ -410,6 +527,31 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
             ball?.SetSimulationEnabled(enabled);
+        }
+
+        private void ClearMatchPause()
+        {
+            SetGoalPollingEnabled(true);
+            if (participants != null)
+            {
+                for (var i = 0; i < participants.Length; i++)
+                {
+                    participants[i]?.SetMatchPaused(false);
+                }
+            }
+            ball?.SetPaused(false);
+        }
+
+        private void SetGoalPollingEnabled(bool enabled)
+        {
+            if (northGoal != null)
+            {
+                northGoal.enabled = enabled;
+            }
+            if (southGoal != null)
+            {
+                southGoal.enabled = enabled;
+            }
         }
 
         private void DestroyAllProjectiles()

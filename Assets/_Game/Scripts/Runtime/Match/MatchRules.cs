@@ -1,4 +1,5 @@
 using System;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Participants;
 
 namespace RocketFooxball.Runtime.Match
@@ -14,7 +15,9 @@ namespace RocketFooxball.Runtime.Match
             Reset = 2,
             OpeningCountdown = 3,
             KickoffCountdown = 4,
-            Final = 5
+            Final = 5,
+            Setup = 6,
+            Paused = 7
         }
 
         /// <summary>Legacy goal result retained for diagnostics and older callers.</summary>
@@ -79,6 +82,59 @@ namespace RocketFooxball.Runtime.Match
         public static bool IsGameplayEnabled(MatchState state)
         {
             return state == MatchState.Playing;
+        }
+
+        public static bool IsSupportedDifficulty(BotDifficulty difficulty)
+        {
+            return difficulty == BotDifficulty.Low ||
+                   difficulty == BotDifficulty.Medium ||
+                   difficulty == BotDifficulty.High;
+        }
+
+        public static bool CanSelectEnemyDifficulty(MatchState state, bool difficultyLocked, BotDifficulty difficulty)
+        {
+            return state == MatchState.Setup && !difficultyLocked && IsSupportedDifficulty(difficulty);
+        }
+
+        public static bool CanStartConfiguredMatch(MatchState state, bool difficultyLocked, BotDifficulty difficulty)
+        {
+            return state == MatchState.Setup && !difficultyLocked && IsSupportedDifficulty(difficulty);
+        }
+
+        public static bool CanPauseMatch(MatchState state, float matchTimeRemaining)
+        {
+            return state == MatchState.Playing && matchTimeRemaining > 0f;
+        }
+
+        public static bool CanResumeMatch(MatchState state)
+        {
+            return state == MatchState.Paused;
+        }
+
+        public static bool CanStartRematch(MatchState state)
+        {
+            return state == MatchState.Final;
+        }
+
+        public static bool ShouldAdvancePausedTimer(MatchState state)
+        {
+            return state != MatchState.Paused;
+        }
+
+        public static BotDifficulty ResolveBotDifficulty(
+            ParticipantTeam participantTeam,
+            ParticipantTeam localTeam,
+            BotDifficulty lockedEnemyDifficulty)
+        {
+            if ((participantTeam != ParticipantTeam.Blue && participantTeam != ParticipantTeam.Red) ||
+                (localTeam != ParticipantTeam.Blue && localTeam != ParticipantTeam.Red) ||
+                participantTeam == localTeam ||
+                !IsSupportedDifficulty(lockedEnemyDifficulty))
+            {
+                return BotDifficulty.Medium;
+            }
+
+            return lockedEnemyDifficulty;
         }
 
         public static int CountdownNumber(MatchState state, float phaseRemaining)

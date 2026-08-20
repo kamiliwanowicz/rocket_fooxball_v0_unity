@@ -43,11 +43,12 @@ namespace RocketFooxball.Runtime.Weapons
         private readonly float[] participantDamage = new float[16];
         private float pumpRemaining;
         private bool simulationEnabled = true;
+        private bool paused;
         private bool requestPending;
         private Vector3 requestedOrigin;
         private Vector3 requestedDirection;
 
-        public bool CanFire => simulationEnabled && ownerParticipant != null && ownerParticipant.IsAlive &&
+        public bool CanFire => !paused && simulationEnabled && ownerParticipant != null && ownerParticipant.IsAlive &&
                                ownerParticipant.HasShotgun && ownerParticipant.ShotgunShells > 0 &&
                                pumpRemaining <= 0f;
         public float PumpRemaining => Mathf.Max(pumpRemaining, 0f);
@@ -83,11 +84,17 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnDisable()
         {
-            requestPending = false;
+            paused = false;
+            ClearProgrammaticRequest();
         }
 
         private void FixedUpdate()
         {
+            if (paused)
+            {
+                return;
+            }
+
             pumpRemaining = Mathf.Max(pumpRemaining - Time.fixedDeltaTime, 0f);
 
             var localRequest = input != null && input.ConsumeShotgunPressed();
@@ -100,15 +107,19 @@ namespace RocketFooxball.Runtime.Weapons
             // Every edge/request is one-shot, including an attempt while pumping,
             // empty, unowned, or simulation-disabled.
             var useProgrammaticRequest = requestPending;
+            var programmaticOrigin = requestedOrigin;
+            var programmaticDirection = requestedDirection;
             requestPending = false;
+            requestedOrigin = Vector3.zero;
+            requestedDirection = Vector3.zero;
 
             if (!CanFire)
             {
                 return;
             }
 
-            var origin = useProgrammaticRequest ? requestedOrigin : GetAimOrigin();
-            var direction = useProgrammaticRequest ? requestedDirection : GetAimDirection();
+            var origin = useProgrammaticRequest ? programmaticOrigin : GetAimOrigin();
+            var direction = useProgrammaticRequest ? programmaticDirection : GetAimDirection();
             if (!IsFinite(origin) || !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
             {
                 return;
@@ -128,7 +139,8 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Queues the latest valid programmatic one-slot fire request.</summary>
         public bool RequestFire(Vector3 origin, Vector3 direction)
         {
-            if (!IsFinite(origin) || !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
+            if (paused || !isActiveAndEnabled || !simulationEnabled || !IsFinite(origin) ||
+                !IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
             {
                 return false;
             }
@@ -142,17 +154,43 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Enables fixed-step firing without changing inventory state.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
+            if (!enabled)
+            {
+                paused = false;
+            }
+
             simulationEnabled = enabled;
             if (!enabled)
             {
-                requestPending = false;
+                ClearProgrammaticRequest();
+            }
+        }
+
+        /// <summary>Freezes firing while preserving pump timing and inventory.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+            if (paused)
+            {
+                ClearProgrammaticRequest();
             }
         }
 
         /// <summary>Clears pump timing and queued programmatic input for a reset.</summary>
         public void ResetState()
         {
+            paused = false;
             pumpRemaining = 0f;
+            ClearProgrammaticRequest();
+        }
+
+        private void ClearProgrammaticRequest()
+        {
             requestPending = false;
             requestedOrigin = Vector3.zero;
             requestedDirection = Vector3.zero;
@@ -248,7 +286,10 @@ namespace RocketFooxball.Runtime.Weapons
                 var impulse = ShotgunDamageRules.CalculateBallImpulse(accumulatedBallFalloff, ballImpulsePerPellet, ballImpulseCap);
                 if (impulse > 0f)
                 {
-                    ball.QueueImpulse(accumulatedBallDirection.normalized * impulse);
+                    if (ball.QueueImpulse(accumulatedBallDirection.normalized * impulse))
+                    {
+                        ball.RecordParticipantTouch(ownerParticipant);
+                    }
                 }
             }
 

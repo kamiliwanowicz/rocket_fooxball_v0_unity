@@ -32,6 +32,7 @@ namespace RocketFooxball.Runtime.Weapons
         private float lifeRemaining;
         private ProjectileState state;
         private bool simulationEnabled = true;
+        private bool paused;
         private bool unregistered;
         private readonly RaycastHit[] raycastBuffer = new RaycastHit[64];
 
@@ -43,6 +44,7 @@ namespace RocketFooxball.Runtime.Weapons
         public float Speed => speed;
         public bool IsDetonated => state == ProjectileState.Detonated;
         public ProjectileState State => state;
+        public bool Paused => paused;
 
         private void Awake()
         {
@@ -52,7 +54,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void FixedUpdate()
         {
-            if (!simulationEnabled || state != ProjectileState.Flying || body == null)
+            if (paused || !simulationEnabled || state != ProjectileState.Flying || body == null)
             {
                 return;
             }
@@ -78,7 +80,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnCollisionEnter(Collision collision)
         {
-            if (state != ProjectileState.Flying || collision == null || collision.collider == null)
+            if (paused || state != ProjectileState.Flying || collision == null || collision.collider == null)
             {
                 return;
             }
@@ -89,7 +91,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private void OnTriggerEnter(Collider other)
         {
-            if (state != ProjectileState.Flying)
+            if (paused || state != ProjectileState.Flying)
             {
                 return;
             }
@@ -108,6 +110,7 @@ namespace RocketFooxball.Runtime.Weapons
             flightDirection = direction.sqrMagnitude > 0.000001f ? direction.normalized : transform.forward;
             lifeRemaining = lifetime;
             state = ProjectileState.Flying;
+            paused = false;
             simulationEnabled = true;
             unregistered = false;
             ConfigureBody();
@@ -133,16 +136,32 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Stops flight without changing transform; launcher normally destroys rockets on freeze.</summary>
         public void SetSimulationEnabled(bool enabled)
         {
+            if (!enabled)
+            {
+                paused = false;
+            }
+
             if (state == ProjectileState.Flying)
             {
                 simulationEnabled = enabled;
             }
         }
 
+        /// <summary>Stops flight and lifetime updates without changing transform, velocity, or lifetime.</summary>
+        public void SetPaused(bool pausedState)
+        {
+            if (paused == pausedState)
+            {
+                return;
+            }
+
+            paused = pausedState;
+        }
+
         /// <summary>Requests one explosion and unregisters projectile before destruction.</summary>
         public bool TryDetonate(Collider hitCollider, Vector3 hitPoint, bool hasHitPoint)
         {
-            if (state != ProjectileState.Flying)
+            if (paused || state != ProjectileState.Flying)
             {
                 return false;
             }
@@ -170,6 +189,7 @@ namespace RocketFooxball.Runtime.Weapons
             }
 
             state = ProjectileState.Cancelled;
+            paused = false;
             simulationEnabled = false;
             UnregisterOnce();
         }

@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Bots;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Runtime.Hud
 {
@@ -18,7 +20,9 @@ namespace RocketFooxball.Runtime.Hud
         KickoffCountdown,
         OpeningRulesCountdown,
         GoalSummary,
-        Final
+        Final,
+        Setup,
+        Paused
     }
 
     /// <summary>Pure presentation priority. Match and participant owners remain mutable-state owners.</summary>
@@ -33,6 +37,14 @@ namespace RocketFooxball.Runtime.Hud
             if (state == MatchController.MatchState.Final)
             {
                 return MatchHudScreen.Final;
+            }
+            if (state == MatchController.MatchState.Setup)
+            {
+                return MatchHudScreen.Setup;
+            }
+            if (state == MatchController.MatchState.Paused)
+            {
+                return MatchHudScreen.Paused;
             }
             if (state == MatchController.MatchState.GoalFreeze)
             {
@@ -92,9 +104,13 @@ namespace RocketFooxball.Runtime.Hud
         private bool previousStateInitialized;
         private MatchController.MatchState previousState;
         private float goRemaining;
+        private ShotgunWeapon localShotgun;
+        private float hitMarkerRemaining;
         private bool finalCursorOverride;
         private CursorLockMode previousCursorLockState;
         private bool previousCursorVisible;
+        private bool cursorEdgeInitialized;
+        private bool previousCursorCaptured;
 
         private MatchController.MatchState frameState;
         private float frameMatchTimeRemaining;
@@ -113,10 +129,16 @@ namespace RocketFooxball.Runtime.Hud
         private bool frameLocalImmune;
         private bool frameTableHeld;
         private bool frameGoVisible;
+        private bool frameHasShotgun;
+        private int frameShotgunShells;
+        private bool frameHitMarkerVisible;
         private bool frameHasGoalSummary;
         private MatchGoalSummary frameGoalSummary;
         private MatchOutcome frameOutcome;
         private MatchDecisionRule frameDecisionRule;
+        private BotDifficulty frameSelectedEnemyDifficulty;
+        private BotDifficulty frameLockedEnemyDifficulty;
+        private bool frameDifficultyLocked;
 
         private GUIStyle panelStyle;
         private GUIStyle labelStyle;
@@ -125,6 +147,8 @@ namespace RocketFooxball.Runtime.Hud
         private GUIStyle titleStyle;
         private GUIStyle bigStyle;
         private GUIStyle tableHeaderStyle;
+        private GUIStyle tableHeaderNumberStyle;
+        private GUIStyle tableNumberStyle;
         private GUIStyle buttonStyle;
         private GUIStyle healthFillStyle;
 
@@ -140,6 +164,7 @@ namespace RocketFooxball.Runtime.Hud
 
             previousState = match.State;
             previousStateInitialized = true;
+            localShotgun = localParticipant.Shotgun;
         }
 
         private void OnEnable()
@@ -149,7 +174,14 @@ namespace RocketFooxball.Runtime.Hud
                 return;
             }
 
+            localShotgun = localParticipant.Shotgun;
             localParticipant.Died += OnLocalParticipantDied;
+            if (localShotgun != null)
+            {
+                localShotgun.HitConfirmed += OnShotgunHitConfirmed;
+            }
+            cursorEdgeInitialized = input != null;
+            previousCursorCaptured = input != null && input.CursorCaptured;
         }
 
         private void OnDisable()
@@ -158,8 +190,14 @@ namespace RocketFooxball.Runtime.Hud
             {
                 localParticipant.Died -= OnLocalParticipantDied;
             }
+            if (localShotgun != null)
+            {
+                localShotgun.HitConfirmed -= OnShotgunHitConfirmed;
+            }
 
             RestoreFinalCursorOverride();
+            cursorEdgeInitialized = false;
+            previousCursorCaptured = false;
         }
 
         private void Update()
@@ -182,8 +220,33 @@ namespace RocketFooxball.Runtime.Hud
                 goRemaining = GoDuration;
             }
 
+            var cursorCaptured = input.CursorCaptured;
+            if (!cursorEdgeInitialized)
+            {
+                previousCursorCaptured = cursorCaptured;
+                cursorEdgeInitialized = true;
+            }
+            else
+            {
+                var cursorReleased = previousCursorCaptured && !cursorCaptured;
+                previousCursorCaptured = cursorCaptured;
+                if (state == MatchController.MatchState.Playing && cursorReleased)
+                {
+                    match.TryPauseMatch();
+                    state = match.State;
+                }
+            }
+
             previousState = state;
-            UpdateFinalCursorOverride(state == MatchController.MatchState.Final);
+            UpdateFinalCursorOverride(
+                state == MatchController.MatchState.Setup ||
+                state == MatchController.MatchState.Paused ||
+                state == MatchController.MatchState.Final);
+
+            if (hitMarkerRemaining > 0f)
+            {
+                hitMarkerRemaining = Mathf.Max(hitMarkerRemaining - Time.unscaledDeltaTime, 0f);
+            }
 
             if (localParticipant.IsAlive)
             {
@@ -217,10 +280,16 @@ namespace RocketFooxball.Runtime.Hud
             frameLocalImmune = localParticipant.IsImmune;
             frameTableHeld = input.MatchTableHeld;
             frameGoVisible = goRemaining > 0f;
+            frameHasShotgun = localParticipant.HasShotgun;
+            frameShotgunShells = localParticipant.ShotgunShells;
+            frameHitMarkerVisible = hitMarkerRemaining > 0f;
             frameHasGoalSummary = match.HasLastGoalSummary;
             frameGoalSummary = match.LastGoalSummary;
             frameOutcome = match.Outcome;
             frameDecisionRule = match.DecisionRule;
+            frameSelectedEnemyDifficulty = match.SelectedEnemyDifficulty;
+            frameLockedEnemyDifficulty = match.LockedEnemyDifficulty;
+            frameDifficultyLocked = match.DifficultyLocked;
 
             var sourceStats = match.ParticipantStats;
             for (var i = 0; i < TableRowCount; i++)
@@ -231,6 +300,11 @@ namespace RocketFooxball.Runtime.Hud
             }
 
             frameValid = true;
+        }
+
+        private void OnShotgunHitConfirmed()
+        {
+            hitMarkerRemaining = 0.18f;
         }
 
         private void OnLocalParticipantDied(ParticipantDeathEvent death)
@@ -292,12 +366,26 @@ namespace RocketFooxball.Runtime.Hud
                 case MatchHudScreen.OpeningRulesCountdown:
                     DrawCountdown("MATCH START", "MOST GOALS WINS", true);
                     break;
+                case MatchHudScreen.Setup:
+                    DrawSetup();
+                    break;
+                case MatchHudScreen.Paused:
+                    DrawPaused();
+                    break;
                 case MatchHudScreen.GoalSummary:
                     DrawGoalSummary();
                     break;
                 case MatchHudScreen.Final:
                     DrawFinal();
                     break;
+            }
+
+            if (frameHitMarkerVisible && frameLocalAlive &&
+                (screen == MatchHudScreen.Live ||
+                 screen == MatchHudScreen.MatchTable ||
+                 screen == MatchHudScreen.Go))
+            {
+                DrawHitMarker();
             }
 
             GUI.matrix = previousMatrix;
@@ -310,6 +398,7 @@ namespace RocketFooxball.Runtime.Hud
             DrawTeamScore(new Rect(300f, 46f, 160f, 34f), ParticipantTeam.Blue, frameBlueGoals);
             DrawTeamScore(new Rect(465f, 46f, 160f, 34f), ParticipantTeam.Red, frameRedGoals);
             DrawHealth();
+            DrawShotgunWidget();
 
             if (frameLocalImmune)
             {
@@ -319,6 +408,26 @@ namespace RocketFooxball.Runtime.Hud
                     headingStyle,
                     new Color(0.35f, 0.95f, 1f));
             }
+        }
+
+        private void DrawShotgunWidget()
+        {
+            var shells = Mathf.Max(frameShotgunShells, 0);
+            if (!frameHasShotgun && shells == 0)
+            {
+                return;
+            }
+
+            var color = frameHasShotgun && shells > 0
+                ? Color.white
+                : new Color(0.55f, 0.6f, 0.68f);
+            DrawPanel(new Rect(1370f, 930f, 514f, 112f));
+            DrawText(new Rect(1392f, 944f, 470f, 70f), "SHOTGUN " + shells, headingStyle, color);
+        }
+
+        private void DrawHitMarker()
+        {
+            DrawText(new Rect(840f, 420f, 240f, 240f), "X", bigStyle, Color.white);
         }
 
         private void DrawHealth()
@@ -362,7 +471,12 @@ namespace RocketFooxball.Runtime.Hud
             var x = rect.x + 30f;
             var y = rect.y + 22f;
             var width = rect.width - 60f;
-            DrawText(new Rect(x, y, width, 38f), "PLAYER                         GOALS       FRAGS       DEATHS", tableHeaderStyle, Color.white);
+            var playerWidth = width * 0.58f;
+            var numberWidth = (width - playerWidth) / 3f;
+            DrawText(new Rect(x, y, playerWidth, 38f), "PLAYER", tableHeaderStyle, Color.white);
+            DrawText(new Rect(x + playerWidth, y, numberWidth, 38f), "GOALS", tableHeaderNumberStyle, Color.white);
+            DrawText(new Rect(x + playerWidth + numberWidth, y, numberWidth, 38f), "FRAGS", tableHeaderNumberStyle, Color.white);
+            DrawText(new Rect(x + playerWidth + numberWidth * 2f, y, numberWidth, 38f), "DEATHS", tableHeaderNumberStyle, Color.white);
             y += 52f;
             for (var i = 0; i < TableRowCount; i++)
             {
@@ -373,11 +487,11 @@ namespace RocketFooxball.Runtime.Hud
                     playerName = "YOU  " + playerName;
                 }
 
-                var rowText = TeamMarker(stats.Team) + " " + playerName.PadRight(31) +
-                              stats.Goals.ToString().PadLeft(7) +
-                              stats.Frags.ToString().PadLeft(13) +
-                              stats.Deaths.ToString().PadLeft(14);
-                DrawText(new Rect(x, y, width, 42f), rowText, labelStyle, TeamColor(stats.Team));
+                var color = TeamColor(stats.Team);
+                DrawText(new Rect(x, y, playerWidth, 42f), TeamMarker(stats.Team) + " " + playerName, labelStyle, color);
+                DrawText(new Rect(x + playerWidth, y, numberWidth, 42f), stats.Goals.ToString(), tableNumberStyle, color);
+                DrawText(new Rect(x + playerWidth + numberWidth, y, numberWidth, 42f), stats.Frags.ToString(), tableNumberStyle, color);
+                DrawText(new Rect(x + playerWidth + numberWidth * 2f, y, numberWidth, 42f), stats.Deaths.ToString(), tableNumberStyle, color);
                 y += 52f;
             }
         }
@@ -400,6 +514,54 @@ namespace RocketFooxball.Runtime.Hud
                 DrawText(new Rect(470f, 620f, 980f, 42f), "MOST GOALS WINS", headingStyle, new Color(0.35f, 0.75f, 1f));
                 DrawText(new Rect(470f, 670f, 980f, 42f), "GOALS TIED — DECIDED BY TEAM FRAGS", headingStyle, new Color(1f, 0.35f, 0.35f));
                 DrawText(new Rect(470f, 720f, 980f, 42f), "EQUAL GOALS AND TEAM FRAGS — DRAW", smallStyle, Color.white);
+            }
+        }
+
+        private void DrawSetup()
+        {
+            DrawPanel(new Rect(390f, 170f, 1140f, 740f));
+            DrawText(new Rect(450f, 225f, 1020f, 72f), "MATCH SETUP", titleStyle, Color.white);
+            DrawText(new Rect(450f, 320f, 1020f, 42f), "ENEMY BOT DIFFICULTY", headingStyle, new Color(0.7f, 0.82f, 0.95f));
+
+            if (GUI.Button(new Rect(500f, 405f, 280f, 78f), "LOW", buttonStyle))
+            {
+                match.TrySelectEnemyDifficulty(BotDifficulty.Low);
+            }
+            if (GUI.Button(new Rect(820f, 405f, 280f, 78f), "MEDIUM", buttonStyle))
+            {
+                match.TrySelectEnemyDifficulty(BotDifficulty.Medium);
+            }
+            if (GUI.Button(new Rect(1140f, 405f, 280f, 78f), "HIGH", buttonStyle))
+            {
+                match.TrySelectEnemyDifficulty(BotDifficulty.High);
+            }
+
+            DrawText(
+                new Rect(450f, 535f, 1020f, 52f),
+                "SELECTED  " + DifficultyName(frameSelectedEnemyDifficulty),
+                headingStyle,
+                TeamColor(ParticipantTeam.Red));
+
+            if (GUI.Button(new Rect(760f, 680f, 400f, 88f), "START", buttonStyle) && match.TryStartConfiguredMatch())
+            {
+                RestoreFinalCursorOverrideForGameplay();
+            }
+        }
+
+        private void DrawPaused()
+        {
+            DrawPanel(new Rect(510f, 250f, 900f, 580f));
+            DrawText(new Rect(580f, 325f, 760f, 72f), "PAUSED", titleStyle, Color.white);
+            DrawText(new Rect(580f, 445f, 760f, 48f), "ENEMY BOT DIFFICULTY", headingStyle, new Color(0.7f, 0.82f, 0.95f));
+            DrawText(
+                new Rect(580f, 515f, 760f, 52f),
+                "LOCKED  " + DifficultyName(frameDifficultyLocked ? frameLockedEnemyDifficulty : BotDifficulty.Medium),
+                headingStyle,
+                TeamColor(ParticipantTeam.Red));
+
+            if (GUI.Button(new Rect(760f, 665f, 400f, 88f), "RESUME", buttonStyle) && match.TryResumeMatch())
+            {
+                RestoreFinalCursorOverrideForGameplay();
             }
         }
 
@@ -609,6 +771,14 @@ namespace RocketFooxball.Runtime.Hud
                 fontSize = 22,
                 fontStyle = FontStyle.Bold
             };
+            tableHeaderNumberStyle = new GUIStyle(tableHeaderStyle)
+            {
+                alignment = TextAnchor.MiddleCenter
+            };
+            tableNumberStyle = new GUIStyle(labelStyle)
+            {
+                alignment = TextAnchor.MiddleCenter
+            };
             buttonStyle = new GUIStyle(GUI.skin.button)
             {
                 fontSize = 24,
@@ -671,6 +841,19 @@ namespace RocketFooxball.Runtime.Hud
             return team == ParticipantTeam.Blue ? "BLUE" : "RED";
         }
 
+        private static string DifficultyName(BotDifficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case BotDifficulty.Low:
+                    return "LOW";
+                case BotDifficulty.High:
+                    return "HIGH";
+                default:
+                    return "MEDIUM";
+            }
+        }
+
         private static Color TeamColor(ParticipantTeam team)
         {
             return team == ParticipantTeam.Blue
@@ -682,16 +865,15 @@ namespace RocketFooxball.Runtime.Hud
         {
             if (shouldOverride)
             {
-                if (finalCursorOverride)
+                if (!finalCursorOverride)
                 {
-                    return;
+                    previousCursorLockState = Cursor.lockState;
+                    previousCursorVisible = Cursor.visible;
+                    finalCursorOverride = true;
                 }
 
-                previousCursorLockState = Cursor.lockState;
-                previousCursorVisible = Cursor.visible;
                 Cursor.lockState = CursorLockMode.None;
                 Cursor.visible = true;
-                finalCursorOverride = true;
                 return;
             }
 
@@ -708,6 +890,13 @@ namespace RocketFooxball.Runtime.Hud
             Cursor.lockState = previousCursorLockState;
             Cursor.visible = previousCursorVisible;
             finalCursorOverride = false;
+        }
+
+        private void RestoreFinalCursorOverrideForGameplay()
+        {
+            RestoreFinalCursorOverride();
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
 }

@@ -18,6 +18,12 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 - Spend effort on issues likely to break playtests, builds, integration, project assets, or iteration speed.
 - Defer broad abstraction, speculative future-proofing, production hardening, exhaustive edge-case handling, and untargeted polish unless required for core-loop reliability or explicitly requested.
 
+## Instruction issues
+
+- Trigger: `AGENTS.md` rule or orchestration instruction unclear, contradictory, infeasible, or causing orchestration issues.
+- Action: flag user clearly. Never silently bypass.
+- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification.
+
 ## Repository map
 
 Layout is discoverable by convention; list directories instead of trusting any enumeration here.
@@ -53,13 +59,13 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Prefer `MovementLabBuilder` or Unity Editor APIs over direct serialized-YAML edits.
 - Prefer public runtime/editor API over private serialized project-setting fields: `UnityEngine.Physics.IgnoreLayerCollision(a, b, false)` + dirty/save `PhysicsManager`, not `m_LayerCollisionMatrix` writes. Read live `SerializedProperty.propertyType` under pinned Unity version before trusting remembered layout; `LayerMask` reports `SerializedPropertyType.LayerMask`, assign through `intValue`.
 - Generated-manifest schema migration is separate state transition, not incremental stage write: keep legacy manifest resumable -> run full non-lighting pass -> persist/reload outputs -> write complete migrated manifest -> resume strict per-stage probing. Never write partial current-schema state before every newly declared output exists.
-- Builder-owned change -> edit source/builder -> rebuild -> validate -> inspect diff. Manual generated-asset edits are not authoritative.
+- Builder-owned change -> edit source/builder, then builder protocol (see Validation). Manual generated-asset edits are not authoritative.
 - Serialized prefab component reference: runtime non-null check insufficient. Save/reload, require nonzero YAML `fileID`, verify `PrefabUtility` source provenance.
 - Imported animation lookup: exact clip name first; delimiter-safe suffix fallback only. Validate expected object identity and distinct state motions, not names alone.
 - Generated controller rebuild: reuse valid states/transitions or remove stale subassets before replacement. Never clear arrays then append replacement subassets indefinitely.
 - Generated YAML stays in Unity-native serialization form. Unity writes empty scalars as `key: ` (trailing space); never post-process generated asset or `.meta` bytes to strip it. A counter-normalizer has no fixed point — Unity re-adds the space on the next import/save, so every run dirties unrelated generated files in both directions. Comparators already `TrimEnd()` each line, so the trailing space carries no semantic weight.
 - Atomic generated-file replacement: one helper owns it — `File.Replace(` may appear only in `Assets/_Game/Editor/MovementLab/MovementLabAtomicFile.cs`, and every `Tools/Validation/*.ps1` must parse clean. Harness guards enforce both; a partially written generated asset corrupts the import cache, so scattering raw replaces is a hard no.
-- Capture pre/post Git status. Classify changed generated output from authoritative inventory + exact task declaration; ownership affects scope only. Every changed authoritative output needs exact coverage: comparator path/output, `SEMANTIC:`, `DANGLING:`, GUID stability, asset/`.meta` pairing; attach at checkpoint/reviewer even when separate regeneration commit excludes raw diff. Changed bytes -> run comparator -> accept only canonical-equal + no `DANGLING:` increase + no GUID churn + intact asset/`.meta` pairing; comparator-unsupported -> reject until supported; otherwise reject. Keep generated churn in separate `chore: regenerate MovementLab outputs` commit. Remove only newly generated IDE files.
+- Capture pre/post Git status. Classifier = union of current authoritative inventory + exact task-declared outputs, each builder-traced; source `inventory | declared-new | both`; scope `owned | inventory-exception`; ownership affects scope only. Reject path outside union or untraced declaration. Every changed authoritative output needs exact comparator coverage: selected path/header, `SEMANTIC:`, `DANGLING:`, `GUID:`, `PAIRS:`, `UNSUPPORTED:`. Run `Tools/Validation/Compare-GeneratedYaml.ps1 -Base <base-sha> -Head <head-sha|WORKTREE> -FailOnDangling`; callers bind base/head per role. Builder-traced task-declared semantic changes are allowed. Reject incomplete coverage, unknown types, increased dangling references, existing-GUID churn, broken asset/`.meta` pairs, or undeclared output. Attach evidence at checkpoint/reviewer even when separate regeneration commit excludes raw diff. Changed generated paths -> separate `chore: regenerate MovementLab outputs` commit; comparator selects zero paths -> no commit, `sourceFreezeSha` is generated boundary, generated review evidence-only. Remove only newly generated IDE files.
 
 ## Unity execution
 
@@ -77,7 +83,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild.
 - Production bake gate: bake entry point owns skip/rebuild from current lighting inputs. Valid skip emits source-defined digest marker and zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Copy marker from source, never retype.
 - Integrity gates: source/input digests decide staleness and bake reuse. Generated-output bytes/hashes provide provenance only; never gate rebuild, acceptance, or nondeterminism. Digest text inputs from canonical Git blob bytes (`git hash-object`) or newline-normalized bytes. Raw worktree bytes differ by CRLF/LF across checkouts (`.gitattributes` -> `*.cs text`, unity YAML `eol=lf`) and produce false staleness plus unowned regeneration churn.
-- Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Invariant: full build and semantic validate both fail unless a production bake is already current -> bake first.
+- Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Bake-first requirement lives in Validation builder protocol.
 
 ## Unity tests direction
 

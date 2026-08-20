@@ -180,21 +180,12 @@ namespace RocketFooxball.Editor
                     northShell.transform.localScale = Vector3.one;
                     southShell.transform.localScale = Vector3.one;
 
-                    CreateArenaKitVisual(architecture, "RampWestRails", "ArenaRampRails", new Vector3(-22f, 2.1f, 2f), Quaternion.Euler(-15f, -90f, 0f), arenaMaterials);
-                    CreateArenaKitVisual(architecture, "RampEastRails", "ArenaRampRails", new Vector3(22f, 2.1f, -2f), Quaternion.Euler(-15f, 90f, 0f), arenaMaterials);
-
                     // Goal shells and roster cues carry the primary silhouettes;
                     // two end trusses per wall keep secondary architecture sparse.
                     for (var x = -48f; x <= 48f; x += 96f)
                     {
                         CreateArenaKitVisual(architecture, "NorthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, -45.0f), Quaternion.identity, arenaMaterials);
                         CreateArenaKitVisual(architecture, "SouthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, 45.0f), Quaternion.identity, arenaMaterials);
-                    }
-
-                    for (var x = -48f; x <= 48f; x += 24f)
-                    {
-                        CreateArenaKitVisual(architecture, "NorthWallPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, -44f), Quaternion.identity, arenaMaterials);
-                        CreateArenaKitVisual(architecture, "SouthWallPylon_" + x.ToString("0"), "ArenaWallPylon", new Vector3(x, 0f, 44f), Quaternion.Euler(0f, 180f, 0f), arenaMaterials);
                     }
 
                     CreateArenaKitVisual(architecture, "NorthScoreboard", "ArenaScoreboard", new Vector3(-64f, 12f, -2.5f), Quaternion.Euler(0f, -90f, 0f), arenaMaterials);
@@ -417,6 +408,7 @@ namespace RocketFooxball.Editor
                         var renderer = renderers[i];
                         var filter = Require(renderer.GetComponent<MeshFilter>(), "Architecture MeshFilter");
                         var mesh = Require(filter.sharedMesh, "Architecture mesh");
+                        if (mesh.name == "ArenaRampRails" || mesh.name == "ArenaWallPylon") throw new InvalidOperationException("Removed arena decoration returned: " + renderer.name);
                         if (AssetDatabase.GetAssetPath(mesh) != ArenaKitModelPath) throw new InvalidOperationException("Architecture mesh provenance mismatch: " + renderer.name);
                         if (renderer.GetComponentsInChildren<Collider>(true).Length != 0 || renderer.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Architecture visual must remain renderer-only: " + renderer.name);
                         var materials = renderer.sharedMaterials;
@@ -430,13 +422,6 @@ namespace RocketFooxball.Editor
                     Debug.Log("Rocket Fooxball Movement Lab ArenaKit imported triangles: " + triangleCount);
                     ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
                     ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
-                    ValidateArchitectureTransform(architecture, "RampWestRails", new Vector3(-22f, 2.1f, 2f), Quaternion.Euler(-15f, -90f, 0f));
-                    ValidateArchitectureTransform(architecture, "RampEastRails", new Vector3(22f, 2.1f, -2f), Quaternion.Euler(-15f, 90f, 0f));
-                    for (var x = -48f; x <= 48f; x += 24f)
-                    {
-                        ValidateArchitectureTransform(architecture, "NorthWallPylon_" + x.ToString("0"), new Vector3(x, 0f, -44f), Quaternion.identity);
-                        ValidateArchitectureTransform(architecture, "SouthWallPylon_" + x.ToString("0"), new Vector3(x, 0f, 44f), Quaternion.Euler(0f, 180f, 0f));
-                    }
                     ValidateShieldVisual(arena.transform.Find("NorthGoal"), "NorthGoal");
                     ValidateShieldVisual(arena.transform.Find("SouthGoal"), "SouthGoal");
                 }
