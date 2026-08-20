@@ -428,6 +428,11 @@ namespace RocketFooxball.Runtime.Bots
                 return 0f;
             }
 
+            if (fighterCount == 2)
+            {
+                return fighterIndex == 0 ? CombatLaneOffset : -CombatLaneOffset;
+            }
+
             return fighterIndex == 1 ? CombatLaneOffset : -CombatLaneOffset;
         }
 
