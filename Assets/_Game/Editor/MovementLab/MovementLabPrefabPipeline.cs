@@ -2118,7 +2118,7 @@ namespace RocketFooxball.Editor
                             throw new InvalidOperationException("ExplosionVfx.particleSystems[" + i + "] must reference the ordered " + expectedSystem.name + " system.");
                         }
 
-                        ValidatePrefabReference(effect, "particleSystems.Array.data[" + i + "]", expectedSystem,
+                        ValidatePrefabReference(effect, "particleSystems.Array.data[" + i + "]", ExplosionPrefabPath,
                             "ExplosionVfx.particleSystems[" + i + "]");
                     }
                 }
