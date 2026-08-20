@@ -23,6 +23,7 @@ namespace RocketFooxball.Runtime.Bots
         [Header("Team")]
         [SerializeField] private ParticipantTeam team = ParticipantTeam.Blue;
         [SerializeField] private MatchController match;
+        [SerializeField] private BotNavigationGraph navigationGraph;
         [SerializeField] private ParticipantState[] participants = new ParticipantState[TeamRosterSize];
         [SerializeField] private BotPerception[] perceptions = new BotPerception[TeamRosterSize];
 
@@ -37,6 +38,13 @@ namespace RocketFooxball.Runtime.Bots
         private readonly float[] roleHeldSeconds = new float[MaxParticipantSlotId];
         private BotTargetCandidate[][] pickupCandidates = new BotTargetCandidate[0][];
         private BotRoleAssignmentSet assignments = BotRoleAssignmentSet.Empty;
+        private BotCornerState cornerState = BotCornerState.Inactive;
+        private BotCornerAssignmentSet cornerAssignments = BotCornerAssignmentSet.Empty;
+        private Vector3 previousCornerBallPosition;
+        private readonly Vector3[] previousCornerParticipantPositions = new Vector3[TeamRosterSize];
+        private int previousCornerObserverSlot = -1;
+        private bool hasCornerBall;
+        private bool hasCornerParticipantPositions;
         private float elapsedSinceEvaluation;
         private int previousAliveMask;
         private bool hasAliveMask;
@@ -91,6 +99,7 @@ namespace RocketFooxball.Runtime.Bots
                 var delta = SafeFixedDeltaTime();
                 elapsedSinceEvaluation += delta;
                 AdvanceRoleHolds(delta);
+                UpdateCornerState(delta, aliveSetChanged);
             }
 
             if (BotCoordinatorScheduleRules.ShouldEvaluate(
@@ -113,6 +122,11 @@ namespace RocketFooxball.Runtime.Bots
 
             role = BotRole.Attacker;
             return false;
+        }
+
+        public bool TryGetCornerAssignment(int botSlotId, out BotCornerAssignment assignment)
+        {
+            return cornerAssignments.TryGetAssignment(botSlotId, out assignment);
         }
 
         public int GetPickupCandidateCount(int observerSlotId)
@@ -217,6 +231,138 @@ namespace RocketFooxball.Runtime.Bots
             elapsedSinceEvaluation = 0f;
             firstEvaluation = false;
             RefreshCandidateCache();
+        }
+
+        private void UpdateCornerState(float deltaSeconds, bool aliveSetChanged)
+        {
+            if (navigationGraph == null || navigationGraph.ArenaBounds == null || perceptions == null)
+            {
+                cornerState = BotCornerState.Inactive;
+                cornerAssignments = BotCornerAssignmentSet.Empty;
+                hasCornerBall = false;
+                previousCornerObserverSlot = -1;
+                return;
+            }
+
+            var observations = new BotCornerBallObservation[perceptions.Length];
+            for (var i = 0; i < perceptions.Length; i++)
+            {
+                var perception = perceptions[i];
+                var observation = default(BotBallObservation);
+                if (perception != null)
+                {
+                    perception.TryGetBallObservation(out observation);
+                }
+
+                observations[i] = new BotCornerBallObservation(
+                    perception != null ? perception.ObserverSlotId : -1,
+                    observation);
+            }
+
+            var hadPreviousState = cornerState.Active || cornerState.DwellSeconds > 0f;
+            var previousState = cornerState;
+            cornerState = BotCornerRules.Advance(cornerState, navigationGraph.ArenaBounds, deltaSeconds, observations);
+
+            var hasFreshBall = BotCornerRules.TrySelectFreshestBall(observations, out var selectedBall);
+            var selectedPosition = hasFreshBall ? selectedBall.Observation.Position : Vector3.zero;
+            var selectedObserverSlot = hasFreshBall ? selectedBall.ObserverSlotId : -1;
+            var ballChanged = hasFreshBall != hasCornerBall ||
+                selectedObserverSlot != previousCornerObserverSlot ||
+                (hasFreshBall && (!IsFinite(previousCornerBallPosition) ||
+                    Vector3.Distance(previousCornerBallPosition, selectedPosition) > 0.0001f));
+            var stateChanged = previousState.Active != cornerState.Active ||
+                Mathf.Abs(previousState.DwellSeconds - cornerState.DwellSeconds) > 0.0001f ||
+                (previousState.Active && (previousState.Corner != cornerState.Corner ||
+                    previousState.ReleaseDirection != cornerState.ReleaseDirection));
+            var participantPositionsChanged = HaveCornerParticipantPositionsChanged();
+
+            previousCornerBallPosition = selectedPosition;
+            previousCornerObserverSlot = selectedObserverSlot;
+            hasCornerBall = hasFreshBall;
+
+            if (!cornerState.Active || !hasFreshBall)
+            {
+                cornerAssignments = BotCornerAssignmentSet.Empty;
+                return;
+            }
+
+            if (aliveSetChanged || stateChanged || ballChanged || participantPositionsChanged || !hadPreviousState)
+            {
+                var enemyGoalPosition = GetEnemyGoalPosition(selectedBall.ObserverSlotId);
+                cornerAssignments = BotCornerRules.Assign(
+                    cornerState,
+                    navigationGraph.ArenaBounds,
+                    selectedBall,
+                    enemyGoalPosition,
+                    BuildCornerParticipants());
+            }
+        }
+
+        private Vector3 GetEnemyGoalPosition(int observerSlotId)
+        {
+            if (perceptions == null)
+            {
+                return Vector3.zero;
+            }
+
+            for (var i = 0; i < perceptions.Length; i++)
+            {
+                if (perceptions[i] != null && perceptions[i].ObserverSlotId == observerSlotId &&
+                    IsFinite(perceptions[i].EnemyGoalPosition))
+                {
+                    return perceptions[i].EnemyGoalPosition;
+                }
+            }
+
+            for (var i = 0; i < perceptions.Length; i++)
+            {
+                if (perceptions[i] != null && IsFinite(perceptions[i].EnemyGoalPosition))
+                {
+                    return perceptions[i].EnemyGoalPosition;
+                }
+            }
+
+            return Vector3.zero;
+        }
+
+        private BotCornerParticipant[] BuildCornerParticipants()
+        {
+            var result = new BotCornerParticipant[participants != null ? participants.Length : 0];
+            for (var i = 0; i < result.Length; i++)
+            {
+                var participant = participants[i];
+                result[i] = participant == null
+                    ? default(BotCornerParticipant)
+                    : new BotCornerParticipant(
+                        participant.SlotId,
+                        participant.IsLocalParticipant,
+                        participant.IsAlive,
+                        participant.transform.position);
+            }
+
+            return result;
+        }
+
+        private bool HaveCornerParticipantPositionsChanged()
+        {
+            var changed = !hasCornerParticipantPositions;
+            for (var i = 0; i < previousCornerParticipantPositions.Length; i++)
+            {
+                var participant = participants != null && i < participants.Length ? participants[i] : null;
+                var position = participant != null && IsFinite(participant.transform.position)
+                    ? participant.transform.position
+                    : Vector3.zero;
+                if (!hasCornerParticipantPositions ||
+                    Vector3.Distance(previousCornerParticipantPositions[i], position) > 0.0001f)
+                {
+                    changed = true;
+                }
+
+                previousCornerParticipantPositions[i] = position;
+            }
+
+            hasCornerParticipantPositions = true;
+            return changed;
         }
 
         private void RefreshCandidateCache()
@@ -463,10 +609,11 @@ namespace RocketFooxball.Runtime.Bots
         private bool ValidateComposition()
         {
             var expectedPerceptionCount = team == ParticipantTeam.Blue ? 2 : 3;
-            if (match == null || participants == null || participants.Length != TeamRosterSize ||
+            if (match == null || navigationGraph == null || navigationGraph.ArenaBounds == null ||
+                !navigationGraph.ArenaBounds.IsValid || participants == null || participants.Length != TeamRosterSize ||
                 perceptions == null || perceptions.Length != expectedPerceptionCount)
             {
-                Debug.LogError("BotTeamRoleCoordinator requires serialized match, exact three participants, and exact non-local perceptions.", this);
+                Debug.LogError("BotTeamRoleCoordinator requires serialized match, navigation graph, exact three participants, and exact non-local perceptions.", this);
                 return false;
             }
 
@@ -527,6 +674,16 @@ namespace RocketFooxball.Runtime.Bots
         private void ClearState()
         {
             assignments = BotRoleAssignmentSet.Empty;
+            cornerState = BotCornerState.Inactive;
+            cornerAssignments = BotCornerAssignmentSet.Empty;
+            previousCornerBallPosition = Vector3.zero;
+            previousCornerObserverSlot = -1;
+            hasCornerBall = false;
+            hasCornerParticipantPositions = false;
+            for (var i = 0; i < previousCornerParticipantPositions.Length; i++)
+            {
+                previousCornerParticipantPositions[i] = Vector3.zero;
+            }
             elapsedSinceEvaluation = 0f;
             previousAliveMask = 0;
             hasAliveMask = false;
