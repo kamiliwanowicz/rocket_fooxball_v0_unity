@@ -58,14 +58,15 @@ namespace RocketFooxball.Runtime.Weapons
                 return ParticipantRelationship.Immune;
             }
 
-            if (!facts.SourceValid)
-            {
-                return ParticipantRelationship.Unattributed;
-            }
-
+            // Identity is authoritative for self-impact, even when a projectile has no team attribution.
             if (facts.Self)
             {
                 return ParticipantRelationship.Self;
+            }
+
+            if (!facts.SourceValid)
+            {
+                return ParticipantRelationship.Unattributed;
             }
 
             return facts.SameTeam ? ParticipantRelationship.Friendly : ParticipantRelationship.Enemy;
@@ -102,37 +103,62 @@ namespace RocketFooxball.Runtime.Weapons
     /// <summary>Runtime adapter that turns participant state into pure policy facts.</summary>
     public static class ParticipantRelationshipAdapter
     {
+        /// <summary>Returns only team values that are valid for gameplay attribution.</summary>
+        public static ParticipantTeam? GetValidTeam(ParticipantTeam? team)
+        {
+            return team.HasValue && (team.Value == ParticipantTeam.Blue || team.Value == ParticipantTeam.Red)
+                ? team
+                : (ParticipantTeam?)null;
+        }
+
+        public static bool IsValidTeam(ParticipantTeam? team)
+        {
+            return GetValidTeam(team).HasValue;
+        }
+
         public static ParticipantRelationship Classify(ParticipantState target, ParticipantState source)
         {
-            if (target == null)
-            {
-                return ParticipantRelationship.Invalid;
-            }
+            return Classify(target, source, source != null ? GetValidTeam(source.Team) : (ParticipantTeam?)null);
+        }
 
-            var facts = new ParticipantRelationshipFacts(
-                targetValid: true,
-                targetAlive: target.IsAlive,
-                targetImmune: target.IsImmune,
-                sourceValid: source != null,
-                self: source != null && target == source,
-                sameTeam: source != null && target.Team == source.Team);
-            return ParticipantRelationshipPolicy.Classify(facts);
+        /// <summary>
+        /// Classifies a target using owner identity and the firing team's immutable snapshot.
+        /// A missing/invalid snapshot is intentionally unattributed, except for the owner itself.
+        /// </summary>
+        public static ParticipantRelationship Classify(
+            ParticipantState target,
+            ParticipantState source,
+            ParticipantTeam? sourceTeamSnapshot)
+        {
+            return ParticipantRelationshipPolicy.Classify(GetFacts(target, source, sourceTeamSnapshot));
         }
 
         public static ParticipantRelationshipFacts GetFacts(ParticipantState target, ParticipantState source)
+        {
+            return GetFacts(target, source, source != null ? GetValidTeam(source.Team) : (ParticipantTeam?)null);
+        }
+
+        public static ParticipantRelationshipFacts GetFacts(
+            ParticipantState target,
+            ParticipantState source,
+            ParticipantTeam? sourceTeamSnapshot)
         {
             if (target == null)
             {
                 return ParticipantRelationshipFacts.Invalid;
             }
 
+            var self = source != null && target == source;
+            var validSnapshot = IsValidTeam(sourceTeamSnapshot);
+            var validTargetTeam = IsValidTeam(target.Team);
+            var attributed = source != null && validSnapshot && validTargetTeam;
             return new ParticipantRelationshipFacts(
                 targetValid: true,
                 targetAlive: target.IsAlive,
                 targetImmune: target.IsImmune,
-                sourceValid: source != null,
-                self: source != null && target == source,
-                sameTeam: source != null && target.Team == source.Team);
+                sourceValid: attributed || self,
+                self: self,
+                sameTeam: attributed && target.Team == sourceTeamSnapshot.Value);
         }
     }
 }

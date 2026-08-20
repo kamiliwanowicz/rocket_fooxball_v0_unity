@@ -31,6 +31,7 @@ namespace RocketFooxball.Runtime.Weapons
         private Vector3 flightDirection = Vector3.forward;
         private float lifeRemaining;
         private ProjectileState state;
+        private ParticipantTeam? firingTeam;
         private bool simulationEnabled = true;
         private bool paused;
         private bool unregistered;
@@ -40,6 +41,7 @@ namespace RocketFooxball.Runtime.Weapons
         public Collider ProjectileCollider => projectileCollider;
         public Transform OwnerRoot => ownerRoot;
         public ParticipantState OwnerParticipant => ownerParticipant;
+        public ParticipantTeam? FiringTeam => firingTeam;
         public Vector3 Velocity => flightDirection * speed;
         public float Speed => speed;
         public bool IsDetonated => state == ProjectileState.Detonated;
@@ -107,6 +109,9 @@ namespace RocketFooxball.Runtime.Weapons
             ownerRoot = ownerTransform != null ? ownerTransform : owner != null ? owner.transform : null;
             launcher = sourceLauncher;
             explosionResolver = resolver != null ? resolver : explosionResolver;
+            firingTeam = ownerParticipant != null
+                ? ParticipantRelationshipAdapter.GetValidTeam(ownerParticipant.Team)
+                : (ParticipantTeam?)null;
             flightDirection = direction.sqrMagnitude > 0.000001f ? direction.normalized : transform.forward;
             lifeRemaining = lifetime;
             state = ProjectileState.Flying;
@@ -115,7 +120,7 @@ namespace RocketFooxball.Runtime.Weapons
             unregistered = false;
             ConfigureBody();
             IgnoreOwnerCollisions();
-            trailVfx?.ConfigureTeam(ownerParticipant != null ? ownerParticipant.Team : ParticipantTeam.Blue);
+            trailVfx?.ConfigureTeam(firingTeam);
         }
 
         /// <summary>Compatibility initializer for callers that only have owner transform.</summary>
@@ -175,7 +180,7 @@ namespace RocketFooxball.Runtime.Weapons
             var explosionPosition = hasHitPoint ? hitPoint : (body != null ? body.position : transform.position);
             UnregisterOnce();
             trailVfx?.DetachAndFade();
-            explosionResolver?.ResolveExplosion(explosionPosition, this, hitCollider);
+            explosionResolver?.ResolveExplosion(explosionPosition, this, hitCollider, firingTeam);
             Destroy(gameObject);
             return true;
         }
