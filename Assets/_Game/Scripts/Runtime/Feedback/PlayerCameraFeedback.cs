@@ -9,6 +9,11 @@ namespace RocketFooxball.Runtime.Feedback
     [MovedFrom("RocketFooxball")]
     public sealed class PlayerCameraFeedback : MonoBehaviour
     {
+        public const float ExpectedCelebrationOrbitRadius = 11f;
+        public const float ExpectedCelebrationOrbitHeight = 5f;
+        public const float ExpectedCelebrationLookHeight = 2.1f;
+        public static readonly Vector3 ExpectedSpectatorOffset = new Vector3(0f, 5f, -10f);
+
         [Header("References")]
         [SerializeField] private PlayerMotor player;
         [SerializeField] private Camera targetCamera;
@@ -30,14 +35,14 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField, Min(0.01f)] private float dashKickImpulseDuration = 0.12f;
 
         [Header("Goal Celebration Orbit")]
-        [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = 5.5f;
-        [SerializeField, Min(0f)] private float celebrationOrbitHeight = 2.5f;
-        [SerializeField, Min(0f)] private float celebrationLookHeight = 1.05f;
+        [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = ExpectedCelebrationOrbitRadius;
+        [SerializeField, Min(0f)] private float celebrationOrbitHeight = ExpectedCelebrationOrbitHeight;
+        [SerializeField, Min(0f)] private float celebrationLookHeight = ExpectedCelebrationLookHeight;
         [SerializeField, Min(0f)] private float celebrationOrbitDegrees = 360f;
         [SerializeField, Min(1f)] private float celebrationFov = 60f;
 
         [Header("Spectator")]
-        [SerializeField] private Vector3 spectatorOffset = new Vector3(0f, 2.5f, -5f);
+        [SerializeField] private Vector3 spectatorOffset = ExpectedSpectatorOffset;
         [SerializeField, Min(1f)] private float spectatorFov = 70f;
 
         private readonly CameraShakeModel shakeModel = new CameraShakeModel();
@@ -69,6 +74,10 @@ namespace RocketFooxball.Runtime.Feedback
         public Camera TargetCamera => targetCamera;
         public float CurrentFov => targetCamera != null ? targetCamera.fieldOfView : baseFov;
         public Vector3 NeutralLocalPosition => neutralLocalPosition;
+        public float CelebrationOrbitRadius => celebrationOrbitRadius;
+        public float CelebrationOrbitHeight => celebrationOrbitHeight;
+        public float CelebrationLookHeight => celebrationLookHeight;
+        public Vector3 SpectatorOffset => spectatorOffset;
         public bool IsGoalCelebrating => orbitModel.IsActive;
         public bool IsSpectating => spectatorTarget != null;
         public Transform SpectatorTarget => spectatorTarget;

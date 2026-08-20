@@ -64,6 +64,7 @@ namespace RocketFooxball.Runtime.Bots
         public float CorridorMargin => corridorMargin;
         public float LedgeProbeDistance => ledgeProbeDistance;
         public float LedgeProbeDepth => ledgeProbeDepth;
+        public float EffectiveControllerRadius => graph != null ? graph.EffectiveControllerRadius : 0f;
 
         private void OnEnable()
         {
@@ -621,7 +622,7 @@ namespace RocketFooxball.Runtime.Bots
                 Vector3.up * (graph.ControllerStepOffset + graph.ControllerRadius + graph.ControllerSkinWidth);
             if (!UnityEngine.Physics.SphereCast(
                     origin,
-                    0.36f,
+                    graph.EffectiveControllerRadius,
                     Vector3.down,
                     out var hit,
                     SafeLedgeProbeDepth(),
@@ -827,7 +828,7 @@ namespace RocketFooxball.Runtime.Bots
             }
 
             return Mathf.Max(
-                edge.CorridorHalfWidth - graph.ControllerRadius - graph.ControllerSkinWidth,
+                edge.CorridorHalfWidth - graph.EffectiveControllerRadius,
                 0f);
         }
 

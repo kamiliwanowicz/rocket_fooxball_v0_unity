@@ -146,6 +146,106 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void DoubledControllerAndArenaContractsExposeExactGeometry()
+        {
+            Assert.That(BotNavigationGraph.ExpectedControllerRadius, Is.EqualTo(0.8f));
+            Assert.That(BotNavigationGraph.ExpectedControllerHeight, Is.EqualTo(3.6f));
+            Assert.That(BotNavigationGraph.ExpectedControllerCenter, Is.EqualTo(new Vector3(0f, 1.8f, 0f)));
+            Assert.That(BotNavigationGraph.ExpectedControllerSkinWidth, Is.EqualTo(0.08f));
+            Assert.That(BotNavigationGraph.ExpectedControllerEffectiveRadius, Is.EqualTo(0.72f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedGoalRecessSafeRadius, Is.EqualTo(1f));
+
+            var graphObject = new GameObject("BotNavigationContractTestGraph");
+            try
+            {
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                Assert.That(graph.ArenaBounds, Is.Not.Null);
+                Assert.That(graph.ArenaBounds.Center, Is.EqualTo(Vector3.zero));
+                Assert.That(graph.ArenaBounds.HalfLength, Is.EqualTo(65f));
+                Assert.That(graph.ArenaBounds.HalfWidth, Is.EqualTo(45f));
+                SetPrivateField(graph, "nodes", new[] { Node(0, 0f) });
+                SetPrivateField(graph, "edges", new BotNavigationEdgeRecord[0]);
+
+                Assert.That(graph.TryValidate(out var reason), Is.True, reason);
+                Assert.That(graph.EffectiveControllerRadius, Is.EqualTo(0.72f).Within(0.0001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        [Test]
+        public void ArenaBoundsRejectNonFiniteOrNonPositiveExtents()
+        {
+            var invalid = new[]
+            {
+                new BotArenaBounds(new Vector3(float.NaN, 0f, 0f), 65f, 45f),
+                new BotArenaBounds(Vector3.zero, float.PositiveInfinity, 45f),
+                new BotArenaBounds(Vector3.zero, 0f, 45f),
+                new BotArenaBounds(Vector3.zero, 65f, -1f)
+            };
+
+            for (var i = 0; i < invalid.Length; i++)
+            {
+                Assert.That(invalid[i].TryValidate(out _), Is.False, "bounds " + i + " should be rejected");
+            }
+        }
+
+        [Test]
+        public void GraphValidationRejectsNonContractArenaBoundsAndSmallGoalRecess()
+        {
+            var graphObject = new GameObject("BotNavigationInvalidGeometryTestGraph");
+            try
+            {
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                SetPrivateField(graph, "nodes", new[]
+                {
+                    new BotNavigationNodeRecord(0, Vector3.zero, BotNavigationArea.GoalRecess, 0.99f)
+                });
+                SetPrivateField(graph, "edges", new BotNavigationEdgeRecord[0]);
+                Assert.That(graph.TryValidate(out _), Is.False);
+
+                SetPrivateField(graph, "nodes", new[]
+                {
+                    new BotNavigationNodeRecord(0, Vector3.zero, BotNavigationArea.Floor, 1f)
+                });
+                SetPrivateField(graph, "arenaBounds", new BotArenaBounds(Vector3.zero, 64f, 45f));
+                Assert.That(graph.TryValidate(out _), Is.False);
+
+                SetPrivateField(graph, "arenaBounds", new BotArenaBounds(Vector3.zero, 65f, 45f));
+                Assert.That(graph.TryValidate(out _), Is.True);
+            }
+            finally
+            {
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        [Test]
+        public void NavigatorCorridorUsesEffectiveControllerRadius()
+        {
+            var graphObject = new GameObject("BotNavigationEffectiveRadiusGraph");
+            var navigatorObject = new GameObject("BotNavigationEffectiveRadiusNavigator");
+            try
+            {
+                var graph = graphObject.AddComponent<BotNavigationGraph>();
+                navigatorObject.SetActive(false);
+                var navigator = navigatorObject.AddComponent<BotNavigator>();
+                SetPrivateField(navigator, "graph", graph);
+                var method = typeof(BotNavigator).GetMethod("SafeCorridorHalfWidth", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(method, Is.Not.Null);
+                var edge = new BotNavigationEdgeRecord(0, 0, 0, BotNavigationTraversal.Walk, 1f, 3f, null);
+                Assert.That((float)method.Invoke(navigator, new object[] { edge }), Is.EqualTo(2.28f).Within(0.0001f));
+            }
+            finally
+            {
+                Object.DestroyImmediate(navigatorObject);
+                Object.DestroyImmediate(graphObject);
+            }
+        }
+
+        [Test]
         public void RampTerminalProjectionReportsMotionTowardOtherEndpoint()
         {
             var graphObject = new GameObject("BotNavigationRulesTestGraph");

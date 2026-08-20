@@ -7,6 +7,9 @@ namespace RocketFooxball.Runtime.Participants
     /// <summary>Authored Blue/Red spawn candidates and deterministic safety scoring.</summary>
     public sealed class ParticipantSpawnSet : MonoBehaviour
     {
+        public const float ExpectedEyeHeight = 2.4f;
+        public const float ExpectedOccupiedRadius = 2f;
+
         [Header("Candidates")]
         [SerializeField] private Transform[] blueCandidates = new Transform[3];
         [SerializeField] private Transform[] redCandidates = new Transform[3];
@@ -15,8 +18,8 @@ namespace RocketFooxball.Runtime.Participants
 
         [Header("Visibility")]
         [SerializeField] private LayerMask visibilityMask = ~0;
-        [SerializeField, Min(0f)] private float eyeHeight = 1.2f;
-        [SerializeField, Min(0f)] private float occupiedRadius = 2f;
+        [SerializeField, Min(0f)] private float eyeHeight = ExpectedEyeHeight;
+        [SerializeField, Min(0f)] private float occupiedRadius = ExpectedOccupiedRadius;
 
         [Header("Safety Weights")]
         [SerializeField, Min(0f)] private float ballDistanceWeight = 1f;
@@ -34,6 +37,7 @@ namespace RocketFooxball.Runtime.Participants
         public Transform BlueEnemyGoal => blueEnemyGoal;
         public Transform RedEnemyGoal => redEnemyGoal;
         public LayerMask VisibilityMask => visibilityMask;
+        public float EyeHeight => eyeHeight;
         public float OccupiedRadius => occupiedRadius;
 
         public IReadOnlyList<Transform> GetCandidates(ParticipantTeam participantTeam)
