@@ -1,6 +1,8 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Weapons;
@@ -33,6 +35,14 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private GameObject redImmunityShield;
         [SerializeField] private GameObject worldVisual;
         [SerializeField] private GameObject fpsVisual;
+        [SerializeField] private GameObject nicknameVisual;
+        [SerializeField] private TextMesh nicknameText;
+        [SerializeField] private Camera nicknameCamera;
+        [SerializeField] private ParticipantState localParticipant;
+        [SerializeField] private MatchController match;
+        [SerializeField] private bool showNickname;
+        [SerializeField] private bool spawnCorpseOnDeath;
+        [SerializeField, Min(0f)] private float corpseLifetime = 30f;
         [SerializeField] private Color blueTeamColor = new Color(0.08f, 0.35f, 1f, 1f);
         [SerializeField] private Color redTeamColor = new Color(1f, 0.12f, 0.1f, 1f);
 
@@ -64,11 +74,26 @@ namespace RocketFooxball.Runtime.Feedback
         private bool kickSubscribed;
         private bool launcherSubscribed;
         private bool shotgunSubscribed;
+        private bool participantDeathSubscribed;
+        private bool pauseSubscribed;
         private bool alive = true;
         private bool localMode;
         private bool shotgunOwned = true;
+        private bool matchPaused;
         private Transform[] worldLayerTransforms;
         private int[] worldLayerValues;
+        private readonly List<CorpseRecord> corpses = new List<CorpseRecord>();
+
+        private sealed class CorpseRecord
+        {
+            internal readonly GameObject Root;
+            internal float Elapsed;
+
+            internal CorpseRecord(GameObject root)
+            {
+                Root = root;
+            }
+        }
 
         public ParticipantState Participant => participant;
         public ParticipantTeam Team => participant != null ? participant.Team : ParticipantTeam.Blue;
@@ -80,6 +105,7 @@ namespace RocketFooxball.Runtime.Feedback
             CacheShotgunNeutralPose();
             localMode = participant != null && participant.IsLocalParticipant;
             alive = participant == null || participant.IsAlive;
+            matchPaused = match != null && match.State == MatchController.MatchState.Paused;
             RefreshShotgunVisibility();
             if (participant != null)
             {
@@ -103,6 +129,18 @@ namespace RocketFooxball.Runtime.Feedback
                 shotgun.ShotFired += OnShotgunFired;
                 shotgunSubscribed = true;
             }
+
+            if (participant != null && !participantDeathSubscribed)
+            {
+                participant.Died += OnParticipantDied;
+                participantDeathSubscribed = true;
+            }
+
+            if (match != null && !pauseSubscribed)
+            {
+                match.PauseChanged += OnPauseChanged;
+                pauseSubscribed = true;
+            }
         }
 
         private void OnDisable()
@@ -125,16 +163,30 @@ namespace RocketFooxball.Runtime.Feedback
                 shotgunSubscribed = false;
             }
 
+            if (participant != null && participantDeathSubscribed)
+            {
+                participant.Died -= OnParticipantDied;
+                participantDeathSubscribed = false;
+            }
+
+            if (match != null && pauseSubscribed)
+            {
+                match.PauseChanged -= OnPauseChanged;
+                pauseSubscribed = false;
+            }
+
             recoilActive = false;
             recoilElapsed = 0f;
             RestoreNeutralPose();
             shotgunCycleActive = false;
             shotgunCycleElapsed = 0f;
             RestoreShotgunNeutralPose();
+            DestroyCorpses();
         }
 
         private void Update()
         {
+            UpdateCorpses();
             if (worldAnimator == null || !worldAnimator.isActiveAndEnabled || motor == null || (participant != null && !participant.IsAlive))
             {
                 return;
@@ -147,6 +199,7 @@ namespace RocketFooxball.Runtime.Feedback
 
         private void LateUpdate()
         {
+            UpdateNicknameBillboard();
             UpdateShotgunCycle();
             if (!neutralPoseCached || weaponVisual == null)
             {
@@ -287,6 +340,7 @@ namespace RocketFooxball.Runtime.Feedback
                 }
             }
             RefreshShotgunVisibility();
+            RefreshNickname();
         }
 
         public void ConfigureTeam(ParticipantTeam configuredTeam)
@@ -393,6 +447,150 @@ namespace RocketFooxball.Runtime.Feedback
             {
                 worldShotgunVisual.gameObject.SetActive(alive && shotgunOwned);
             }
+        }
+
+        private void RefreshNickname()
+        {
+            if (nicknameText != null)
+            {
+                nicknameText.text = participant != null ? participant.DisplayName : string.Empty;
+            }
+
+            if (nicknameVisual != null)
+            {
+                nicknameVisual.SetActive(showNickname && IsEnemyParticipant());
+            }
+        }
+
+        private void UpdateNicknameBillboard()
+        {
+            RefreshNickname();
+            if (nicknameVisual == null || !nicknameVisual.activeSelf || nicknameCamera == null)
+            {
+                return;
+            }
+
+            var direction = nicknameVisual.transform.position - nicknameCamera.transform.position;
+            if (direction.sqrMagnitude > 0.0001f)
+            {
+                nicknameVisual.transform.rotation = Quaternion.LookRotation(direction, Vector3.up);
+            }
+        }
+
+        private bool IsEnemyParticipant()
+        {
+            return participant != null && localParticipant != null && participant.Team != localParticipant.Team;
+        }
+
+        private void OnPauseChanged(bool paused)
+        {
+            matchPaused = paused;
+        }
+
+        private void OnParticipantDied(ParticipantDeathEvent death)
+        {
+            if (!spawnCorpseOnDeath || !IsEnemyParticipant() || death.Victim != participant || worldVisual == null)
+            {
+                return;
+            }
+
+            var deathPosition = transform.position + Vector3.up * 0.05f;
+            var deathRotation = Quaternion.Euler(0f, transform.eulerAngles.y, 0f) * Quaternion.Euler(-90f, 0f, 0f);
+            var corpseRoot = Instantiate(worldVisual, deathPosition, deathRotation);
+            corpseRoot.transform.SetParent(null, true);
+            SanitizeCorpse(corpseRoot);
+            corpses.Add(new CorpseRecord(corpseRoot));
+        }
+
+        private static void SanitizeCorpse(GameObject corpseRoot)
+        {
+            if (corpseRoot == null)
+            {
+                return;
+            }
+
+            var transforms = corpseRoot.GetComponentsInChildren<Transform>(true);
+            for (var i = 0; i < transforms.Length; i++)
+            {
+                if (transforms[i] != null)
+                {
+                    transforms[i].gameObject.layer = 0;
+                }
+            }
+
+            var colliders = corpseRoot.GetComponentsInChildren<Collider>(true);
+            for (var i = 0; i < colliders.Length; i++)
+            {
+                if (colliders[i] != null)
+                {
+                    colliders[i].enabled = false;
+                }
+            }
+
+            var rigidbodies = corpseRoot.GetComponentsInChildren<Rigidbody>(true);
+            for (var i = 0; i < rigidbodies.Length; i++)
+            {
+                var body = rigidbodies[i];
+                if (body == null)
+                {
+                    continue;
+                }
+
+                body.isKinematic = true;
+                body.detectCollisions = false;
+                body.velocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
+
+            var animators = corpseRoot.GetComponentsInChildren<Animator>(true);
+            for (var i = 0; i < animators.Length; i++)
+            {
+                if (animators[i] != null)
+                {
+                    animators[i].enabled = false;
+                }
+            }
+
+            corpseRoot.SetActive(true);
+        }
+
+        private void UpdateCorpses()
+        {
+            if (corpses.Count == 0 || matchPaused)
+            {
+                return;
+            }
+
+            var lifetime = Mathf.Max(corpseLifetime, 0f);
+            for (var i = corpses.Count - 1; i >= 0; i--)
+            {
+                var corpse = corpses[i];
+                if (corpse == null || corpse.Root == null)
+                {
+                    corpses.RemoveAt(i);
+                    continue;
+                }
+
+                corpse.Elapsed += Time.unscaledDeltaTime;
+                if (corpse.Elapsed >= lifetime)
+                {
+                    Destroy(corpse.Root);
+                    corpses.RemoveAt(i);
+                }
+            }
+        }
+
+        private void DestroyCorpses()
+        {
+            for (var i = 0; i < corpses.Count; i++)
+            {
+                if (corpses[i] != null && corpses[i].Root != null)
+                {
+                    Destroy(corpses[i].Root);
+                }
+            }
+
+            corpses.Clear();
         }
 
         private void UpdateShotgunCycle()
