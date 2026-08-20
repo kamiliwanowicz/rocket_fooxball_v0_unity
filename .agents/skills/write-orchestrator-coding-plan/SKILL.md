@@ -1,6 +1,7 @@
 ---
 name: write-orchestrator-coding-plan
 description: Use when user requests repository-grounded, implementation-ready coding plan or LP dispatches planning for orchestrator-led implementation with workers, reviews, and exact validation.
+disable-model-invocation: true
 ---
 
 # Write Orchestrator Coding Plan

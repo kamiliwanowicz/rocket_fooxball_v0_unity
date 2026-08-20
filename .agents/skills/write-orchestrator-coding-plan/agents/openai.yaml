@@ -2,3 +2,6 @@ interface:
   display_name: "Write Orchestrator Coding Plan"
   short_description: "Write lean, executable coding plans"
   default_prompt: "Use $write-orchestrator-coding-plan to inspect this repository and write a lean coding plan for coordinated implementation."
+
+policy:
+  allow_implicit_invocation: false
