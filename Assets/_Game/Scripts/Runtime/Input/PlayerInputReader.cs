@@ -1,7 +1,6 @@
 using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.Utilities;
 using UnityEngine.Scripting.APIUpdating;
 
@@ -281,9 +280,9 @@ namespace RocketFooxball.Runtime.Input
             suppressFireUntilRelease = true;
         }
 
-        private void OnAnyButtonPress(InputControl control)
+        private void OnAnyButtonPress(InputControl _)
         {
-            if (anyButtonPressLatched || !(control is ButtonControl button) || !button.isPressed)
+            if (anyButtonPressLatched)
             {
                 return;
             }
