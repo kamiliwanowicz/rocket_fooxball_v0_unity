@@ -2060,6 +2060,8 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Explosion VFX tuning contract invalid.");
                     }
                     var cueMain = blastRadiusCue.main;
+                    var cueStartSpeed = cueMain.startSpeed;
+                    var cueStartSize = cueMain.startSize;
                     var cueRenderer = blastRadiusCue.GetComponent<ParticleSystemRenderer>();
                     var cueSize = blastRadiusCue.sizeOverLifetime;
                     var cueSizeCurve = cueSize.size.curve;
@@ -2069,9 +2071,9 @@ namespace RocketFooxball.Editor
                     var cuePeakAlpha = 0f;
                     for (var i = 0; i < cueAlphaKeys.Length; i++) cuePeakAlpha = Mathf.Max(cuePeakAlpha, cueAlphaKeys[i].alpha);
                     if (cueMain.startLifetime.constantMin < 0.279f || cueMain.startLifetime.constantMax > 0.281f ||
-                        cueMain.startSpeed.constantMin != 0f || cueMain.startSpeed.constantMax != 0f ||
-                        Mathf.Abs(cueMain.startSize.constantMin - 9f) > 0.001f || Mathf.Abs(cueMain.startSize.constantMax - 9f) > 0.001f ||
-                        Mathf.Abs(cueMain.startSize.constantMin - ExplosionVfx.ReferenceVisualDiameter) > 0.001f ||
+                        cueStartSpeed.mode != ParticleSystemCurveMode.Constant || cueStartSpeed.constant != 0f ||
+                        cueStartSize.mode != ParticleSystemCurveMode.Constant || Mathf.Abs(cueStartSize.constant - 9f) > 0.001f ||
+                        Mathf.Abs(cueStartSize.constant - ExplosionVfx.ReferenceVisualDiameter) > 0.001f ||
                         Vector3.Distance(blastRadiusCue.transform.localPosition, Vector3.zero) > 0.001f || Quaternion.Angle(blastRadiusCue.transform.localRotation, Quaternion.identity) > 0.001f ||
                         Vector3.Distance(blastRadiusCue.transform.localScale, Vector3.one) > 0.001f ||
                         cueMain.maxParticles != 1 || cueMain.loop || cueMain.playOnAwake || !blastRadiusCue.emission.enabled ||
