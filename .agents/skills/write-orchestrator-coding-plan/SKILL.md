@@ -133,7 +133,7 @@ Split anchors: prefab/scene wiring + few call sites -> usually one task; new Mon
 
 ## Worker-decision gate
 
-Before writing artifact, simulate each task from dispatch through proof. Identify every choice worker would encounter. Resolve each repository-significant choice in plan from observed evidence or explicit proposed design.
+Before writing artifact, simulate each task from dispatch through proof. Identify the choices the worker is likely to encounter and resolve every repository-significant choice that can reasonably be settled from baseline evidence. Planning owns the heavy analysis and gives the lower-cost implementation worker a strong default design; it does not freeze a plan assumption after later repository evidence disproves it.
 
 Predefine applicable details:
 
@@ -144,11 +144,13 @@ Predefine applicable details:
 - validation command, expected discriminatory evidence, and invalidation boundary
 - cross-task producer/consumer value identity, valid workflow result variants, and executable writer/reviewer route
 
-Worker freedom: syntax, formatting, local names, and mechanical adaptation needed to express recorded design in observed codebase. Planner owns every choice affecting behavior, architecture, API/contract shape, state ownership, dependencies, compatibility, persistence, safety, scope, or proof.
+Worker freedom: follow the recorded design by default. The worker owns syntax, formatting, local names, and mechanical adaptation. When current code, compiler/test results, or other concrete repository evidence shows a plan detail is outdated, impossible, or clearly wrong, the worker may make the smallest task-scoped decision needed to correct it. Preserve the objective, requirements, owned paths, safety constraints, validation intent, and compatible cross-task contracts. Report the conflicting plan detail, evidence, chosen correction, and downstream effects so review and orchestration can verify it. A plan is revisable guidance: a material correction may require a fresh plan artifact or attempt rather than pretending the original design remains accurate.
 
-Never delegate design with phrases such as `choose`, `decide`, `determine`, `design`, `figure out`, `investigate and implement`, `as appropriate`, `if needed`, `use best judgment`, or `update callers as necessary`. Replace each with exact choice, trigger, target, and behavior. Select worker profile from user/`AGENTS.md` rules. Accepted task is fully designed; never select profile defined for tasks lacking detailed plan or use stronger reasoning profile to compensate for missing design.
+Worker adaptation must not silently expand scope, change product intent, break a cross-task contract another task depends on, touch protected paths, or assume new authority. Escalate those cases for plan revision or user/LP direction.
 
-Unresolved product/architecture choice -> `needs_user`. Missing repository evidence -> LP `blocked`; direct mode stops without accepted artifact and reports exact evidence needed. Design too large to pre-resolve within one worker task -> decomposition mismatch. Never defer unresolved design to implementation worker.
+Never knowingly delegate plan-time design with phrases such as `choose`, `decide`, `determine`, `design`, `figure out`, `investigate and implement`, `as appropriate`, `if needed`, `use best judgment`, or `update callers as necessary`. Replace each with the best evidence-backed choice, trigger, target, and behavior available during planning. Select worker profile from user/`AGENTS.md` rules. Accepted task is fully designed against its baseline; this means it has no knowingly open product or architecture decision at dispatch, not that evidence-based implementation adaptation is prohibited.
+
+Unresolved product/architecture choice -> `needs_user`. Missing repository evidence -> LP `blocked`; direct mode stops without accepted artifact and reports exact evidence needed. Design too large to pre-resolve within one worker task -> decomposition mismatch. Never knowingly defer unresolved design to the implementation worker merely to reduce planning effort.
 
 After design detail, apply `Plan shape` splitting rules. No meaningful independent acceptance -> fold.
 
