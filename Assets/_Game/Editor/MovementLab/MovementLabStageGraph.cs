@@ -75,11 +75,14 @@ namespace RocketFooxball.Editor
         private const string LightingContract = "lighting-contract:5";
         private const string BakedContract = "baked-output-contract:4";
 
-        // Development can deterministically omit only lightmap variants 3/4;
+        // Development can deterministically omit only lightmap variants 2/3/4;
         // keep exact ownership paths (including .meta files) in fingerprints.
         private static readonly HashSet<string> DevelopmentStableMissingBakedOutputPaths =
             new HashSet<string>(WithMetas(new[]
             {
+                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_dir.png",
+                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_light.exr",
+                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
                 MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_dir.png",
                 MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_light.exr",
                 MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
