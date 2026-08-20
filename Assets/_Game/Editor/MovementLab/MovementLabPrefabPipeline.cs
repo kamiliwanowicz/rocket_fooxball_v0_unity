@@ -354,7 +354,7 @@ namespace RocketFooxball.Editor
                     SetEnum(participant, "team", "Blue");
                     SetBool(participant, "localParticipant", true);
                     SetFloat(participant, "maxHealth", 100f);
-                    SetFloat(participant, "deathWait", 5f);
+                    SetFloat(participant, "deathWait", MovementLabContract.LocalRespawnDelay);
                     SetFloat(participant, "immunityDuration", 2f);
                     SetObjectReference(feedback, "participant", participant);
                     SetObjectReference(launcher, "ownerParticipant", participant);
@@ -1262,7 +1262,7 @@ namespace RocketFooxball.Editor
                              ValidateSerializedFloat(prefabPresentation, "corpseLifetime", 30f, "Player prefab PlayerPresentation.corpseLifetime");
                             ValidateSerializedInteger(prefabParticipant, "slotId", 0, "Player prefab ParticipantState.slotId");
                             ValidateSerializedFloat(prefabParticipant, "maxHealth", 100f, "Player prefab ParticipantState.maxHealth");
-                             ValidateSerializedFloat(prefabParticipant, "deathWait", 5f, "Player prefab ParticipantState.deathWait");
+                             ValidateSerializedFloat(prefabParticipant, "deathWait", MovementLabContract.LocalRespawnDelay, "Player prefab ParticipantState.deathWait");
                              ValidateSerializedFloat(prefabParticipant, "immunityDuration", 2f, "Player prefab ParticipantState.immunityDuration");
                              ValidateSerializedInteger(prefabParticipant, "shotgunShellCapacity", 16, "Player prefab ParticipantState.shotgunShellCapacity");
                              ValidateSerializedFloat(prefabShotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage, "Player prefab ShotgunWeapon.pelletDamage");
