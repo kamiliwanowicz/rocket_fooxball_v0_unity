@@ -181,6 +181,17 @@ namespace RocketFooxball.Runtime.Bots
             storedActionFacing = Vector3.zero;
             ClearCombatState();
             ClearMotion();
+
+            BuildCornerTargetSelection(
+                GetGameplayTime(),
+                current,
+                out var refreshedSelection);
+            activeTarget = refreshedSelection;
+            storedActionFacing = activeTarget.HasTarget
+                ? GetFiniteFacing(
+                    activeTarget.ActionPosition - GetCurrentPosition(),
+                    activeTarget.NavigationPosition - GetCurrentPosition())
+                : GetFiniteFacing(transform.forward, Vector3.forward);
         }
 
         private static bool CornerAssignmentsMatch(BotCornerAssignment first, BotCornerAssignment second)
@@ -415,7 +426,18 @@ namespace RocketFooxball.Runtime.Bots
                 return false;
             }
 
-            hasCornerAssignment = true;
+            return BuildCornerTargetSelection(decisionTime, cornerAssignment, out selection);
+        }
+
+        private bool BuildCornerTargetSelection(
+            float decisionTime,
+            BotCornerAssignment assignment,
+            out BotTargetSelection selection)
+        {
+            selection = BotTargetSelection.None;
+            hasCornerAssignment = assignment.IsAssigned;
+            cornerAssignment = assignment;
+
             if (!IsFinite(cornerAssignment.NavigationPoint) || !IsFinite(cornerAssignment.ActionPoint) ||
                 !IsFinite(decisionTime) || !IsFinite(nextDecisionTime))
             {
