@@ -20,18 +20,43 @@ namespace RocketFooxball.Tests.EditMode
         [Test]
         public void DefaultCloseShotAndTwoShotsMatchStartingLethalityTarget()
         {
-            var perPellet = ShotgunDamageRules.CalculatePelletDamage(8f, Falloff(4f));
+            var perPellet = ShotgunDamageRules.CalculatePelletDamage(
+                ShotgunDamageRules.DefaultPelletDamage,
+                Falloff(4f));
             var closeShot = perPellet * ShotgunDamageRules.DefaultPelletCount;
 
-            Assert.That(closeShot, Is.EqualTo(64f).Within(0.0001f));
-            Assert.That(closeShot * 2f, Is.EqualTo(128f).Within(0.0001f));
+            Assert.That(closeShot, Is.EqualTo(108.8f).Within(0.0001f));
+            Assert.That(closeShot * 2f, Is.EqualTo(217.6f).Within(0.0001f));
         }
 
         [Test]
-        public void BallImpulseAggregatesPelletsAndCapsAtTwelve()
+        public void DefaultDamageScalesAtMediumAndFarRanges()
         {
-            Assert.That(ShotgunDamageRules.CalculateBallImpulse(3f, 2f, 12f), Is.EqualTo(6f).Within(0.0001f));
-            Assert.That(ShotgunDamageRules.CalculateBallImpulse(8f, 2f, 12f), Is.EqualTo(12f).Within(0.0001f));
+            Assert.That(
+                ShotgunDamageRules.CalculatePelletDamage(ShotgunDamageRules.DefaultPelletDamage, Falloff(16f)) *
+                ShotgunDamageRules.DefaultPelletCount,
+                Is.EqualTo(59.84f).Within(0.0001f));
+            Assert.That(
+                ShotgunDamageRules.CalculatePelletDamage(ShotgunDamageRules.DefaultPelletDamage, Falloff(23f)) *
+                ShotgunDamageRules.DefaultPelletCount,
+                Is.EqualTo(40.8f).Within(0.0001f));
+        }
+
+        [Test]
+        public void DefaultBallImpulseUsesSinglePelletStrengthAndNewCap()
+        {
+            Assert.That(
+                ShotgunDamageRules.CalculateBallImpulse(
+                    1f,
+                    ShotgunDamageRules.DefaultPerPelletBallImpulse,
+                    ShotgunDamageRules.DefaultBallImpulseCap),
+                Is.EqualTo(3.4f).Within(0.0001f));
+            Assert.That(
+                ShotgunDamageRules.CalculateBallImpulse(
+                    ShotgunDamageRules.DefaultPelletCount,
+                    ShotgunDamageRules.DefaultPerPelletBallImpulse,
+                    ShotgunDamageRules.DefaultBallImpulseCap),
+                Is.EqualTo(20.4f).Within(0.0001f));
         }
 
         [Test]
@@ -41,8 +66,15 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(ShotgunDamageRules.EvaluateFalloff(2f, 6f, 16f, 30f, 1.1f, 0.2f), Is.EqualTo(0f));
             Assert.That(ShotgunDamageRules.EvaluateFalloff(-1f, 6f, 16f, 30f, 0.55f, 0.2f), Is.EqualTo(0f));
             Assert.That(ShotgunDamageRules.EvaluateFalloff(float.NaN, 6f, 16f, 30f, 0.55f, 0.2f), Is.EqualTo(0f));
-            Assert.That(ShotgunDamageRules.CalculatePelletDamage(8f, float.PositiveInfinity), Is.EqualTo(0f));
-            Assert.That(ShotgunDamageRules.CalculateBallImpulse(-1f, 2f, 12f), Is.EqualTo(0f));
+            Assert.That(
+                ShotgunDamageRules.CalculatePelletDamage(ShotgunDamageRules.DefaultPelletDamage, float.PositiveInfinity),
+                Is.EqualTo(0f));
+            Assert.That(
+                ShotgunDamageRules.CalculateBallImpulse(
+                    -1f,
+                    ShotgunDamageRules.DefaultPerPelletBallImpulse,
+                    ShotgunDamageRules.DefaultBallImpulseCap),
+                Is.EqualTo(0f));
         }
 
         [Test]

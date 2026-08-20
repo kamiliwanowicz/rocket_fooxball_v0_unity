@@ -275,9 +275,18 @@ namespace RocketFooxball.Runtime.Weapons
             for (var targetIndex = 0; targetIndex < targetCount; targetIndex++)
             {
                 var target = participantTargets[targetIndex];
-                if (target != null && target.TryApplyDamage(ownerParticipant, participantDamage[targetIndex], ParticipantDamageCause.Shotgun, "Shotgun"))
+                if (target != null)
                 {
-                    hitConfirmed = true;
+                    var damageRequest = new ParticipantDamageRequest(
+                        ownerParticipant,
+                        participantDamage[targetIndex],
+                        ParticipantDamageCause.Shotgun,
+                        "Shotgun",
+                        origin);
+                    if (target.TryApplyDamage(damageRequest))
+                    {
+                        hitConfirmed = true;
+                    }
                 }
             }
 
