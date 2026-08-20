@@ -21,7 +21,7 @@ namespace RocketFooxball.Runtime.Participants
 
         [Header("Vitals")]
         [SerializeField, Min(1f)] private float maxHealth = 100f;
-        [SerializeField, Min(0f)] private float deathWait = 5f;
+        [SerializeField, Min(0f)] private float deathWait = 8f;
         [SerializeField, Min(0f)] private float immunityDuration = 2f;
         [SerializeField, Min(1)] private int shotgunShellCapacity = 16;
 
@@ -95,6 +95,7 @@ namespace RocketFooxball.Runtime.Participants
             ImmunityRemaining);
 
         public event Action<ParticipantReadModel> ReadModelChanged;
+        public event Action<ParticipantDamageEvent> Damaged;
         public event Action<ParticipantDeathEvent> Died;
         public event Action<ParticipantLifecycleEvent> LifecycleChanged;
         public event Action<ParticipantState> RespawnRequested;
@@ -297,16 +298,38 @@ namespace RocketFooxball.Runtime.Participants
         /// <summary>Applies enemy damage. Self and same-team requests reject before health mutation.</summary>
         public bool TryApplyDamage(ParticipantState attacker, float amount, ParticipantDamageCause cause, string weapon = "Rocket Launcher")
         {
-            if (!IsAlive || IsImmune || !IsFinite(amount) || amount <= 0f || attacker == this || (attacker != null && attacker.Team == team))
+            return TryApplyDamage(new ParticipantDamageRequest(
+                attacker,
+                amount,
+                cause,
+                weapon,
+                ResolveLegacyDamageSource(attacker)));
+        }
+
+        public bool TryApplyDamage(ParticipantDamageRequest request)
+        {
+            if (!IsAlive || IsImmune || !IsFinite(request.Amount) || request.Amount <= 0f ||
+                request.Attacker == this || (request.Attacker != null && request.Attacker.Team == team))
             {
                 return false;
             }
 
             var healthBefore = health;
-            health = Mathf.Max(health - amount, 0f);
+            health = Mathf.Clamp(health - request.Amount, 0f, maxHealth);
+            var removedAmount = healthBefore - health;
+            var sourceWorldPosition = request.HasExplicitSource
+                ? request.SourceWorldPosition
+                : ResolveLegacyDamageSource(request.Attacker);
+            Damaged?.Invoke(new ParticipantDamageEvent(
+                this,
+                request.Attacker,
+                removedAmount,
+                request.Cause,
+                request.Weapon,
+                sourceWorldPosition));
             if (health <= 0f)
             {
-                KillInternal(attacker, cause, weapon, healthBefore);
+                KillInternal(request.Attacker, request.Cause, request.Weapon, healthBefore);
             }
             else
             {
@@ -315,14 +338,14 @@ namespace RocketFooxball.Runtime.Participants
             return true;
         }
 
-        public bool TryApplyDamage(ParticipantDamageRequest request)
-        {
-            return TryApplyDamage(request.Attacker, request.Amount, request.Cause, request.Weapon);
-        }
-
         public bool TryTakeDamage(ParticipantState attacker, float amount, ParticipantDamageCause cause, string weapon = "Rocket Launcher")
         {
             return TryApplyDamage(attacker, amount, cause, weapon);
+        }
+
+        public bool TryTakeDamage(ParticipantDamageRequest request)
+        {
+            return TryApplyDamage(request);
         }
 
         /// <summary>Restores health without overheal; pickup owners request this mutation.</summary>
@@ -498,7 +521,7 @@ namespace RocketFooxball.Runtime.Participants
             botController?.SetSimulationEnabled(active && !localParticipant);
             if (input != null)
             {
-                input.enabled = localParticipant && IsAlive;
+                input.enabled = localParticipant;
                 input.SetGameplayInputEnabled(active && localParticipant);
             }
             if (look != null)
@@ -673,5 +696,10 @@ namespace RocketFooxball.Runtime.Participants
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private Vector3 ResolveLegacyDamageSource(ParticipantState attacker)
+        {
+            return attacker != null ? attacker.transform.position : transform.position;
+        }
     }
 }

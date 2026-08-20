@@ -255,7 +255,13 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             contactedParticipants.Add(nearestParticipant);
-            if (!nearestParticipant.TryApplyDamage(ownerParticipant, enemyContactDamage, ParticipantDamageCause.DashKick, "Dash Kick"))
+            var damageRequest = new ParticipantDamageRequest(
+                ownerParticipant,
+                enemyContactDamage,
+                ParticipantDamageCause.DashKick,
+                "Dash Kick",
+                ownerParticipant.transform.position);
+            if (!nearestParticipant.TryApplyDamage(damageRequest))
             {
                 return;
             }
