@@ -1,6 +1,8 @@
 # Rocket Fooxball Unity POC
 
-First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based.
+First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based. 
+
+Project written by AI, should be AI-native in all aspects for efficient AI development.
 
 User new to Unity. Explain Unity-specific concepts at junior level. Keep general technical discussion concise.
 
