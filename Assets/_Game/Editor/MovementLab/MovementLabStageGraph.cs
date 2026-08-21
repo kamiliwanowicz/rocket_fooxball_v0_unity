@@ -266,7 +266,7 @@ namespace RocketFooxball.Editor
                 }
                 else
                 {
-                    var drift = FindOutputDrift(prior.outputs, current.outputs, definition.Outputs);
+                    var drift = FindOutputDrift(definition.Stage, current.profile, prior.outputs, current.outputs, definition.Outputs);
                     var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
@@ -340,7 +340,7 @@ namespace RocketFooxball.Editor
                 var definition = Definitions[i];
                 var prior = manifestRead.State.Find(definition.Stage.ToString());
                 if (prior == null || !live.TryGetValue(definition.Stage, out var current)) continue;
-                var drift = FindOutputDrift(prior.outputs, current.outputs, definition.Outputs);
+                var drift = FindOutputDrift(definition.Stage, current.profile, prior.outputs, current.outputs, definition.Outputs);
                 var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                 if (IsBlockingOutputDrift(drift, identityViolations))
                 {
@@ -590,11 +590,12 @@ namespace RocketFooxball.Editor
                 if (path.EndsWith(".meta", StringComparison.Ordinal))
                 {
                     // Legacy byte digests migrate once; stable GUID identities remain protected.
-                    if (priorValue != null && !priorValue.missing && currentValue.missing)
+                    var developmentOmission = IsDevelopmentOmittedBakedLightmapOutput(definition.Stage, current?.profile, path, currentValue);
+                    if (!developmentOmission && priorValue != null && !priorValue.missing && currentValue.missing)
                     {
                         violations.Add("identity:missing-meta:" + path);
                     }
-                    else if (priorValue != null && !priorValue.missing && !currentValue.missing)
+                    else if (!developmentOmission && priorValue != null && !priorValue.missing && !currentValue.missing)
                     {
                         var isLegacyToGuidMigration = IsHexDigest(priorValue, 64) && IsHexDigest(currentValue, 32);
                         var isStableGuidPair = IsHexDigest(priorValue, 32) && IsHexDigest(currentValue, 32);
@@ -611,14 +612,15 @@ namespace RocketFooxball.Editor
                     var assetPath = path.Substring(0, path.Length - ".meta".Length);
                     if (checkedPairs.Add(assetPath))
                     {
-                        var pairViolation = FindAssetMetaPairViolation(assetPath);
+                        var pairViolation = developmentOmission ? null : FindAssetMetaPairViolation(assetPath);
                         if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                     }
                 }
                 else if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
                     contractPaths.Contains(path + ".meta") && checkedPairs.Add(path))
                 {
-                    var pairViolation = FindAssetMetaPairViolation(path);
+                    var pairViolation = IsDevelopmentOmittedBakedLightmapOutput(definition.Stage, current?.profile, path, currentValue)
+                        ? null : FindAssetMetaPairViolation(path);
                     if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                 }
             }
@@ -1057,7 +1059,7 @@ namespace RocketFooxball.Editor
             return result;
         }
 
-        private static List<string> FindOutputDrift(MovementLabPathDigest[] expected,
+        private static List<string> FindOutputDrift(MovementLabStage stage, string currentProfile, MovementLabPathDigest[] expected,
             MovementLabPathDigest[] actual, string[] contractOutputs)
         {
             var drift = new List<string>();
@@ -1072,11 +1074,35 @@ namespace RocketFooxball.Editor
                 if (oldValue == null) continue; // Contract-authorized new output path; stage contract/input staleness drives writer.
                 if (newValue == null || newValue.missing)
                 {
+                    if (IsDevelopmentOmittedBakedLightmapOutput(stage, currentProfile, path, newValue)) continue;
                     drift.Add("missing:" + path);
                 }
                 else if (oldValue == null || oldValue.missing || !string.Equals(oldValue.digest, newValue.digest, StringComparison.Ordinal)) drift.Add("changed:" + path);
             }
             return drift;
+        }
+
+        private static bool IsDevelopmentOmittedBakedLightmapOutput(MovementLabStage stage, string currentProfile,
+            string path, MovementLabPathDigest current)
+        {
+            if (stage != MovementLabStage.BakedOutput || current == null || !current.missing ||
+                !IsDevelopmentProfile(currentProfile)) return false;
+
+            var productionPaths = MovementLabContract.BakedLightmapPaths(MovementLabContract.ExpectedLightmapCount);
+            var firstOmittedPath = MovementLabContract.DevelopmentLightmapCount * 3;
+            for (var i = firstOmittedPath; i < productionPaths.Length; i++)
+            {
+                if (string.Equals(path, productionPaths[i], StringComparison.Ordinal) ||
+                    string.Equals(path, productionPaths[i] + ".meta", StringComparison.Ordinal)) return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsDevelopmentProfile(string profile)
+        {
+            return string.Equals(profile, MovementLabLightingProfiles.ProfileId.Development.ToString(), StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(profile, MovementLabLightingProfiles.Development.Tag, StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool SequenceEqual(string[] left, string[] right) => (left ?? Array.Empty<string>()).SequenceEqual(right ?? Array.Empty<string>(), StringComparer.Ordinal);
