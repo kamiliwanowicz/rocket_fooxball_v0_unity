@@ -251,15 +251,6 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                internal static AnimatorStateTransition AddAirTransitions(AnimatorState source, AnimatorState jump, AnimatorState fall)
-                {
-                    var toJump = AddAnimatorConditionTransition(source, jump, AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed");
-                    toJump.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
-                    var toFall = AddAnimatorConditionTransition(source, fall, AnimatorConditionMode.Less, 0.05f, "VerticalSpeed");
-                    toFall.AddCondition(AnimatorConditionMode.IfNot, 0f, "Grounded");
-                    return toFall;
-                }
-
                 internal static AnimatorStateTransition AddAnimatorConditionTransition(AnimatorState source, AnimatorState destination, AnimatorConditionMode mode, float threshold, string parameter)
                 {
                     var transition = source.AddTransition(destination);

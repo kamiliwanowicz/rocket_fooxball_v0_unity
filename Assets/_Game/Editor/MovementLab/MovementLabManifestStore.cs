@@ -83,17 +83,6 @@ namespace RocketFooxball.Editor
             }
         }
 
-        internal static MovementLabGeneratedState ReadOrNull()
-        {
-            var result = Read();
-            if (result.Status == MovementLabManifestReadStatus.Unreadable)
-            {
-                throw new InvalidOperationException("build manifest could not be parsed: " + result.Error);
-            }
-
-            return result.State;
-        }
-
         internal static bool IsCurrentAndReadable(MovementLabGeneratedState state)
         {
             return Validate(state).IsFullyValid;

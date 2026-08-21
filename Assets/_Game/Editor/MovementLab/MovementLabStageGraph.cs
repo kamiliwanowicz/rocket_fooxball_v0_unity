@@ -338,11 +338,6 @@ namespace RocketFooxball.Editor
             return new MovementLabStageProbe(stale, reasons, lightingDigest, currentState, manifestRead.Status);
         }
 
-        internal static MovementLabGeneratedState CaptureAssembledState()
-        {
-            return CaptureStateThrough(MovementLabStage.Quality);
-        }
-
         internal static MovementLabGeneratedState CaptureBakedState()
         {
             var state = CaptureStateThrough(MovementLabStage.BakedOutput);

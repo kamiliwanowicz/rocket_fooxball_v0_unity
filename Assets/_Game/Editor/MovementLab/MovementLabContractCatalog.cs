@@ -316,6 +316,7 @@ namespace RocketFooxball.Editor
             ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
 
+        // Unread by design: constructing this list IS the .meta-coverage check (see ValidateGeneratedFingerprintPathList).
         internal static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
 
         internal static readonly Color SkyHorizonColor = new Color(0.7254902f, 0.8627451f, 0.9490196f, 1f);

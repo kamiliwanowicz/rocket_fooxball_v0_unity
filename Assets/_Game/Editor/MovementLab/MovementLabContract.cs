@@ -192,19 +192,6 @@ namespace RocketFooxball.Editor
             TagManagerPath
         };
 
-        // T12 owns this complete generated inventory. The manifest remains an
-        // orchestration artifact and is intentionally excluded from stage
-        // fingerprints above.
-        internal static readonly string[] T12GameplaySceneOutputs =
-        {
-            ScenePath,
-            ManifestPath,
-            EditorBuildSettingsPath,
-            DynamicsManagerPath,
-            TimeManagerPath,
-            TagManagerPath
-        };
-
         internal static readonly string[] QualityOutputs =
         {
             GraphicsQualityConfigurator.HighPipelinePath,

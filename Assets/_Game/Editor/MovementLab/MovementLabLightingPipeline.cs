@@ -115,39 +115,6 @@ namespace RocketFooxball.Editor
                     BindExistingLightingSettings(scene);
                 }
 
-                internal static Material GetOrCreateSkyMaterial(Light sun)
-                {
-                    var shader = Shader.Find("RocketFooxball/SunnyArenaSky");
-                    if (shader == null)
-                    {
-                        throw new InvalidOperationException("SunnyArenaSky shader is unavailable.");
-                    }
-
-                    var material = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
-                    if (material == null)
-                    {
-                        material = new Material(shader) { name = "RetroSunnySky" };
-                        AssetDatabase.CreateAsset(material, SkyMaterialPath);
-                    }
-
-                    material.shader = shader;
-                    material.SetTexture("_Panorama", LoadTexture(SkyTexturePath));
-                    material.SetColor("_HorizonColor", SkyHorizonColor);
-                    material.SetColor("_ZenithColor", SkyZenithColor);
-                    material.SetColor("_CloudTint", SkyCloudColor);
-                    material.SetFloat("_CloudCoverage", 0.22f);
-                    material.SetFloat("_CloudSoftness", 0.65f);
-                    material.SetVector("_SunDirection", -sun.transform.forward);
-                    material.SetColor("_SunColor", SunColor);
-                    material.SetFloat("_SunAngularRadius", 0.012f);
-                    material.SetFloat("_SunIntensity", 3f);
-                    material.SetColor("_FogHorizonColor", SkyHorizonColor);
-                    material.SetFloat("_FogHorizonHeight", 0.02f);
-                    material.SetFloat("_FogHorizonWidth", 0.28f);
-                    EditorUtility.SetDirty(material);
-                    return material;
-                }
-
                 private static void BindExistingGlobalVolume(Transform parent)
                 {
                     var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
@@ -215,66 +182,6 @@ namespace RocketFooxball.Editor
                         light.shadowStrength = 0.85f;
                         light.lightmapBakeType = LightmapBakeType.Baked;
                     }
-                }
-
-                internal static void ConfigureGlobalVolume(Transform parent)
-                {
-                    var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
-                    if (profile == null)
-                    {
-                        profile = ScriptableObject.CreateInstance<VolumeProfile>();
-                        profile.name = "MovementLabVolumeProfile";
-                        AssetDatabase.CreateAsset(profile, VolumeProfilePath);
-                    }
-
-                    VolumeComponent[] stale = profile.components.ToArray();
-                    for (var i = 0; i < stale.Length; i++)
-                    {
-                        if (stale[i] != null)
-                        {
-                            profile.Remove(stale[i].GetType());
-                            UnityEngine.Object.DestroyImmediate(stale[i], true);
-                        }
-                    }
-                    profile.components.Clear();
-
-                    var tonemapping = AddPersistentVolumeComponent<Tonemapping>(profile);
-                    tonemapping.active = true;
-                    tonemapping.mode.value = TonemappingMode.ACES;
-                    tonemapping.mode.overrideState = true;
-
-                    var bloom = AddPersistentVolumeComponent<Bloom>(profile);
-                    bloom.active = true;
-                    bloom.threshold.value = 1.1f;
-                    bloom.threshold.overrideState = true;
-                    bloom.intensity.value = 0.20f;
-                    bloom.intensity.overrideState = true;
-                    bloom.scatter.value = 0.60f;
-                    bloom.scatter.overrideState = true;
-                    bloom.clamp.value = 10f;
-                    bloom.clamp.overrideState = true;
-                    bloom.highQualityFiltering.value = false;
-                    bloom.highQualityFiltering.overrideState = true;
-
-                    var color = AddPersistentVolumeComponent<ColorAdjustments>(profile);
-                    color.active = true;
-                    color.postExposure.value = 0f;
-                    color.postExposure.overrideState = true;
-                    color.contrast.value = 5f;
-                    color.contrast.overrideState = true;
-                    color.saturation.value = 4f;
-                    color.saturation.overrideState = true;
-
-                    var volumeObject = new GameObject("GlobalVolume");
-                    volumeObject.transform.SetParent(parent, false);
-                    var volume = volumeObject.AddComponent<Volume>();
-                    volume.isGlobal = true;
-                    volume.priority = 0f;
-                    // Editor-authored profile must use sharedProfile so serialized
-                    // scene YAML retains nonzero GUID/fileID reference.
-                    volume.sharedProfile = profile;
-                    EditorUtility.SetDirty(profile);
-                    EditorUtility.SetDirty(volume);
                 }
 
                 internal static T AddPersistentVolumeComponent<T>(VolumeProfile profile) where T : VolumeComponent
@@ -370,13 +277,6 @@ namespace RocketFooxball.Editor
                         renderer.shadowCastingMode = transparent ? ShadowCastingMode.Off : ShadowCastingMode.On;
                         renderer.receiveShadows = !transparent;
                     }
-                }
-
-                internal static LightingSettings ConfigureLightingSettings(Scene scene)
-                {
-                    var settings = MovementLabLightingProfiles.EnsurePersistedProductionSettings();
-                    Lightmapping.SetLightingSettingsForScene(scene, settings);
-                    return settings;
                 }
 
                 internal static Scene BakeSceneLighting(Scene scene, string passPath)
