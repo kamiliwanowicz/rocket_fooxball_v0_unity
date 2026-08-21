@@ -326,10 +326,10 @@ namespace RocketFooxball.Editor
         internal static readonly (string name, Vector3 position, Color color)[] AccentLightContract =
         {
             // Red owns negative-X/North; Blue owns positive-X/South.
-            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f))
+            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -22f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 22f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -22f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 22f), new Color(0.20f, 0.46f, 1.00f, 1f))
         };
         internal static readonly (string name, Vector3 center, Vector3 size)[] ReflectionProbeContract =
         {

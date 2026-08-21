@@ -39,19 +39,21 @@ namespace RocketFooxball.Editor
                 private const float ProductionAmbientIntensity = 0.65f;
                 private const float ProductionSunIntensity = 2.0f;
                 private const float ProductionSunShadowStrength = 0.90f;
+                private const float GoalAccentIntensity = 350f;
+                private const float GoalAccentRange = 24f;
                 private static readonly Color WallFillColor = new Color(1.0f, 0.82f, 0.64f, 1f);
-                private const float WallFillIntensity = 1100f;
-                private const float WallFillRange = 28f;
-                private const float WallFillOuterAngle = 110f;
-                private const float WallFillInnerAngle = 70f;
+                private const float WallFillIntensity = 900f;
+                private const float WallFillRange = 32f;
+                private const float WallFillOuterAngle = 120f;
+                private const float WallFillInnerAngle = 105f;
                 private static readonly (string name, Vector3 position, Vector3 target)[] WallFillLightContract =
                 {
-                    ("WallFill_North_West", new Vector3(-43f, 10f, -27f), new Vector3(-43f, 4f, -44.5f)),
-                    ("WallFill_North_Center", new Vector3(0f, 10f, -27f), new Vector3(0f, 4f, -44.5f)),
-                    ("WallFill_North_East", new Vector3(43f, 10f, -27f), new Vector3(43f, 4f, -44.5f)),
-                    ("WallFill_South_West", new Vector3(-43f, 10f, 27f), new Vector3(-43f, 4f, 44.5f)),
-                    ("WallFill_South_Center", new Vector3(0f, 10f, 27f), new Vector3(0f, 4f, 44.5f)),
-                    ("WallFill_South_East", new Vector3(43f, 10f, 27f), new Vector3(43f, 4f, 44.5f))
+                    ("WallFill_North_West", new Vector3(-43f, 10f, -24f), new Vector3(-43f, 4f, -44.5f)),
+                    ("WallFill_North_Center", new Vector3(0f, 10f, -24f), new Vector3(0f, 4f, -44.5f)),
+                    ("WallFill_North_East", new Vector3(43f, 10f, -24f), new Vector3(43f, 4f, -44.5f)),
+                    ("WallFill_South_West", new Vector3(-43f, 10f, 24f), new Vector3(-43f, 4f, 44.5f)),
+                    ("WallFill_South_Center", new Vector3(0f, 10f, 24f), new Vector3(0f, 4f, 44.5f)),
+                    ("WallFill_South_East", new Vector3(43f, 10f, 24f), new Vector3(43f, 4f, 44.5f))
                 };
 
                 // Gameplay assembly owns scene objects and bindings only. The
@@ -186,8 +188,8 @@ namespace RocketFooxball.Editor
                         light.transform.localPosition = contract.position;
                         light.type = LightType.Point;
                         light.color = contract.color;
-                        light.intensity = 500f;
-                        light.range = 14f;
+                        light.intensity = GoalAccentIntensity;
+                        light.range = GoalAccentRange;
                         light.shadows = LightShadows.None;
                         light.lightmapBakeType = LightmapBakeType.Realtime;
                     }
@@ -467,7 +469,7 @@ namespace RocketFooxball.Editor
                             var accentData = accent.GetComponent<UniversalAdditionalLightData>();
                             if (accentData == null || accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
                                 Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
-                                Mathf.Abs(accent.intensity - 500f) > 0.01f || Mathf.Abs(accent.range - 14f) > 0.001f)
+                                Mathf.Abs(accent.intensity - GoalAccentIntensity) > 0.01f || Mathf.Abs(accent.range - GoalAccentRange) > 0.001f)
                             {
                                 throw new InvalidOperationException("Goal accent light contract invalid: " + accent.name);
                             }
