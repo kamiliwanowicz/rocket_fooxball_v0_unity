@@ -75,23 +75,6 @@ namespace RocketFooxball.Editor
         private const string LightingContract = "lighting-contract:5";
         private const string BakedContract = "baked-output-contract:5";
 
-        // Unity can deterministically omit unused lightmap variants 2/3/4 in
-        // either bake profile; keep their exact optional identities in the
-        // output fingerprint without treating an intact absent pair as damage.
-        private static readonly HashSet<string> OptionalBakedLightmapOutputPaths =
-            new HashSet<string>(WithMetas(new[]
-            {
-                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_dir.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_light.exr",
-                MovementLabContract.BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_dir.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_light.exr",
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_dir.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_light.exr",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_shadowmask.png"
-            }), StringComparer.Ordinal);
-
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a
         // dynamic/prefab-only change cannot invalidate lighting by transitively
@@ -283,7 +266,7 @@ namespace RocketFooxball.Editor
                 }
                 else
                 {
-                    var drift = FindOutputDrift(definition.Stage, prior.outputs, current.outputs, definition.Outputs);
+                    var drift = FindOutputDrift(prior.outputs, current.outputs, definition.Outputs);
                     var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
@@ -357,7 +340,7 @@ namespace RocketFooxball.Editor
                 var definition = Definitions[i];
                 var prior = manifestRead.State.Find(definition.Stage.ToString());
                 if (prior == null || !live.TryGetValue(definition.Stage, out var current)) continue;
-                var drift = FindOutputDrift(definition.Stage, prior.outputs, current.outputs, definition.Outputs);
+                var drift = FindOutputDrift(prior.outputs, current.outputs, definition.Outputs);
                 var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                 if (IsBlockingOutputDrift(drift, identityViolations))
                 {
@@ -606,14 +589,12 @@ namespace RocketFooxball.Editor
 
                 if (path.EndsWith(".meta", StringComparison.Ordinal))
                 {
-                    var stableMissingPair = IsOptionalMissingBakedOutput(definition.Stage, path, currentValue);
                     // Legacy byte digests migrate once; stable GUID identities remain protected.
-                    if (!stableMissingPair &&
-                        priorValue != null && !priorValue.missing && currentValue.missing)
+                    if (priorValue != null && !priorValue.missing && currentValue.missing)
                     {
                         violations.Add("identity:missing-meta:" + path);
                     }
-                    else if (!stableMissingPair && priorValue != null && !priorValue.missing && !currentValue.missing)
+                    else if (priorValue != null && !priorValue.missing && !currentValue.missing)
                     {
                         var isLegacyToGuidMigration = IsHexDigest(priorValue, 64) && IsHexDigest(currentValue, 32);
                         var isStableGuidPair = IsHexDigest(priorValue, 32) && IsHexDigest(currentValue, 32);
@@ -630,14 +611,14 @@ namespace RocketFooxball.Editor
                     var assetPath = path.Substring(0, path.Length - ".meta".Length);
                     if (checkedPairs.Add(assetPath))
                     {
-                        var pairViolation = FindAssetMetaPairViolation(assetPath, definition.Stage);
+                        var pairViolation = FindAssetMetaPairViolation(assetPath);
                         if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                     }
                 }
                 else if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
                     contractPaths.Contains(path + ".meta") && checkedPairs.Add(path))
                 {
-                    var pairViolation = FindAssetMetaPairViolation(path, definition.Stage);
+                    var pairViolation = FindAssetMetaPairViolation(path);
                     if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                 }
             }
@@ -645,7 +626,7 @@ namespace RocketFooxball.Editor
             return violations.Distinct(StringComparer.Ordinal).ToList();
         }
 
-        private static string FindAssetMetaPairViolation(string assetPath, MovementLabStage stage)
+        private static string FindAssetMetaPairViolation(string assetPath)
         {
             if (string.IsNullOrEmpty(assetPath) || !assetPath.StartsWith("Assets/", StringComparison.Ordinal)) return null;
             var assetAbsolute = MovementLabManifestStore.ResolveProjectPath(assetPath);
@@ -653,11 +634,6 @@ namespace RocketFooxball.Editor
             var metaAbsolute = MovementLabManifestStore.ResolveProjectPath(metaPath);
             var currentMeta = File.Exists(metaAbsolute);
             var currentAssetExists = File.Exists(assetAbsolute);
-
-            if (stage == MovementLabStage.BakedOutput &&
-                !currentAssetExists && !currentMeta &&
-                OptionalBakedLightmapOutputPaths.Contains(assetPath) &&
-                OptionalBakedLightmapOutputPaths.Contains(metaPath)) return null;
 
             if (!currentAssetExists || !currentMeta)
                 return "identity:broken-pair:" + assetPath;
@@ -1081,7 +1057,7 @@ namespace RocketFooxball.Editor
             return result;
         }
 
-        private static List<string> FindOutputDrift(MovementLabStage stage, MovementLabPathDigest[] expected,
+        private static List<string> FindOutputDrift(MovementLabPathDigest[] expected,
             MovementLabPathDigest[] actual, string[] contractOutputs)
         {
             var drift = new List<string>();
@@ -1096,20 +1072,11 @@ namespace RocketFooxball.Editor
                 if (oldValue == null) continue; // Contract-authorized new output path; stage contract/input staleness drives writer.
                 if (newValue == null || newValue.missing)
                 {
-                    if (IsOptionalMissingBakedOutput(stage, path, newValue)) continue;
                     drift.Add("missing:" + path);
                 }
                 else if (oldValue == null || oldValue.missing || !string.Equals(oldValue.digest, newValue.digest, StringComparison.Ordinal)) drift.Add("changed:" + path);
             }
             return drift;
-        }
-
-        private static bool IsOptionalMissingBakedOutput(MovementLabStage stage, string path, MovementLabPathDigest current)
-        {
-            var isBakedOutput = stage == MovementLabStage.BakedOutput;
-            var currentMissing = current != null && current.missing;
-            var isAllowlistedPath = !string.IsNullOrEmpty(path) && OptionalBakedLightmapOutputPaths.Contains(path);
-            return isBakedOutput && currentMissing && isAllowlistedPath;
         }
 
         private static bool SequenceEqual(string[] left, string[] right) => (left ?? Array.Empty<string>()).SequenceEqual(right ?? Array.Empty<string>(), StringComparer.Ordinal);

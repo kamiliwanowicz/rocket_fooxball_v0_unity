@@ -34,6 +34,7 @@ namespace RocketFooxball.Editor
         internal const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
+        internal const int ExpectedLightmapCount = 4;
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
         internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
@@ -204,32 +205,21 @@ namespace RocketFooxball.Editor
             GraphicsQualityConfigurator.ProjectSettingsPath
         };
 
-        internal static readonly string[] BakedOutputPaths =
-        {
-            ScenePath,
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr",
-            LightingManifestPath
-        };
+        internal static readonly string[] BakedOutputPaths = CreateBakedOutputPaths();
 
-        internal static readonly string[] T12ProductionBakeOutputs =
+        internal static string[] BakedLightmapPaths(int count)
         {
-            LightingSettingsPath,
-            VolumeProfilePath,
-            LightingManifestPath,
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
-        };
+            var paths = new string[count * 3];
+            for (var i = 0; i < count; i++)
+            {
+                var path = BakedLightingPath + "/Lightmap-" + i + "_comp_";
+                var offset = i * 3;
+                paths[offset] = path + "dir.png";
+                paths[offset + 1] = path + "light.exr";
+                paths[offset + 2] = path + "shadowmask.png";
+            }
+            return paths;
+        }
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
 
@@ -342,6 +332,22 @@ namespace RocketFooxball.Editor
                 EmissionStrength = emissionStrength; Metallic = metallic; Smoothness = smoothness;
                 OcclusionStrength = occlusionStrength; BumpScale = bumpScale;
             }
+        }
+
+        private static string[] CreateBakedOutputPaths()
+        {
+            var lightmapPaths = BakedLightmapPaths(ExpectedLightmapCount);
+            var paths = new string[2 + lightmapPaths.Length + 5];
+            paths[0] = ScenePath;
+            paths[1] = BakedLightingPath + "/LightingData.asset";
+            Array.Copy(lightmapPaths, 0, paths, 2, lightmapPaths.Length);
+            var reflectionOffset = 2 + lightmapPaths.Length;
+            paths[reflectionOffset] = BakedLightingPath + "/ReflectionProbe-0.exr";
+            paths[reflectionOffset + 1] = BakedLightingPath + "/ReflectionProbe-1.exr";
+            paths[reflectionOffset + 2] = BakedLightingPath + "/ReflectionProbe-2.exr";
+            paths[reflectionOffset + 3] = BakedLightingPath + "/ReflectionProbe-3.exr";
+            paths[reflectionOffset + 4] = LightingManifestPath;
+            return paths;
         }
 
         private static string[] WithMetas(string[] paths)
