@@ -15,9 +15,9 @@ namespace RocketFooxball.Runtime.Bots
     {
         private const int RosterSize = 6;
         private const int PickupCount = 5;
-        private const float ExpectedSightDistance = 75f;
-        private const float ExpectedFieldOfViewDegrees = 130f;
-        private const float ExpectedMemorySeconds = 1.5f;
+        public const float ExpectedSightDistance = 75f;
+        public const float ExpectedFieldOfViewDegrees = 130f;
+        public const float ExpectedMemorySeconds = 1.5f;
         private const float TargetDistanceEpsilon = 0.05f;
         private const float PositionEpsilon = 0.000001f;
 
@@ -500,14 +500,11 @@ namespace RocketFooxball.Runtime.Bots
                 pickupKinds[i] = kind;
             }
 
-            if (!Mathf.Approximately(sightDistance, ExpectedSightDistance) ||
-                !Mathf.Approximately(fieldOfViewDegrees, ExpectedFieldOfViewDegrees) ||
-                !Mathf.Approximately(memorySeconds, ExpectedMemorySeconds) ||
-                !IsFinite(sightDistance) || sightDistance <= 0f ||
+            if (!IsFinite(sightDistance) || sightDistance <= 0f ||
                 !IsFinite(fieldOfViewDegrees) || fieldOfViewDegrees <= 0f || fieldOfViewDegrees > 360f ||
                 !IsFinite(memorySeconds) || memorySeconds < 0f || ContainsForbiddenLayer(obstacleMask.value))
             {
-                Debug.LogError("BotPerception requires sightDistance=75, fieldOfViewDegrees=130, memorySeconds=1.5 and an obstacle mask excluding Participants and Projectiles.", this);
+                Debug.LogError("BotPerception requires positive finite sight distance, valid field of view and memory duration, and an obstacle mask excluding Participants and Projectiles.", this);
                 return false;
             }
 

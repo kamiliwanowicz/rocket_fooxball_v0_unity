@@ -154,7 +154,7 @@ namespace RocketFooxball.Editor
             SetInt(serialized, "m_HDRColorBufferPrecision", 0);
             SetInt(serialized, "m_MSAA", 1);
             SetFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
-            SetInt(serialized, "m_MainLightRenderingMode", (high || iteration) ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
+            SetInt(serialized, "m_MainLightRenderingMode", (int)LightRenderingMode.PerPixel);
             SetBool(serialized, "m_MainLightShadowsSupported", fullQuality);
             SetInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
             SetInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
@@ -321,7 +321,7 @@ namespace RocketFooxball.Editor
             ExpectInt(serialized, "m_MSAA", 1);
             var fullQuality = high && !iteration;
             ExpectFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
-            ExpectInt(serialized, "m_MainLightRenderingMode", (high || iteration) ? 1 : 0);
+            ExpectInt(serialized, "m_MainLightRenderingMode", (int)LightRenderingMode.PerPixel);
             ExpectBool(serialized, "m_MainLightShadowsSupported", fullQuality);
             ExpectInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
             ExpectInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? 1 : 0);

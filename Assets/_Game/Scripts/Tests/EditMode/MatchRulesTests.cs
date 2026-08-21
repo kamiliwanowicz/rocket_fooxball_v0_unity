@@ -35,6 +35,23 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void GoalFreezeStartsIndefinitelyWithZeroRemaining()
+        {
+            var transition = MatchRules.BeginGoal(
+                MatchRules.MatchState.Playing,
+                1,
+                2,
+                GoalTrigger.GoalSide.North,
+                3f);
+
+            Assert.That(transition.State, Is.EqualTo(MatchRules.MatchState.GoalFreeze));
+            Assert.That(transition.FreezeRemaining, Is.EqualTo(0f));
+            Assert.That(transition.NorthScore, Is.EqualTo(1));
+            Assert.That(transition.SouthScore, Is.EqualTo(3));
+            Assert.That(MatchRules.AdvanceGoalFreeze(transition.FreezeRemaining, 100f), Is.EqualTo(0f));
+        }
+
+        [Test]
         public void GameplayGateAndCountdownPhaseAreDeterministic()
         {
             Assert.That(MatchRules.IsGameplayEnabled(MatchRules.MatchState.Playing), Is.True);

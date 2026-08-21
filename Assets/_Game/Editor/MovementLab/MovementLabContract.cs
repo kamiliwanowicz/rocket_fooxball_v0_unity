@@ -1,6 +1,9 @@
 using System;
 using UnityEditor.Animations;
 using UnityEngine;
+using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 
 namespace RocketFooxball.Editor
 {
@@ -9,7 +12,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 6;
+        internal const int SerializedContractVersion = 8;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -34,6 +37,8 @@ namespace RocketFooxball.Editor
         internal const string VolumeProfilePath = LightingPath + "/MovementLabVolumeProfile.asset";
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
+        internal const int DevelopmentLightmapCount = 2;
+        internal const int ExpectedLightmapCount = 4;
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
         internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
@@ -48,7 +53,7 @@ namespace RocketFooxball.Editor
         internal const string HealthPickupsRootName = "HealthPickups";
         internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
         internal const string HealthPickupEastSouthName = "HealthPickup_EastSouth";
-        internal const float HealthPickupRespawnDelay = 15f;
+        internal const float HealthPickupRespawnDelay = ArenaPickup.DefaultRespawnDelay;
         internal const float HealthPickupRestoreFraction = 0.33f;
         internal const float HealthPickupTriggerRadius = 1.50f;
         internal const string ShotgunPickupsRootName = "ShotgunPickups";
@@ -96,16 +101,27 @@ namespace RocketFooxball.Editor
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
         internal const float BallSpawnHeight = BallRadius;
-        internal const float BlastRadius = 5.85f;
-        internal const float BlastVisualScale = 1.30f;
+        internal const float BlastRadius = 11.7f;
         internal const float GoalAxisPosition = 64f;
         internal const float PlayerSpawnOffset = 12f;
-        internal const float GoalFreezeDuration = 5f;
-        internal const float CelebrationOrbitRadius = 5.5f;
-        internal const float CelebrationOrbitHeight = 2.5f;
-        internal const float CelebrationLookHeight = 1.05f;
+        internal const float CelebrationOrbitRadius = PlayerCameraFeedback.ExpectedCelebrationOrbitRadius;
+        internal const float CelebrationOrbitHeight = PlayerCameraFeedback.ExpectedCelebrationOrbitHeight;
+        internal const float CelebrationLookHeight = 2.1f;
         internal const float CelebrationOrbitDegrees = 360f;
         internal const float CelebrationFov = 60f;
+        internal const float PlayerControllerRadius = 0.8f;
+        internal const float PlayerControllerHeight = 3.6f;
+        internal static readonly Vector3 PlayerControllerCenter = new Vector3(0f, 1.8f, 0f);
+        internal const float PlayerControllerSkinWidth = 0.08f;
+        internal const float PlayableFloorTop = 0f;
+        internal const float ParticipantRecoveryThreshold = -1f;
+        internal const float WorldVisualScale = 2f;
+        internal const float PlayerHeadHeight = 3.1f;
+        internal const float TeamCueScaleMultiplier = 2f;
+        internal const float ImmunityShieldScaleMultiplier = 2f;
+        internal const float NameplateHeight = 4.1f;
+        internal const float LocalRespawnDelay = ParticipantState.DefaultDeathWait;
+        internal const float BotRespawnDelay = 5f;
         internal const float RocketTrailLifetime = 0.55f;
         internal const float RocketTrailRateOverDistance = 1.5f;
         internal const float RocketTrailStartSize = 0.70f;
@@ -183,19 +199,6 @@ namespace RocketFooxball.Editor
             TagManagerPath
         };
 
-        // T12 owns this complete generated inventory. The manifest remains an
-        // orchestration artifact and is intentionally excluded from stage
-        // fingerprints above.
-        internal static readonly string[] T12GameplaySceneOutputs =
-        {
-            ScenePath,
-            ManifestPath,
-            EditorBuildSettingsPath,
-            DynamicsManagerPath,
-            TimeManagerPath,
-            TagManagerPath
-        };
-
         internal static readonly string[] QualityOutputs =
         {
             GraphicsQualityConfigurator.HighPipelinePath,
@@ -208,32 +211,21 @@ namespace RocketFooxball.Editor
             GraphicsQualityConfigurator.ProjectSettingsPath
         };
 
-        internal static readonly string[] BakedOutputPaths =
-        {
-            ScenePath,
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr",
-            LightingManifestPath
-        };
+        internal static readonly string[] BakedOutputPaths = CreateBakedOutputPaths();
 
-        internal static readonly string[] T12ProductionBakeOutputs =
+        internal static string[] BakedLightmapPaths(int count)
         {
-            LightingSettingsPath,
-            VolumeProfilePath,
-            LightingManifestPath,
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
-        };
+            var paths = new string[count * 3];
+            for (var i = 0; i < count; i++)
+            {
+                var path = BakedLightingPath + "/Lightmap-" + i + "_comp_";
+                var offset = i * 3;
+                paths[offset] = path + "dir.png";
+                paths[offset + 1] = path + "light.exr";
+                paths[offset + 2] = path + "shadowmask.png";
+            }
+            return paths;
+        }
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
 
@@ -346,6 +338,22 @@ namespace RocketFooxball.Editor
                 EmissionStrength = emissionStrength; Metallic = metallic; Smoothness = smoothness;
                 OcclusionStrength = occlusionStrength; BumpScale = bumpScale;
             }
+        }
+
+        private static string[] CreateBakedOutputPaths()
+        {
+            var lightmapPaths = BakedLightmapPaths(ExpectedLightmapCount);
+            var paths = new string[2 + lightmapPaths.Length + 5];
+            paths[0] = ScenePath;
+            paths[1] = BakedLightingPath + "/LightingData.asset";
+            Array.Copy(lightmapPaths, 0, paths, 2, lightmapPaths.Length);
+            var reflectionOffset = 2 + lightmapPaths.Length;
+            paths[reflectionOffset] = BakedLightingPath + "/ReflectionProbe-0.exr";
+            paths[reflectionOffset + 1] = BakedLightingPath + "/ReflectionProbe-1.exr";
+            paths[reflectionOffset + 2] = BakedLightingPath + "/ReflectionProbe-2.exr";
+            paths[reflectionOffset + 3] = BakedLightingPath + "/ReflectionProbe-3.exr";
+            paths[reflectionOffset + 4] = LightingManifestPath;
+            return paths;
         }
 
         private static string[] WithMetas(string[] paths)

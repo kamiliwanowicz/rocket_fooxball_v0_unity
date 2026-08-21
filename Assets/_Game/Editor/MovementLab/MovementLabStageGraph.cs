@@ -66,27 +66,14 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:3";
-        private const string MaterialContract = "material-prefab-contract:10";
+        private const string MaterialContract = "material-prefab-contract:11";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
         private const string GameplayContract = "gameplay-scene-contract:15";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
-        private const string LightingContract = "lighting-contract:4";
-        private const string BakedContract = "baked-output-contract:4";
-
-        // Development can deterministically omit only lightmap variants 3/4;
-        // keep exact ownership paths (including .meta files) in fingerprints.
-        private static readonly HashSet<string> DevelopmentStableMissingBakedOutputPaths =
-            new HashSet<string>(WithMetas(new[]
-            {
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_dir.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_light.exr",
-                MovementLabContract.BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_dir.png",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_light.exr",
-                MovementLabContract.BakedLightingPath + "/Lightmap-4_comp_shadowmask.png"
-            }), StringComparer.Ordinal);
+        private const string LightingContract = "lighting-contract:5";
+        private const string BakedContract = "baked-output-contract:5";
 
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a
@@ -102,7 +89,7 @@ namespace RocketFooxball.Editor
                 MovementLabContractCatalog.GeneratedImporterMetadataPaths, includeUnityVersion: true),
             new StageDefinition(MovementLabStage.MaterialPrefab, new[] { MovementLabStage.Importer }, Array.Empty<MovementLabStage>(),
                 MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
-                WithMetas(new[]
+                Concat(new[] { "Tools/Blender/generate_retro_textures.py" }, WithMetas(new[]
                 {
                     MovementLabContract.InputActionsPath,
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
@@ -133,8 +120,11 @@ namespace RocketFooxball.Editor
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs"
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs"
                      ,"Assets/_Game/Scripts/Runtime/Ball/BallKick.cs"
-                     ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
-                 }), MovementLabContract.ImportedAssetPaths,
+                      ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
+                  })), MovementLabContract.ImportedAssetPaths,
                 WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
                 GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
@@ -145,6 +135,7 @@ namespace RocketFooxball.Editor
                       "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
                       "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
                       "Assets/_Game/Scripts/Runtime/Input/PlayerInputReader.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/ParticipantRelationship.cs",
@@ -175,7 +166,14 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs",
                      "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
-                     "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
+                      "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Hud/MatchHud.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfxSpawner.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Participants/ParticipantSpawnSet.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Bots/BotController.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs"
                  })),
                 new[]
                 {
@@ -211,6 +209,7 @@ namespace RocketFooxball.Editor
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, new[] { MovementLabStage.Lighting }, BakedContract,
                 new[]
                 {
+                    "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
                     MovementLabContract.BakedLightingPath + "/LightingData.asset",
                     MovementLabContract.LightingManifestPath
                 }, Array.Empty<string>(), WithMetas(MovementLabContract.BakedOutputPaths), includeUnityVersion: false)
@@ -267,7 +266,7 @@ namespace RocketFooxball.Editor
                 }
                 else
                 {
-                    var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs, definition.Outputs);
+                    var drift = FindOutputDrift(definition.Stage, current.profile, prior.outputs, current.outputs, definition.Outputs);
                     var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                     if (prior.schemaVersion != MovementLabContract.ManifestSchemaVersion) stageReasons.Add("schema-mismatch");
                     if (!string.Equals(prior.contractVersion, current.contractVersion, StringComparison.Ordinal)) stageReasons.Add("contract-changed");
@@ -322,11 +321,6 @@ namespace RocketFooxball.Editor
             return new MovementLabStageProbe(stale, reasons, lightingDigest, currentState, manifestRead.Status);
         }
 
-        internal static MovementLabGeneratedState CaptureAssembledState()
-        {
-            return CaptureStateThrough(MovementLabStage.Quality);
-        }
-
         internal static MovementLabGeneratedState CaptureBakedState()
         {
             var state = CaptureStateThrough(MovementLabStage.BakedOutput);
@@ -346,7 +340,7 @@ namespace RocketFooxball.Editor
                 var definition = Definitions[i];
                 var prior = manifestRead.State.Find(definition.Stage.ToString());
                 if (prior == null || !live.TryGetValue(definition.Stage, out var current)) continue;
-                var drift = FindOutputDrift(definition.Stage, prior.profile, current.profile, prior.outputs, current.outputs, definition.Outputs);
+                var drift = FindOutputDrift(definition.Stage, current.profile, prior.outputs, current.outputs, definition.Outputs);
                 var identityViolations = FindOutputIdentityViolations(definition, prior, current);
                 if (IsBlockingOutputDrift(drift, identityViolations))
                 {
@@ -408,6 +402,7 @@ namespace RocketFooxball.Editor
 
         internal static void RunCanonicalSceneInvariantSelfCheck()
         {
+            RunRepositoryInputDigestInvariantSelfCheck();
             var absolute = MovementLabManifestStore.ResolveProjectPath(MovementLabContract.ScenePath);
             if (!File.Exists(absolute)) return;
             var source = File.ReadAllText(absolute, Encoding.UTF8);
@@ -594,14 +589,13 @@ namespace RocketFooxball.Editor
 
                 if (path.EndsWith(".meta", StringComparison.Ordinal))
                 {
-                    var stableMissingPair = IsStableDevelopmentMissingPair(definition.Stage, prior.profile, current.profile, path, priorValue, currentValue);
                     // Legacy byte digests migrate once; stable GUID identities remain protected.
-                    if (!stableMissingPair &&
-                        priorValue != null && !priorValue.missing && currentValue.missing)
+                    var developmentOmission = IsDevelopmentOmittedBakedLightmapOutput(definition.Stage, current?.profile, path, currentValue);
+                    if (!developmentOmission && priorValue != null && !priorValue.missing && currentValue.missing)
                     {
                         violations.Add("identity:missing-meta:" + path);
                     }
-                    else if (!stableMissingPair && priorValue != null && !priorValue.missing && !currentValue.missing)
+                    else if (!developmentOmission && priorValue != null && !priorValue.missing && !currentValue.missing)
                     {
                         var isLegacyToGuidMigration = IsHexDigest(priorValue, 64) && IsHexDigest(currentValue, 32);
                         var isStableGuidPair = IsHexDigest(priorValue, 32) && IsHexDigest(currentValue, 32);
@@ -618,14 +612,15 @@ namespace RocketFooxball.Editor
                     var assetPath = path.Substring(0, path.Length - ".meta".Length);
                     if (checkedPairs.Add(assetPath))
                     {
-                        var pairViolation = FindAssetMetaPairViolation(assetPath, definition.Stage, current.profile);
+                        var pairViolation = developmentOmission ? null : FindAssetMetaPairViolation(assetPath);
                         if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                     }
                 }
                 else if (path.StartsWith("Assets/", StringComparison.Ordinal) &&
                     contractPaths.Contains(path + ".meta") && checkedPairs.Add(path))
                 {
-                    var pairViolation = FindAssetMetaPairViolation(path, definition.Stage, current.profile);
+                    var pairViolation = IsDevelopmentOmittedBakedLightmapOutput(definition.Stage, current?.profile, path, currentValue)
+                        ? null : FindAssetMetaPairViolation(path);
                     if (!string.IsNullOrEmpty(pairViolation)) violations.Add(pairViolation);
                 }
             }
@@ -633,7 +628,7 @@ namespace RocketFooxball.Editor
             return violations.Distinct(StringComparer.Ordinal).ToList();
         }
 
-        private static string FindAssetMetaPairViolation(string assetPath, MovementLabStage stage, string currentProfile)
+        private static string FindAssetMetaPairViolation(string assetPath)
         {
             if (string.IsNullOrEmpty(assetPath) || !assetPath.StartsWith("Assets/", StringComparison.Ordinal)) return null;
             var assetAbsolute = MovementLabManifestStore.ResolveProjectPath(assetPath);
@@ -641,11 +636,6 @@ namespace RocketFooxball.Editor
             var metaAbsolute = MovementLabManifestStore.ResolveProjectPath(metaPath);
             var currentMeta = File.Exists(metaAbsolute);
             var currentAssetExists = File.Exists(assetAbsolute);
-
-            if (stage == MovementLabStage.BakedOutput && IsDevelopmentProfile(currentProfile) &&
-                !currentAssetExists && !currentMeta &&
-                DevelopmentStableMissingBakedOutputPaths.Contains(assetPath) &&
-                DevelopmentStableMissingBakedOutputPaths.Contains(metaPath)) return null;
 
             if (!currentAssetExists || !currentMeta)
                 return "identity:broken-pair:" + assetPath;
@@ -678,12 +668,6 @@ namespace RocketFooxball.Editor
                 .Where(line => line.StartsWith("guid:", StringComparison.Ordinal))
                 .Select(line => line.Substring("guid:".Length).Trim())
                 .FirstOrDefault() ?? string.Empty;
-        }
-
-        private static bool IsStableDevelopmentMissingPair(MovementLabStage stage, string priorProfile,
-            string currentProfile, string path, MovementLabPathDigest prior, MovementLabPathDigest current)
-        {
-            return IsStableDevelopmentMissingBakedOutput(stage, priorProfile, currentProfile, path, prior, current);
         }
 
         private static bool IsBlockingOutputDrift(IEnumerable<string> drift, IEnumerable<string> identityViolations)
@@ -775,14 +759,54 @@ namespace RocketFooxball.Editor
 
         private static string NormalizeLineEndings(string value) => (value ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n");
 
+        private static void RunRepositoryInputDigestInvariantSelfCheck()
+        {
+            var lf = Encoding.UTF8.GetBytes("first\nsecond\n");
+            var crlf = Encoding.UTF8.GetBytes("first\r\nsecond\r\n");
+            var changed = Encoding.UTF8.GetBytes("first\nchanged\n");
+            if (!string.Equals(HashRepositoryInputBytes(lf), HashRepositoryInputBytes(crlf), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Repository input digest self-check failed: line endings changed digest.");
+            }
+            if (string.Equals(HashRepositoryInputBytes(lf), HashRepositoryInputBytes(changed), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Repository input digest self-check failed: content mutation was ignored.");
+            }
+        }
+
         private static void AddRepositoryDigests(List<string> parts, string[] paths)
         {
             var expanded = ExpandRepositoryPaths(paths);
             foreach (var path in expanded.Select(MovementLabManifestStore.NormalizeRepositoryPath).Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal))
             {
                 var absolute = MovementLabManifestStore.ResolveProjectPath(path);
-                parts.Add("file:" + path + ":" + (File.Exists(absolute) ? HashFile(absolute) : "missing"));
+                parts.Add("file:" + path + ":" + (File.Exists(absolute) ? HashRepositoryInputFile(absolute) : "missing"));
             }
+        }
+
+        private static string HashRepositoryInputFile(string path) => HashRepositoryInputBytes(File.ReadAllBytes(path));
+
+        private static string HashRepositoryInputBytes(byte[] bytes)
+        {
+            bytes = bytes ?? Array.Empty<byte>();
+            // Git treats NUL-containing inputs as binary; keep their exact bytes
+            // while canonicalizing checkout-specific line endings for text.
+            if (Array.IndexOf(bytes, (byte)0) >= 0 || Array.IndexOf(bytes, (byte)'\r') < 0) return HashBytes(bytes);
+
+            var normalized = new List<byte>(bytes.Length);
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                if (bytes[i] == (byte)'\r')
+                {
+                    normalized.Add((byte)'\n');
+                    if (i + 1 < bytes.Length && bytes[i + 1] == (byte)'\n') i++;
+                }
+                else
+                {
+                    normalized.Add(bytes[i]);
+                }
+            }
+            return HashBytes(normalized.ToArray());
         }
 
         private static IEnumerable<string> ExpandRepositoryPaths(string[] paths)
@@ -1035,8 +1059,8 @@ namespace RocketFooxball.Editor
             return result;
         }
 
-        private static List<string> FindOutputDrift(MovementLabStage stage, string priorProfile, string currentProfile,
-            MovementLabPathDigest[] expected, MovementLabPathDigest[] actual, string[] contractOutputs)
+        private static List<string> FindOutputDrift(MovementLabStage stage, string currentProfile, MovementLabPathDigest[] expected,
+            MovementLabPathDigest[] actual, string[] contractOutputs)
         {
             var drift = new List<string>();
             var expectedByPath = (expected ?? Array.Empty<MovementLabPathDigest>()).Where(item => item != null).ToDictionary(item => item.path, StringComparer.Ordinal);
@@ -1050,7 +1074,7 @@ namespace RocketFooxball.Editor
                 if (oldValue == null) continue; // Contract-authorized new output path; stage contract/input staleness drives writer.
                 if (newValue == null || newValue.missing)
                 {
-                    if (IsStableDevelopmentMissingBakedOutput(stage, priorProfile, currentProfile, path, oldValue, newValue)) continue;
+                    if (IsDevelopmentOmittedBakedLightmapOutput(stage, currentProfile, path, newValue)) continue;
                     drift.Add("missing:" + path);
                 }
                 else if (oldValue == null || oldValue.missing || !string.Equals(oldValue.digest, newValue.digest, StringComparison.Ordinal)) drift.Add("changed:" + path);
@@ -1058,18 +1082,21 @@ namespace RocketFooxball.Editor
             return drift;
         }
 
-        // Development profile intentionally omits allowlisted lightmap variants.
-        // Suppress only current-profile Development + current missing + known
-        // owned path; all other missing output states remain blocking.
-        private static bool IsStableDevelopmentMissingBakedOutput(MovementLabStage stage, string priorProfile,
-            string currentProfile, string path, MovementLabPathDigest prior, MovementLabPathDigest current)
+        private static bool IsDevelopmentOmittedBakedLightmapOutput(MovementLabStage stage, string currentProfile,
+            string path, MovementLabPathDigest current)
         {
-            var isBakedOutput = stage == MovementLabStage.BakedOutput;
-            var isDevelopmentProfile = IsDevelopmentProfile(currentProfile);
-            var priorKnown = prior != null;
-            var currentMissing = current != null && current.missing;
-            var isAllowlistedPath = !string.IsNullOrEmpty(path) && DevelopmentStableMissingBakedOutputPaths.Contains(path);
-            return isBakedOutput && isDevelopmentProfile && priorKnown && currentMissing && isAllowlistedPath;
+            if (stage != MovementLabStage.BakedOutput || current == null || !current.missing ||
+                !IsDevelopmentProfile(currentProfile)) return false;
+
+            var productionPaths = MovementLabContract.BakedLightmapPaths(MovementLabContract.ExpectedLightmapCount);
+            var firstOmittedPath = MovementLabContract.DevelopmentLightmapCount * 3;
+            for (var i = firstOmittedPath; i < productionPaths.Length; i++)
+            {
+                if (string.Equals(path, productionPaths[i], StringComparison.Ordinal) ||
+                    string.Equals(path, productionPaths[i] + ".meta", StringComparison.Ordinal)) return true;
+            }
+
+            return false;
         }
 
         private static bool IsDevelopmentProfile(string profile)
@@ -1149,7 +1176,7 @@ namespace RocketFooxball.Editor
 
         private static string[] Concat(string[] first, string[] second)
         {
-            return (first ?? Array.Empty<string>()).Concat(second ?? Array.Empty<string>()).ToArray();
+            return (first ?? Array.Empty<string>()).Concat(second ?? Array.Empty<string>()).Distinct(StringComparer.Ordinal).ToArray();
         }
 
         private sealed class StageDefinition

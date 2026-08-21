@@ -86,6 +86,8 @@ namespace RocketFooxball.Runtime.Hud
         private const float ReferenceHeight = 1080f;
         private const float GoDuration = 0.5f;
         private const int TableRowCount = 6;
+        private const float ShotgunIconWidth = 128f;
+        private const float ShotgunIconHeight = 64f;
 
         private const string BlueMarker = "[O]";
         private const string RedMarker = @"[/\]";
@@ -106,6 +108,8 @@ namespace RocketFooxball.Runtime.Hud
         private float goRemaining;
         private ShotgunWeapon localShotgun;
         private float hitMarkerRemaining;
+        private float damageIndicatorRemaining;
+        private DamageIndicatorSector damageIndicatorSector;
         private bool finalCursorOverride;
         private CursorLockMode previousCursorLockState;
         private bool previousCursorVisible;
@@ -132,6 +136,8 @@ namespace RocketFooxball.Runtime.Hud
         private bool frameHasShotgun;
         private int frameShotgunShells;
         private bool frameHitMarkerVisible;
+        private float frameDamageIndicatorRemaining;
+        private DamageIndicatorSector frameDamageIndicatorSector;
         private bool frameHasGoalSummary;
         private MatchGoalSummary frameGoalSummary;
         private MatchOutcome frameOutcome;
@@ -151,6 +157,8 @@ namespace RocketFooxball.Runtime.Hud
         private GUIStyle tableNumberStyle;
         private GUIStyle buttonStyle;
         private GUIStyle healthFillStyle;
+        private GUIStyle damageIndicatorStyle;
+        private Texture2D whiteTexture;
 
         private void Awake()
         {
@@ -176,6 +184,7 @@ namespace RocketFooxball.Runtime.Hud
 
             localShotgun = localParticipant.Shotgun;
             localParticipant.Died += OnLocalParticipantDied;
+            localParticipant.Damaged += OnLocalParticipantDamaged;
             if (localShotgun != null)
             {
                 localShotgun.HitConfirmed += OnShotgunHitConfirmed;
@@ -189,6 +198,7 @@ namespace RocketFooxball.Runtime.Hud
             if (localParticipant != null)
             {
                 localParticipant.Died -= OnLocalParticipantDied;
+                localParticipant.Damaged -= OnLocalParticipantDamaged;
             }
             if (localShotgun != null)
             {
@@ -248,6 +258,13 @@ namespace RocketFooxball.Runtime.Hud
                 hitMarkerRemaining = Mathf.Max(hitMarkerRemaining - Time.unscaledDeltaTime, 0f);
             }
 
+            if (damageIndicatorRemaining > 0f)
+            {
+                damageIndicatorRemaining = Mathf.Max(
+                    damageIndicatorRemaining - Time.unscaledDeltaTime,
+                    0f);
+            }
+
             if (localParticipant.IsAlive)
             {
                 ClearCachedDeath();
@@ -283,6 +300,8 @@ namespace RocketFooxball.Runtime.Hud
             frameHasShotgun = localParticipant.HasShotgun;
             frameShotgunShells = localParticipant.ShotgunShells;
             frameHitMarkerVisible = hitMarkerRemaining > 0f;
+            frameDamageIndicatorRemaining = damageIndicatorRemaining;
+            frameDamageIndicatorSector = damageIndicatorSector;
             frameHasGoalSummary = match.HasLastGoalSummary;
             frameGoalSummary = match.LastGoalSummary;
             frameOutcome = match.Outcome;
@@ -305,6 +324,31 @@ namespace RocketFooxball.Runtime.Hud
         private void OnShotgunHitConfirmed()
         {
             hitMarkerRemaining = 0.18f;
+        }
+
+        private void OnLocalParticipantDamaged(ParticipantDamageEvent damage)
+        {
+            if (damage.Victim != localParticipant || localParticipant == null)
+            {
+                return;
+            }
+
+            var cameraFeedback = localParticipant.CameraFeedback;
+            var camera = cameraFeedback != null ? cameraFeedback.TargetCamera : null;
+            var cameraTransform = camera != null ? camera.transform : localParticipant.transform;
+            var victimToSource = damage.SourceWorldPosition - damage.Victim.transform.position;
+            if (!DamageIndicatorRules.TryResolveSector(
+                    victimToSource,
+                    cameraTransform.right,
+                    cameraTransform.forward,
+                    out var sector))
+            {
+                damageIndicatorRemaining = 0f;
+                return;
+            }
+
+            damageIndicatorSector = sector;
+            damageIndicatorRemaining = DamageIndicatorRules.VisibleDuration;
         }
 
         private void OnLocalParticipantDied(ParticipantDeathEvent death)
@@ -388,6 +432,14 @@ namespace RocketFooxball.Runtime.Hud
                 DrawHitMarker();
             }
 
+            if (frameDamageIndicatorRemaining > 0f && frameLocalAlive &&
+                (screen == MatchHudScreen.Live ||
+                 screen == MatchHudScreen.MatchTable ||
+                 screen == MatchHudScreen.Go))
+            {
+                DrawDamageIndicator();
+            }
+
             GUI.matrix = previousMatrix;
         }
 
@@ -422,12 +474,85 @@ namespace RocketFooxball.Runtime.Hud
                 ? Color.white
                 : new Color(0.55f, 0.6f, 0.68f);
             DrawPanel(new Rect(1370f, 930f, 514f, 112f));
-            DrawText(new Rect(1392f, 944f, 470f, 70f), "SHOTGUN " + shells, headingStyle, color);
+            DrawShotgunSilhouette(new Rect(1392f, 954f, ShotgunIconWidth, ShotgunIconHeight), color);
+            DrawText(new Rect(1540f, 942f, 320f, 38f), "SHOTGUN", headingStyle, color);
+            DrawText(new Rect(1540f, 985f, 320f, 38f), "SHELLS  " + shells, smallStyle, color);
+        }
+
+        private void DrawShotgunSilhouette(Rect rect, Color color)
+        {
+            if (whiteTexture == null)
+            {
+                whiteTexture = MakeSolidTexture(Color.white);
+            }
+
+            var previousColor = GUI.color;
+            var previousMatrix = GUI.matrix;
+            try
+            {
+                GUI.color = color;
+                var stock = new Rect(rect.x, rect.y + 27f, 28f, 12f);
+                var body = new Rect(rect.x + 22f, rect.y + 16f, 47f, 29f);
+                var barrel = new Rect(rect.x + 65f, rect.y + 21f, 63f, 11f);
+                var trigger = new Rect(rect.x + 47f, rect.y + 42f, 11f, 16f);
+                GUI.DrawTexture(stock, whiteTexture);
+                GUI.DrawTexture(body, whiteTexture);
+                GUI.DrawTexture(barrel, whiteTexture);
+                GUI.DrawTexture(trigger, whiteTexture);
+            }
+            finally
+            {
+                GUI.matrix = previousMatrix;
+                GUI.color = previousColor;
+            }
         }
 
         private void DrawHitMarker()
         {
             DrawText(new Rect(840f, 420f, 240f, 240f), "X", bigStyle, Color.white);
+        }
+
+        private void DrawDamageIndicator()
+        {
+            var opacity = DamageIndicatorRules.EvaluateOpacity(frameDamageIndicatorRemaining);
+            if (opacity <= 0f)
+            {
+                return;
+            }
+
+            var symbol = DamageIndicatorSymbol(frameDamageIndicatorSector);
+            var color = new Color(1f, 0.16f, 0.12f, opacity);
+            DrawText(DamageIndicatorRect(frameDamageIndicatorSector), symbol, damageIndicatorStyle, color);
+        }
+
+        private static string DamageIndicatorSymbol(DamageIndicatorSector sector)
+        {
+            switch (sector)
+            {
+                case DamageIndicatorSector.Right:
+                    return ">";
+                case DamageIndicatorSector.Back:
+                    return "⌄";
+                case DamageIndicatorSector.Left:
+                    return "<";
+                default:
+                    return "⌃";
+            }
+        }
+
+        private static Rect DamageIndicatorRect(DamageIndicatorSector sector)
+        {
+            switch (sector)
+            {
+                case DamageIndicatorSector.Right:
+                    return new Rect(1812f, 470f, 72f, 140f);
+                case DamageIndicatorSector.Back:
+                    return new Rect(924f, 900f, 72f, 140f);
+                case DamageIndicatorSector.Left:
+                    return new Rect(36f, 470f, 72f, 140f);
+                default:
+                    return new Rect(924f, 40f, 72f, 140f);
+            }
         }
 
         private void DrawHealth()
@@ -607,8 +732,7 @@ namespace RocketFooxball.Runtime.Hud
                 attribution = "SCORER  " + summary.ScorerName;
             }
             DrawText(new Rect(110f, 490f, 520f, 72f), attribution, headingStyle, Color.white);
-            DrawText(new Rect(110f, 580f, 520f, 42f), "NEXT KICKOFF", smallStyle, new Color(0.75f, 0.8f, 0.86f));
-            DrawText(new Rect(110f, 625f, 520f, 120f), FormatCeilSeconds(framePhaseRemaining), bigStyle, Color.white);
+            DrawText(new Rect(110f, 580f, 520f, 72f), "PRESS ANY BUTTON", headingStyle, Color.white);
             DrawTable(new Rect(720f, 120f, 1130f, 820f), true);
         }
 
@@ -786,6 +910,11 @@ namespace RocketFooxball.Runtime.Hud
             };
             healthFillStyle = new GUIStyle(GUI.skin.box);
             healthFillStyle.normal.background = MakeSolidTexture(new Color(0.25f, 0.9f, 0.45f, 0.95f));
+            damageIndicatorStyle = new GUIStyle(headingStyle)
+            {
+                fontSize = 72,
+                alignment = TextAnchor.MiddleCenter
+            };
         }
 
         private static Texture2D MakeSolidTexture(Color color)

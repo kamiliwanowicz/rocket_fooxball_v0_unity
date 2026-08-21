@@ -8,7 +8,6 @@ namespace RocketFooxball.Runtime.Bots
         public const float DashRange = 2.2f;
         public const float BallShotgunRange = 20f;
         public const float EnemyShotgunRange = 16f;
-        public const float EnemyScoreLimit = 20f;
         public const float RocketCorridorRadius = 1.5f;
 
         private const float Epsilon = 0.000001f;
@@ -18,7 +17,11 @@ namespace RocketFooxball.Runtime.Bots
         {
             if (input.PreferBallActions)
             {
-                return EvaluateBallActions(input);
+                var ballResult = EvaluateBallActions(input);
+                if (ballResult.HasAction)
+                {
+                    return ballResult;
+                }
             }
 
             if (input.SuppressParticipantCombat)
@@ -33,6 +36,7 @@ namespace RocketFooxball.Runtime.Bots
                     BotCombatTarget.SelfImpact,
                     input.RocketJumpAimPoint,
                     GetRocketJumpDirection(input.RouteForwardXZ),
+                    GetBodyFacingDirection(input.RouteForwardXZ),
                     input.RocketJumpLaunchPosition);
             }
 
@@ -45,8 +49,14 @@ namespace RocketFooxball.Runtime.Bots
         /// </summary>
         public static Vector3 GetRocketJumpDirection(Vector3 routeForwardXZ)
         {
+            if (!IsFinite(routeForwardXZ))
+            {
+                return Vector3.zero;
+            }
+
+            routeForwardXZ.y = 0f;
             var routeMagnitudeSquared = routeForwardXZ.sqrMagnitude;
-            if (!IsFinite(routeForwardXZ) || !IsFinite(routeMagnitudeSquared) || routeMagnitudeSquared <= Epsilon)
+            if (!IsFinite(routeMagnitudeSquared) || routeMagnitudeSquared <= Epsilon)
             {
                 return Vector3.zero;
             }
@@ -100,7 +110,7 @@ namespace RocketFooxball.Runtime.Bots
             }
 
             var distance = DistanceFromActionOrigin(input.ActionOrigin, input.Enemy.Position);
-            if (!IsFinite(distance) || !IsFinite(input.ActiveTargetScore) || input.ActiveTargetScore > EnemyScoreLimit)
+            if (!IsFinite(distance))
             {
                 return BotCombatResult.None;
             }
@@ -148,8 +158,7 @@ namespace RocketFooxball.Runtime.Bots
 
         private static bool IsEligibleEnemy(in BotCombatInput input)
         {
-            return input.Enemy.HasObservation && input.Enemy.IsVisible && input.Enemy.IsAlive &&
-                   IsFinite(input.Enemy.Position);
+            return BotCombatEnemyRules.IsEligibleVisibleEnemy(input.Enemy);
         }
 
         private static bool IsEligibleBallRocket(in BotCombatInput input)
@@ -173,12 +182,19 @@ namespace RocketFooxball.Runtime.Bots
                    input.UpwardTransitionRequired && input.LauncherReady && input.RocketJumpLineClear &&
                    direction.sqrMagnitude > Epsilon && IsFinite(input.RocketJumpLaunchPosition) &&
                    IsFinite(input.RocketJumpAimPoint) &&
+                   GetBodyFacingDirection(input.RouteForwardXZ).sqrMagnitude > Epsilon &&
                    IsCorridorClear(input.RocketJumpLaunchPosition, input.RocketJumpAimPoint, input.AllyA, input.AllyB);
         }
 
         private static BotCombatResult DirectResult(BotCombatAction action, BotCombatTarget target, BotAimSolution aim)
         {
-            return new BotCombatResult(action, target, aim.AimPoint, aim.Direction, Vector3.zero);
+            return new BotCombatResult(
+                action,
+                target,
+                aim.AimPoint,
+                aim.Direction,
+                aim.Direction,
+                Vector3.zero);
         }
 
         private static BotCombatResult RocketResult(BotCombatTarget target, BotAimSolution aim, Vector3 launchPosition)
@@ -188,7 +204,29 @@ namespace RocketFooxball.Runtime.Bots
                 target,
                 aim.AimPoint,
                 aim.Direction,
+                aim.Direction,
                 launchPosition);
+        }
+
+        /// <summary>Returns a finite normalized horizontal route direction for root facing.</summary>
+        public static Vector3 GetBodyFacingDirection(Vector3 routeForwardXZ)
+        {
+            if (!IsFinite(routeForwardXZ))
+            {
+                return Vector3.zero;
+            }
+
+            routeForwardXZ.y = 0f;
+            var magnitudeSquared = routeForwardXZ.sqrMagnitude;
+            if (!IsFinite(magnitudeSquared) || magnitudeSquared <= Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            var direction = routeForwardXZ.normalized;
+            return IsFinite(direction) && direction.sqrMagnitude > Epsilon
+                ? direction
+                : Vector3.zero;
         }
 
         private static bool IsUsableDirectAim(BotAimSolution aim)

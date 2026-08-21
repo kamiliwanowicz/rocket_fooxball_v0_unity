@@ -1,6 +1,10 @@
+You are a Senior Unity Game Dev developer. 
+
 # Rocket Fooxball Unity POC
 
-First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based.
+First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based. 
+
+Project written by AI, should be AI-native in all aspects for efficient AI development.
 
 User new to Unity. Explain Unity-specific concepts at junior level. Keep general technical discussion concise.
 
@@ -13,7 +17,9 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 
 ## Delivery posture
 
+- Change channel: code only, authored by AI agents. No manual edits in Unity UI — no Inspector tuning, no hand-authored scene or prefab edits, no Editor-window value changes. Every tuned value originates in a C# constant; builder writes it into generated scene/prefabs. Consequence: scene never legitimately diverges from code, so divergence is a builder bug, not a user edit to preserve. Do not add tooling to rescue, diff, or promote Inspector-side values.
 - PoC -> optimize for fast gameplay learning, not production completeness.
+- Fast efficient development is the target. Slow, bugged or inefficient ceremonies or processes must be highlighted to user. 
 - Prefer smallest reversible change proving intended behavior. Reuse existing patterns and assets.
 - Spend effort on issues likely to break playtests, builds, integration, project assets, or iteration speed.
 - Defer broad abstraction, speculative future-proofing, production hardening, exhaustive edge-case handling, and untargeted polish unless required for core-loop reliability or explicitly requested.
@@ -22,7 +28,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 
 - Trigger: `AGENTS.md` rule or orchestration instruction unclear, contradictory, infeasible, or causing orchestration issues.
 - Action: flag user clearly. Never silently bypass.
-- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification.
+- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification. Same for inefficient, broken or illogical processes/ceremonies.
 
 ## Repository map
 
@@ -74,7 +80,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Unity worktrees: use short `C:\wt\<id>` path or verified junction/subst alias there. Use same short project path for all Unity commands and process checks. Create short evidence alias such as `C:\wt\<id>e` before worker dispatch and probe deepest expected path. Workflow `Assert-EvidencePathBudget` rejects over-long evidence path and write-probes before lease, Unity, or product mutation.
 - Unity processes: one Editor per project. Close interactive Editor before batch mutation. Batch run -> `Start-Process -Wait -PassThru` -> capture `.ExitCode` -> confirm process and project lock release. Direct `Unity.exe` / `& Unity.exe` invocation or polling instead of `-Wait` -> prohibited.
 - Failure classification: decide pass/fail from process exit code, workflow result JSON, Unity exception, compile errors, and semantic validation result. Never fail from keyword-only log scan. Known-benign here: `[Licensing::Module] LicensingClient has failed validation; ignoring`, `[Licensing::Module] Error: Access token is unavailable; failed to update`, `d3d12: failed to query info queue interface (0x80004002).`
-- Harness pre-gate: non-Claude before any Unity-mutating workflow -> run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`; finish `<90s` without Unity process or project lock. Failure or timeout blocks Unity. Claude -> `.claude` `PreToolUse` runs same gate before recognized Unity-mutating workflow/Unity command; do not add manual Claude run.
+- Harness pre-gate: non-Claude before any Unity-mutating workflow -> run `powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Tests/Invoke-HarnessTests.ps1`; finish `<90s` without Unity process or project lock. Failure or timeout blocks Unity. Claude -> `.claude` `PreToolUse` runs same gate before recognized Unity-mutating workflow/Unity command; do not add manual Claude run. Harness `hook-command` case asserts gate presence only -> some `PreToolUse` matcher covering `Bash`+`PowerShell` invokes `Invoke-HarnessTests.ps1 -HookMode PreToolUse`; exact hook spelling is not pinned, so `.claude/settings.json` formatting never blocks non-Claude harness run.
 - Harness red baseline: `Tools/Tests/Fixtures/` holds deliberately broken copies of guarded scripts. Missing fixture throws instead of silently skipping. Guard cases must pass at HEAD and fail against their fixture, proving the guard can still detect regressions. Edit a guarded workflow script -> update its fixture so it stays red, else harness self-check breaks.
 - Import cache: preserve each worktree's `Library/` between runs. Delete only with cache-corruption evidence. Never share one `Library/` across concurrent worktrees. New worktree -> provision its own private `Library/` before first Unity mutation; preserve across retries.
 - C# inner loop: run relevant existing Unity test when available; its import/compile is sufficient before test execution. Otherwise run compile-only Unity batch with `-batchmode -nographics -quit`. Skip `MovementLabBuilder.BuildMovementLab()` during inner-loop compilation.
@@ -82,6 +88,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Successful Unity builder/validator execution already supplies compile proof for covered source. Builder protocol subsumes generic build/validate rows; do not launch duplicate compile checks.
 - Builder no-op gate: derive staleness from source/input digest before importer, prefab, material, or scene writes. Current input digest -> no save or rebuild; stale input -> authoritative rebuild.
 - Production bake gate: bake entry point owns skip/rebuild from current lighting inputs. Valid skip emits source-defined digest marker and zero bakes; absent marker -> exactly one bake; duplicate or malformed marker -> fail. Copy marker from source, never retype.
+- If a plan predicts a rebuild but the bake entry point proves lighting inputs current and emits the valid skip marker, accept `reused` with zero bakes and continue. Never force a bake solely to match the plan's predicted status.
 - Integrity gates: source/input digests decide staleness and bake reuse. Generated-output bytes/hashes provide provenance only; never gate rebuild, acceptance, or nondeterminism. Digest text inputs from canonical Git blob bytes (`git hash-object`) or newline-normalized bytes. Raw worktree bytes differ by CRLF/LF across checkouts (`.gitattributes` -> `*.cs text`, unity YAML `eol=lf`) and produce false staleness plus unowned regeneration churn.
 - Builder command surface: facade exposes staged entry points (assemble without lighting -> pre-bake validation gate -> production bake -> full build) so agents can run the cheapest sufficient stage. Read the facade for current names and composition. Bake-first requirement lives in Validation builder protocol.
 
@@ -99,6 +106,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Movement, input, generated-lab, or other builder-generated change -> run builder protocol.
 - Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process proves references persisted to disk. Do not require second builds.
 - Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
+- Visual-evidence capture tooling: `Tools/Validation/Capture-BrightArenaVisuals.ps1` + `Assets/_Game/Editor/BrightArenaVisualCapture.cs`. Zero callers is intentional -> retained as template for agent screenshot capture. Never delete as dead code. Reuse blockers before hooking it anywhere: fixed six images (three hardcoded views x High/Low, exact count asserted), `EvidenceRoot` must sit under `C:\wt\`, refuses to run while any Editor owns project, runs full harness pre-gate first. Carries pre-hardening lock delete and `Unity.exe`-only process probe; hardened equivalents live in `Tools/Validation/Invoke-MovementLabWorkflow.ps1`.
 - Validator scope matches owner scope: contract assertions run against owning subtree. New presentation object never invalidates unrelated owner's contract.
 - Render budgets are report-only. Renderer counts, triangle counts, opaque passes, transparent statics, and texture memory are measured and logged/manifested, never enforced. No build, import, validate, or Blender generate step fails on a budget. Do not reintroduce a budget throw without explicit user instruction.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.

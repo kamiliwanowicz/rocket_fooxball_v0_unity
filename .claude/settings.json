@@ -12,6 +12,20 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/Tools/Tests/harness-pregate.mjs"
+            ]
+          }
+        ]
+      }
     ]
   }
 }

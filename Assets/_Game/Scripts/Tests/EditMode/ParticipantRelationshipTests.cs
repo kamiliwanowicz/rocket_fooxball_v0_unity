@@ -1,4 +1,5 @@
 using NUnit.Framework;
+using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Tests.EditMode
@@ -42,6 +43,35 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(ParticipantRelationshipPolicy.RocketImpulseScale(ParticipantRelationship.Unattributed, 0.5f), Is.EqualTo(1f));
             Assert.That(ParticipantRelationshipPolicy.RocketImpulseScale(ParticipantRelationship.Enemy, 0.5f), Is.EqualTo(0.5f));
             Assert.That(ParticipantRelationshipPolicy.RocketImpulseScale(ParticipantRelationship.Friendly, 0.5f), Is.EqualTo(0f));
+        }
+
+        [Test]
+        public void SnapshotAttributionAcceptsOnlyBlueAndRed()
+        {
+            Assert.That(ParticipantRelationshipAdapter.GetValidTeam(ParticipantTeam.Blue), Is.EqualTo(ParticipantTeam.Blue));
+            Assert.That(ParticipantRelationshipAdapter.GetValidTeam(ParticipantTeam.Red), Is.EqualTo(ParticipantTeam.Red));
+            Assert.That(ParticipantRelationshipAdapter.GetValidTeam((ParticipantTeam)99), Is.Null);
+            Assert.That(ParticipantRelationshipAdapter.GetValidTeam(null), Is.Null);
+        }
+
+        [Test]
+        public void MissingOrInvalidTeamSnapshotRemainsUnattributedButSelfIdentityWins()
+        {
+            var unattributedFacts = new ParticipantRelationshipFacts(true, true, false, false, false, false);
+            var selfFacts = new ParticipantRelationshipFacts(true, true, false, false, true, false);
+
+            Assert.That(ParticipantRelationshipPolicy.Classify(unattributedFacts), Is.EqualTo(ParticipantRelationship.Unattributed));
+            Assert.That(ParticipantRelationshipPolicy.Classify(selfFacts), Is.EqualTo(ParticipantRelationship.Self));
+        }
+
+        [Test]
+        public void InvalidTargetTeamCannotBecomeEnemyFromAValidSnapshot()
+        {
+            var facts = new ParticipantRelationshipFacts(true, true, false, false, false, false);
+
+            Assert.That(ParticipantRelationshipPolicy.Classify(facts), Is.EqualTo(ParticipantRelationship.Unattributed));
+            Assert.That(ParticipantRelationshipPolicy.CanReceiveRocketForce(ParticipantRelationship.Unattributed), Is.True);
+            Assert.That(ParticipantRelationshipPolicy.CanReceiveRocketDamage(ParticipantRelationship.Unattributed), Is.False);
         }
     }
 }

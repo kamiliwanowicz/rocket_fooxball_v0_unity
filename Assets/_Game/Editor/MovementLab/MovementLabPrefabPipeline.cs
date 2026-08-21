@@ -100,12 +100,12 @@ namespace RocketFooxball.Editor
 
                     var root = new GameObject("Player") { tag = "Player" };
                     var controller = root.AddComponent<CharacterController>();
-                    controller.radius = 0.4f;
-                    controller.height = 1.8f;
-                    controller.center = new Vector3(0f, 0.9f, 0f);
+                    controller.radius = PlayerControllerRadius;
+                    controller.height = PlayerControllerHeight;
+                    controller.center = PlayerControllerCenter;
                     controller.slopeLimit = 60f;
                     controller.stepOffset = 0.3f;
-                    controller.skinWidth = 0.04f;
+                    controller.skinWidth = PlayerControllerSkinWidth;
 
                     var input = root.AddComponent<PlayerInputReader>();
                     var motor = root.AddComponent<PlayerMotor>();
@@ -121,7 +121,7 @@ namespace RocketFooxball.Editor
                     root.layer = participantLayer;
                     var head = new GameObject("Head").transform;
                     head.SetParent(root.transform, false);
-                    head.localPosition = new Vector3(0f, 1.55f, 0f);
+                    head.localPosition = new Vector3(0f, PlayerHeadHeight, 0f);
                     var camera = new GameObject("Camera").AddComponent<Camera>();
                     camera.transform.SetParent(head, false);
                     camera.tag = "MainCamera";
@@ -152,7 +152,7 @@ namespace RocketFooxball.Editor
                     var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
                     var teamBlueShieldMaterial = GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     var teamRedShieldMaterial = GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
-                    var worldVisual = InstantiateImportedVisual(characterModel, "WorldVisual", root.transform, Vector3.zero, Quaternion.identity, Vector3.one);
+                    var worldVisual = InstantiateImportedVisual(characterModel, "WorldVisual", root.transform, Vector3.zero, Quaternion.identity, Vector3.one * WorldVisualScale);
                     AssignImportedMaterials(worldVisual, characterRed, characterBlack, characterCream, characterEye);
                     var worldAnimator = worldVisual.GetComponent<Animator>();
                     if (worldAnimator == null)
@@ -182,8 +182,10 @@ namespace RocketFooxball.Editor
 
                     var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, new Vector3(0f, 1.12f, -0.32f));
                     blueCue.transform.SetParent(root.transform, false);
+                    blueCue.transform.localScale *= TeamCueScaleMultiplier;
                     var redCue = CreateShapeCue("RedTriangleCue", true, teamRedMaterial, new Vector3(0f, 1.12f, -0.32f));
                     redCue.transform.SetParent(root.transform, false);
+                    redCue.transform.localScale *= TeamCueScaleMultiplier;
                     redCue.SetActive(false);
 
                     var immunityShield = new GameObject("ImmunityShield");
@@ -192,6 +194,19 @@ namespace RocketFooxball.Editor
                     immunityShield.SetActive(false);
                     var blueImmunityShield = CreateImmunityShieldVfx("BlueImmunityShield", immunityShield.transform, teamBlueShieldMaterial);
                     var redImmunityShield = CreateImmunityShieldVfx("RedImmunityShield", immunityShield.transform, teamRedShieldMaterial);
+                    blueImmunityShield.transform.localScale *= ImmunityShieldScaleMultiplier;
+                    redImmunityShield.transform.localScale *= ImmunityShieldScaleMultiplier;
+
+                    var nameplate = new GameObject("Nameplate");
+                    nameplate.transform.SetParent(root.transform, false);
+                    nameplate.transform.localPosition = new Vector3(0f, NameplateHeight, 0f);
+                    var nameplateText = nameplate.AddComponent<TextMesh>();
+                    nameplateText.text = "Participant";
+                    nameplateText.anchor = TextAnchor.MiddleCenter;
+                    nameplateText.alignment = TextAlignment.Center;
+                    nameplateText.characterSize = 0.24f;
+                    nameplateText.fontSize = 32;
+                    nameplateText.color = Color.white;
 
                     var viewmodels = new GameObject("Viewmodels").transform;
                     viewmodels.SetParent(camera.transform, false);
@@ -199,13 +214,13 @@ namespace RocketFooxball.Editor
                     viewmodels.localRotation = Quaternion.identity;
                     // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
                     var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(-0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
-                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
-                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
+                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
                     var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent);
                     RemovePhysicsComponents(weaponVisual);
-                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
-                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.90f, 1f));
+                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
+                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
                     var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath), LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunAccentBaseColor, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, 1f, 1f, 0.90f, 1f));
                     var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
@@ -232,15 +247,15 @@ namespace RocketFooxball.Editor
 
                     SetObjectReference(input, "actions", actions);
                     SetObjectReference(motor, "input", input);
-                    SetFloat(motor, "bhopSoftCapMultiplier", 2.5f);
+                    SetFloat(motor, "bhopSoftCapMultiplier", PlayerMotorDefaults.BhopSoftCapMultiplier);
                     // Keep gameplay tuning at the approved review baseline. Presentation
                     // changes must not silently retune movement or ball control.
                     SetFloat(motor, "jumpVelocity", JumpVelocity);
-                    SetInteger(motor, "jumpsToHardCap", 4);
-                    SetFloat(motor, "dashBurstSpeed", 12f);
-                    SetFloat(motor, "dashDuration", 0.33f);
-                    SetFloat(motor, "dashSteerRateDegrees", 180f);
-                    SetFloat(motor, "dashSpeedCap", 30f);
+                    SetInteger(motor, "jumpsToHardCap", PlayerMotorDefaults.JumpsToHardCap);
+                    SetFloat(motor, "dashBurstSpeed", PlayerMotorDefaults.DashBurstSpeed);
+                    SetFloat(motor, "dashDuration", PlayerMotorDefaults.DashDuration);
+                    SetFloat(motor, "dashSteerRateDegrees", PlayerMotorDefaults.DashSteerRateDegrees);
+                    SetFloat(motor, "dashSpeedCap", PlayerMotorDefaults.DashSpeedCap);
                     SetObjectReference(look, "input", input);
                     SetObjectReference(look, "head", head);
                     SetObjectReference(feedback, "player", motor);
@@ -261,13 +276,13 @@ namespace RocketFooxball.Editor
                      SetLayerMask(shotgun, "hitMask", ~(1 << projectileLayer));
                      SetFloat(shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
                      SetInteger(shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
-                     SetFloat(shotgun, "spreadAngleDegrees", 7f);
+                     SetFloat(shotgun, "spreadAngleDegrees", ShotgunDamageRules.DefaultSpreadAngleDegrees);
                      SetFloat(shotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange);
                      SetFloat(shotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange);
                      SetFloat(shotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange);
                      SetFloat(shotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier);
                      SetFloat(shotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier);
-                     SetFloat(shotgun, "pumpDelay", 0.85f);
+                     SetFloat(shotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay);
                      SetFloat(shotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse);
                      SetFloat(shotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap);
                     SetObjectReference(kick, "input", input);
@@ -275,24 +290,25 @@ namespace RocketFooxball.Editor
                     SetObjectReference(kick, "look", look);
                     SetObjectReference(kick, "aimCamera", camera);
                     SetObjectReference(kick, "ownerParticipant", participant);
-                    SetFloat(kick, "dashContactStartDelay", 0.10f);
-                    SetFloat(kick, "dashContactReach", 2f);
-                    SetFloat(kick, "dashContactRadiusPadding", 0.35f);
-                    SetFloat(kick, "cooldown", 3f);
-                    SetFloat(kick, "speedFraction", 0.91f);
-                    SetFloat(kick, "playerMomentumShare", 0.20f);
-                    SetFloat(kick, "enemyContactDamage", 20f);
-                    SetFloat(kick, "enemyShoveImpulse", 6f);
-                    SetFloat(kick, "enemyDashRetention", 0.20f);
+                    SetFloat(kick, "dashContactStartDelay", BallKickDefaults.DashContactStartDelay);
+                    SetFloat(kick, "dashContactReach", BallKickDefaults.DashContactReach);
+                    SetFloat(kick, "dashContactRadiusPadding", BallKickDefaults.DashContactRadiusPadding);
+                    SetFloat(kick, "cooldown", BallKickDefaults.Cooldown);
+                    SetFloat(kick, "speedFraction", BallKickDefaults.SpeedFraction);
+                    SetFloat(kick, "playerMomentumShare", BallKickDefaults.PlayerMomentumShare);
+                    SetFloat(kick, "enemyContactDamage", BallKickDefaults.EnemyContactDamage);
+                    SetFloat(kick, "enemyShoveImpulse", BallKickDefaults.EnemyShoveImpulse);
+                    SetFloat(kick, "enemyDashRetention", BallKickDefaults.EnemyDashRetention);
                     SetFloat(feedback, "baseFov", 75f);
                     SetFloat(feedback, "maxFov", 84f);
-                    SetFloat(feedback, "dashKickImpulse", 0.025f);
-                    SetFloat(feedback, "dashKickImpulseDuration", 0.12f);
+                    SetFloat(feedback, "dashKickImpulse", PlayerCameraFeedback.DefaultDashKickImpulse);
+                    SetFloat(feedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration);
                     SetFloat(feedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
                     SetFloat(feedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
                     SetFloat(feedback, "celebrationLookHeight", CelebrationLookHeight);
-                    SetFloat(feedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
-                    SetFloat(feedback, "celebrationFov", CelebrationFov);
+                     SetFloat(feedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
+                     SetFloat(feedback, "celebrationFov", CelebrationFov);
+                     SetVector3(feedback, "spectatorOffset", PlayerCameraFeedback.ExpectedSpectatorOffset);
                     SetObjectReference(presentation, "kick", kick);
                     SetObjectReference(presentation, "motor", motor);
                      SetObjectReference(presentation, "launcher", launcher);
@@ -314,8 +330,16 @@ namespace RocketFooxball.Editor
                     SetObjectReference(presentation, "immunityShield", immunityShield);
                     SetObjectReference(presentation, "blueImmunityShield", blueImmunityShield);
                     SetObjectReference(presentation, "redImmunityShield", redImmunityShield);
-                    SetObjectReference(presentation, "worldVisual", worldVisual);
-                    SetObjectReference(presentation, "fpsVisual", fpsVisual);
+                     SetObjectReference(presentation, "worldVisual", worldVisual);
+                     SetObjectReference(presentation, "fpsVisual", fpsVisual);
+                     SetObjectReference(presentation, "nicknameVisual", nameplate);
+                     SetObjectReference(presentation, "nicknameText", nameplateText);
+                     SetObjectReference(presentation, "nicknameCamera", null);
+                     SetObjectReference(presentation, "localParticipant", null);
+                     SetObjectReference(presentation, "match", null);
+                     SetBool(presentation, "showNickname", false);
+                     SetBool(presentation, "spawnCorpseOnDeath", false);
+                     SetFloat(presentation, "corpseLifetime", 30f);
                     SetObjectReference(participant, "motor", motor);
                     SetObjectReference(participant, "characterController", controller);
                     SetObjectReference(participant, "input", input);
@@ -329,9 +353,9 @@ namespace RocketFooxball.Editor
                     SetString(participant, "displayName", "Player");
                     SetEnum(participant, "team", "Blue");
                     SetBool(participant, "localParticipant", true);
-                    SetFloat(participant, "maxHealth", 100f);
-                    SetFloat(participant, "deathWait", 5f);
-                    SetFloat(participant, "immunityDuration", 2f);
+                    SetFloat(participant, "maxHealth", ParticipantState.DefaultMaxHealth);
+                    SetFloat(participant, "deathWait", MovementLabContract.LocalRespawnDelay);
+                    SetFloat(participant, "immunityDuration", ParticipantState.DefaultImmunityDuration);
                     SetObjectReference(feedback, "participant", participant);
                     SetObjectReference(launcher, "ownerParticipant", participant);
 
@@ -676,8 +700,9 @@ namespace RocketFooxball.Editor
                     smokeSheet.numTilesY = 4;
                     smokeSheet.animation = ParticleSystemAnimationType.WholeSheet;
                     smokeSheet.frameOverTime = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(1f, 1f)));
-                    var trailVfx = smokeTrail.AddComponent<RocketTrailVfx>();
-                    SetObjectArray(trailVfx, "particleSystems", new UnityEngine.Object[] { smokeSystem });
+                     var trailVfx = smokeTrail.AddComponent<RocketTrailVfx>();
+                     SetObjectArray(trailVfx, "particleSystems", new UnityEngine.Object[] { smokeSystem });
+                     SetObjectReference(trailVfx, "projectileGlow", glowSystem);
                     var blueTrailMaterial = GetOrCreateParticleMaterial("TeamBlueTrail", new Color(0.08f, 0.35f, 1f, 1f), LoadTexture(RocketGlowTexturePath));
                     var redTrailMaterial = GetOrCreateParticleMaterial("TeamRedTrail", new Color(1f, 0.12f, 0.1f, 1f), LoadTexture(RocketGlowTexturePath));
                     var blueAccent = CreateShapeCue("BlueImpactRing", false, blueTrailMaterial, new Vector3(0f, 0f, 0.16f));
@@ -690,8 +715,9 @@ namespace RocketFooxball.Editor
                     redAccent.SetActive(false);
                     SetObjectReference(trailVfx, "blueImpactAccent", blueAccent);
                     SetObjectReference(trailVfx, "redImpactAccent", redAccent);
-                    SetObjectReference(trailVfx, "blueTrailMaterial", blueTrailMaterial);
-                    SetObjectReference(trailVfx, "redTrailMaterial", redTrailMaterial);
+                     SetObjectReference(trailVfx, "blueTrailMaterial", blueTrailMaterial);
+                     SetObjectReference(trailVfx, "redTrailMaterial", redTrailMaterial);
+                     SetObjectReference(trailVfx, "neutralTrailMaterial", projectileGlowMaterial);
                     SetObjectReference(projectile, "trailVfx", trailVfx);
                     PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
@@ -710,8 +736,10 @@ namespace RocketFooxball.Editor
                         var blueAccent = Require(trail.transform.Find("BlueImpactRing"), "Rocket prefab BlueImpactRing");
                         var redAccent = Require(trail.transform.Find("RedImpactTriangle"), "Rocket prefab RedImpactTriangle");
                         SetObjectArray(trail, "particleSystems", new UnityEngine.Object[] { system });
+                        SetObjectReference(trail, "projectileGlow", root.transform.Find("ProjectileGlow")?.GetComponent<ParticleSystem>());
                         SetObjectReference(trail, "blueImpactAccent", blueAccent.gameObject);
                         SetObjectReference(trail, "redImpactAccent", redAccent.gameObject);
+                        SetObjectReference(trail, "neutralTrailMaterial", AssetDatabase.LoadAssetAtPath<Material>(ProjectileGlowMaterialPath));
                         SetObjectReference(projectile, "trailVfx", trail);
                         PrefabUtility.SaveAsPrefabAsset(root, RocketPrefabPath);
                     }
@@ -724,8 +752,8 @@ namespace RocketFooxball.Editor
                 internal static ExplosionVfx BuildExplosionVfxPrefab()
                 {
                     var root = new GameObject("ExplosionVfx");
-                    // Keep blast readability aligned with the 30% gameplay radius increase.
-                    root.transform.localScale = Vector3.one * BlastVisualScale;
+                    // Runtime scales each one-shot from the authored 4.5-unit reference.
+                    root.transform.localScale = Vector3.one;
                     var explosionMaterial = GetOrCreateParticleMaterial("Explosion", ExplosionFireMaterialColor, LoadTexture(ExplosionTexturePath));
                     var explosionFlashMaterial = GetOrCreateAdditiveParticleMaterial("ExplosionAdditive", Color.white, LoadTexture(ExplosionTexturePath), 3.0f);
                     var explosionSparksMaterial = GetOrCreateAdditiveParticleMaterial("ExplosionSparks", Color.white, LoadTexture(ExplosionTexturePath), 2.0f);
@@ -755,6 +783,25 @@ namespace RocketFooxball.Editor
                     ConfigureExplosionGradient(smoke, new[] { new GradientColorKey(new Color(0.52f, 0.49f, 0.44f, 1f), 0f), new GradientColorKey(new Color(0.20f, 0.19f, 0.18f, 1f), 1f) }, new[] { new GradientAlphaKey(0.30f, 0f), new GradientAlphaKey(0f, 1f) });
                     ConfigureExplosionSize(smoke, 0.55f, 1.40f);
                     systems.Add(smoke);
+                    var blastRadiusCue = CreateExplosionSystem(root.transform, "BlastRadiusCue", explosionMaterial, 1, 0.28f, 0.28f, 9f, 0f, 1, 0f, 0f);
+                    blastRadiusCue.transform.localPosition = Vector3.zero;
+                    blastRadiusCue.transform.localRotation = Quaternion.identity;
+                    blastRadiusCue.transform.localScale = Vector3.one;
+                    var cueMain = blastRadiusCue.main;
+                    cueMain.simulationSpace = ParticleSystemSimulationSpace.Local;
+                    cueMain.scalingMode = ParticleSystemScalingMode.Hierarchy;
+                    var cueShape = blastRadiusCue.shape;
+                    cueShape.enabled = false;
+                    var cueRenderer = blastRadiusCue.GetComponent<ParticleSystemRenderer>();
+                    cueRenderer.renderMode = ParticleSystemRenderMode.HorizontalBillboard;
+                    cueRenderer.alignment = ParticleSystemRenderSpace.World;
+                    cueRenderer.sharedMaterial = explosionMaterial;
+                    ConfigureExplosionIdentity(blastRadiusCue, 0xF005u, 3);
+                    ConfigureExplosionGradient(blastRadiusCue,
+                        new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                        new[] { new GradientAlphaKey(0.22f, 0f), new GradientAlphaKey(0f, 1f) });
+                    ConfigureExplosionSize(blastRadiusCue, 0.15f, 1f);
+                    systems.Add(blastRadiusCue);
 
                     var effect = root.AddComponent<ExplosionVfx>();
                     SetObjectArray(effect, "particleSystems", systems.ToArray());
@@ -1158,6 +1205,12 @@ namespace RocketFooxball.Editor
                         if (path == PrefabPath)
                         {
                             var controller = Require(root.GetComponent<CharacterController>(), "Player prefab CharacterController");
+                            if (Vector3.Distance(root.transform.localScale, Vector3.one) > 0.001f ||
+                                Mathf.Abs(controller.radius - PlayerControllerRadius) > 0.001f ||
+                                Mathf.Abs(controller.height - PlayerControllerHeight) > 0.001f ||
+                                Vector3.Distance(controller.center, PlayerControllerCenter) > 0.001f ||
+                                Mathf.Abs(controller.skinWidth - PlayerControllerSkinWidth) > 0.001f)
+                                throw new InvalidOperationException("Player prefab root/CharacterController scale contract invalid.");
                             if (root.layer != LayerMask.NameToLayer("Participants")) throw new InvalidOperationException("Player prefab root must use Participants layer.");
                             var input = Require(root.GetComponent<PlayerInputReader>(), "Player prefab PlayerInputReader");
                             var prefabMotor = Require(root.GetComponent<PlayerMotor>(), "Player prefab PlayerMotor");
@@ -1192,6 +1245,8 @@ namespace RocketFooxball.Editor
                              ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
                              ValidateReference(prefabPresentation, "fpsShotgunVisual", root.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual"), "Player prefab PlayerPresentation.fpsShotgunVisual");
                              var prefabWorldVisual = Require(root.transform.Find("WorldVisual"), "Player prefab WorldVisual");
+                              if (Vector3.Distance(prefabWorldVisual.localScale, Vector3.one * WorldVisualScale) > 0.001f)
+                                  throw new InvalidOperationException("Player prefab WorldVisual scale must be doubled.");
                              var prefabWorldShotgunMount = FindNamedTransform(prefabWorldVisual, "WorldShotgunMount");
                              if (prefabWorldShotgunMount == null) throw new InvalidOperationException("Player prefab WorldShotgunMount is missing.");
                              var prefabWorldShotgunVisualReference = FindNamedTransform(prefabWorldShotgunMount, "WorldShotgunVisual");
@@ -1210,46 +1265,60 @@ namespace RocketFooxball.Editor
                              var projectileLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
                              if (projectileLayer < 0 || (prefabShotgun.HitMask.value & (1 << projectileLayer)) != 0)
                                  throw new InvalidOperationException("Player prefab ShotgunWeapon.hitMask must exclude Projectiles.");
-                            ValidateReference(prefabFeedback, "participant", prefabParticipant, "Player prefab PlayerCameraFeedback.participant");
+                             ValidateReference(prefabFeedback, "participant", prefabParticipant, "Player prefab PlayerCameraFeedback.participant");
+                             var prefabNameplate = Require(root.transform.Find("Nameplate"), "Player prefab Nameplate");
+                             var prefabNameplateText = Require(prefabNameplate.GetComponent<TextMesh>(), "Player prefab Nameplate TextMesh");
+                             if (Vector3.Distance(prefabNameplate.localPosition, new Vector3(0f, NameplateHeight, 0f)) > 0.001f ||
+                                 prefabNameplate.GetComponentsInChildren<Collider>(true).Length != 0)
+                                 throw new InvalidOperationException("Player prefab Nameplate must be collider-free at the authored height.");
+                             ValidateReference(prefabPresentation, "nicknameVisual", prefabNameplate.gameObject, "Player prefab PlayerPresentation.nicknameVisual");
+                             ValidateReference(prefabPresentation, "nicknameText", prefabNameplateText, "Player prefab PlayerPresentation.nicknameText");
+                             ValidateNullReference(prefabPresentation, "nicknameCamera", "Player prefab PlayerPresentation.nicknameCamera");
+                             ValidateNullReference(prefabPresentation, "localParticipant", "Player prefab PlayerPresentation.localParticipant");
+                             ValidateNullReference(prefabPresentation, "match", "Player prefab PlayerPresentation.match");
+                             ValidateSerializedBool(prefabPresentation, "showNickname", false, "Player prefab PlayerPresentation.showNickname");
+                             ValidateSerializedBool(prefabPresentation, "spawnCorpseOnDeath", false, "Player prefab PlayerPresentation.spawnCorpseOnDeath");
+                             ValidateSerializedFloat(prefabPresentation, "corpseLifetime", 30f, "Player prefab PlayerPresentation.corpseLifetime");
                             ValidateSerializedInteger(prefabParticipant, "slotId", 0, "Player prefab ParticipantState.slotId");
-                            ValidateSerializedFloat(prefabParticipant, "maxHealth", 100f, "Player prefab ParticipantState.maxHealth");
-                            ValidateSerializedFloat(prefabParticipant, "deathWait", 5f, "Player prefab ParticipantState.deathWait");
-                             ValidateSerializedFloat(prefabParticipant, "immunityDuration", 2f, "Player prefab ParticipantState.immunityDuration");
-                             ValidateSerializedInteger(prefabParticipant, "shotgunShellCapacity", 16, "Player prefab ParticipantState.shotgunShellCapacity");
+                            ValidateSerializedFloat(prefabParticipant, "maxHealth", ParticipantState.DefaultMaxHealth, "Player prefab ParticipantState.maxHealth");
+                             ValidateSerializedFloat(prefabParticipant, "deathWait", MovementLabContract.LocalRespawnDelay, "Player prefab ParticipantState.deathWait");
+                             ValidateSerializedFloat(prefabParticipant, "immunityDuration", ParticipantState.DefaultImmunityDuration, "Player prefab ParticipantState.immunityDuration");
+                             ValidateSerializedInteger(prefabParticipant, "shotgunShellCapacity", ParticipantState.DefaultShotgunShellCapacity, "Player prefab ParticipantState.shotgunShellCapacity");
                              ValidateSerializedFloat(prefabShotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage, "Player prefab ShotgunWeapon.pelletDamage");
                              ValidateSerializedInteger(prefabShotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount, "Player prefab ShotgunWeapon.pelletCount");
-                             ValidateSerializedFloat(prefabShotgun, "spreadAngleDegrees", 7f, "Player prefab ShotgunWeapon.spreadAngleDegrees");
+                             ValidateSerializedFloat(prefabShotgun, "spreadAngleDegrees", ShotgunDamageRules.DefaultSpreadAngleDegrees, "Player prefab ShotgunWeapon.spreadAngleDegrees");
                              ValidateSerializedFloat(prefabShotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange, "Player prefab ShotgunWeapon.fullDamageRange");
                              ValidateSerializedFloat(prefabShotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange, "Player prefab ShotgunWeapon.mediumRange");
                              ValidateSerializedFloat(prefabShotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange, "Player prefab ShotgunWeapon.maxRange");
                              ValidateSerializedFloat(prefabShotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier, "Player prefab ShotgunWeapon.mediumMultiplier");
                              ValidateSerializedFloat(prefabShotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier, "Player prefab ShotgunWeapon.farMultiplier");
-                             ValidateSerializedFloat(prefabShotgun, "pumpDelay", 0.85f, "Player prefab ShotgunWeapon.pumpDelay");
+                             ValidateSerializedFloat(prefabShotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay, "Player prefab ShotgunWeapon.pumpDelay");
                              ValidateSerializedFloat(prefabShotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse, "Player prefab ShotgunWeapon.ballImpulsePerPellet");
                              ValidateSerializedFloat(prefabShotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap, "Player prefab ShotgunWeapon.ballImpulseCap");
                             if (LayerMask.NameToLayer("Participants") < 0 || LayerMask.NameToLayer("Projectiles") < 0) throw new InvalidOperationException("Participants and Projectiles layers are required.");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius, "Player prefab PlayerCameraFeedback.celebrationOrbitRadius");
                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight, "Player prefab PlayerCameraFeedback.celebrationOrbitHeight");
                             ValidateSerializedFloat(prefabFeedback, "celebrationLookHeight", CelebrationLookHeight, "Player prefab PlayerCameraFeedback.celebrationLookHeight");
-                            ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
-                            ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
+                             ValidateSerializedFloat(prefabFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees, "Player prefab PlayerCameraFeedback.celebrationOrbitDegrees");
+                             ValidateSerializedFloat(prefabFeedback, "celebrationFov", CelebrationFov, "Player prefab PlayerCameraFeedback.celebrationFov");
+                             ValidateSerializedVector3(prefabFeedback, "spectatorOffset", PlayerCameraFeedback.ExpectedSpectatorOffset, "Player prefab PlayerCameraFeedback.spectatorOffset");
                             ValidateSerializedFloat(prefabMotor, "jumpVelocity", JumpVelocity, "Player prefab PlayerMotor.jumpVelocity");
-                            ValidateSerializedFloat(prefabMotor, "dashBurstSpeed", 12f, "Player prefab PlayerMotor.dashBurstSpeed");
-                            ValidateSerializedFloat(prefabMotor, "dashDuration", 0.33f, "Player prefab PlayerMotor.dashDuration");
-                            ValidateSerializedFloat(prefabMotor, "dashSteerRateDegrees", 180f, "Player prefab PlayerMotor.dashSteerRateDegrees");
-                            ValidateSerializedFloat(prefabMotor, "dashSpeedCap", 30f, "Player prefab PlayerMotor.dashSpeedCap");
-                            ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", 4, "Player prefab PlayerMotor.jumpsToHardCap");
-                            ValidateSerializedFloat(prefabKick, "dashContactStartDelay", 0.10f, "Player prefab BallKick.dashContactStartDelay");
-                            ValidateSerializedFloat(prefabKick, "dashContactReach", 2f, "Player prefab BallKick.dashContactReach");
-                            ValidateSerializedFloat(prefabKick, "dashContactRadiusPadding", 0.35f, "Player prefab BallKick.dashContactRadiusPadding");
-                            ValidateSerializedFloat(prefabKick, "cooldown", 3f, "Player prefab BallKick.cooldown");
-                            ValidateSerializedFloat(prefabKick, "speedFraction", 0.91f, "Player prefab BallKick.speedFraction");
-                            ValidateSerializedFloat(prefabKick, "playerMomentumShare", 0.20f, "Player prefab BallKick.playerMomentumShare");
-                            ValidateSerializedFloat(prefabKick, "enemyContactDamage", 20f, "Player prefab BallKick.enemyContactDamage");
-                            ValidateSerializedFloat(prefabKick, "enemyShoveImpulse", 6f, "Player prefab BallKick.enemyShoveImpulse");
-                            ValidateSerializedFloat(prefabKick, "enemyDashRetention", 0.20f, "Player prefab BallKick.enemyDashRetention");
-                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulse", 0.025f, "Player prefab PlayerCameraFeedback.dashKickImpulse");
-                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulseDuration", 0.12f, "Player prefab PlayerCameraFeedback.dashKickImpulseDuration");
+                            ValidateSerializedFloat(prefabMotor, "dashBurstSpeed", PlayerMotorDefaults.DashBurstSpeed, "Player prefab PlayerMotor.dashBurstSpeed");
+                            ValidateSerializedFloat(prefabMotor, "dashDuration", PlayerMotorDefaults.DashDuration, "Player prefab PlayerMotor.dashDuration");
+                            ValidateSerializedFloat(prefabMotor, "dashSteerRateDegrees", PlayerMotorDefaults.DashSteerRateDegrees, "Player prefab PlayerMotor.dashSteerRateDegrees");
+                            ValidateSerializedFloat(prefabMotor, "dashSpeedCap", PlayerMotorDefaults.DashSpeedCap, "Player prefab PlayerMotor.dashSpeedCap");
+                            ValidateSerializedInteger(prefabMotor, "jumpsToHardCap", PlayerMotorDefaults.JumpsToHardCap, "Player prefab PlayerMotor.jumpsToHardCap");
+                            ValidateSerializedFloat(prefabKick, "dashContactStartDelay", BallKickDefaults.DashContactStartDelay, "Player prefab BallKick.dashContactStartDelay");
+                            ValidateSerializedFloat(prefabKick, "dashContactReach", BallKickDefaults.DashContactReach, "Player prefab BallKick.dashContactReach");
+                            ValidateSerializedFloat(prefabKick, "dashContactRadiusPadding", BallKickDefaults.DashContactRadiusPadding, "Player prefab BallKick.dashContactRadiusPadding");
+                            ValidateSerializedFloat(prefabKick, "cooldown", BallKickDefaults.Cooldown, "Player prefab BallKick.cooldown");
+                            ValidateSerializedFloat(prefabKick, "speedFraction", BallKickDefaults.SpeedFraction, "Player prefab BallKick.speedFraction");
+                            ValidateSerializedFloat(prefabKick, "playerMomentumShare", BallKickDefaults.PlayerMomentumShare, "Player prefab BallKick.playerMomentumShare");
+                            ValidateSerializedFloat(prefabKick, "enemyContactDamage", BallKickDefaults.EnemyContactDamage, "Player prefab BallKick.enemyContactDamage");
+                            ValidateSerializedFloat(prefabKick, "enemyShoveImpulse", BallKickDefaults.EnemyShoveImpulse, "Player prefab BallKick.enemyShoveImpulse");
+                            ValidateSerializedFloat(prefabKick, "enemyDashRetention", BallKickDefaults.EnemyDashRetention, "Player prefab BallKick.enemyDashRetention");
+                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulse", PlayerCameraFeedback.DefaultDashKickImpulse, "Player prefab PlayerCameraFeedback.dashKickImpulse");
+                            ValidateSerializedFloat(prefabFeedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration, "Player prefab PlayerCameraFeedback.dashKickImpulseDuration");
                             var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
                              ValidateCrosshair(prefabCamera);
                              var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
@@ -1273,10 +1342,20 @@ namespace RocketFooxball.Editor
                              ValidateNoAnimators(prefabWorldShotgunVisual.gameObject, "Player prefab WorldShotgunVisual");
                              ValidateShotgunPresentation(root, prefabCamera, prefabFpsShotgunVisual, prefabWorldVisual, prefabWorldShotgunMount, prefabWorldShotgunVisual, "Player prefab");
                              ValidateTeamTintRenderers(prefabPresentation, prefabWorldVisual, prefabWorldShotgunMount, FindRendererByName(prefabWorldShotgunVisual.gameObject, "WeaponAccent"), "Player prefab PlayerPresentation.teamTintRenderers");
-                            ValidateShapeCue(Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue"), BlueCircleCueMeshPath, "Player prefab BlueCircleCue");
-                            ValidateShapeCue(Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue"), RedTriangleCueMeshPath, "Player prefab RedTriangleCue");
-                            ValidateImmunityShield(Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield"), AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath), "Player prefab BlueImmunityShield");
-                            ValidateImmunityShield(Require(root.transform.Find("ImmunityShield/RedImmunityShield"), "Player prefab RedImmunityShield"), AssetDatabase.LoadAssetAtPath<Material>(TeamRedShieldMaterialPath), "Player prefab RedImmunityShield");
+                             var blueCue = Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue");
+                             var redCue = Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue");
+                             ValidateShapeCue(blueCue, BlueCircleCueMeshPath, "Player prefab BlueCircleCue");
+                             ValidateShapeCue(redCue, RedTriangleCueMeshPath, "Player prefab RedTriangleCue");
+                             if (Vector3.Distance(blueCue.localScale, new Vector3(0.84f, 0.84f, 2f)) > 0.001f ||
+                                 Vector3.Distance(redCue.localScale, Vector3.one * 2f) > 0.001f)
+                                 throw new InvalidOperationException("Player team cue scale must be doubled.");
+                             var blueShield = Require(root.transform.Find("ImmunityShield/BlueImmunityShield"), "Player prefab BlueImmunityShield");
+                             var redShield = Require(root.transform.Find("ImmunityShield/RedImmunityShield"), "Player prefab RedImmunityShield");
+                             ValidateImmunityShield(blueShield, AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath), "Player prefab BlueImmunityShield");
+                             ValidateImmunityShield(redShield, AssetDatabase.LoadAssetAtPath<Material>(TeamRedShieldMaterialPath), "Player prefab RedImmunityShield");
+                             if (Vector3.Distance(blueShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f ||
+                                 Vector3.Distance(redShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f)
+                                 throw new InvalidOperationException("Player immunity shield scale must be doubled.");
                         }
                         else if (path == BallPrefabPath)
                         {
@@ -1904,32 +1983,43 @@ namespace RocketFooxball.Editor
                     }
                     var projectile = Require(rocketPrefab.GetComponent<RocketProjectile>(), "RocketProjectile");
                     ValidateReference(projectile, "trailVfx", trail, "RocketProjectile.trailVfx");
+                    ValidateReference(trail, "projectileGlow", glowSystems[0], "RocketTrailVfx.projectileGlow");
+                    ValidateReference(trail, "neutralTrailMaterial", glowMaterial, "RocketTrailVfx.neutralTrailMaterial");
                     if (rocketPrefab.GetComponentsInChildren<Light>(true).Length != 0) throw new InvalidOperationException("Rocket prefab must not contain Point Light components.");
                 }
 
                 internal static void ValidateExplosionPrefab(GameObject prefab)
                 {
                     if (prefab == null) throw new InvalidOperationException("Explosion prefab unavailable.");
-                    if (Vector3.Distance(prefab.transform.localScale, Vector3.one * BlastVisualScale) > 0.001f)
+                    if (Vector3.Distance(prefab.transform.localScale, Vector3.one) > 0.001f)
                     {
-                        throw new InvalidOperationException("Explosion VFX scale must track the enlarged blast radius.");
+                        throw new InvalidOperationException("Explosion VFX prefab root must remain unit scale; runtime owns radius scaling.");
                     }
+                    if (Mathf.Abs(ExplosionVfx.ReferenceVisualRadius - 4.5f) > 0.001f ||
+                        Mathf.Abs(ExplosionVfx.ReferenceVisualDiameter - 9f) > 0.001f ||
+                        Mathf.Abs(ExplosionVfx.ComputeVisualScale(BlastRadius) - 2.6f) > 0.001f ||
+                        Mathf.Abs(ExplosionVfx.ComputeVisualRadius(ExplosionVfx.ReferenceVisualDiameter, BlastRadius) - BlastRadius) > 0.001f)
+                        throw new InvalidOperationException("Explosion VFX reference radius/reach contract invalid.");
                     var effect = Require(prefab.GetComponent<ExplosionVfx>(), "ExplosionVfx");
                     var systems = prefab.GetComponentsInChildren<ParticleSystem>(true);
-                    if (systems.Length != 4) throw new InvalidOperationException("Explosion VFX must contain Flash/FireballBody/Sparks/Smoke systems.");
+                    if (systems.Length != 5) throw new InvalidOperationException("Explosion VFX must contain exactly Flash/FireballBody/Sparks/Smoke/BlastRadiusCue systems.");
                     var emitted = 0;
                     ParticleSystem flash = null;
                     ParticleSystem fire = null;
                     ParticleSystem sparks = null;
                     ParticleSystem smoke = null;
+                    ParticleSystem blastRadiusCue = null;
+                    var systemNames = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < systems.Length; i++)
                     {
                         var system = systems[i];
+                        if (system == null || !systemNames.Add(system.name)) throw new InvalidOperationException("Explosion VFX system names must be unique and exact.");
                         if (system.name == "Flash") flash = system;
                         else if (system.name == "FireballBody") fire = system;
                         else if (system.name == "Sparks") sparks = system;
-                        if (system.name == "Smoke") smoke = system;
-                        if (system.name != "Flash" && system.name != "FireballBody" && system.name != "Sparks" && system.name != "Smoke") throw new InvalidOperationException("Unknown explosion system: " + system.name);
+                        else if (system.name == "Smoke") smoke = system;
+                        else if (system.name == "BlastRadiusCue") blastRadiusCue = system;
+                        else throw new InvalidOperationException("Unknown explosion system: " + system.name);
                         var emission = system.emission;
                         var bursts = new ParticleSystem.Burst[emission.burstCount];
                         emission.GetBursts(bursts);
@@ -1942,10 +2032,10 @@ namespace RocketFooxball.Editor
                         var sheet = system.textureSheetAnimation;
                         if (!sheet.enabled || sheet.numTilesX != 4 || sheet.numTilesY != 4 || sheet.animation != ParticleSystemAnimationType.WholeSheet) throw new InvalidOperationException("Explosion texture-sheet contract invalid: " + system.name);
                     }
-                    if (emitted != 37) throw new InvalidOperationException("Explosion burst count must total 37.");
-                    if (flash == null || fire == null || sparks == null || smoke == null ||
-                        fire.emission.burstCount != 1 || sparks.emission.burstCount != 1 || smoke.emission.burstCount != 1 ||
-                        GetBurstParticleCount(fire) != 20 || GetBurstParticleCount(sparks) != 10 || GetBurstParticleCount(smoke) != 6 ||
+                    if (systemNames.Count != 5 || emitted != 38) throw new InvalidOperationException("Explosion VFX must contain the exact five systems and total 38 burst particles.");
+                    if (flash == null || fire == null || sparks == null || smoke == null || blastRadiusCue == null ||
+                        fire.emission.burstCount != 1 || sparks.emission.burstCount != 1 || smoke.emission.burstCount != 1 || blastRadiusCue.emission.burstCount != 1 ||
+                        GetBurstParticleCount(fire) != 20 || GetBurstParticleCount(sparks) != 10 || GetBurstParticleCount(smoke) != 6 || GetBurstParticleCount(blastRadiusCue) != 1 ||
                         Mathf.Abs(flash.main.startLifetime.constantMax - 0.13f) > 0.01f || Mathf.Abs(fire.main.startLifetime.constantMin - 0.40f) > 0.01f ||
                         Mathf.Abs(fire.main.startLifetime.constantMax - 0.56f) > 0.01f || Mathf.Abs(sparks.main.startLifetime.constantMin - 0.20f) > 0.01f ||
                         Mathf.Abs(sparks.main.startLifetime.constantMax - 0.32f) > 0.01f || Mathf.Abs(smoke.main.startLifetime.constantMin - 0.62f) > 0.01f ||
@@ -1969,21 +2059,70 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Explosion VFX tuning contract invalid.");
                     }
-                    var renderer = prefab.GetComponentsInChildren<Renderer>(true);
-                    for (var i = 0; i < renderer.Length; i++) if (renderer[i].GetComponent<Collider>() != null || renderer[i].GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Explosion VFX must not contain physics.");
+                    var cueMain = blastRadiusCue.main;
+                    var cueStartSpeed = cueMain.startSpeed;
+                    var cueStartSize = cueMain.startSize;
+                    var cueRenderer = blastRadiusCue.GetComponent<ParticleSystemRenderer>();
+                    var cueSize = blastRadiusCue.sizeOverLifetime;
+                    var cueSizeCurve = cueSize.size.curve;
+                    var cueSizeKeys = cueSizeCurve == null ? Array.Empty<Keyframe>() : cueSizeCurve.keys;
+                    var cueGradient = blastRadiusCue.colorOverLifetime.color.gradient;
+                    var cueAlphaKeys = cueGradient == null ? Array.Empty<GradientAlphaKey>() : cueGradient.alphaKeys;
+                    var cuePeakAlpha = 0f;
+                    for (var i = 0; i < cueAlphaKeys.Length; i++) cuePeakAlpha = Mathf.Max(cuePeakAlpha, cueAlphaKeys[i].alpha);
+                    if (cueMain.startLifetime.constantMin < 0.279f || cueMain.startLifetime.constantMax > 0.281f ||
+                        cueStartSpeed.mode != ParticleSystemCurveMode.Constant || cueStartSpeed.constant != 0f ||
+                        cueStartSize.mode != ParticleSystemCurveMode.Constant || Mathf.Abs(cueStartSize.constant - 9f) > 0.001f ||
+                        Mathf.Abs(cueStartSize.constant - ExplosionVfx.ReferenceVisualDiameter) > 0.001f ||
+                        Vector3.Distance(blastRadiusCue.transform.localPosition, Vector3.zero) > 0.001f || Quaternion.Angle(blastRadiusCue.transform.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(blastRadiusCue.transform.localScale, Vector3.one) > 0.001f ||
+                        cueMain.maxParticles != 1 || cueMain.loop || cueMain.playOnAwake || !blastRadiusCue.emission.enabled ||
+                        cueMain.simulationSpace != ParticleSystemSimulationSpace.Local || cueMain.scalingMode != ParticleSystemScalingMode.Hierarchy ||
+                        !cueSize.enabled || cueSize.size.mode != ParticleSystemCurveMode.Curve || Mathf.Abs(cueSize.size.curveMultiplier - 1f) > 0.001f ||
+                        cueSizeKeys.Length != 2 || Mathf.Abs(cueSizeKeys[0].time) > 0.001f || Mathf.Abs(cueSizeKeys[0].value - 0.15f) > 0.001f ||
+                        Mathf.Abs(cueSizeKeys[1].time - 1f) > 0.001f || Mathf.Abs(cueSizeKeys[1].value - 1f) > 0.001f ||
+                        cueRenderer == null || cueRenderer.renderMode != ParticleSystemRenderMode.HorizontalBillboard ||
+                        cueRenderer.alignment != ParticleSystemRenderSpace.World || cueRenderer.sortingOrder != 3 ||
+                        blastRadiusCue.useAutoRandomSeed || blastRadiusCue.randomSeed != 0xF005u || blastRadiusCue.shape.enabled ||
+                        cueGradient == null || !GradientColorsMatch(cueGradient, new[] { Color.white, Color.white }) || cueAlphaKeys.Length < 2 ||
+                        cueAlphaKeys[0].time > 0.001f || cueAlphaKeys[cueAlphaKeys.Length - 1].time < 0.999f ||
+                        Mathf.Abs(cueAlphaKeys[cueAlphaKeys.Length - 1].alpha) > 0.001f || cuePeakAlpha > 0.22f)
+                    {
+                        throw new InvalidOperationException("Explosion BlastRadiusCue tuning contract invalid.");
+                    }
+                    if (prefab.GetComponentsInChildren<Collider>(true).Length != 0 || prefab.GetComponentsInChildren<Rigidbody>(true).Length != 0)
+                        throw new InvalidOperationException("Explosion VFX must not contain physics.");
                     if (prefab.GetComponentsInChildren<Light>(true).Length != 0) throw new InvalidOperationException("Explosion VFX must not contain lights.");
                     var flashMaterial = flash.GetComponent<ParticleSystemRenderer>().sharedMaterial;
                     var sparksMaterial = sparks.GetComponent<ParticleSystemRenderer>().sharedMaterial;
                     var expectedFlashMaterial = AssetDatabase.LoadAssetAtPath<Material>(ExplosionAdditiveMaterialPath);
                     var expectedSparksMaterial = AssetDatabase.LoadAssetAtPath<Material>(ExplosionSparksMaterialPath);
-                    if (flashMaterial != expectedFlashMaterial || sparksMaterial != expectedSparksMaterial || fire.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Explosion.mat") || smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Smoke.mat") ||
+                    var expectedExplosionMaterial = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Explosion.mat");
+                    if (flashMaterial != expectedFlashMaterial || sparksMaterial != expectedSparksMaterial || fire.GetComponent<ParticleSystemRenderer>().sharedMaterial != expectedExplosionMaterial || blastRadiusCue.GetComponent<ParticleSystemRenderer>().sharedMaterial != expectedExplosionMaterial || smoke.GetComponent<ParticleSystemRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Smoke.mat") ||
+                        expectedExplosionMaterial == null || expectedExplosionMaterial.shader == null || expectedExplosionMaterial.shader.name != "RocketFooxball/RetroParticle" ||
                         flashMaterial == null || sparksMaterial == null || flashMaterial.shader == null || sparksMaterial.shader == null || flashMaterial.shader.name != "RocketFooxball/RetroAdditiveParticle" || sparksMaterial.shader.name != "RocketFooxball/RetroAdditiveParticle" || Mathf.Abs(flashMaterial.GetFloat("_Intensity") - 3.0f) > 0.001f || Mathf.Abs(sparksMaterial.GetFloat("_Intensity") - 2.0f) > 0.001f)
                     {
                         throw new InvalidOperationException("Explosion material routing/intensity contract invalid.");
                     }
                     var serialized = new SerializedObject(effect);
                     var configured = serialized.FindProperty("particleSystems");
-                    if (configured == null || !configured.isArray || configured.arraySize != 4) throw new InvalidOperationException("ExplosionVfx.particleSystems must contain four systems.");
+                    if (configured == null || !configured.isArray || configured.arraySize != 5) throw new InvalidOperationException("ExplosionVfx.particleSystems must contain five systems.");
+                    var expectedSystems = new[] { flash, fire, sparks, smoke, blastRadiusCue };
+                    for (var i = 0; i < expectedSystems.Length; i++)
+                    {
+                        var expectedSystem = expectedSystems[i];
+                        var configuredElement = configured.GetArrayElementAtIndex(i);
+                        var configuredSystem = configuredElement.propertyType == SerializedPropertyType.ObjectReference
+                            ? configuredElement.objectReferenceValue as ParticleSystem
+                            : null;
+                        if (configuredSystem == null || configuredSystem != expectedSystem)
+                        {
+                            throw new InvalidOperationException("ExplosionVfx.particleSystems[" + i + "] must reference the ordered " + expectedSystem.name + " system.");
+                        }
+
+                        ValidatePrefabReference(effect, "particleSystems.Array.data[" + i + "]", ExplosionPrefabPath,
+                            "ExplosionVfx.particleSystems[" + i + "]");
+                    }
                 }
 
                 internal static int GetBurstParticleCount(ParticleSystem system)
@@ -1994,6 +2133,20 @@ namespace RocketFooxball.Editor
                     var count = 0;
                     for (var i = 0; i < bursts.Length; i++) count += bursts[i].maxCount;
                     return count;
+                }
+
+                private static void ValidateNullReference(UnityEngine.Object target, string propertyName, string label)
+                {
+                    var property = new SerializedObject(target).FindProperty(propertyName);
+                    if (property == null || property.propertyType != SerializedPropertyType.ObjectReference || property.objectReferenceValue != null)
+                        throw new InvalidOperationException(label + " must remain null on the prefab.");
+                }
+
+                private static void ValidateSerializedBool(UnityEngine.Object target, string propertyName, bool expected, string label)
+                {
+                    var property = new SerializedObject(target).FindProperty(propertyName);
+                    if (property == null || property.propertyType != SerializedPropertyType.Boolean || property.boolValue != expected)
+                        throw new InvalidOperationException(label + " tuning mismatch.");
                 }
 
                 internal static bool GradientColorsMatch(Gradient gradient, Color[] expected)

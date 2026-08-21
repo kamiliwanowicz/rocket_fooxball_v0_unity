@@ -1,5 +1,5 @@
 # Historical red baseline for harness red/green checks.
-# Includes pre-IDictionary access and the removed R6 generated-path surface.
+# Intentionally violates generated-path and short-workspace contracts.
 param(
     [string[]]$GeneratedPath = @()
 )

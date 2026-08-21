@@ -210,6 +210,219 @@ namespace RocketFooxball.Runtime.Bots
                 ordinal);
         }
 
+        /// <summary>
+        /// Samples one deterministic lateral miss for an airborne ball. The returned vector is
+        /// perpendicular to the canonical origin-to-ball axis and has the configured fixed
+        /// magnitude on a miss. Grounded balls, invalid inputs, and successful samples return
+        /// zero. Call once per decision and reuse the result for every ball aim solve.
+        /// </summary>
+        public static Vector3 GetAerialMissOffset(
+            BotDifficulty difficulty,
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            int slotId,
+            int ordinal)
+        {
+            return GetAerialMissOffset(
+                BotDifficultyRules.GetParameters(difficulty),
+                actionOrigin,
+                observedBallPosition,
+                isGrounded,
+                slotId,
+                ordinal);
+        }
+
+        public static Vector3 GetAerialMissOffset(
+            BotDifficulty difficulty,
+            Vector3 actionOrigin,
+            BotBallObservation ball,
+            int slotId,
+            int ordinal)
+        {
+            return ball.HasObservation && ball.IsVisible
+                ? GetAerialMissOffset(
+                    difficulty,
+                    actionOrigin,
+                    ball.Position,
+                    ball.IsGrounded,
+                    slotId,
+                    ordinal)
+                : Vector3.zero;
+        }
+
+        public static Vector3 GetAerialMissOffset(
+            BotDifficultyParameters parameters,
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            int slotId,
+            int ordinal)
+        {
+            if (isGrounded || !IsFinite(actionOrigin) || !IsFinite(observedBallPosition))
+            {
+                return Vector3.zero;
+            }
+
+            var chance = IsFinite(parameters.AerialMissChance)
+                ? Mathf.Clamp01(parameters.AerialMissChance)
+                : 0f;
+            var magnitude = IsFinite(parameters.AerialMissMagnitude)
+                ? Mathf.Max(0f, parameters.AerialMissMagnitude)
+                : 0f;
+            if (magnitude <= Epsilon ||
+                BotDifficultyRules.Sample01(slotId, ordinal, BotSampleChannel.AerialMissRoll) >= chance)
+            {
+                return Vector3.zero;
+            }
+
+            var axis = observedBallPosition - actionOrigin;
+            if (!IsFinite(axis) || axis.sqrMagnitude <= Epsilon)
+            {
+                // Coincident origin/ball has no canonical axis. Forward is a stable world
+                // fallback, while the basis fallback below handles a vertical canonical axis.
+                axis = Vector3.forward;
+            }
+            else
+            {
+                axis.Normalize();
+            }
+
+            if (!IsFinite(axis) || axis.sqrMagnitude <= Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            var reference = Mathf.Abs(Vector3.Dot(axis, Vector3.up)) < 0.999f
+                ? Vector3.up
+                : Vector3.right;
+            var perpendicularA = Vector3.Cross(reference, axis);
+            if (!IsFinite(perpendicularA) || perpendicularA.sqrMagnitude <= Epsilon)
+            {
+                reference = Vector3.forward;
+                perpendicularA = Vector3.Cross(reference, axis);
+            }
+
+            perpendicularA.Normalize();
+            var perpendicularB = Vector3.Cross(axis, perpendicularA);
+            if (!IsFinite(perpendicularA) || !IsFinite(perpendicularB) ||
+                perpendicularA.sqrMagnitude <= Epsilon || perpendicularB.sqrMagnitude <= Epsilon)
+            {
+                return Vector3.zero;
+            }
+
+            var azimuth = 2f * Mathf.PI * BotDifficultyRules.Sample01(
+                slotId,
+                ordinal,
+                BotSampleChannel.AerialMissAzimuth);
+            var direction = Mathf.Cos(azimuth) * perpendicularA + Mathf.Sin(azimuth) * perpendicularB;
+            var offset = direction.normalized * magnitude;
+            return IsFinite(offset) ? offset : Vector3.zero;
+        }
+
+        public static Vector3 GetAerialMissOffset(
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            BotDifficulty difficulty,
+            int slotId,
+            int ordinal)
+        {
+            return GetAerialMissOffset(
+                difficulty,
+                actionOrigin,
+                observedBallPosition,
+                isGrounded,
+                slotId,
+                ordinal);
+        }
+
+        public static Vector3 GetAerialMissOffset(
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            float missChance,
+            float missMagnitude,
+            int slotId,
+            int ordinal)
+        {
+            return GetAerialMissOffset(
+                new BotDifficultyParameters(0f, 0f, 0f, 0f, 0f, missChance, missMagnitude),
+                actionOrigin,
+                observedBallPosition,
+                isGrounded,
+                slotId,
+                ordinal);
+        }
+
+        public static Vector3 BuildAerialMissOffset(
+            BotDifficulty difficulty,
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            int slotId,
+            int ordinal)
+        {
+            return GetAerialMissOffset(
+                difficulty,
+                actionOrigin,
+                observedBallPosition,
+                isGrounded,
+                slotId,
+                ordinal);
+        }
+
+        public static Vector3 GetAerialMissOffset(
+            BotCombatTarget target,
+            BotDifficulty difficulty,
+            Vector3 actionOrigin,
+            Vector3 observedTargetPosition,
+            bool isGrounded,
+            int slotId,
+            int ordinal)
+        {
+            return target == BotCombatTarget.Ball
+                ? GetAerialMissOffset(
+                    difficulty,
+                    actionOrigin,
+                    observedTargetPosition,
+                    isGrounded,
+                    slotId,
+                    ordinal)
+                : Vector3.zero;
+        }
+
+        public static bool TryGetAerialMissOffset(
+            BotDifficulty difficulty,
+            Vector3 actionOrigin,
+            Vector3 observedBallPosition,
+            bool isGrounded,
+            int slotId,
+            int ordinal,
+            out Vector3 offset)
+        {
+            offset = GetAerialMissOffset(
+                difficulty,
+                actionOrigin,
+                observedBallPosition,
+                isGrounded,
+                slotId,
+                ordinal);
+            return IsFinite(offset) && offset.sqrMagnitude > Epsilon;
+        }
+
+        /// <summary>Applies a previously sampled ball offset without changing its velocity.</summary>
+        public static Vector3 ApplyAerialMissOffset(Vector3 targetPosition, Vector3 offset)
+        {
+            if (!IsFinite(targetPosition) || !IsFinite(offset))
+            {
+                return Vector3.zero;
+            }
+
+            var result = targetPosition + offset;
+            return IsFinite(result) ? result : Vector3.zero;
+        }
+
         /// <summary>Clamps a direction's pitch to the default [-80, 80] degree range.</summary>
         public static Vector3 ClampPitch(Vector3 direction)
         {
@@ -273,6 +486,24 @@ namespace RocketFooxball.Runtime.Bots
             return BuildAimSolution(origin, targetPosition, maxNoiseDegrees, slotId, ordinal, false, 0f);
         }
 
+        /// <summary>Solves direct aim against a target position shifted by a sampled offset.</summary>
+        public static BotAimSolution SolveDirectAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetOffset,
+            float maxNoiseDegrees,
+            int slotId,
+            int ordinal)
+        {
+            if (!IsFinite(targetPosition) || !IsFinite(targetOffset))
+            {
+                return BotAimSolution.Invalid;
+            }
+
+            var adjustedTarget = ApplyAerialMissOffset(targetPosition, targetOffset);
+            return SolveDirectAim(origin, adjustedTarget, maxNoiseDegrees, slotId, ordinal);
+        }
+
         public static BotAimSolution SolveDirectAim(
             Vector3 origin,
             Vector3 targetPosition,
@@ -286,11 +517,45 @@ namespace RocketFooxball.Runtime.Bots
         public static BotAimSolution SolveDirectAim(
             Vector3 origin,
             Vector3 targetPosition,
+            Vector3 targetOffset,
+            BotDifficultyParameters parameters,
+            int slotId,
+            int ordinal)
+        {
+            return SolveDirectAim(
+                origin,
+                targetPosition,
+                targetOffset,
+                parameters.AimNoiseDegrees,
+                slotId,
+                ordinal);
+        }
+
+        public static BotAimSolution SolveDirectAim(
+            Vector3 origin,
+            Vector3 targetPosition,
             BotDifficulty difficulty,
             int slotId,
             int ordinal)
         {
             return SolveDirectAim(origin, targetPosition, BotDifficultyRules.GetParameters(difficulty), slotId, ordinal);
+        }
+
+        public static BotAimSolution SolveDirectAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetOffset,
+            BotDifficulty difficulty,
+            int slotId,
+            int ordinal)
+        {
+            return SolveDirectAim(
+                origin,
+                targetPosition,
+                targetOffset,
+                BotDifficultyRules.GetParameters(difficulty),
+                slotId,
+                ordinal);
         }
 
         /// <summary>Solves direct aim when the target kind is known.</summary>
@@ -419,6 +684,83 @@ namespace RocketFooxball.Runtime.Bots
             Vector3 origin,
             Vector3 targetPosition,
             Vector3 targetVelocity,
+            Vector3 targetOffset,
+            float projectileSpeed,
+            BotDifficultyParameters parameters,
+            int slotId,
+            int ordinal)
+        {
+            return SolveInterceptAim(
+                origin,
+                targetPosition,
+                targetVelocity,
+                targetOffset,
+                projectileSpeed,
+                parameters.PredictionErrorFraction,
+                parameters.AimNoiseDegrees,
+                slotId,
+                ordinal);
+        }
+
+        /// <summary>
+        /// Solves intercept aim from a target position shifted by a previously sampled offset.
+        /// Velocity remains the original observed velocity; only the intercept base moves.
+        /// </summary>
+        public static BotAimSolution SolveInterceptAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetVelocity,
+            Vector3 targetOffset,
+            float projectileSpeed,
+            float maxPredictionErrorFraction,
+            float maxNoiseDegrees,
+            int slotId,
+            int ordinal)
+        {
+            if (!IsFinite(targetPosition) || !IsFinite(targetVelocity) || !IsFinite(targetOffset))
+            {
+                return BotAimSolution.Invalid;
+            }
+
+            var adjustedTarget = ApplyAerialMissOffset(targetPosition, targetOffset);
+            return SolveInterceptAim(
+                origin,
+                adjustedTarget,
+                targetVelocity,
+                projectileSpeed,
+                maxPredictionErrorFraction,
+                maxNoiseDegrees,
+                slotId,
+                ordinal);
+        }
+
+        public static BotAimSolution SolveInterceptAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetVelocity,
+            float projectileSpeed,
+            float maxPredictionErrorFraction,
+            float maxNoiseDegrees,
+            Vector3 targetOffset,
+            int slotId,
+            int ordinal)
+        {
+            return SolveInterceptAim(
+                origin,
+                targetPosition,
+                targetVelocity,
+                targetOffset,
+                projectileSpeed,
+                maxPredictionErrorFraction,
+                maxNoiseDegrees,
+                slotId,
+                ordinal);
+        }
+
+        public static BotAimSolution SolveInterceptAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetVelocity,
             float projectileSpeed,
             BotDifficulty difficulty,
             int slotId,
@@ -428,6 +770,27 @@ namespace RocketFooxball.Runtime.Bots
                 origin,
                 targetPosition,
                 targetVelocity,
+                projectileSpeed,
+                BotDifficultyRules.GetParameters(difficulty),
+                slotId,
+                ordinal);
+        }
+
+        public static BotAimSolution SolveInterceptAim(
+            Vector3 origin,
+            Vector3 targetPosition,
+            Vector3 targetVelocity,
+            Vector3 targetOffset,
+            float projectileSpeed,
+            BotDifficulty difficulty,
+            int slotId,
+            int ordinal)
+        {
+            return SolveInterceptAim(
+                origin,
+                targetPosition,
+                targetVelocity,
+                targetOffset,
                 projectileSpeed,
                 BotDifficultyRules.GetParameters(difficulty),
                 slotId,

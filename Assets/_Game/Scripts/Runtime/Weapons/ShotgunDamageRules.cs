@@ -6,14 +6,16 @@ namespace RocketFooxball.Runtime.Weapons
     public static class ShotgunDamageRules
     {
         public const int DefaultPelletCount = 8;
-        public const float DefaultPelletDamage = 8f;
+        public const float DefaultPelletDamage = 13.6f;
         public const float DefaultFullDamageRange = 6f;
         public const float DefaultMediumRange = 16f;
         public const float DefaultMaxRange = 30f;
         public const float DefaultMediumMultiplier = 0.55f;
         public const float DefaultFarMultiplier = 0.20f;
-        public const float DefaultPerPelletBallImpulse = 2f;
-        public const float DefaultBallImpulseCap = 12f;
+        public const float DefaultPerPelletBallImpulse = 3.4f;
+        public const float DefaultBallImpulseCap = 20.4f;
+        public const float DefaultSpreadAngleDegrees = 7f;
+        public const float DefaultPumpDelay = 0.85f;
 
         /// <summary>Clamps a requested pellet count to the fixed spread's usable range.</summary>
         public static int ClampPelletCount(int requested)

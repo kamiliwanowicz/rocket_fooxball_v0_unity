@@ -1,5 +1,7 @@
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Utilities;
 using UnityEngine.Scripting.APIUpdating;
 
 namespace RocketFooxball.Runtime.Input
@@ -17,6 +19,8 @@ namespace RocketFooxball.Runtime.Input
         private bool releaseCursorRequested;
         private bool captureCursorRequested;
         private bool suppressFireUntilRelease;
+        private bool anyButtonPressLatched;
+        private IDisposable anyButtonPressSubscription;
         private InputAction moveAction;
         private InputAction lookAction;
         private InputAction jumpAction;
@@ -109,6 +113,7 @@ namespace RocketFooxball.Runtime.Input
             {
                 captureCursorAction.started -= OnCaptureCursorStarted;
             }
+            CancelAnyButtonPress();
             Disable(moveAction);
             Disable(lookAction);
             Disable(jumpAction);
@@ -177,6 +182,29 @@ namespace RocketFooxball.Runtime.Input
             var result = captureCursorRequested;
             captureCursorRequested = false;
             return result;
+        }
+
+        /// <summary>Arms one fresh global button press for dismissing a goal celebration.</summary>
+        public void ArmAnyButtonPress()
+        {
+            CancelAnyButtonPress();
+            anyButtonPressSubscription = InputSystem.onAnyButtonPress.CallOnce(OnAnyButtonPress);
+        }
+
+        /// <summary>Consumes the one latched goal-celebration dismissal request.</summary>
+        public bool ConsumeAnyButtonPress()
+        {
+            var result = anyButtonPressLatched;
+            anyButtonPressLatched = false;
+            return result;
+        }
+
+        /// <summary>Disarms and clears the goal-celebration dismissal request.</summary>
+        public void CancelAnyButtonPress()
+        {
+            anyButtonPressSubscription?.Dispose();
+            anyButtonPressSubscription = null;
+            anyButtonPressLatched = false;
         }
 
         public void SetGameplayInputEnabled(bool enabled)
@@ -250,6 +278,16 @@ namespace RocketFooxball.Runtime.Input
             captureCursorRequested = true;
             fireHeld = false;
             suppressFireUntilRelease = true;
+        }
+
+        private void OnAnyButtonPress(InputControl _)
+        {
+            if (anyButtonPressLatched)
+            {
+                return;
+            }
+
+            anyButtonPressLatched = true;
         }
 
         private static void Enable(InputAction action)

@@ -213,7 +213,7 @@ namespace RocketFooxball.Editor
             MovementLabLightingProfiles.ValidatePreparedScene(MovementLabLightingProfiles.ProfileId.Development);
             scene = MovementLabLightingPipeline.BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Development);
             EditorSceneManager.SaveScene(scene, MovementLabContract.ScenePath);
-            MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true).LightingInputDigest);
+            MovementLabLightingProfiles.WriteManifest(MovementLabLightingProfiles.ProfileId.Development, MovementLabStageGraph.CaptureCurrentRecord(MovementLabStage.Lighting).inputDigest);
             MovementLabManifestStore.WriteAtomic(MovementLabStageGraph.CaptureBakedState());
             AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             MovementLabStageRunner.WriteProbeIfRequested(MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true));

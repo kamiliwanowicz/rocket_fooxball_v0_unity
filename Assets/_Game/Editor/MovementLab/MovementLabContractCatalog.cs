@@ -217,7 +217,7 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
-        internal const int ExpectedLightmapCount = 5;
+        internal const int ExpectedLightmapCount = MovementLabContract.ExpectedLightmapCount;
         internal const int ExpectedReflectionProbeBakeCount = 4;
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
         internal const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
@@ -226,15 +226,26 @@ namespace RocketFooxball.Editor
         internal const float BallRadius = MovementLabContract.BallRadius;
         internal const float BallSpawnHeight = MovementLabContract.BallSpawnHeight;
         internal const float BlastRadius = MovementLabContract.BlastRadius;
-        internal const float BlastVisualScale = MovementLabContract.BlastVisualScale;
         internal const float GoalAxisPosition = MovementLabContract.GoalAxisPosition;
         internal const float PlayerSpawnOffset = MovementLabContract.PlayerSpawnOffset;
-        internal const float GoalFreezeDuration = MovementLabContract.GoalFreezeDuration;
         internal const float CelebrationOrbitRadius = MovementLabContract.CelebrationOrbitRadius;
         internal const float CelebrationOrbitHeight = MovementLabContract.CelebrationOrbitHeight;
         internal const float CelebrationLookHeight = MovementLabContract.CelebrationLookHeight;
         internal const float CelebrationOrbitDegrees = MovementLabContract.CelebrationOrbitDegrees;
         internal const float CelebrationFov = MovementLabContract.CelebrationFov;
+        internal const float PlayerControllerRadius = MovementLabContract.PlayerControllerRadius;
+        internal const float PlayerControllerHeight = MovementLabContract.PlayerControllerHeight;
+        internal static readonly Vector3 PlayerControllerCenter = MovementLabContract.PlayerControllerCenter;
+        internal const float PlayerControllerSkinWidth = MovementLabContract.PlayerControllerSkinWidth;
+        internal const float PlayableFloorTop = MovementLabContract.PlayableFloorTop;
+        internal const float ParticipantRecoveryThreshold = MovementLabContract.ParticipantRecoveryThreshold;
+        internal const float WorldVisualScale = MovementLabContract.WorldVisualScale;
+        internal const float PlayerHeadHeight = MovementLabContract.PlayerHeadHeight;
+        internal const float TeamCueScaleMultiplier = MovementLabContract.TeamCueScaleMultiplier;
+        internal const float ImmunityShieldScaleMultiplier = MovementLabContract.ImmunityShieldScaleMultiplier;
+        internal const float NameplateHeight = MovementLabContract.NameplateHeight;
+        internal const float LocalRespawnDelay = MovementLabContract.LocalRespawnDelay;
+        internal const float BotRespawnDelay = MovementLabContract.BotRespawnDelay;
         internal const float RocketTrailLifetime = MovementLabContract.RocketTrailLifetime;
         internal const float RocketTrailRateOverDistance = MovementLabContract.RocketTrailRateOverDistance;
         internal const float RocketTrailStartSize = MovementLabContract.RocketTrailStartSize;
@@ -279,16 +290,7 @@ namespace RocketFooxball.Editor
             WorldControllerPath, FpsControllerPath
         };
 
-        internal static readonly string[] GeneratedBakedLightingPaths =
-        {
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
-        };
+        internal static readonly string[] GeneratedBakedLightingPaths = CreateGeneratedBakedLightingPaths();
 
         internal static readonly string[] GeneratedImporterMetadataPaths =
         {
@@ -308,6 +310,7 @@ namespace RocketFooxball.Editor
             ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
 
+        // Unread by design: constructing this list IS the .meta-coverage check (see ValidateGeneratedFingerprintPathList).
         internal static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
 
         internal static readonly Color SkyHorizonColor = new Color(0.7254902f, 0.8627451f, 0.9490196f, 1f);
@@ -317,10 +320,10 @@ namespace RocketFooxball.Editor
         internal static readonly (string name, Vector3 position, Color color)[] AccentLightContract =
         {
             // Red owns negative-X/North; Blue owns positive-X/South.
-            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 12f), new Color(1.00f, 0.20f, 0.14f, 1f)),
-            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -12f), new Color(0.20f, 0.46f, 1.00f, 1f)),
-            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 12f), new Color(0.20f, 0.46f, 1.00f, 1f))
+            ("GoalAccent_WestRed_North", new Vector3(-58f, 5f, -22f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_WestRed_South", new Vector3(-58f, 5f, 22f), new Color(1.00f, 0.20f, 0.14f, 1f)),
+            ("GoalAccent_EastBlue_North", new Vector3(58f, 5f, -22f), new Color(0.20f, 0.46f, 1.00f, 1f)),
+            ("GoalAccent_EastBlue_South", new Vector3(58f, 5f, 22f), new Color(0.20f, 0.46f, 1.00f, 1f))
         };
         internal static readonly (string name, Vector3 center, Vector3 size)[] ReflectionProbeContract =
         {
@@ -363,6 +366,18 @@ namespace RocketFooxball.Editor
 
         internal static string ComputeBuilderSignature() => "serialized-contract-v" + MovementLabContract.SerializedContractVersion;
         internal static string GetBuildMarkerName(string builderSignature) => BuildMarkerPrefix + builderSignature;
+
+        private static string[] CreateGeneratedBakedLightingPaths()
+        {
+            var lightmapPaths = MovementLabContract.BakedLightmapPaths(ExpectedLightmapCount);
+            var paths = new string[1 + lightmapPaths.Length + ExpectedReflectionProbeBakeCount];
+            paths[0] = BakedLightingPath + "/LightingData.asset";
+            Array.Copy(lightmapPaths, 0, paths, 1, lightmapPaths.Length);
+            var reflectionOffset = 1 + lightmapPaths.Length;
+            for (var i = 0; i < ExpectedReflectionProbeBakeCount; i++)
+                paths[reflectionOffset + i] = BakedLightingPath + "/ReflectionProbe-" + i + ".exr";
+            return paths;
+        }
 
         private static string[] CreateGeneratedFingerprintPaths()
         {

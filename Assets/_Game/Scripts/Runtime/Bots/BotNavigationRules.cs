@@ -222,7 +222,7 @@ namespace RocketFooxball.Runtime.Bots
             {
                 var node = nodes[i];
                 if (node == null || node.Id < 0 || !IsFinite(node.Position) || !IsFinite(node.SafeRadius) ||
-                    node.SafeRadius < BotNavigationGraph.ExpectedControllerRadius + BotNavigationGraph.ExpectedControllerSkinWidth)
+                    node.SafeRadius < BotNavigationGraph.ExpectedControllerEffectiveRadius)
                 {
                     return false;
                 }
@@ -247,7 +247,7 @@ namespace RocketFooxball.Runtime.Bots
                 var edge = edges[i];
                 if (edge == null || edge.Id < 0 || edge.FromNodeId < 0 || edge.ToNodeId < 0 ||
                     !IsFinite(edge.Cost) || edge.Cost <= 0f || !IsFinite(edge.CorridorHalfWidth) ||
-                    edge.CorridorHalfWidth < BotNavigationGraph.ExpectedControllerRadius + BotNavigationGraph.ExpectedControllerSkinWidth)
+                    edge.CorridorHalfWidth < BotNavigationGraph.ExpectedControllerEffectiveRadius)
                 {
                     return false;
                 }

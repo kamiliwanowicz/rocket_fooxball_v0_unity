@@ -23,7 +23,9 @@ namespace RocketFooxball.Runtime.Bots
         DecisionDelay = 1,
         PredictionError = 2,
         AimConeRadius = 3,
-        AimConeAzimuth = 4
+        AimConeAzimuth = 4,
+        AerialMissRoll = 5,
+        AerialMissAzimuth = 6
     }
 
     public enum BotPickupKind
@@ -71,13 +73,17 @@ namespace RocketFooxball.Runtime.Bots
             float decisionSeconds,
             float scheduleJitterSeconds,
             float aimNoiseDegrees,
-            float predictionErrorFraction)
+            float predictionErrorFraction,
+            float aerialMissChance = 0f,
+            float aerialMissMagnitude = 0f)
         {
             ReactionSeconds = reactionSeconds;
             DecisionSeconds = decisionSeconds;
             ScheduleJitterSeconds = scheduleJitterSeconds;
             AimNoiseDegrees = aimNoiseDegrees;
             PredictionErrorFraction = predictionErrorFraction;
+            AerialMissChance = aerialMissChance;
+            AerialMissMagnitude = aerialMissMagnitude;
         }
 
         public float ReactionSeconds { get; }
@@ -85,6 +91,10 @@ namespace RocketFooxball.Runtime.Bots
         public float ScheduleJitterSeconds { get; }
         public float AimNoiseDegrees { get; }
         public float PredictionErrorFraction { get; }
+        public float AerialMissChance { get; }
+        public float AerialMissMagnitude { get; }
+        public float AerialMissProbability => AerialMissChance;
+        public float AerialMissOffsetMagnitude => AerialMissMagnitude;
     }
 
     public readonly struct BotBallObservation
@@ -242,11 +252,83 @@ namespace RocketFooxball.Runtime.Bots
 
     public readonly struct BotCombatInput
     {
+        /// <summary>
+        /// Creates combat input without the legacy target score. Enemy combat eligibility is
+        /// governed by current visibility and the normal action gates, never by target score.
+        /// </summary>
         public BotCombatInput(
             BotDifficulty difficulty,
             BotRole role,
             BotTargetKind activeTargetKind,
-            float activeTargetScore,
+            bool suppressParticipantCombat,
+            bool preferBallActions,
+            Vector3 actionOrigin,
+            Vector3 ballRocketLaunchPosition,
+            Vector3 enemyRocketLaunchPosition,
+            Vector3 rocketJumpLaunchPosition,
+            Vector3 routeForwardXZ,
+            BotBallObservation ball,
+            BotParticipantObservation enemy,
+            BotParticipantObservation allyA,
+            BotParticipantObservation allyB,
+            bool ballRouteReachable,
+            bool enemyRouteReachable,
+            bool dashReady,
+            bool shotgunReady,
+            bool launcherReady,
+            BotAimSolution ballDirectAim,
+            BotAimSolution ballRocketAim,
+            BotAimSolution enemyDirectAim,
+            BotAimSolution enemyRocketAim,
+            bool rocketLineClearToBall,
+            bool rocketLineClearToEnemy,
+            bool isGrounded,
+            bool upwardTransitionRequired,
+            Vector3 rocketJumpAimPoint,
+            bool rocketJumpLineClear)
+            : this(
+                difficulty,
+                role,
+                activeTargetKind,
+                0f,
+                suppressParticipantCombat,
+                preferBallActions,
+                actionOrigin,
+                ballRocketLaunchPosition,
+                enemyRocketLaunchPosition,
+                rocketJumpLaunchPosition,
+                routeForwardXZ,
+                ball,
+                enemy,
+                allyA,
+                allyB,
+                ballRouteReachable,
+                enemyRouteReachable,
+                dashReady,
+                shotgunReady,
+                launcherReady,
+                ballDirectAim,
+                ballRocketAim,
+                enemyDirectAim,
+                enemyRocketAim,
+                rocketLineClearToBall,
+                rocketLineClearToEnemy,
+                isGrounded,
+                upwardTransitionRequired,
+                rocketJumpAimPoint,
+                rocketJumpLineClear)
+        {
+        }
+
+        /// <summary>
+        /// Legacy overload retained for source compatibility while callers migrate away from
+        /// target-score gating. The score is intentionally ignored by combat rules.
+        /// </summary>
+        public BotCombatInput(
+            BotDifficulty difficulty,
+            BotRole role,
+            BotTargetKind activeTargetKind,
+            float legacyActiveTargetScore,
             bool suppressParticipantCombat,
             bool preferBallActions,
             Vector3 actionOrigin,
@@ -277,7 +359,6 @@ namespace RocketFooxball.Runtime.Bots
             Difficulty = difficulty;
             Role = role;
             ActiveTargetKind = activeTargetKind;
-            ActiveTargetScore = activeTargetScore;
             SuppressParticipantCombat = suppressParticipantCombat;
             PreferBallActions = preferBallActions;
             ActionOrigin = actionOrigin;
@@ -309,7 +390,6 @@ namespace RocketFooxball.Runtime.Bots
         public BotDifficulty Difficulty { get; }
         public BotRole Role { get; }
         public BotTargetKind ActiveTargetKind { get; }
-        public float ActiveTargetScore { get; }
         public bool SuppressParticipantCombat { get; }
         public bool PreferBallActions { get; }
         public Vector3 ActionOrigin { get; }
@@ -344,20 +424,38 @@ namespace RocketFooxball.Runtime.Bots
             BotCombatAction action,
             BotCombatTarget target,
             Vector3 aimPoint,
-            Vector3 aimDirection,
+            Vector3 fireAimDirection,
+            Vector3 bodyFacingDirection,
             Vector3 launchPosition)
         {
             Action = action;
             Target = target;
             AimPoint = aimPoint;
-            AimDirection = aimDirection;
+            FireAimDirection = fireAimDirection;
+            BodyFacingDirection = bodyFacingDirection;
             LaunchPosition = launchPosition;
+        }
+
+        /// <summary>
+        /// Legacy constructor maps one direction to both fire and body facing. New actions should
+        /// use the six-argument constructor so rocket jumps can fire down/back while facing route.
+        /// </summary>
+        public BotCombatResult(
+            BotCombatAction action,
+            BotCombatTarget target,
+            Vector3 aimPoint,
+            Vector3 aimDirection,
+            Vector3 launchPosition)
+            : this(action, target, aimPoint, aimDirection, aimDirection, launchPosition)
+        {
         }
 
         public BotCombatAction Action { get; }
         public BotCombatTarget Target { get; }
         public Vector3 AimPoint { get; }
-        public Vector3 AimDirection { get; }
+        public Vector3 FireAimDirection { get; }
+        public Vector3 BodyFacingDirection { get; }
+        public Vector3 AimDirection => FireAimDirection;
         public Vector3 LaunchPosition { get; }
         public bool HasAction => Action != BotCombatAction.None;
 

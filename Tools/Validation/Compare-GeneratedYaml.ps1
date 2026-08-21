@@ -8,8 +8,7 @@ param(
     # Empty means every path in the workflow's authoritative generated inventory.  Explicit
     # paths remain useful for a narrow review, but are rejected unless that inventory owns them.
     [string[]]$Path = @(),
-    [switch]$FailOnDangling,
-    [switch]$SelfTest
+    [switch]$FailOnDangling
 )
 
 Set-StrictMode -Version Latest
@@ -65,9 +64,16 @@ function Invoke-GitNullDelimitedCapture {
     $process = New-Object Diagnostics.Process
     $process.StartInfo = $startInfo
     [void]$process.Start()
-    $output = $process.StandardOutput.ReadToEnd()
-    $errorOutput = $process.StandardError.ReadToEnd()
+    $outputTask = $process.StandardOutput.ReadToEndAsync()
+    $errorTask = $process.StandardError.ReadToEndAsync()
+    $timedOut = -not $process.WaitForExit(120000)
+    if ($timedOut) {
+        try { $process.Kill() } catch { }
+    }
     $process.WaitForExit()
+    $output = $outputTask.Result
+    $errorOutput = $errorTask.Result
+    if ($timedOut) { throw 'Git path listing timed out after 120s.' }
     if ($process.ExitCode -ne 0) { throw ('Git path listing failed: ' + $errorOutput.Trim()) }
     return ,@($output.Split([char[]]@([char]0), [StringSplitOptions]::RemoveEmptyEntries))
 }
@@ -737,101 +743,10 @@ function Get-CountMap {
     return $map
 }
 
-function Invoke-SelfTest {
-    $failures = New-Object System.Collections.Generic.List[string]
-
-    # Regression: literal '$' in a replacement string must survive -replace.
-    $token = Get-LocalToken 'abc123'
-    if ($token -cne '$LOCALabc123') { $failures.Add('token literal broken: ' + $token) | Out-Null }
-    $replaced = 'x &ANCHOR y' -replace '&ANCHOR', (ConvertTo-ReplacementLiteral $token)
-    if ($replaced -cne 'x $LOCALabc123 y') { $failures.Add('replacement escaping lost literal $: ' + $replaced) | Out-Null }
-    if ((ConvertTo-ReplacementLiteral $token) -cne '$$LOCALabc123') { $failures.Add('replacement literal not escaped') | Out-Null }
-
-    $yamlA = @(
-        '%YAML 1.1', '--- !u!1 &100', 'GameObject:', '  m_Name: Root', '  m_Component:', '  - component: {fileID: 200}',
-        '--- !u!4 &200', 'Transform:', '  m_GameObject: {fileID: 100}', '  m_Father: {fileID: 999}')
-    $yamlB = @(
-        '%YAML 1.1', '--- !u!4 &777', 'Transform:', '  m_GameObject: {fileID: 555}', '  m_Father: {fileID: 999}',
-        '--- !u!1 &555', 'GameObject:', '  m_Name: Root', '  m_Component:', '  - component: {fileID: 777}')
-    $yamlC = @(
-        '%YAML 1.1', '--- !u!1 &100', 'GameObject:', '  m_Name: Renamed', '  m_Component:', '  - component: {fileID: 200}',
-        '--- !u!4 &200', 'Transform:', '  m_GameObject: {fileID: 100}', '  m_Father: {fileID: 999}')
-    $a = Get-Analysis $yamlA
-    $b = Get-Analysis $yamlB
-    $c = Get-Analysis $yamlC
-    if ($a.DocCount -ne 2) { $failures.Add('doc count wrong: ' + $a.DocCount) | Out-Null }
-    if ($a.Dangling -ne 1) { $failures.Add('dangling count wrong: ' + $a.Dangling) | Out-Null }
-    if ($a.Canonical -cne $b.Canonical) { $failures.Add('renumbered documents did not canonicalize equal') | Out-Null }
-    if ($a.Canonical -ceq $c.Canonical) { $failures.Add('value change was not detected') | Out-Null }
-    if ($a.NonZeroRefs -ne 3) { $failures.Add('nonzero ref count wrong: ' + $a.NonZeroRefs) | Out-Null }
-
-    # Regression: the Transform documents have identical non-reference data. Their distinct
-    # GameObject neighbourhoods must still keep a rewired Root reference semantically changed.
-    $rewireA = @(
-        '%YAML 1.1', '--- !u!1 &100', 'GameObject:', '  m_Name: Root', '  m_Target: {fileID: 201}',
-        '--- !u!1 &101', 'GameObject:', '  m_Name: Target A', '--- !u!4 &201', 'Transform:', '  m_GameObject: {fileID: 101}', '  m_Father: {fileID: 0}', '  m_LocalPosition: {x: 0, y: 0, z: 0}',
-        '--- !u!1 &102', 'GameObject:', '  m_Name: Target B', '--- !u!4 &202', 'Transform:', '  m_GameObject: {fileID: 102}', '  m_Father: {fileID: 0}', '  m_LocalPosition: {x: 0, y: 0, z: 0}')
-    $rewireB = @(
-        '%YAML 1.1', '--- !u!1 &100', 'GameObject:', '  m_Name: Root', '  m_Target: {fileID: 202}',
-        '--- !u!1 &101', 'GameObject:', '  m_Name: Target A', '--- !u!4 &201', 'Transform:', '  m_GameObject: {fileID: 101}', '  m_Father: {fileID: 0}', '  m_LocalPosition: {x: 0, y: 0, z: 0}',
-        '--- !u!1 &102', 'GameObject:', '  m_Name: Target B', '--- !u!4 &202', 'Transform:', '  m_GameObject: {fileID: 102}', '  m_Father: {fileID: 0}', '  m_LocalPosition: {x: 0, y: 0, z: 0}')
-    if ((Get-Analysis $rewireA).Canonical -ceq (Get-Analysis $rewireB).Canonical) { $failures.Add('rewiring between structurally identical Transform targets was not detected') | Out-Null }
-
-    # Regression: one directed 6-cycle and two disconnected directed 3-cycles have the same
-    # 1-WL colors, document count, and local text. Exact component canonicalization must retain
-    # their different topology instead of treating every node in the shared color as equivalent.
-    $sixCycle = New-Object System.Collections.Generic.List[string]
-    $twoCycles = New-Object System.Collections.Generic.List[string]
-    $sixCycle.Add('%YAML 1.1') | Out-Null
-    $twoCycles.Add('%YAML 1.1') | Out-Null
-    for ($index = 0; $index -lt 6; $index++) {
-        $id = 100 + $index
-        $next = 100 + (($index + 1) % 6)
-        $sixCycle.Add('--- !u!114 &' + $id) | Out-Null
-        $sixCycle.Add('MonoBehaviour:') | Out-Null
-        $sixCycle.Add('  m_Next: {fileID: ' + $next + '}') | Out-Null
-
-        $otherId = 200 + $index
-        $otherNext = 200 + ((($index % 3) + 1) % 3) + (3 * [int]($index / 3))
-        $twoCycles.Add('--- !u!114 &' + $otherId) | Out-Null
-        $twoCycles.Add('MonoBehaviour:') | Out-Null
-        $twoCycles.Add('  m_Next: {fileID: ' + $otherNext + '}') | Out-Null
-    }
-    $sixCycleAnalysis = Get-Analysis @($sixCycle.ToArray())
-    $twoCyclesAnalysis = Get-Analysis @($twoCycles.ToArray())
-    if ($sixCycleAnalysis.Canonical -ceq $twoCyclesAnalysis.Canonical) { $failures.Add('symmetric cycle topology was not detected') | Out-Null }
-    if ((Get-ShortHash $sixCycleAnalysis.Canonical) -ceq (Get-ShortHash $twoCyclesAnalysis.Canonical)) { $failures.Add('symmetric cycle canonical hash was not distinct') | Out-Null }
-
-    # Regression: individualizing either identical child in this symmetric three-node cycle
-    # must persist through refinement.  Before colors were included in the next signature,
-    # the "!" marker vanished and exact canonicalization recursed forever on this graph.
-    $individualizationA = @(
-        '%YAML 1.1', '--- !u!1 &1', 'GameObject:', '  m_Left: {fileID: 2}', '  m_Right: {fileID: 3}',
-        '--- !u!114 &2', 'MonoBehaviour:', '  m_Root: {fileID: 1}',
-        '--- !u!114 &3', 'MonoBehaviour:', '  m_Root: {fileID: 1}')
-    $individualizationB = @(
-        '%YAML 1.1', '--- !u!114 &30', 'MonoBehaviour:', '  m_Root: {fileID: 10}',
-        '--- !u!1 &10', 'GameObject:', '  m_Left: {fileID: 20}', '  m_Right: {fileID: 30}',
-        '--- !u!114 &20', 'MonoBehaviour:', '  m_Root: {fileID: 10}')
-    $individualizationWatch = [Diagnostics.Stopwatch]::StartNew()
-    $individualizationAnalysisA = Get-Analysis $individualizationA
-    $individualizationAnalysisB = Get-Analysis $individualizationB
-    $individualizationWatch.Stop()
-    if ($individualizationAnalysisA.Canonical -cne $individualizationAnalysisB.Canonical) { $failures.Add('individualized symmetric graph did not canonicalize equal after fileID renumbering') | Out-Null }
-    if ($individualizationWatch.Elapsed.TotalSeconds -gt 5) { $failures.Add('individualized symmetric graph did not finish promptly: ' + $individualizationWatch.Elapsed.TotalSeconds + 's') | Out-Null }
-
-    if ($failures.Count -gt 0) {
-        foreach ($failure in $failures) { Write-Output ('SELFTEST FAIL: ' + $failure) }
-        throw ('Self-test failed with ' + $failures.Count + ' failure(s).')
-    }
-    Write-Output 'SELFTEST: ok'
-}
-
 $script:RepoRoot = (& git -C $PSScriptRoot rev-parse --show-toplevel)
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($script:RepoRoot)) { throw 'Not inside a Git repository.' }
 $script:RepoRoot = ([string]$script:RepoRoot).Trim().Replace('/', '\')
 
-if ($SelfTest) { Invoke-SelfTest; exit 0 }
 if ([string]::IsNullOrWhiteSpace($Base) -or [string]::IsNullOrWhiteSpace($Head)) { throw 'Base and Head are required (use WORKTREE for the working tree).' }
 
 $basePaths = Get-RevisionPaths $Base

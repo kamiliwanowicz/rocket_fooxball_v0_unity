@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 using UnityEngine.Serialization;
@@ -40,13 +41,15 @@ namespace RocketFooxball.Runtime.Match
 
         [Header("Match Timing")]
         [SerializeField, Min(0.1f)] private float matchDuration = 300f;
+        [FormerlySerializedAs("goalSummaryDuration")]
         [FormerlySerializedAs("goalFreezeDuration")]
-        [SerializeField, Min(0f)] private float goalSummaryDuration = 3f;
+        [SerializeField, Min(0f)] private float goalCelebrationOrbitDuration = 3f;
         [SerializeField, Min(0f)] private float kickoffCountdownDuration = 3f;
 
         [Header("Reset")]
         [SerializeField] private Vector3 ballResetPosition = new Vector3(0f, 2.16f, 0f);
         [SerializeField] private Vector3 resetLookTarget = Vector3.zero;
+        [SerializeField] private float participantRecoveryThreshold = -1f;
 
         private MatchRules.MatchState state = MatchRules.MatchState.Setup;
         private float matchTimeRemaining;
@@ -62,6 +65,7 @@ namespace RocketFooxball.Runtime.Match
         private BotDifficulty selectedEnemyDifficulty = BotDifficulty.Medium;
         private BotDifficulty lockedEnemyDifficulty = BotDifficulty.Medium;
         private bool difficultyLocked;
+        private readonly HashSet<ParticipantState> recoverySuppressed = new HashSet<ParticipantState>();
 
         public MatchState State => (MatchState)state;
         public bool GameplayEnabled => MatchRules.IsGameplayEnabled(state);
@@ -89,6 +93,7 @@ namespace RocketFooxball.Runtime.Match
         public ParticipantState LocalParticipant => localParticipant;
         public ParticipantSpawnSet SpawnSet => spawnSet;
         public BallMotor Ball => ball;
+        public float ParticipantRecoveryThreshold => participantRecoveryThreshold;
 
         public event Action<MatchState> FlowChanged;
         public event Action StatsChanged;
@@ -141,6 +146,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void OnDisable()
         {
+            localParticipant?.Input?.CancelAnyButtonPress();
             if (northGoal != null)
             {
                 northGoal.GoalCrossed -= OnGoalCrossed;
@@ -173,10 +179,9 @@ namespace RocketFooxball.Runtime.Match
                     break;
                 }
                 case MatchRules.MatchState.GoalFreeze:
-                    phaseRemaining = MatchRules.AdvancePhase(phaseRemaining, Time.unscaledDeltaTime);
-                    if (phaseRemaining <= 0f)
+                    if (localParticipant?.Input?.ConsumeAnyButtonPress() == true)
                     {
-                        CompleteGoalSummary();
+                        DismissGoalFreeze();
                     }
                     break;
                 case MatchRules.MatchState.OpeningCountdown:
@@ -190,6 +195,41 @@ namespace RocketFooxball.Runtime.Match
                 case MatchRules.MatchState.Setup:
                 case MatchRules.MatchState.Paused:
                     break;
+            }
+        }
+
+        private void FixedUpdate()
+        {
+            if (!compositionValid || state != MatchRules.MatchState.Playing || participants == null)
+            {
+                return;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                var participant = participants[i];
+                if (participant == null)
+                {
+                    continue;
+                }
+
+                var shouldRecover = ParticipantRecoveryRules.ShouldRecover(
+                    state,
+                    participant.Lifecycle,
+                    participant.transform.position,
+                    participantRecoveryThreshold);
+                if (!shouldRecover)
+                {
+                    recoverySuppressed.Remove(participant);
+                    continue;
+                }
+
+                if (recoverySuppressed.Contains(participant))
+                {
+                    continue;
+                }
+
+                RecoverParticipant(participant, i);
             }
         }
 
@@ -241,14 +281,20 @@ namespace RocketFooxball.Runtime.Match
             hasLastGoalSummary = true;
             StatsChanged?.Invoke();
 
-            SetState(MatchRules.MatchState.GoalFreeze);
-            phaseRemaining = Mathf.Max(goalSummaryDuration, 0f);
-            ApplyGameplayGate(false);
-            DestroyAllProjectiles();
-            GetCameraFeedback()?.BeginGoalCelebration(phaseRemaining);
+            EnterGoalFreeze();
         }
 
-        private void CompleteGoalSummary()
+        private void EnterGoalFreeze()
+        {
+            SetState(MatchRules.MatchState.GoalFreeze);
+            phaseRemaining = 0f;
+            ApplyGameplayGate(false);
+            DestroyAllProjectiles();
+            GetCameraFeedback()?.BeginGoalCelebration(Mathf.Max(goalCelebrationOrbitDuration, 0f));
+            localParticipant?.Input?.ArmAnyButtonPress();
+        }
+
+        private void DismissGoalFreeze()
         {
             PerformCoordinatedReset(MatchResetReason.Goal);
             SetCountdown(MatchRules.MatchState.KickoffCountdown);
@@ -456,6 +502,7 @@ namespace RocketFooxball.Runtime.Match
                 return false;
             }
 
+            localParticipant?.Input?.CancelAnyButtonPress();
             ExitRequested?.Invoke();
             Application.Quit();
             return true;
@@ -475,6 +522,7 @@ namespace RocketFooxball.Runtime.Match
 
         private void PerformCoordinatedReset(MatchResetReason reason)
         {
+            localParticipant?.Input?.CancelAnyButtonPress();
             ClearMatchPause();
             SetState(MatchRules.MatchState.Reset, true);
             phaseRemaining = 0f;
@@ -491,23 +539,29 @@ namespace RocketFooxball.Runtime.Match
                         continue;
                     }
 
+                    var from = participant.transform.position;
                     var spawn = spawnSet != null ? spawnSet.GetKickoffSpawn(participant, i) : null;
+                    var requested = spawn != null ? spawn.position : from;
                     if (spawn != null)
                     {
-                        var lookDirection = resetLookTarget - spawn.position;
-                        lookDirection.y = 0f;
-                        if (lookDirection.sqrMagnitude <= 0.000001f)
-                        {
-                            lookDirection = spawn.forward;
-                        }
-                        participant.ResetForKickoff(spawn.position, Quaternion.LookRotation(lookDirection.normalized, Vector3.up));
+                        participant.ResetForKickoff(spawn.position, ResolveResetRotation(spawn));
                     }
                     else
                     {
                         participant.ResetForKickoff();
                     }
+
+                    LogParticipantPosition(
+                        "RF_PARTICIPANT_RESET",
+                        reason.ToString(),
+                        participant,
+                        spawn != null ? spawn.name : "None",
+                        from,
+                        requested);
                 }
             }
+
+            recoverySuppressed.Clear();
 
             ball?.ResetState(ballResetPosition, Quaternion.identity);
             GetCameraFeedback()?.ResetFeedback();
@@ -671,19 +725,148 @@ namespace RocketFooxball.Runtime.Match
                 return;
             }
 
+            var from = participant.transform.position;
             var spawn = spawnSet.SelectSafestSpawn(participant, ball, participants);
-            if (spawn == null)
+            if (!IsRecoverySpawnValid(spawn))
             {
+                spawn = spawnSet.GetKickoffSpawn(participant, FindParticipantIndex(participant));
+            }
+
+            if (!IsRecoverySpawnValid(spawn))
+            {
+                Debug.LogError("MatchController could not find a valid death respawn destination for participant " + participant.DisplayName + ".", this);
                 return;
             }
 
+            participant.RespawnAt(spawn.position, ResolveResetRotation(spawn));
+            LogParticipantPosition(
+                "RF_PARTICIPANT_RESPAWN",
+                "Death",
+                participant,
+                spawn.name,
+                from,
+                spawn.position);
+        }
+
+        private void RecoverParticipant(ParticipantState participant, int rosterIndex)
+        {
+            var from = participant.transform.position;
+            var spawn = spawnSet != null ? spawnSet.SelectSafestSpawn(participant, ball, participants) : null;
+            if (!IsRecoverySpawnValid(spawn))
+            {
+                spawn = spawnSet != null ? spawnSet.GetKickoffSpawn(participant, rosterIndex) : null;
+            }
+
+            if (!IsRecoverySpawnValid(spawn))
+            {
+                recoverySuppressed.Add(participant);
+                Debug.LogError("MatchController could not recover participant " + participant.DisplayName + ": no valid spawn destination.", this);
+                return;
+            }
+
+            var requested = spawn.position;
+            if (!participant.RecoverAt(requested, ResolveResetRotation(spawn)))
+            {
+                recoverySuppressed.Add(participant);
+                Debug.LogError("MatchController recovery operation failed for participant " + participant.DisplayName + ".", this);
+                return;
+            }
+
+            var actual = participant.transform.position;
+            LogParticipantPosition("RF_PARTICIPANT_RECOVERY", "BelowArena", participant, spawn.name, from, requested);
+            if (!ParticipantRecoveryRules.IsValidDestination(actual, participantRecoveryThreshold))
+            {
+                recoverySuppressed.Add(participant);
+                Debug.LogError("MatchController recovery destination remained invalid for participant " + participant.DisplayName + ": actual=" + FormatPosition(actual) + ".", this);
+                return;
+            }
+
+            recoverySuppressed.Remove(participant);
+            ReconcileParticipantCollisions();
+        }
+
+        private bool IsRecoverySpawnValid(Transform spawn)
+        {
+            return spawn != null && ParticipantRecoveryRules.IsValidDestination(spawn.position, participantRecoveryThreshold);
+        }
+
+        private int FindParticipantIndex(ParticipantState participant)
+        {
+            if (participants == null)
+            {
+                return -1;
+            }
+
+            for (var i = 0; i < participants.Length; i++)
+            {
+                if (participants[i] == participant)
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private Quaternion ResolveResetRotation(Transform spawn)
+        {
             var lookDirection = resetLookTarget - spawn.position;
             lookDirection.y = 0f;
-            if (lookDirection.sqrMagnitude <= 0.000001f)
+            if (!IsFinite(lookDirection) || lookDirection.sqrMagnitude <= 0.000001f)
             {
                 lookDirection = spawn.forward;
             }
-            participant.RespawnAt(spawn.position, Quaternion.LookRotation(lookDirection.normalized, Vector3.up));
+            if (!IsFinite(lookDirection) || lookDirection.sqrMagnitude <= 0.000001f)
+            {
+                lookDirection = Vector3.forward;
+            }
+
+            return Quaternion.LookRotation(lookDirection.normalized, Vector3.up);
+        }
+
+        private void LogParticipantPosition(
+            string prefix,
+            string reason,
+            ParticipantState participant,
+            string spawnName,
+            Vector3 from,
+            Vector3 requested)
+        {
+            var actual = participant != null ? participant.transform.position : Vector3.zero;
+            var stateName = participant != null ? participant.Lifecycle.ToString() : "Unknown";
+            var message = string.Format(
+                CultureInfo.InvariantCulture,
+                "{0} reason={1} slot={2} name={3} spawn={4} from={5} requested={6} actual={7} state={8}",
+                prefix,
+                reason ?? string.Empty,
+                participant != null ? participant.SlotId : -1,
+                participant != null ? participant.DisplayName : string.Empty,
+                string.IsNullOrEmpty(spawnName) ? "None" : spawnName,
+                FormatPosition(from),
+                FormatPosition(requested),
+                FormatPosition(actual),
+                stateName);
+            Debug.Log(message, participant != null ? participant : this);
+        }
+
+        private static string FormatPosition(Vector3 value)
+        {
+            return string.Format(
+                CultureInfo.InvariantCulture,
+                "({0:F3},{1:F3},{2:F3})",
+                value.x,
+                value.y,
+                value.z);
+        }
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private void SetLocalSpectatorTarget()
@@ -833,6 +1016,13 @@ namespace RocketFooxball.Runtime.Match
             if (participants == null || participants.Length != 6 || localParticipant == null || spawnSet == null || ball == null || northGoal == null || southGoal == null)
             {
                 Debug.LogError("MatchController requires serialized references: six participants, localParticipant, spawnSet, ball, northGoal, southGoal.", this);
+                enabled = false;
+                return false;
+            }
+
+            if (!IsFinite(participantRecoveryThreshold) || participantRecoveryThreshold >= 0f)
+            {
+                Debug.LogError("MatchController participantRecoveryThreshold must be finite and below the playable floor.", this);
                 enabled = false;
                 return false;
             }

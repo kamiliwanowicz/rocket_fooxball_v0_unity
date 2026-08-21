@@ -103,17 +103,69 @@ namespace RocketFooxball.Runtime.Participants
     public readonly struct ParticipantDamageRequest
     {
         public ParticipantDamageRequest(ParticipantState attacker, float amount, ParticipantDamageCause cause, string weapon)
+            : this(attacker, amount, cause, weapon, Vector3.zero, false)
+        {
+        }
+
+        public ParticipantDamageRequest(
+            ParticipantState attacker,
+            float amount,
+            ParticipantDamageCause cause,
+            string weapon,
+            Vector3 sourceWorldPosition)
+            : this(attacker, amount, cause, weapon, sourceWorldPosition, true)
+        {
+        }
+
+        private ParticipantDamageRequest(
+            ParticipantState attacker,
+            float amount,
+            ParticipantDamageCause cause,
+            string weapon,
+            Vector3 sourceWorldPosition,
+            bool hasExplicitSource)
         {
             Attacker = attacker;
             Amount = amount;
             Cause = cause;
             Weapon = weapon ?? string.Empty;
+            SourceWorldPosition = sourceWorldPosition;
+            HasExplicitSource = hasExplicitSource;
         }
 
         public ParticipantState Attacker { get; }
         public float Amount { get; }
         public ParticipantDamageCause Cause { get; }
         public string Weapon { get; }
+        public Vector3 SourceWorldPosition { get; }
+
+        internal bool HasExplicitSource { get; }
+    }
+
+    public readonly struct ParticipantDamageEvent
+    {
+        public ParticipantDamageEvent(
+            ParticipantState victim,
+            ParticipantState attacker,
+            float amount,
+            ParticipantDamageCause cause,
+            string weapon,
+            Vector3 sourceWorldPosition)
+        {
+            Victim = victim;
+            Attacker = attacker;
+            Amount = amount;
+            Cause = cause;
+            Weapon = weapon ?? string.Empty;
+            SourceWorldPosition = sourceWorldPosition;
+        }
+
+        public ParticipantState Victim { get; }
+        public ParticipantState Attacker { get; }
+        public float Amount { get; }
+        public ParticipantDamageCause Cause { get; }
+        public string Weapon { get; }
+        public Vector3 SourceWorldPosition { get; }
     }
 
     public readonly struct ParticipantDeathEvent

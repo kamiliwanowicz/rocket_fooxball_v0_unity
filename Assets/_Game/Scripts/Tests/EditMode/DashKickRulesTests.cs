@@ -34,12 +34,57 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void AirDashExhaustionRejectsOnlyAirborneActivation()
+        {
+            Assert.That(DashKickRules.CanActivate(true, Vector3.forward, false, 0f, false, false), Is.False);
+            Assert.That(DashKickRules.CanActivate(true, Vector3.forward, false, 0f, false, true), Is.True);
+        }
+
+        [Test]
+        public void GroundedDashDoesNotRequireAirChargeAfterLanding()
+        {
+            Assert.That(DashKickRules.CanActivate(true, Vector3.forward, false, 0f, true, false), Is.True);
+        }
+
+        [Test]
         public void DashCompositionPreservesMomentumUnderStrictCap()
         {
             var composed = MovementMath.ComposeDashVelocity(new Vector3(10f, 0f, 0f), Vector3.forward, 12f, 30f);
 
             Assert.That(composed, Is.EqualTo(new Vector3(10f, 0f, 12f)));
             Assert.That(composed.magnitude, Is.LessThanOrEqualTo(30f));
+        }
+
+        [Test]
+        public void AirDashPreservesNormalizedDownwardAimAsFullThreeDimensionalImpulse()
+        {
+            var direction = new Vector3(0f, -1f, 1f).normalized;
+            var composed = MovementMath.ComposeDashVelocity(Vector3.zero, direction, 12f, 30f);
+
+            Assert.That(composed.y, Is.LessThan(0f));
+            Assert.That(composed.z, Is.GreaterThan(0f));
+            Assert.That(composed.magnitude, Is.EqualTo(12f).Within(0.0001f));
+        }
+
+        [Test]
+        public void DashCompositionCapsTheFullVectorIncludingVerticalMomentum()
+        {
+            var composed = MovementMath.ComposeDashVelocity(new Vector3(20f, 20f, 0f), Vector3.up, 12f, 30f);
+
+            Assert.That(composed.magnitude, Is.EqualTo(30f).Within(0.0001f));
+            Assert.That(composed.y, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void HorizontalAndUpwardAimKeepTheirVerticalComponents()
+        {
+            var horizontal = MovementMath.ComposeDashVelocity(Vector3.zero, Vector3.right, 12f, 30f);
+            var upward = MovementMath.ComposeDashVelocity(Vector3.zero, Vector3.up, 12f, 30f);
+
+            Assert.That(horizontal, Is.EqualTo(Vector3.right * 12f));
+            Assert.That(upward, Is.EqualTo(Vector3.up * 12f));
+            Assert.That(horizontal.y, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(upward.y, Is.GreaterThan(0f));
         }
 
         [Test]

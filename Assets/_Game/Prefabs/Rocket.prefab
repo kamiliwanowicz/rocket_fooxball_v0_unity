@@ -4853,13 +4853,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: RocketFooxball.Runtime::RocketFooxball.Runtime.Feedback.RocketTrailVfx
   particleSystems:
   - {fileID: 6429022872448179805}
+  projectileGlow: {fileID: 6552468506201645975}
   trailRenderers: []
   blueImpactAccent: {fileID: 5447942722357448497}
   redImpactAccent: {fileID: 9098059749988641206}
   blueTrailMaterial: {fileID: 2100000, guid: b0ab9e80406efa54babc0af0f8b05345, type: 2}
   redTrailMaterial: {fileID: 2100000, guid: 5a702ad7e41f9b04aa188c268a09fc5e, type: 2}
+  neutralTrailMaterial: {fileID: 2100000, guid: 77e865abd335f6c4b8ff8052fc61c34a, type: 2}
   blueTrailColor: {r: 0.08, g: 0.35, b: 1, a: 1}
   redTrailColor: {r: 1, g: 0.12, b: 0.1, a: 1}
+  neutralTrailColor: {r: 1, g: 0.55, b: 0.18, a: 1}
 --- !u!1 &2566106794535997151
 GameObject:
   m_ObjectHideFlags: 0

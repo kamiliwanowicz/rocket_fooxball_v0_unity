@@ -1,6 +1,7 @@
 ---
 name: loop-orchestrator
 description: Use when user requests plan-first delegated implementation through breakdown, planning, execution orchestration, isolated integration, and verified handoff.
+disable-model-invocation: true
 ---
 
 # Loop Orchestrator

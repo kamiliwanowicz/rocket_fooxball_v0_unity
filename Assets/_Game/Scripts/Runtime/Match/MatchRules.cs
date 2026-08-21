@@ -56,7 +56,10 @@ namespace RocketFooxball.Runtime.Match
                 northScore++;
             }
 
-            return new GoalTransition(MatchState.GoalFreeze, Math.Max(goalFreezeDuration, 0f), northScore, southScore, true);
+            // GoalFreeze is dismissed by a fresh input press, not by a timer. Keep the
+            // legacy argument for callers that still use this compatibility helper.
+            _ = goalFreezeDuration;
+            return new GoalTransition(MatchState.GoalFreeze, 0f, northScore, southScore, true);
         }
 
         /// <summary>Advances an unscaled phase timer and clamps at zero.</summary>

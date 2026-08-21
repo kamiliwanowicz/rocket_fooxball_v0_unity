@@ -35,21 +35,21 @@ namespace RocketFooxball.Runtime.Movement
         [SerializeField, Min(1f)] private float airStrafePower = 2f;
         [SerializeField, Min(0f)] private float airSteerRateDegrees = 420f;
         [SerializeField, Range(0f, 1f)] private float airForwardScale = 0.35f;
-        [SerializeField, Min(1f)] private float bhopSoftCapMultiplier = 2.5f;
+        [SerializeField, Min(1f)] private float bhopSoftCapMultiplier = PlayerMotorDefaults.BhopSoftCapMultiplier;
         [SerializeField, Min(1f)] private float hardCapMultiplier = 3f;
 
         [Header("Jump")]
         [SerializeField, Min(0f)] private float jumpVelocity = 4.80f;
-        [SerializeField, Min(1)] private int jumpsToHardCap = 4;
+        [SerializeField, Min(1)] private int jumpsToHardCap = PlayerMotorDefaults.JumpsToHardCap;
         [SerializeField, Min(0f)] private float coyoteTime = 0.08f;
         [SerializeField, Min(0f)] private float jumpBufferTime = 0.10f;
         [SerializeField] private PlayerInputReader input;
 
         [Header("Dash Kick")]
-        [SerializeField, Min(0f)] private float dashBurstSpeed = 12f;
-        [SerializeField, Min(0.01f)] private float dashDuration = 0.33f;
-        [SerializeField, Min(0f)] private float dashSteerRateDegrees = 180f;
-        [SerializeField, Min(1f)] private float dashSpeedCap = 30f;
+        [SerializeField, Min(0f)] private float dashBurstSpeed = PlayerMotorDefaults.DashBurstSpeed;
+        [SerializeField, Min(0.01f)] private float dashDuration = PlayerMotorDefaults.DashDuration;
+        [SerializeField, Min(0f)] private float dashSteerRateDegrees = PlayerMotorDefaults.DashSteerRateDegrees;
+        [SerializeField, Min(1f)] private float dashSpeedCap = PlayerMotorDefaults.DashSpeedCap;
 
         private const float MaxGroundedFallVelocity = -0.1f;
         private const float Epsilon = 0.000001f;

@@ -448,7 +448,7 @@ namespace RocketFooxball.Editor
             }
             accumulator.Capture("scene/render", "scene-environment", () =>
             {
-                if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Skybox ||
+                if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Trilight ||
                     !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f ||
                     Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f)
                     throw new InvalidOperationException("Scene environment contract invalid.");
@@ -497,8 +497,8 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootForwardImpulseScale", context.Resolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootUpwardImpulseScale", context.Resolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootHighSpeedVerticalRedirect", context.Resolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
-                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", 50f);
-                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", 0.5f);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", ExplosionResolver.DefaultDirectRocketDamage);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", ExplosionResolver.DefaultEnemyRocketImpulseMultiplier);
             }
 
             var goals = UnityEngine.Object.FindObjectsByType<GoalTrigger>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -594,7 +594,7 @@ namespace RocketFooxball.Editor
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.ball", participant.Shotgun, "ball", context.BallMotor);
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.ownerParticipant", participant.Shotgun, "ownerParticipant", participant);
                      CaptureSerializedInteger(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pelletCount", participant.Shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
-                     CaptureSerialized(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pumpDelay", participant.Shotgun, "pumpDelay", 0.85f);
+                     CaptureSerialized(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pumpDelay", participant.Shotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay);
                      accumulator.Capture("gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.hitMask", () =>
                      {
                          var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
@@ -636,8 +636,9 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitRadius", context.CameraFeedback, "celebrationOrbitRadius", CelebrationOrbitRadius);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitHeight", context.CameraFeedback, "celebrationOrbitHeight", CelebrationOrbitHeight);
                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationLookHeight", context.CameraFeedback, "celebrationLookHeight", CelebrationLookHeight);
-                CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitDegrees", context.CameraFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
-                CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationFov", context.CameraFeedback, "celebrationFov", CelebrationFov);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationOrbitDegrees", context.CameraFeedback, "celebrationOrbitDegrees", CelebrationOrbitDegrees);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "PlayerCameraFeedback.celebrationFov", context.CameraFeedback, "celebrationFov", CelebrationFov);
+                 CaptureSerializedVector(accumulator, "gameplay/serialized", "PlayerCameraFeedback.spectatorOffset", context.CameraFeedback, "spectatorOffset", PlayerCameraFeedback.ExpectedSpectatorOffset);
             }
             if (context.QualityRuntime != null)
                 CaptureReference(accumulator, "gameplay/wiring", "GraphicsQualityRuntime.targetCamera", context.QualityRuntime, "targetCamera", context.Camera);
@@ -665,13 +666,13 @@ namespace RocketFooxball.Editor
                  });
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pelletDamage", context.Shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
                  CaptureSerializedInteger(accumulator, "gameplay/serialized", "ShotgunWeapon.pelletCount", context.Shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
-                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.spreadAngleDegrees", context.Shotgun, "spreadAngleDegrees", 7f);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.spreadAngleDegrees", context.Shotgun, "spreadAngleDegrees", ShotgunDamageRules.DefaultSpreadAngleDegrees);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.fullDamageRange", context.Shotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.mediumRange", context.Shotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.maxRange", context.Shotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.mediumMultiplier", context.Shotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.farMultiplier", context.Shotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier);
-                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pumpDelay", context.Shotgun, "pumpDelay", 0.85f);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pumpDelay", context.Shotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.ballImpulsePerPellet", context.Shotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.ballImpulseCap", context.Shotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap);
              }
@@ -720,8 +721,9 @@ namespace RocketFooxball.Editor
                 });
                 accumulator.Capture("gameplay/contract", "MatchController.public-surface", ValidateMatchPublicContract);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabSceneComposer.MatchDuration);
-                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalSummaryDuration", context.Match, "goalSummaryDuration", MovementLabSceneComposer.GoalSummaryDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalCelebrationOrbitDuration", context.Match, "goalCelebrationOrbitDuration", MovementLabSceneComposer.GoalSummaryDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.participantRecoveryThreshold", context.Match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
             }
@@ -1248,21 +1250,21 @@ namespace RocketFooxball.Editor
                 return;
 
             var label = "Participant[" + participantIndex + "]";
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashBurstSpeed", participant.Motor, "dashBurstSpeed", 12f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashDuration", participant.Motor, "dashDuration", 0.33f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSteerRateDegrees", participant.Motor, "dashSteerRateDegrees", 180f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSpeedCap", participant.Motor, "dashSpeedCap", 30f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactStartDelay", participant.Kick, "dashContactStartDelay", 0.10f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactReach", participant.Kick, "dashContactReach", 2f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactRadiusPadding", participant.Kick, "dashContactRadiusPadding", 0.35f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.cooldown", participant.Kick, "cooldown", 3f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.speedFraction", participant.Kick, "speedFraction", 0.91f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.playerMomentumShare", participant.Kick, "playerMomentumShare", 0.20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyContactDamage", participant.Kick, "enemyContactDamage", 20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyShoveImpulse", participant.Kick, "enemyShoveImpulse", 6f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyDashRetention", participant.Kick, "enemyDashRetention", 0.20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulse", participant.CameraFeedback, "dashKickImpulse", 0.025f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", 0.12f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashBurstSpeed", participant.Motor, "dashBurstSpeed", PlayerMotorDefaults.DashBurstSpeed);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashDuration", participant.Motor, "dashDuration", PlayerMotorDefaults.DashDuration);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSteerRateDegrees", participant.Motor, "dashSteerRateDegrees", PlayerMotorDefaults.DashSteerRateDegrees);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSpeedCap", participant.Motor, "dashSpeedCap", PlayerMotorDefaults.DashSpeedCap);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactStartDelay", participant.Kick, "dashContactStartDelay", BallKickDefaults.DashContactStartDelay);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactReach", participant.Kick, "dashContactReach", BallKickDefaults.DashContactReach);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactRadiusPadding", participant.Kick, "dashContactRadiusPadding", BallKickDefaults.DashContactRadiusPadding);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.cooldown", participant.Kick, "cooldown", BallKickDefaults.Cooldown);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.speedFraction", participant.Kick, "speedFraction", BallKickDefaults.SpeedFraction);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.playerMomentumShare", participant.Kick, "playerMomentumShare", BallKickDefaults.PlayerMomentumShare);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyContactDamage", participant.Kick, "enemyContactDamage", BallKickDefaults.EnemyContactDamage);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyShoveImpulse", participant.Kick, "enemyShoveImpulse", BallKickDefaults.EnemyShoveImpulse);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyDashRetention", participant.Kick, "enemyDashRetention", BallKickDefaults.EnemyDashRetention);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulse", participant.CameraFeedback, "dashKickImpulse", PlayerCameraFeedback.DefaultDashKickImpulse);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration);
         }
 
         private static void ValidateMatchPublicContract()
@@ -1282,6 +1284,10 @@ namespace RocketFooxball.Editor
                 if (property == null || !property.CanRead)
                     throw new InvalidOperationException("MatchController diagnostics compatibility property missing: " + compatibilityProperties[i] + ".");
             }
+
+            var recoveryThreshold = matchType.GetProperty(nameof(MatchController.ParticipantRecoveryThreshold), publicInstance);
+            if (recoveryThreshold == null || recoveryThreshold.PropertyType != typeof(float) || !recoveryThreshold.CanRead)
+                throw new InvalidOperationException("MatchController participant recovery threshold surface is missing or changed.");
 
             if (!Enum.IsDefined(typeof(MatchController.MatchState), MatchController.MatchState.GoalFreeze))
                 throw new InvalidOperationException("MatchController.MatchState.GoalFreeze compatibility value is missing.");
@@ -1334,9 +1340,12 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Participants/Projectiles collision matrix must remain enabled.");
             });
 
-            var localCameraCount = 0;
-            var localAudioCount = 0;
-            for (var i = 0; i < context.Participants.Length; i++)
+             var localCameraCount = 0;
+             var localAudioCount = 0;
+             var localParticipant = context.Participants.FirstOrDefault(item => item != null && item.IsLocalParticipant);
+             var localCamera = localParticipant != null ? localParticipant.GetComponentInChildren<Camera>(true) : null;
+             var sceneMatch = context.Match != null ? context.Match : context.MatchObject != null ? context.MatchObject.GetComponent<MatchController>() : null;
+             for (var i = 0; i < context.Participants.Length; i++)
             {
                 var participant = context.Participants[i];
                 var expected = ParticipantSlots[i];
@@ -1379,15 +1388,16 @@ namespace RocketFooxball.Editor
                       ValidateReference(participant.Presentation, "fpsShotgunVisual", participantFpsShotgun, expected.DisplayName + ".presentation.fpsShotgunVisual");
                       ValidateReference(participant.Presentation, "worldShotgunVisual", participantWorldShotgun, expected.DisplayName + ".presentation.worldShotgunVisual");
                       ValidateReference(participant.Presentation, "shotgun", participant.Shotgun, expected.DisplayName + ".presentation.shotgun");
-                     MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
+                      ValidateSceneParticipantComposition(participant, localParticipant, sceneMatch, localCamera, expected.DisplayName);
+                      MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
                      MovementLabPrefabPipeline.ValidateImportedVisual(participantWorldShotgun.gameObject, ShotgunModelPath, expected.DisplayName + ".WorldShotgunVisual");
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantFpsShotgun.gameObject);
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantWorldShotgun.gameObject);
                  });
-                 CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", 100f);
-                 CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", 5f);
-                 CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", 2f);
-                 CaptureSerializedInteger(accumulator, "scene/roster", "shotgun-capacity:" + expected.SlotId, participant, "shotgunShellCapacity", 16);
+                 CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", ParticipantState.DefaultMaxHealth);
+                  CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", expected.IsLocal ? LocalRespawnDelay : BotRespawnDelay);
+                 CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", ParticipantState.DefaultImmunityDuration);
+                 CaptureSerializedInteger(accumulator, "scene/roster", "shotgun-capacity:" + expected.SlotId, participant, "shotgunShellCapacity", ParticipantState.DefaultShotgunShellCapacity);
                 var camera = participant.GetComponentInChildren<Camera>(true);
                 var listener = participant.GetComponentInChildren<AudioListener>(true);
                 if (camera != null && camera.enabled) localCameraCount++;
@@ -1430,11 +1440,75 @@ namespace RocketFooxball.Editor
 
             if (context.SpawnSet != null)
             {
-                CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
-            }
-        }
+                 CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
+             }
+         }
 
-        private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
+         private static void ValidateSceneParticipantComposition(ParticipantState participant,
+             ParticipantState localParticipant, MatchController match, Camera localCamera, string label)
+         {
+             if (participant == null || localParticipant == null || match == null || localCamera == null || participant.Presentation == null)
+                 throw new InvalidOperationException(label + " presentation composition dependencies are missing.");
+
+             if (Vector3.Distance(participant.transform.localScale, Vector3.one) > 0.001f)
+                 throw new InvalidOperationException(label + " root scale must remain unit scale.");
+
+             var controller = participant.GetComponent<CharacterController>();
+             if (controller == null || Mathf.Abs(controller.radius - PlayerControllerRadius) > 0.001f ||
+                 Mathf.Abs(controller.height - PlayerControllerHeight) > 0.001f ||
+                 Vector3.Distance(controller.center, PlayerControllerCenter) > 0.001f ||
+                 Mathf.Abs(controller.skinWidth - PlayerControllerSkinWidth) > 0.001f)
+                 throw new InvalidOperationException(label + " CharacterController composition mismatch.");
+
+             var head = participant.transform.Find("Head");
+             var worldVisual = participant.transform.Find("WorldVisual");
+             if (head == null || Vector3.Distance(head.localPosition, new Vector3(0f, PlayerHeadHeight, 0f)) > 0.001f)
+                 throw new InvalidOperationException(label + " Head height must match the enlarged player contract.");
+             if (worldVisual == null || Vector3.Distance(worldVisual.localScale, Vector3.one * WorldVisualScale) > 0.001f)
+                 throw new InvalidOperationException(label + " WorldVisual scale must be doubled.");
+
+             var blueCue = participant.transform.Find("BlueCircleCue");
+             var redCue = participant.transform.Find("RedTriangleCue");
+             var blueShield = participant.transform.Find("ImmunityShield/BlueImmunityShield");
+             var redShield = participant.transform.Find("ImmunityShield/RedImmunityShield");
+             if (blueCue == null || redCue == null || blueShield == null || redShield == null ||
+                 Vector3.Distance(blueCue.localScale, new Vector3(0.84f, 0.84f, 2f)) > 0.001f ||
+                 Vector3.Distance(redCue.localScale, Vector3.one * 2f) > 0.001f ||
+                 Vector3.Distance(blueShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f ||
+                 Vector3.Distance(redShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f)
+                 throw new InvalidOperationException(label + " team cue/immunity scale contract invalid.");
+
+             var isEnemy = participant.Team != localParticipant.Team;
+             if (blueCue.gameObject.activeSelf != (participant.Team == ParticipantTeam.Blue) ||
+                 redCue.gameObject.activeSelf != (participant.Team == ParticipantTeam.Red))
+                 throw new InvalidOperationException(label + " team cue activation mismatch.");
+
+             var nameplate = participant.transform.Find("Nameplate");
+             var nameplateText = nameplate != null ? nameplate.GetComponent<TextMesh>() : null;
+             if (nameplate == null || nameplateText == null ||
+                 Vector3.Distance(nameplate.localPosition, new Vector3(0f, NameplateHeight, 0f)) > 0.001f ||
+                 nameplate.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                 nameplateText.text != participant.DisplayName)
+                 throw new InvalidOperationException(label + " Nameplate must be collider-free, raised, and use immutable DisplayName.");
+
+             var presentation = participant.Presentation;
+             ValidateReference(presentation, "localParticipant", localParticipant, label + ".presentation.localParticipant");
+             ValidateReference(presentation, "match", match, label + ".presentation.match");
+             ValidateReference(presentation, "nicknameCamera", localCamera, label + ".presentation.nicknameCamera");
+             ValidateReference(presentation, "nicknameVisual", nameplate.gameObject, label + ".presentation.nicknameVisual");
+             ValidateReference(presentation, "nicknameText", nameplateText, label + ".presentation.nicknameText");
+             var serialized = new SerializedObject(presentation);
+             var showNickname = serialized.FindProperty("showNickname");
+             var spawnCorpse = serialized.FindProperty("spawnCorpseOnDeath");
+             var corpseLifetime = serialized.FindProperty("corpseLifetime");
+             if (showNickname == null || showNickname.propertyType != SerializedPropertyType.Boolean || showNickname.boolValue != isEnemy ||
+                 spawnCorpse == null || spawnCorpse.propertyType != SerializedPropertyType.Boolean || spawnCorpse.boolValue != isEnemy ||
+                 corpseLifetime == null || corpseLifetime.propertyType != SerializedPropertyType.Float || Mathf.Abs(corpseLifetime.floatValue - 30f) > 0.001f ||
+                 nameplate.gameObject.activeSelf != isEnemy)
+                 throw new InvalidOperationException(label + " nickname/corpse enemy-only policy mismatch.");
+         }
+
+         private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
         {
             var spawnSet = context.SpawnSet;
             accumulator.Capture("scene/spawn-set", "arrays", () =>
@@ -1446,6 +1520,8 @@ namespace RocketFooxball.Editor
                     if (spawnSet.BlueCandidates[i] == null || spawnSet.RedCandidates[i] == null) throw new InvalidOperationException("ParticipantSpawnSet candidate is null.");
                     if (Vector3.Distance(spawnSet.BlueCandidates[i].position, ParticipantSlots[i].Position) > 0.01f || Vector3.Distance(spawnSet.RedCandidates[i].position, ParticipantSlots[i + 3].Position) > 0.01f)
                         throw new InvalidOperationException("ParticipantSpawnSet candidate transform mismatch.");
+                    ValidateRecoverySpawnGeometry(spawnSet.BlueCandidates[i], "BlueSpawn_" + i);
+                    ValidateRecoverySpawnGeometry(spawnSet.RedCandidates[i], "RedSpawn_" + i);
                     var blueCue = spawnSet.BlueCandidates[i].Find("BlueCircleCue");
                     var redCue = spawnSet.RedCandidates[i].Find("RedTriangleCue");
                     if (blueCue == null || redCue == null || blueCue.GetComponent<MeshFilter>()?.sharedMesh == null || redCue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(blueCue.GetComponent<MeshFilter>().sharedMesh) != BlueCircleCueMeshPath || AssetDatabase.GetAssetPath(redCue.GetComponent<MeshFilter>().sharedMesh) != RedTriangleCueMeshPath)
@@ -1456,16 +1532,32 @@ namespace RocketFooxball.Editor
                 var expectedMask = ~(1 << participantLayer | 1 << projectilesLayer);
                 if (spawnSet.VisibilityMask.value != expectedMask) throw new InvalidOperationException("ParticipantSpawnSet visibility mask must exclude Participants and Projectiles.");
             });
-            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", 2f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", 1f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", 0.5f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", 1f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "noVisibleEnemyBonus", spawnSet, "noVisibleEnemyBonus", 4f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "visibleEnemyCountPenalty", spawnSet, "visibleEnemyCountPenalty", 2f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedFallbackPenalty", spawnSet, "occupiedFallbackPenalty", 8f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", 30f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", 30f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", 30f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "eyeHeight", spawnSet, "eyeHeight", ParticipantSpawnSet.ExpectedEyeHeight);
+             CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", ParticipantSpawnSet.ExpectedOccupiedRadius);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", ParticipantSpawnSet.ExpectedBallDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", ParticipantSpawnSet.ExpectedEnemyGoalDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", ParticipantSpawnSet.ExpectedNearestEnemyDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "noVisibleEnemyBonus", spawnSet, "noVisibleEnemyBonus", ParticipantSpawnSet.ExpectedNoVisibleEnemyBonus);
+            CaptureSerialized(accumulator, "scene/spawn-set", "visibleEnemyCountPenalty", spawnSet, "visibleEnemyCountPenalty", ParticipantSpawnSet.ExpectedVisibleEnemyCountPenalty);
+            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedFallbackPenalty", spawnSet, "occupiedFallbackPenalty", ParticipantSpawnSet.ExpectedOccupiedFallbackPenalty);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", ParticipantSpawnSet.ExpectedBallDistanceCap);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", ParticipantSpawnSet.ExpectedEnemyGoalDistanceCap);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", ParticipantSpawnSet.ExpectedEnemyDistanceCap);
+        }
+
+        private static void ValidateRecoverySpawnGeometry(Transform candidate, string label)
+        {
+            if (candidate == null || !ParticipantRecoveryRules.IsValidDestination(candidate.position, ParticipantRecoveryThreshold))
+                throw new InvalidOperationException("Participant recovery spawn is below the configured threshold: " + label);
+
+            var capsuleBottom = candidate.position.y + PlayerControllerCenter.y - PlayerControllerHeight * 0.5f;
+            var capsuleTop = candidate.position.y + PlayerControllerCenter.y + PlayerControllerHeight * 0.5f;
+            if (capsuleBottom < PlayableFloorTop - PlayerControllerSkinWidth || capsuleTop <= capsuleBottom ||
+                Mathf.Abs(candidate.position.x) + PlayerControllerRadius > 65f - PlayerControllerSkinWidth ||
+                Mathf.Abs(candidate.position.z) + PlayerControllerRadius > 45f - PlayerControllerSkinWidth)
+            {
+                throw new InvalidOperationException("Participant recovery spawn capsule clearance invalid: " + label);
+            }
         }
 
         private static void ValidateImportedVisualAndAnimatorContracts(ValidationContext context,

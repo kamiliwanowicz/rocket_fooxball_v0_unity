@@ -44,10 +44,24 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void PreferredBallActionsNeverFallBackToEnemy()
+        public void PreferredBallActionsFallBackToVisibleEnemyWhenNotSuppressed()
         {
             var result = BotCombatRules.Evaluate(Input(
                 preferBall: true,
+                ball: Ball(false, new Vector3(3f, 0f, 0f)),
+                enemy: Enemy(true, new Vector3(1f, 0f, 0f)),
+                enemyDirectAim: Aim()));
+
+            Assert.That(result.Action, Is.EqualTo(BotCombatAction.DashKick));
+            Assert.That(result.Target, Is.EqualTo(BotCombatTarget.Enemy));
+        }
+
+        [Test]
+        public void PreferredBallActionsDoNotFallBackWhenParticipantCombatIsSuppressed()
+        {
+            var result = BotCombatRules.Evaluate(Input(
+                preferBall: true,
+                suppressCombat: true,
                 ball: Ball(false, new Vector3(3f, 0f, 0f)),
                 enemy: Enemy(true, new Vector3(1f, 0f, 0f)),
                 enemyDirectAim: Aim()));
@@ -56,7 +70,7 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void EnemyActionsRequireCurrentVisibilityAndScoreAtMostTwenty()
+        public void EnemyActionsRequireCurrentVisibilityButIgnoreTargetScore()
         {
             var invisible = BotCombatRules.Evaluate(Input(
                 enemy: Enemy(false, Vector3.one),
@@ -74,7 +88,7 @@ namespace RocketFooxball.Tests.EditMode
                 activeScore: 20.01f,
                 enemy: Enemy(true, Vector3.one),
                 enemyDirectAim: Aim()));
-            Assert.That(overBudget.Action, Is.EqualTo(BotCombatAction.None));
+            Assert.That(overBudget.Action, Is.EqualTo(BotCombatAction.DashKick));
         }
 
         [Test]
@@ -118,6 +132,8 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(result.Action, Is.EqualTo(BotCombatAction.RocketJump));
             Assert.That(result.Target, Is.EqualTo(BotCombatTarget.SelfImpact));
             Assert.That(result.LaunchPosition, Is.EqualTo(jump.RocketJumpLaunchPosition));
+            Assert.That(result.FireAimDirection.y, Is.LessThan(0f));
+            Assert.That(result.BodyFacingDirection, Is.EqualTo(Vector3.forward));
 
             jump = Input(
                 difficulty: BotDifficulty.Medium,
@@ -135,6 +151,33 @@ namespace RocketFooxball.Tests.EditMode
                 ballDirectAim: Aim(),
                 jumpLineClear: true,
                 routeForward: Vector3.forward);
+            Assert.That(BotCombatRules.Evaluate(jump).Action, Is.EqualTo(BotCombatAction.None));
+
+            jump = Input(
+                difficulty: BotDifficulty.High,
+                grounded: true,
+                upwardTransition: true,
+                jumpLaunch: Vector3.one,
+                jumpAim: Vector3.one,
+                jumpLineClear: true,
+                routeForward: Vector3.up);
+            Assert.That(BotCombatRules.Evaluate(jump).Action, Is.EqualTo(BotCombatAction.None));
+        }
+
+        [Test]
+        public void RocketJumpWithInvalidRouteProducesNoAction()
+        {
+            var jump = Input(
+                difficulty: BotDifficulty.High,
+                grounded: true,
+                upwardTransition: true,
+                ball: Ball(false, Vector3.zero),
+                launcherReady: true,
+                jumpLaunch: Vector3.one,
+                jumpAim: Vector3.one,
+                jumpLineClear: true,
+                routeForward: Vector3.zero);
+
             Assert.That(BotCombatRules.Evaluate(jump).Action, Is.EqualTo(BotCombatAction.None));
         }
 

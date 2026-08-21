@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using RocketFooxball.Runtime.Rendering;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -23,9 +24,8 @@ namespace RocketFooxball.Editor
     {
         private const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         private const string BuildManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
-        private const string EvidenceRoot = "Temp/BrightArenaVisuals";
-        private const int Width = 1280;
-        private const int Height = 720;
+        private const int Width = GraphicsQualityConfigurator.NativeWidth;
+        private const int Height = GraphicsQualityConfigurator.NativeHeight;
         private const int DepthBits = 24;
         private const int Samples = 1;
         private const int RendererCap = 80;
@@ -51,6 +51,7 @@ namespace RocketFooxball.Editor
         private sealed class ManifestDto
         {
             public int schemaVersion = 1;
+            public string attemptId;
             public string captureUtc;
             public string evidenceDirectory;
             public SourceInfo source;
@@ -121,6 +122,7 @@ namespace RocketFooxball.Editor
         private sealed class ImageEvidence
         {
             public string view;
+            public string qualityLevel;
             public string path;
             public string sha256;
             public int width;
@@ -152,20 +154,27 @@ namespace RocketFooxball.Editor
             public bool pass;
         }
 
+        private enum ViewMode
+        {
+            Rocket,
+            Shotgun,
+            External
+        }
+
         private sealed class ViewDefinition
         {
             public string Name;
             public string FileName;
-            public bool FirstPerson;
+            public ViewMode Mode;
             public Vector3 Position;
             public Vector3 Target;
             public float FieldOfView;
 
-            public ViewDefinition(string name, string fileName, bool firstPerson, Vector3 position, Vector3 target, float fieldOfView)
+            public ViewDefinition(string name, string fileName, ViewMode mode, Vector3 position, Vector3 target, float fieldOfView)
             {
                 Name = name;
                 FileName = fileName;
-                FirstPerson = firstPerson;
+                Mode = mode;
                 Position = position;
                 Target = target;
                 FieldOfView = fieldOfView;
@@ -196,22 +205,35 @@ namespace RocketFooxball.Editor
             public bool Active;
         }
 
+        private sealed class CaptureOptions
+        {
+            public string EvidenceRoot;
+            public string AttemptId;
+        }
+
         [MenuItem("Rocket Fooxball/Capture Bright Arena Visuals")]
         public static void Capture()
         {
             var projectRoot = Directory.GetParent(Application.dataPath).FullName;
-            var evidenceDirectory = CreateEvidenceDirectory(projectRoot);
+            var captureOptions = ReadCaptureOptions();
+            var evidenceDirectory = CreateEvidenceDirectory(captureOptions.EvidenceRoot, captureOptions.AttemptId);
             var manifestPath = Path.Combine(evidenceDirectory, "BrightArenaVisualManifest.json");
             RenderTexture previousActive = null;
             RenderTexture renderTarget = null;
             GameObject externalCameraObject = null;
             Camera gameplayCamera = null;
+            GraphicsQualityRuntime graphicsQualityRuntime = null;
             Camera externalCamera = null;
             CameraState gameplayState = default;
             ObjectState viewmodelsState = default;
             ObjectState crosshairState = default;
+            ObjectState rocketState = default;
+            ObjectState shotgunState = default;
+            ObjectState kickState = default;
+            var initialQualityLevel = QualitySettings.GetQualityLevel();
             var manifest = new ManifestDto
             {
+                attemptId = captureOptions.AttemptId,
                 captureUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
                 evidenceDirectory = evidenceDirectory
             };
@@ -229,10 +251,9 @@ namespace RocketFooxball.Editor
 
                 RunBudgetAccountingSelfChecks();
 
-                // Validator is the single authoritative scene/manifest check. Do not build,
-                // save, refresh, or otherwise mutate generated Unity assets from this path.
-                MovementLabBuilder.ValidateMovementLab();
-                var scene = EditorSceneManager.GetActiveScene();
+                // Capture is a fast visual aid and must work with development lighting.
+                // Open the persisted scene directly; never build, bake, save, or refresh here.
+                var scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
                 if (!scene.IsValid() || !string.Equals(scene.path, ScenePath, StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException("MovementLab scene is not active after validation: " + scene.path);
@@ -256,11 +277,18 @@ namespace RocketFooxball.Editor
 
                 var player = Require(GameObject.Find("Player"), "Player root");
                 gameplayCamera = Require(player.transform.Find("Head/Camera")?.GetComponent<Camera>(), "Player camera");
+                graphicsQualityRuntime = Require(gameplayCamera.GetComponent<GraphicsQualityRuntime>(), "Player camera GraphicsQualityRuntime");
                 var viewmodels = Require(gameplayCamera.transform.Find("Viewmodels")?.gameObject, "Viewmodels");
                 var crosshair = Require(gameplayCamera.transform.Find("CrosshairCanvas")?.gameObject, "CrosshairCanvas");
+                var rocket = Require(viewmodels.transform.Find("WeaponVisual")?.gameObject, "rocket FPS viewmodel");
+                var shotgun = Require(viewmodels.transform.Find("FpsShotgunVisual")?.gameObject, "shotgun FPS viewmodel");
+                var kick = Require(viewmodels.transform.Find("FpsKickVisual")?.gameObject, "kick FPS viewmodel");
                 gameplayState = SaveCameraState(gameplayCamera);
                 viewmodelsState = new ObjectState { Object = viewmodels, Active = viewmodels.activeSelf };
                 crosshairState = new ObjectState { Object = crosshair, Active = crosshair.activeSelf };
+                rocketState = new ObjectState { Object = rocket, Active = rocket.activeSelf };
+                shotgunState = new ObjectState { Object = shotgun, Active = shotgun.activeSelf };
+                kickState = new ObjectState { Object = kick, Active = kick.activeSelf };
 
                 renderTarget = new RenderTexture(Width, Height, DepthBits, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB)
                 {
@@ -276,65 +304,73 @@ namespace RocketFooxball.Editor
                 gameplayCamera.targetTexture = renderTarget;
                 gameplayCamera.aspect = (float)Width / Height;
 
-                // One warm render avoids first-view shader/import stalls while retaining
-                // exactly six written PNGs in the ordered view list.
-                gameplayCamera.Render();
-
                 var views = CreateViews();
-                var images = new List<ImageEvidence>(views.Length);
-                var cameras = new List<CameraPose>(views.Length);
-                for (var i = 0; i < views.Length; i++)
+                var qualityLevels = new[]
                 {
-                    var view = views[i];
-                    Camera captureCamera;
-                    if (view.FirstPerson)
+                    (GraphicsQualityConfigurator.HighQualityIndex, GraphicsQualityConfigurator.HighQualityName),
+                    (GraphicsQualityConfigurator.LowQualityIndex, GraphicsQualityConfigurator.LowQualityName)
+                };
+                var images = new List<ImageEvidence>(views.Length * qualityLevels.Length);
+                var cameras = new List<CameraPose>(views.Length * qualityLevels.Length);
+                for (var qualityIndex = 0; qualityIndex < qualityLevels.Length; qualityIndex++)
+                {
+                    var quality = qualityLevels[qualityIndex];
+                    QualitySettings.SetQualityLevel(quality.Item1, true);
+                    graphicsQualityRuntime.ApplyCurrentQuality();
+                    gameplayCamera.Render();
+                    for (var i = 0; i < views.Length; i++)
                     {
-                        captureCamera = gameplayCamera;
-                        RestoreCameraState(gameplayCamera, gameplayState);
-                        gameplayCamera.targetTexture = renderTarget;
-                        gameplayCamera.aspect = (float)Width / Height;
-                        viewmodels.SetActive(viewmodelsState.Active);
-                        crosshair.SetActive(crosshairState.Active);
-                    }
-                    else
-                    {
-                        if (externalCameraObject == null)
+                        var view = views[i];
+                        Camera captureCamera;
+                        if (view.Mode != ViewMode.External)
                         {
-                            externalCameraObject = new GameObject("__BrightArenaExternalCamera")
-                            {
-                                hideFlags = HideFlags.HideAndDontSave
-                            };
-                            externalCamera = externalCameraObject.AddComponent<Camera>();
-                            externalCamera.hideFlags = HideFlags.HideAndDontSave;
-                            externalCamera.enabled = false;
-                            externalCamera.targetTexture = renderTarget;
-                            externalCamera.clearFlags = CameraClearFlags.SolidColor;
-                            externalCamera.backgroundColor = gameplayCamera.backgroundColor;
-                            externalCamera.nearClipPlane = 0.05f;
-                            externalCamera.farClipPlane = gameplayCamera.farClipPlane;
+                            captureCamera = gameplayCamera;
+                            RestoreCameraState(gameplayCamera, gameplayState);
+                            gameplayCamera.targetTexture = renderTarget;
+                            gameplayCamera.aspect = (float)Width / Height;
+                            viewmodels.SetActive(true);
+                            crosshair.SetActive(crosshairState.Active);
+                            rocket.SetActive(view.Mode == ViewMode.Rocket);
+                            shotgun.SetActive(view.Mode == ViewMode.Shotgun);
+                            kick.SetActive(false);
                         }
-                        viewmodels.SetActive(false);
-                        crosshair.SetActive(false);
-                        externalCamera.cullingMask = ~0;
-                        externalCamera.fieldOfView = view.FieldOfView;
-                        externalCamera.transform.position = view.Position;
-                        externalCamera.transform.rotation = Quaternion.LookRotation(view.Target - view.Position, Vector3.up);
-                        externalCamera.aspect = (float)Width / Height;
-                        captureCamera = externalCamera;
-                    }
+                        else
+                        {
+                            if (externalCameraObject == null)
+                            {
+                                externalCameraObject = new GameObject("__BrightArenaExternalCamera") { hideFlags = HideFlags.HideAndDontSave };
+                                externalCamera = externalCameraObject.AddComponent<Camera>();
+                                externalCamera.hideFlags = HideFlags.HideAndDontSave;
+                                externalCamera.enabled = false;
+                                externalCamera.targetTexture = renderTarget;
+                                externalCamera.clearFlags = CameraClearFlags.SolidColor;
+                                externalCamera.backgroundColor = gameplayCamera.backgroundColor;
+                                externalCamera.nearClipPlane = 0.05f;
+                                externalCamera.farClipPlane = gameplayCamera.farClipPlane;
+                            }
+                            viewmodels.SetActive(false);
+                            crosshair.SetActive(false);
+                            externalCamera.cullingMask = ~0;
+                            externalCamera.fieldOfView = view.FieldOfView;
+                            externalCamera.transform.position = view.Position;
+                            externalCamera.transform.rotation = Quaternion.LookRotation(view.Target - view.Position, Vector3.up);
+                            externalCamera.aspect = (float)Width / Height;
+                            captureCamera = externalCamera;
+                        }
 
-                    captureCamera.targetTexture = renderTarget;
-                    captureCamera.Render();
-                    cameras.Add(new CameraPose
-                    {
-                        view = view.Name,
-                        camera = captureCamera.name,
-                        position = captureCamera.transform.position,
-                        eulerAngles = captureCamera.transform.eulerAngles,
-                        fieldOfView = captureCamera.fieldOfView,
-                        cullingMask = captureCamera.cullingMask
-                    });
-                    images.Add(CaptureImage(captureCamera, view, evidenceDirectory));
+                        captureCamera.targetTexture = renderTarget;
+                        captureCamera.Render();
+                        cameras.Add(new CameraPose
+                        {
+                            view = quality.Item2 + "/" + view.Name,
+                            camera = captureCamera.name,
+                            position = captureCamera.transform.position,
+                            eulerAngles = captureCamera.transform.eulerAngles,
+                            fieldOfView = captureCamera.fieldOfView,
+                            cullingMask = captureCamera.cullingMask
+                        });
+                        images.Add(CaptureImage(captureCamera, view, quality.Item2, evidenceDirectory));
+                    }
                 }
 
                 manifest.cameras = cameras.ToArray();
@@ -363,9 +399,6 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("Capture manifest could not be written: " + manifestPath);
                 }
-                var evidenceAttributes = File.GetAttributes(evidenceDirectory);
-                File.SetAttributes(evidenceDirectory, evidenceAttributes | FileAttributes.ReadOnly);
-                LaunchEvidenceFinalizer(projectRoot, evidenceDirectory);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_MANIFEST_WRITTEN " + File.Exists(manifestPath) + " " + manifestPath);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_HUMAN_VISUAL_REVIEW_REQUIRED true");
                 UnityEngine.Debug.Log("Human visual review required; manifest.pass means technical capture completion only.");
@@ -391,6 +424,14 @@ namespace RocketFooxball.Editor
                 {
                     crosshairState.Object.SetActive(crosshairState.Active);
                 }
+                if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
+                if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
+                if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
+                QualitySettings.SetQualityLevel(initialQualityLevel, true);
+                if (graphicsQualityRuntime != null)
+                {
+                    graphicsQualityRuntime.ApplyCurrentQuality();
+                }
                 if (externalCameraObject != null)
                 {
                     UnityEngine.Object.DestroyImmediate(externalCameraObject);
@@ -404,11 +445,35 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static string CreateEvidenceDirectory(string projectRoot)
+        private static CaptureOptions ReadCaptureOptions()
         {
-            var root = Path.GetFullPath(Path.Combine(projectRoot, EvidenceRoot));
-            var id = DateTime.UtcNow.ToString("yyyyMMdd'T'HHmmssfff'Z'", CultureInfo.InvariantCulture);
-            var directory = Path.Combine(root, id);
+            var arguments = Environment.GetCommandLineArgs();
+            var root = ReadArgument(arguments, "-captureEvidenceRoot");
+            var attemptId = ReadArgument(arguments, "-captureAttemptId");
+            if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(attemptId))
+            {
+                throw new InvalidOperationException("Capture requires -captureEvidenceRoot and -captureAttemptId.");
+            }
+            if (attemptId.Length > 64 || attemptId == "." || attemptId == ".." ||
+                attemptId.Any(character => !(char.IsLetterOrDigit(character) || character == '.' || character == '_' || character == '-')))
+            {
+                throw new InvalidOperationException("Capture attempt id is not filename-safe: " + attemptId);
+            }
+            return new CaptureOptions { EvidenceRoot = Path.GetFullPath(root), AttemptId = attemptId };
+        }
+
+        private static string ReadArgument(string[] arguments, string name)
+        {
+            for (var i = 0; i < arguments.Length - 1; i++)
+            {
+                if (string.Equals(arguments[i], name, StringComparison.OrdinalIgnoreCase)) return arguments[i + 1];
+            }
+            return null;
+        }
+
+        private static string CreateEvidenceDirectory(string root, string attemptId)
+        {
+            var directory = Path.Combine(root, attemptId);
             if (Directory.Exists(directory))
             {
                 throw new InvalidOperationException("Capture evidence directory already exists/non-empty: " + directory);
@@ -509,18 +574,15 @@ namespace RocketFooxball.Editor
         {
             return new[]
             {
-                new ViewDefinition("FirstPersonSpawn", "01_FirstPersonSpawn.png", true, Vector3.zero, Vector3.zero, 75f),
-                new ViewDefinition("ArenaOverview", "02_ArenaOverview.png", false, new Vector3(0f, 68f, -92f), new Vector3(0f, 2.5f, 0f), 60f),
-                new ViewDefinition("NorthGoalThreeQuarter", "03_NorthGoalThreeQuarter.png", false, new Vector3(-45f, 11f, -30f), new Vector3(-64f, 3.5f, 0f), 55f),
-                new ViewDefinition("SouthGoalThreeQuarter", "04_SouthGoalThreeQuarter.png", false, new Vector3(45f, 11f, 30f), new Vector3(64f, 3.5f, 0f), 55f),
-                new ViewDefinition("RampArchitectureDetail", "05_RampArchitectureDetail.png", false, new Vector3(-8f, 13f, -19f), new Vector3(-22f, 3.5f, 2f), 58f),
-                new ViewDefinition("ExternalCharacterBallDetail", "06_ExternalCharacterBallDetail.png", false, new Vector3(10f, 5.5f, -13f), new Vector3(2f, 2.4f, 0f), 52f)
+                new ViewDefinition("FirstPersonRocket", "01_FirstPersonRocket.png", ViewMode.Rocket, Vector3.zero, Vector3.zero, 75f),
+                new ViewDefinition("FirstPersonShotgun", "02_FirstPersonShotgun.png", ViewMode.Shotgun, Vector3.zero, Vector3.zero, 75f),
+                new ViewDefinition("ShadowSideNorthWall", "03_ShadowSideNorthWall.png", ViewMode.External, new Vector3(18f, 8f, 8f), new Vector3(-8f, 4f, -44f), 58f)
             };
         }
 
-        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string evidenceDirectory)
+        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string qualityLevel, string evidenceDirectory)
         {
-            var absolutePath = Path.Combine(evidenceDirectory, view.FileName);
+            var absolutePath = Path.Combine(evidenceDirectory, qualityLevel + "_" + view.FileName);
             RenderTexture.active = camera.targetTexture;
             var texture = new Texture2D(Width, Height, TextureFormat.RGBA32, false, false);
             try
@@ -537,7 +599,9 @@ namespace RocketFooxball.Editor
                 {
                     throw new InvalidOperationException("PNG file could not be written: " + view.Name);
                 }
-                return AnalyzeImage(absolutePath, view.Name, png);
+                var evidence = AnalyzeImage(absolutePath, view.Name, png);
+                evidence.qualityLevel = qualityLevel;
+                return evidence;
             }
             finally
             {
@@ -774,26 +838,5 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void LaunchEvidenceFinalizer(string projectRoot, string evidenceDirectory)
-        {
-            var scriptPath = Path.Combine(projectRoot, "Tools/Validation/Capture-BrightArenaVisuals.ps1".Replace('/', Path.DirectorySeparatorChar));
-            if (!File.Exists(scriptPath)) throw new InvalidOperationException("Capture wrapper missing for evidence finalization: " + scriptPath);
-            var escapedScript = scriptPath.Replace("\"", "\\\"");
-            var escapedDirectory = evidenceDirectory.Replace("\"", "\\\"");
-            var finalizerLog = Path.Combine(projectRoot, EvidenceRoot.Replace('/', Path.DirectorySeparatorChar), "Finalizer-" + Path.GetFileName(evidenceDirectory) + ".log");
-            var escapedLog = finalizerLog.Replace("\"", "\\\"");
-            var arguments = string.Format(CultureInfo.InvariantCulture,
-                "-NoProfile -ExecutionPolicy Bypass -File \"{0}\" -FinalizeEvidence -SourceDirectory \"{1}\" -TargetDirectory \"{1}\" -ParentPid {2} -FinalizerLog \"{3}\"",
-                escapedScript, escapedDirectory, Process.GetCurrentProcess().Id, escapedLog);
-            var start = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = arguments,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WindowStyle = ProcessWindowStyle.Hidden
-            };
-            if (Process.Start(start) == null) throw new InvalidOperationException("Failed to start evidence finalizer.");
-        }
     }
 }

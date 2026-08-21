@@ -18,6 +18,58 @@ namespace RocketFooxball.Runtime.Bots
         ShieldGate = 3
     }
 
+    /// <summary>Authoritative X/Z limits shared by bot navigation and corner recovery.</summary>
+    [Serializable]
+    public sealed class BotArenaBounds
+    {
+        [SerializeField] private Vector3 center = Vector3.zero;
+        [SerializeField, Min(0f)] private float halfLength = 65f;
+        [SerializeField, Min(0f)] private float halfWidth = 45f;
+
+        public BotArenaBounds() { }
+
+        public BotArenaBounds(Vector3 center, float halfLength, float halfWidth)
+        {
+            this.center = center;
+            this.halfLength = halfLength;
+            this.halfWidth = halfWidth;
+        }
+
+        public Vector3 Center => center;
+        public float HalfLength => halfLength;
+        public float HalfWidth => halfWidth;
+
+        public bool TryValidate(out string reason)
+        {
+            if (!IsFinite(center) || !IsFinite(halfLength) || !IsFinite(halfWidth))
+            {
+                reason = "center and half-extents must be finite";
+                return false;
+            }
+
+            if (halfLength <= 0f || halfWidth <= 0f)
+            {
+                reason = "half-extents must be positive";
+                return false;
+            }
+
+            reason = string.Empty;
+            return true;
+        }
+
+        public bool IsValid => TryValidate(out _);
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
+        }
+    }
+
     [Serializable]
     public sealed class BotNavigationNodeRecord
     {
@@ -81,20 +133,28 @@ namespace RocketFooxball.Runtime.Bots
     [DisallowMultipleComponent]
     public sealed class BotNavigationGraph : MonoBehaviour
     {
-        public const float ExpectedControllerRadius = 0.4f;
-        public const float ExpectedControllerHeight = 1.8f;
+        public const float ExpectedControllerRadius = 0.8f;
+        public const float ExpectedControllerHeight = 3.6f;
         public const float ExpectedControllerSlopeLimit = 60f;
         public const float ExpectedControllerStepOffset = 0.3f;
-        public const float ExpectedControllerSkinWidth = 0.04f;
-        public static readonly Vector3 ExpectedControllerCenter = new Vector3(0f, 0.9f, 0f);
+        public const float ExpectedControllerSkinWidth = 0.08f;
+        public const float ExpectedControllerEffectiveRadius = ExpectedControllerRadius - ExpectedControllerSkinWidth;
+        public const float ExpectedControllerClearance = ExpectedControllerEffectiveRadius;
+        public const float ExpectedRocketJumpGroundProbeDistance = 8f;
+        public const float ExpectedGoalRecessSafeRadius = 1f;
+        public const float ExpectedArenaHalfLength = 65f;
+        public const float ExpectedArenaHalfWidth = 45f;
+        public static readonly Vector3 ExpectedControllerCenter = new Vector3(0f, 1.8f, 0f);
+        public static readonly Vector3 ExpectedArenaCenter = Vector3.zero;
 
         [SerializeField] private BotNavigationNodeRecord[] nodes = new BotNavigationNodeRecord[0];
         [SerializeField] private BotNavigationEdgeRecord[] edges = new BotNavigationEdgeRecord[0];
+        [SerializeField] private BotArenaBounds arenaBounds = new BotArenaBounds();
 
         [Header("Player CharacterController facts")]
         [SerializeField] private float controllerRadius = ExpectedControllerRadius;
         [SerializeField] private float controllerHeight = ExpectedControllerHeight;
-        [SerializeField] private Vector3 controllerCenter = new Vector3(0f, 0.9f, 0f);
+        [SerializeField] private Vector3 controllerCenter = ExpectedControllerCenter;
         [SerializeField] private float controllerSlopeLimit = ExpectedControllerSlopeLimit;
         [SerializeField] private float controllerStepOffset = ExpectedControllerStepOffset;
         [SerializeField] private float controllerSkinWidth = ExpectedControllerSkinWidth;
@@ -117,6 +177,9 @@ namespace RocketFooxball.Runtime.Bots
         public float ControllerSlopeLimit => controllerSlopeLimit;
         public float ControllerStepOffset => controllerStepOffset;
         public float ControllerSkinWidth => controllerSkinWidth;
+        public float EffectiveControllerRadius => controllerRadius - controllerSkinWidth;
+        public float ControllerClearance => EffectiveControllerRadius;
+        public BotArenaBounds ArenaBounds => arenaBounds;
 
         internal BotNavigationNodeRecord[] NodesForNavigation => nodes;
         internal BotNavigationEdgeRecord[] EdgesForNavigation => edges;
@@ -143,6 +206,21 @@ namespace RocketFooxball.Runtime.Bots
                 return false;
             }
 
+            var boundsReason = string.Empty;
+            if (arenaBounds == null || !arenaBounds.TryValidate(out boundsReason))
+            {
+                reason = "arena bounds are invalid" + (string.IsNullOrEmpty(boundsReason) ? string.Empty : ": " + boundsReason);
+                return false;
+            }
+
+            if (Vector3.Distance(arenaBounds.Center, ExpectedArenaCenter) > 0.001f ||
+                Mathf.Abs(arenaBounds.HalfLength - ExpectedArenaHalfLength) > 0.001f ||
+                Mathf.Abs(arenaBounds.HalfWidth - ExpectedArenaHalfWidth) > 0.001f)
+            {
+                reason = "arena bounds do not match the MovementLab X/Z contract";
+                return false;
+            }
+
             if (nodes == null || nodes.Length == 0)
             {
                 reason = "nodes are missing";
@@ -155,7 +233,7 @@ namespace RocketFooxball.Runtime.Bots
                 return false;
             }
 
-            var minimumClearance = controllerRadius + controllerSkinWidth;
+            var minimumClearance = EffectiveControllerRadius;
             for (var i = 0; i < nodes.Length; i++)
             {
                 var node = nodes[i];
@@ -174,6 +252,12 @@ namespace RocketFooxball.Runtime.Bots
                 if (!IsFinite(node.Position) || !IsFinite(node.SafeRadius) || node.SafeRadius < minimumClearance)
                 {
                     reason = "node " + node.Id + " has invalid position or clearance";
+                    return false;
+                }
+
+                if (node.Area == BotNavigationArea.GoalRecess && node.SafeRadius < ExpectedGoalRecessSafeRadius)
+                {
+                    reason = "goal recess node " + node.Id + " has insufficient safe radius";
                     return false;
                 }
 

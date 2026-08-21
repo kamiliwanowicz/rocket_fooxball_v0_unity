@@ -7,6 +7,18 @@ namespace RocketFooxball.Runtime.Participants
     /// <summary>Authored Blue/Red spawn candidates and deterministic safety scoring.</summary>
     public sealed class ParticipantSpawnSet : MonoBehaviour
     {
+        public const float ExpectedEyeHeight = 2.4f;
+        public const float ExpectedOccupiedRadius = 2f;
+        public const float ExpectedBallDistanceWeight = 1f;
+        public const float ExpectedEnemyGoalDistanceWeight = 0.5f;
+        public const float ExpectedNearestEnemyDistanceWeight = 1f;
+        public const float ExpectedNoVisibleEnemyBonus = 4f;
+        public const float ExpectedVisibleEnemyCountPenalty = 2f;
+        public const float ExpectedOccupiedFallbackPenalty = 8f;
+        public const float ExpectedBallDistanceCap = 30f;
+        public const float ExpectedEnemyGoalDistanceCap = 30f;
+        public const float ExpectedEnemyDistanceCap = 30f;
+
         [Header("Candidates")]
         [SerializeField] private Transform[] blueCandidates = new Transform[3];
         [SerializeField] private Transform[] redCandidates = new Transform[3];
@@ -15,25 +27,26 @@ namespace RocketFooxball.Runtime.Participants
 
         [Header("Visibility")]
         [SerializeField] private LayerMask visibilityMask = ~0;
-        [SerializeField, Min(0f)] private float eyeHeight = 1.2f;
-        [SerializeField, Min(0f)] private float occupiedRadius = 2f;
+        [SerializeField, Min(0f)] private float eyeHeight = ExpectedEyeHeight;
+        [SerializeField, Min(0f)] private float occupiedRadius = ExpectedOccupiedRadius;
 
         [Header("Safety Weights")]
-        [SerializeField, Min(0f)] private float ballDistanceWeight = 1f;
-        [SerializeField, Min(0f)] private float enemyGoalDistanceWeight = 0.5f;
-        [SerializeField, Min(0f)] private float nearestEnemyDistanceWeight = 1f;
-        [SerializeField, Min(0f)] private float noVisibleEnemyBonus = 4f;
-        [SerializeField, Min(0f)] private float visibleEnemyCountPenalty = 2f;
-        [SerializeField, Min(0f)] private float occupiedFallbackPenalty = 8f;
-        [SerializeField, Min(0f)] private float ballDistanceCap = 30f;
-        [SerializeField, Min(0f)] private float enemyGoalDistanceCap = 30f;
-        [SerializeField, Min(0f)] private float enemyDistanceCap = 30f;
+        [SerializeField, Min(0f)] private float ballDistanceWeight = ExpectedBallDistanceWeight;
+        [SerializeField, Min(0f)] private float enemyGoalDistanceWeight = ExpectedEnemyGoalDistanceWeight;
+        [SerializeField, Min(0f)] private float nearestEnemyDistanceWeight = ExpectedNearestEnemyDistanceWeight;
+        [SerializeField, Min(0f)] private float noVisibleEnemyBonus = ExpectedNoVisibleEnemyBonus;
+        [SerializeField, Min(0f)] private float visibleEnemyCountPenalty = ExpectedVisibleEnemyCountPenalty;
+        [SerializeField, Min(0f)] private float occupiedFallbackPenalty = ExpectedOccupiedFallbackPenalty;
+        [SerializeField, Min(0f)] private float ballDistanceCap = ExpectedBallDistanceCap;
+        [SerializeField, Min(0f)] private float enemyGoalDistanceCap = ExpectedEnemyGoalDistanceCap;
+        [SerializeField, Min(0f)] private float enemyDistanceCap = ExpectedEnemyDistanceCap;
 
         public IReadOnlyList<Transform> BlueCandidates => blueCandidates;
         public IReadOnlyList<Transform> RedCandidates => redCandidates;
         public Transform BlueEnemyGoal => blueEnemyGoal;
         public Transform RedEnemyGoal => redEnemyGoal;
         public LayerMask VisibilityMask => visibilityMask;
+        public float EyeHeight => eyeHeight;
         public float OccupiedRadius => occupiedRadius;
 
         public IReadOnlyList<Transform> GetCandidates(ParticipantTeam participantTeam)

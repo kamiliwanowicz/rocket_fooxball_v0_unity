@@ -15,21 +15,27 @@ namespace RocketFooxball.Runtime.Bots
             0.35f,
             0.12f,
             7f,
-            0.35f);
+            0.35f,
+            0.70f,
+            8f);
 
         private static readonly BotDifficultyParameters MediumParameters = new BotDifficultyParameters(
             0.22f,
             0.20f,
             0.06f,
             3f,
-            0.15f);
+            0.15f,
+            0.50f,
+            7f);
 
         private static readonly BotDifficultyParameters HighParameters = new BotDifficultyParameters(
             0.10f,
             0.12f,
             0.03f,
             1.5f,
-            0.06f);
+            0.06f,
+            0.30f,
+            6f);
 
         /// <summary>Returns the fixed tier tuple. Unknown enum values intentionally use Medium.</summary>
         public static BotDifficultyParameters GetParameters(BotDifficulty difficulty)
@@ -97,6 +103,53 @@ namespace RocketFooxball.Runtime.Bots
         public static float SignedSample(uint hash)
         {
             return 2f * Sample01(hash) - 1f;
+        }
+
+        /// <summary>Returns the configured probability of intentionally missing an airborne ball.</summary>
+        public static float GetAerialMissChance(BotDifficulty difficulty)
+        {
+            return GetParameters(difficulty).AerialMissChance;
+        }
+
+        public static float AerialMissChance(BotDifficulty difficulty)
+        {
+            return GetAerialMissChance(difficulty);
+        }
+
+        /// <summary>Returns the configured world-space miss offset magnitude for an airborne ball.</summary>
+        public static float GetAerialMissMagnitude(BotDifficulty difficulty)
+        {
+            return GetParameters(difficulty).AerialMissMagnitude;
+        }
+
+        public static float AerialMissMagnitude(BotDifficulty difficulty)
+        {
+            return GetAerialMissMagnitude(difficulty);
+        }
+
+        public static BotDifficultyParameters GetAerialMissParameters(BotDifficulty difficulty)
+        {
+            return GetParameters(difficulty);
+        }
+
+        /// <summary>
+        /// Samples the aerial miss roll once for a decision. Keeping this helper pure makes the
+        /// decision ordinal the sole source of variation and avoids frame-to-frame rerolls.
+        /// </summary>
+        public static bool ShouldMissAerialBall(BotDifficulty difficulty, int slotId, int ordinal)
+        {
+            var chance = Mathf.Clamp01(GetAerialMissChance(difficulty));
+            return Sample01(slotId, ordinal, BotSampleChannel.AerialMissRoll) < chance;
+        }
+
+        public static bool ShouldMissAerialBall(int slotId, int ordinal, BotDifficulty difficulty)
+        {
+            return ShouldMissAerialBall(difficulty, slotId, ordinal);
+        }
+
+        public static bool ShouldAerialMiss(BotDifficulty difficulty, int slotId, int ordinal)
+        {
+            return ShouldMissAerialBall(difficulty, slotId, ordinal);
         }
 
         /// <summary>Samples a reaction schedule without a second aim timer.</summary>

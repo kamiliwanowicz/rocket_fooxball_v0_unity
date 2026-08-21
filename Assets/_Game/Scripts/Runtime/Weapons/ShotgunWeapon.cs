@@ -26,7 +26,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private LayerMask hitMask = ~0;
         [SerializeField, Min(0f)] private float pelletDamage = ShotgunDamageRules.DefaultPelletDamage;
         [SerializeField, Min(1)] private int pelletCount = ShotgunDamageRules.DefaultPelletCount;
-        [SerializeField, Min(0f)] private float spreadAngleDegrees = 7f;
+        [SerializeField, Min(0f)] private float spreadAngleDegrees = ShotgunDamageRules.DefaultSpreadAngleDegrees;
         [SerializeField, Min(0f)] private float fullDamageRange = ShotgunDamageRules.DefaultFullDamageRange;
         [SerializeField, Min(0f)] private float mediumRange = ShotgunDamageRules.DefaultMediumRange;
         [SerializeField, Min(0f)] private float maxRange = ShotgunDamageRules.DefaultMaxRange;
@@ -34,7 +34,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField, Range(0f, 1f)] private float farMultiplier = ShotgunDamageRules.DefaultFarMultiplier;
 
         [Header("Timing and Ball")]
-        [SerializeField, Min(0f)] private float pumpDelay = 0.85f;
+        [SerializeField, Min(0f)] private float pumpDelay = ShotgunDamageRules.DefaultPumpDelay;
         [SerializeField, Min(0f)] private float ballImpulsePerPellet = ShotgunDamageRules.DefaultPerPelletBallImpulse;
         [SerializeField, Min(0f)] private float ballImpulseCap = ShotgunDamageRules.DefaultBallImpulseCap;
 
@@ -275,9 +275,18 @@ namespace RocketFooxball.Runtime.Weapons
             for (var targetIndex = 0; targetIndex < targetCount; targetIndex++)
             {
                 var target = participantTargets[targetIndex];
-                if (target != null && target.TryApplyDamage(ownerParticipant, participantDamage[targetIndex], ParticipantDamageCause.Shotgun, "Shotgun"))
+                if (target != null)
                 {
-                    hitConfirmed = true;
+                    var damageRequest = new ParticipantDamageRequest(
+                        ownerParticipant,
+                        participantDamage[targetIndex],
+                        ParticipantDamageCause.Shotgun,
+                        "Shotgun",
+                        origin);
+                    if (target.TryApplyDamage(damageRequest))
+                    {
+                        hitConfirmed = true;
+                    }
                 }
             }
 

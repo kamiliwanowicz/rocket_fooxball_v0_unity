@@ -122,7 +122,7 @@ Material:
     - _GlossyReflections: 0
     - _LightSteps: 3
     - _Metallic: 1
-    - _OcclusionStrength: 0.9
+    - _OcclusionStrength: 0.7
     - _Parallax: 0.005
     - _QueueOffset: 0
     - _ReceiveShadows: 1

@@ -227,10 +227,10 @@ namespace RocketFooxball.Runtime.Ball
             }
             else if (freezeStored)
             {
-                body.isKinematic = preFreezeKinematic;
-                body.linearVelocity = preFreezeVelocity;
-                body.angularVelocity = preFreezeAngularVelocity;
+                RestoreBodyState(body, preFreezeKinematic, preFreezeVelocity, preFreezeAngularVelocity);
                 freezeStored = false;
+                preFreezeVelocity = Vector3.zero;
+                preFreezeAngularVelocity = Vector3.zero;
             }
         }
 
@@ -264,10 +264,10 @@ namespace RocketFooxball.Runtime.Ball
                 return;
             }
 
-            body.isKinematic = prePauseKinematic;
-            body.linearVelocity = prePauseVelocity;
-            body.angularVelocity = prePauseAngularVelocity;
+            RestoreBodyState(body, prePauseKinematic, prePauseVelocity, prePauseAngularVelocity);
             pauseStored = false;
+            prePauseVelocity = Vector3.zero;
+            prePauseAngularVelocity = Vector3.zero;
         }
 
         /// <summary>Clears pending impulses and contact state without moving the body.</summary>
@@ -291,8 +291,11 @@ namespace RocketFooxball.Runtime.Ball
 
             body.position = worldPosition;
             body.rotation = worldRotation;
-            body.linearVelocity = Vector3.zero;
-            body.angularVelocity = Vector3.zero;
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+                body.angularVelocity = Vector3.zero;
+            }
             body.Sleep();
             // A reset invalidates the motion captured by a preceding freeze, but
             // keeps the stored kinematic mode so ordinary freeze/unfreeze still
@@ -300,6 +303,8 @@ namespace RocketFooxball.Runtime.Ball
             // this reset frame instead of replaying scoring-frame velocity.
             preFreezeVelocity = Vector3.zero;
             preFreezeAngularVelocity = Vector3.zero;
+            prePauseVelocity = Vector3.zero;
+            prePauseAngularVelocity = Vector3.zero;
             ClearQueuedState();
         }
 
@@ -510,6 +515,16 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             body.linearVelocity = BallMotionRules.ClampVelocity(body.linearVelocity, HardCap);
+        }
+
+        private static void RestoreBodyState(Rigidbody rigidbody, bool kinematic, Vector3 velocity, Vector3 angularVelocity)
+        {
+            rigidbody.isKinematic = kinematic;
+            if (!rigidbody.isKinematic)
+            {
+                rigidbody.linearVelocity = velocity;
+                rigidbody.angularVelocity = angularVelocity;
+            }
         }
     }
 }

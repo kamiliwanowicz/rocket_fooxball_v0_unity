@@ -168,14 +168,15 @@ namespace RocketFooxball.Editor
                         SetObjectReference(explosionResolver, "explosionVfxSpawner", explosionVfxSpawner);
                         SetObjectReference(explosionVfxSpawner, "explosionVfxPrefab", explosionPrefab);
                         SetFloat(explosionResolver, "blastRadius", BlastRadius);
-                        SetFloat(explosionResolver, "playerImpulseStrength", 24f);
-                        SetFloat(explosionResolver, "ballImpulseStrength", 16f);
-                        SetFloat(explosionResolver, "occludedForce", 0.25f);
-                        SetFloat(explosionResolver, "playerUpBias", 0.18f);
+                        SetFloat(explosionResolver, "playerImpulseStrength", ExplosionResolver.DefaultPlayerImpulseStrength);
+                        SetFloat(explosionResolver, "ballImpulseStrength", ExplosionResolver.DefaultBallImpulseStrength);
+                        SetFloat(explosionResolver, "occludedForce", ExplosionResolver.DefaultOccludedForce);
+                        SetFloat(explosionResolver, "playerUpBias", ExplosionResolver.DefaultPlayerUpBias);
                         SetFloat(explosionResolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
-                        SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
-                        SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
-                        SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
+                         SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
+                         SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
+                         SetFloat(explosionResolver, "enemyRocketImpulseMultiplier", ExplosionResolver.DefaultEnemyRocketImpulseMultiplier);
+                        SetFloat(explosionResolver, "cameraFeedbackScale", ExplosionResolver.DefaultCameraFeedbackScale);
                         var participantStates = BuildParticipantRoster(playerPrefab);
                         var localParticipant = participantStates[0];
                         var player = localParticipant.gameObject;
@@ -220,11 +221,13 @@ namespace RocketFooxball.Editor
                         SetObjectReference(match, "ball", ballMotor);
                         SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                        SetFloat(match, "matchDuration", MatchDuration);
-                        SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
+                         SetFloat(match, "matchDuration", MatchDuration);
+                         SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                        SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                        SetVector3(match, "resetLookTarget", Vector3.zero);
+                        SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                         SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                         SetVector3(match, "resetLookTarget", Vector3.zero);
+                         WirePresentationSceneReferences(participantStates, localParticipant, match);
                         var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
                         var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
                         var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
@@ -401,197 +404,6 @@ namespace RocketFooxball.Editor
                     return result;
                 }
 
-                internal static void AssembleMovementLabUnstaged()
-                {
-                    var builderSignature = ComputeBuilderSignature();
-
-                    EnsureFolders();
-
-                    // Quality assets must settle before importer, material, scene, or bake
-                    // writes. Build fingerprint includes these outputs, so valid state
-                    // returns above without touching project settings.
-                    GraphicsQualityConfigurator.Configure();
-
-                    MovementLabImportPipeline.Apply();
-
-                    var ballSurface = GetOrCreatePhysicMaterial();
-                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
-                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
-                    var trimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Trim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
-                    var hazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Hazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
-                    var markingMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Marking", null, null, null, null, null, null, Vector2.one, new Color(1.00f, 0.96f, 0.78f, 1f), Color.clear, 0f, 0f, 0.5f, 1f, 1f));
-                    var ballMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Ball", LoadTexture(BallTexturePath), LoadTexture(BallNormalTexturePath), LoadTexture(BallMetallicTexturePath), LoadTexture(BallOcclusionTexturePath), null, null, Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.65f, 0.45f));
-                    var rocketMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Rocket", LoadTexture(RocketTexturePath), LoadTexture(RocketNormalTexturePath), LoadTexture(RocketMetallicTexturePath), LoadTexture(RocketOcclusionTexturePath), null, null, Vector2.one, RocketBaseColor, Color.clear, 0f, 1f, 1f, 0.85f, 0.80f));
-                    var rocketHotMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("RocketHot", LoadTexture(RocketTexturePath), LoadTexture(RocketNormalTexturePath), LoadTexture(RocketMetallicTexturePath), LoadTexture(RocketOcclusionTexturePath), LoadTexture(RocketEmissionTexturePath), null, Vector2.one, Color.white, RocketEmissionColor, RocketEmissionStrength, 1f, 1f, 0.85f, 0.80f));
-                    var projectileGlowMaterial = GetOrCreateAdditiveParticleMaterial("ProjectileGlow", Color.white, LoadTexture(RocketGlowTexturePath), 2.5f);
-                    var frameMaterial = trimMaterial;
-                    var shieldMaterial = GetOrCreateShieldMaterial("Shield", new Color(0.10f, 0.75f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
-                    var arenaPrimaryMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaPrimary", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
-                    var arenaTrimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaTrim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
-                    var arenaHazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaHazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
-                    var arenaGlowMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaGlow", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, Color.white, new Color(0.10f, 0.95f, 0.88f, 1f), 2.0f, 1f, 1f, 0.80f, 1f));
-                    var gridCeilingMaterial = GetOrCreateGridMaterial("ContainmentGridCeiling", new Vector2(32.5f, 22.5f));
-                    var gridLongWallMaterial = GetOrCreateGridMaterial("ContainmentGridLongWall", new Vector2(32.5f, 10f));
-                    var gridEndWallMaterial = GetOrCreateGridMaterial("ContainmentGridEndWall", new Vector2(22.5f, 10f));
-                    var shieldBlueMaterial = GetOrCreateShieldMaterial("ShieldBlue", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
-                    var shieldRedMaterial = GetOrCreateShieldMaterial("ShieldRed", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
-                    var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
-                    var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
-                    var healthPickupMaterial = GetOrCreateHealthPickupMaterial();
-                    GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
-                    GetOrCreateShieldMaterial("TeamRedShield", new Color(1.00f, 0.22f, 0.20f, 1f), new Color(1.00f, 0.55f, 0.45f, 1f));
-                    MovementLabMaterialPipeline.ValidateCatalog(floorMaterial, wallMaterial, trimMaterial, hazardMaterial, markingMaterial, ballMaterial, rocketMaterial);
-
-                    var rocketPrefab = BuildRocketPrefab(rocketMaterial, rocketHotMaterial, projectileGlowMaterial);
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.ImportAsset(RocketPrefabPath, ImportAssetOptions.ForceSynchronousImport);
-                    rocketPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(RocketPrefabPath);
-                    var ballPrefab = BuildBallPrefab(ballMaterial, ballSurface);
-                    var playerPrefab = BuildPlayerPrefab(rocketPrefab);
-                    BuildExplosionVfxPrefab();
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.ImportAsset(ExplosionPrefabPath, ImportAssetOptions.ForceSynchronousImport);
-                    var explosionRootAsset = AssetDatabase.LoadAssetAtPath<GameObject>(ExplosionPrefabPath);
-                    var explosionAssetComponent = explosionRootAsset != null ? explosionRootAsset.GetComponent<ExplosionVfx>() : null;
-                    if (explosionAssetComponent == null) throw new InvalidOperationException("Explosion VFX prefab failed to import.");
-                    if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
-                    var ammoShellMaterial = GetOrCreateAmmoShellMaterial();
-                    BuildHealthPickupPrefab(healthPickupMaterial);
-                    BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
-                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
-                    BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
-                    AssetDatabase.ImportAsset(ShotgunPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
-                    AssetDatabase.ImportAsset(AmmoPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
-
-                    RegisterBuildScene();
-                    UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
-                    SetProjectFixedTimestep();
-                    EnsureGameplayLayersAndCollisionMatrix();
-
-                    GameObject explosionPrefabProbe = null;
-                    try
-                    {
-                    var explosionPrefab = GetSerializablePrefabComponent<ExplosionVfx>(explosionRootAsset, out explosionPrefabProbe);
-                    if (explosionPrefab == null) throw new InvalidOperationException("Explosion VFX prefab source component could not be resolved.");
-                    var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-                    var defaultCamera = Camera.main;
-                    if (defaultCamera != null)
-                    {
-                        UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
-                    }
-
-                    var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
-                    var shieldSetObject = new GameObject("GoalShieldSet");
-                    var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
-                    SetObjectArray(goalShieldSet, "colliders", arena.Shields);
-                    var explosionObject = new GameObject("ExplosionResolver");
-                    var explosionResolver = explosionObject.AddComponent<ExplosionResolver>();
-                    var explosionVfxSpawner = explosionObject.AddComponent<ExplosionVfxSpawner>();
-                    SetObjectReference(explosionResolver, "goalShieldSet", goalShieldSet);
-                    SetObjectReference(explosionResolver, "explosionVfxSpawner", explosionVfxSpawner);
-                    SetObjectReference(explosionVfxSpawner, "explosionVfxPrefab", explosionPrefab);
-                    SetFloat(explosionResolver, "blastRadius", BlastRadius);
-                    SetFloat(explosionResolver, "playerImpulseStrength", 24f);
-                    SetFloat(explosionResolver, "ballImpulseStrength", 16f);
-                    SetFloat(explosionResolver, "occludedForce", 0.25f);
-                    SetFloat(explosionResolver, "playerUpBias", 0.18f);
-                    SetFloat(explosionResolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
-                    SetFloat(explosionResolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
-                    SetFloat(explosionResolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
-                    SetFloat(explosionResolver, "cameraFeedbackScale", 0.8f);
-
-                    var participantStates = BuildParticipantRoster(playerPrefab);
-                    var localParticipant = participantStates[0];
-                    var player = localParticipant.gameObject;
-                    var spawnSet = BuildParticipantSpawnSet(arena);
-
-                    var ball = (GameObject)PrefabUtility.InstantiatePrefab(ballPrefab);
-                    ball.name = "Ball";
-                    ball.transform.SetPositionAndRotation(new Vector3(0f, BallSpawnHeight, 0f), Quaternion.identity);
-
-                    var playerMotor = localParticipant.Motor;
-                    var playerInput = localParticipant.Input;
-                    var playerLook = localParticipant.Look;
-                    var cameraFeedback = localParticipant.CameraFeedback;
-                    var launcher = localParticipant.Launcher;
-                    var kick = localParticipant.Kick;
-                    var ballMotor = ball.GetComponent<BallMotor>();
-                    var ballBody = ball.GetComponent<Rigidbody>();
-                    var ballCollider = ball.GetComponent<Collider>();
-
-                    SetObjectReference(ballMotor, "body", ballBody);
-                    SetObjectReference(ballMotor, "ballCollider", ballCollider);
-                    SetObjectArray(ballMotor, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
-                    SetObjectReference(ballMotor, "goalShieldSet", goalShieldSet);
-                    for (var participantIndex = 0; participantIndex < participantStates.Length; participantIndex++)
-                    {
-                        var participant = participantStates[participantIndex];
-                        SetObjectReference(participant.Kick, "ball", ballMotor);
-                        SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
-                        SetObjectReference(participant.Shotgun, "ball", ballMotor);
-                        SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
-                        SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
-                    }
-
-                    SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
-                    SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
-                    SetObjectReference(arena.NorthGoal.Trigger, "planeReference", arena.NorthGoal.Root.transform);
-                    SetObjectReference(arena.SouthGoal.Trigger, "planeReference", arena.SouthGoal.Root.transform);
-                    SetEnum(arena.NorthGoal.Trigger, "defendingTeam", "Red");
-                    SetEnum(arena.SouthGoal.Trigger, "defendingTeam", "Blue");
-
-                    var matchObject = new GameObject("MatchController");
-                    var match = matchObject.AddComponent<MatchController>();
-                    SetObjectArray(match, "participants", participantStates.Cast<UnityEngine.Object>().ToArray());
-                    SetObjectReference(match, "localParticipant", localParticipant);
-                    SetObjectReference(match, "spawnSet", spawnSet);
-                    SetObjectReference(match, "cameraFeedback", cameraFeedback);
-                    SetObjectReference(match, "ball", ballMotor);
-                    SetObjectReference(match, "northGoal", arena.NorthGoal.Trigger);
-                    SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
-                    SetFloat(match, "matchDuration", MatchDuration);
-                    SetFloat(match, "goalSummaryDuration", GoalSummaryDuration);
-                    SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                    SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
-                    SetVector3(match, "resetLookTarget", Vector3.zero);
-                    var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);
-                    var shotgunPickups = BuildShotgunPickupInstances(LoadRequiredAsset<GameObject>(ShotgunPickupPrefabPath), match);
-                    var ammoPickups = BuildAmmoPickupInstances(LoadRequiredAsset<GameObject>(AmmoPickupPrefabPath), match);
-                    var pickups = healthPickups.Cast<ArenaPickup>().Concat(shotgunPickups).Concat(ammoPickups).ToArray();
-                    MovementLabBotPipeline.ComposeScene(participantStates, match, ballMotor, pickups,
-                        arena.NorthGoal.Trigger, arena.SouthGoal.Trigger, arena.NorthGoal.Shield, arena.SouthGoal.Shield);
-
-                    var hud = new GameObject("DebugHUD");
-                    var hudComponent = hud.AddComponent<MovementDebugHud>();
-                    SetObjectReference(hudComponent, "player", playerMotor);
-                    SetObjectReference(hudComponent, "ball", ballMotor);
-                    SetObjectReference(hudComponent, "launcher", launcher);
-                    SetObjectReference(hudComponent, "kick", kick);
-                    SetObjectReference(hudComponent, "match", match);
-                    var matchHudObject = new GameObject("MatchHUD");
-                    var matchHud = matchHudObject.AddComponent<MatchHud>();
-                    SetObjectReference(matchHud, "match", match);
-                    SetObjectReference(matchHud, "localParticipant", localParticipant);
-                    SetObjectReference(matchHud, "input", playerInput);
-
-                    new GameObject(GetBuildMarkerName(builderSignature));
-
-                    BindSceneEnvironment(scene, arena);
-                    EditorSceneManager.SaveScene(scene, ScenePath);
-                    }
-                    finally
-                    {
-                        if (explosionPrefabProbe != null)
-                        {
-                            UnityEngine.Object.DestroyImmediate(explosionPrefabProbe);
-                        }
-                    }
-                    AssetDatabase.SaveAssets();
-                    MovementLabMaterialPipeline.FinalizeGeneratedMaterialPersistence();
-                }
-
                 private static ParticipantState[] BuildParticipantRoster(GameObject playerPrefab)
                 {
                     if (playerPrefab == null) throw new InvalidOperationException("Player prefab is required for six-slot roster composition.");
@@ -612,7 +424,8 @@ namespace RocketFooxball.Editor
                         SetInteger(state, "slotId", slot.SlotId);
                         SetString(state, "displayName", slot.DisplayName);
                         SetEnum(state, "team", slot.Team == ParticipantTeam.Blue ? "Blue" : "Red");
-                        SetBool(state, "localParticipant", slot.IsLocal);
+                         SetBool(state, "localParticipant", slot.IsLocal);
+                         SetFloat(state, "deathWait", slot.IsLocal ? LocalRespawnDelay : BotRespawnDelay);
                         SetObjectReference(state.Presentation, "participant", state);
                         SetObjectReference(state.CameraFeedback, "participant", state);
                         SetObjectReference(state.Launcher, "ownerParticipant", state);
@@ -635,8 +448,37 @@ namespace RocketFooxball.Editor
                         if (worldVisual != null) SetLayerRecursively(worldVisual.gameObject, slot.IsLocal ? hiddenLayer : 0);
                         roster[i] = state;
                     }
-                    return roster;
-                }
+                     return roster;
+                 }
+
+                 private static void WirePresentationSceneReferences(ParticipantState[] roster, ParticipantState localParticipant, MatchController match)
+                 {
+                     if (roster == null || localParticipant == null || match == null)
+                         throw new InvalidOperationException("Presentation scene wiring requires the complete roster, local participant, and match.");
+
+                     var localCamera = localParticipant.transform.Find("Head/Camera")?.GetComponent<Camera>();
+                     if (localCamera == null)
+                         throw new InvalidOperationException("Presentation scene wiring requires the local participant camera.");
+
+                     for (var i = 0; i < roster.Length; i++)
+                     {
+                         var participant = roster[i];
+                         if (participant == null || participant.Presentation == null)
+                             throw new InvalidOperationException("Presentation scene wiring requires every participant presentation.");
+
+                         var isEnemy = participant.Team != localParticipant.Team;
+                         SetObjectReference(participant.Presentation, "localParticipant", localParticipant);
+                         SetObjectReference(participant.Presentation, "match", match);
+                         SetObjectReference(participant.Presentation, "nicknameCamera", localCamera);
+                         SetBool(participant.Presentation, "showNickname", isEnemy);
+                         SetBool(participant.Presentation, "spawnCorpseOnDeath", isEnemy);
+                         var nameplate = participant.transform.Find("Nameplate")?.GetComponent<TextMesh>();
+                         if (nameplate == null)
+                             throw new InvalidOperationException("Presentation scene wiring requires Nameplate TextMesh: " + participant.DisplayName);
+                         nameplate.text = participant.DisplayName;
+                         participant.Presentation.ConfigureSlot(participant);
+                     }
+                 }
 
                 private static ParticipantSpawnSet BuildParticipantSpawnSet(ArenaBuild arena)
                 {
@@ -677,17 +519,17 @@ namespace RocketFooxball.Editor
                     var projectilesLayer = LayerMask.NameToLayer("Projectiles");
                     if (participantsLayer < 0 || projectilesLayer < 0) throw new InvalidOperationException("Participants and Projectiles layers must exist before spawn-set composition.");
                     SetLayerMask(spawnSet, "visibilityMask", ~(1 << participantsLayer | 1 << projectilesLayer));
-                    SetFloat(spawnSet, "eyeHeight", 1.2f);
-                    SetFloat(spawnSet, "occupiedRadius", 2f);
-                    SetFloat(spawnSet, "ballDistanceWeight", 1f);
-                    SetFloat(spawnSet, "enemyGoalDistanceWeight", 0.5f);
-                    SetFloat(spawnSet, "nearestEnemyDistanceWeight", 1f);
-                    SetFloat(spawnSet, "noVisibleEnemyBonus", 4f);
-                    SetFloat(spawnSet, "visibleEnemyCountPenalty", 2f);
-                    SetFloat(spawnSet, "occupiedFallbackPenalty", 8f);
-                    SetFloat(spawnSet, "ballDistanceCap", 30f);
-                    SetFloat(spawnSet, "enemyGoalDistanceCap", 30f);
-                    SetFloat(spawnSet, "enemyDistanceCap", 30f);
+                     SetFloat(spawnSet, "eyeHeight", ParticipantSpawnSet.ExpectedEyeHeight);
+                    SetFloat(spawnSet, "occupiedRadius", ParticipantSpawnSet.ExpectedOccupiedRadius);
+                    SetFloat(spawnSet, "ballDistanceWeight", ParticipantSpawnSet.ExpectedBallDistanceWeight);
+                    SetFloat(spawnSet, "enemyGoalDistanceWeight", ParticipantSpawnSet.ExpectedEnemyGoalDistanceWeight);
+                    SetFloat(spawnSet, "nearestEnemyDistanceWeight", ParticipantSpawnSet.ExpectedNearestEnemyDistanceWeight);
+                    SetFloat(spawnSet, "noVisibleEnemyBonus", ParticipantSpawnSet.ExpectedNoVisibleEnemyBonus);
+                    SetFloat(spawnSet, "visibleEnemyCountPenalty", ParticipantSpawnSet.ExpectedVisibleEnemyCountPenalty);
+                    SetFloat(spawnSet, "occupiedFallbackPenalty", ParticipantSpawnSet.ExpectedOccupiedFallbackPenalty);
+                    SetFloat(spawnSet, "ballDistanceCap", ParticipantSpawnSet.ExpectedBallDistanceCap);
+                    SetFloat(spawnSet, "enemyGoalDistanceCap", ParticipantSpawnSet.ExpectedEnemyGoalDistanceCap);
+                    SetFloat(spawnSet, "enemyDistanceCap", ParticipantSpawnSet.ExpectedEnemyDistanceCap);
                     return spawnSet;
                 }
 

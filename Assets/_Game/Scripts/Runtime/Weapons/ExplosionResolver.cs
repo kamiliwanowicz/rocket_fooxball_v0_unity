@@ -11,16 +11,24 @@ namespace RocketFooxball.Runtime.Weapons
     [MovedFrom("RocketFooxball")]
     public sealed class ExplosionResolver : MonoBehaviour
     {
+        public const float DefaultPlayerImpulseStrength = 24f;
+        public const float DefaultBallImpulseStrength = 16f;
+        public const float DefaultOccludedForce = 0.25f;
+        public const float DefaultPlayerUpBias = 0.18f;
+        public const float DefaultDirectRocketDamage = 50f;
+        public const float DefaultEnemyRocketImpulseMultiplier = 1f;
+        public const float DefaultCameraFeedbackScale = 0.8f;
+
         [Header("Blast")]
-        [SerializeField, Min(0.1f)] private float blastRadius = 5.85f;
-        [SerializeField, Min(0f)] private float playerImpulseStrength = 24f;
-        [SerializeField, Min(0f)] private float ballImpulseStrength = 16f;
-        [SerializeField, Range(0f, 1f)] private float occludedForce = 0.25f;
-        [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
+        [SerializeField, Min(0.1f)] private float blastRadius = 11.7f;
+        [SerializeField, Min(0f)] private float playerImpulseStrength = DefaultPlayerImpulseStrength;
+        [SerializeField, Min(0f)] private float ballImpulseStrength = DefaultBallImpulseStrength;
+        [SerializeField, Range(0f, 1f)] private float occludedForce = DefaultOccludedForce;
+        [SerializeField, Range(0f, 1f)] private float playerUpBias = DefaultPlayerUpBias;
 
         [Header("Participant Damage")]
-        [SerializeField, Min(0f)] private float directRocketDamage = 50f;
-        [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = 0.5f;
+        [SerializeField, Min(0f)] private float directRocketDamage = DefaultDirectRocketDamage;
+        [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = DefaultEnemyRocketImpulseMultiplier;
 
         [Header("Rocket Jump")]
         [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
@@ -29,7 +37,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private GoalShieldSet goalShieldSet;
 
         [Header("Feedback")]
-        [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = 0.8f;
+        [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = DefaultCameraFeedbackScale;
 
         [Header("Presentation")]
         [SerializeField] private ExplosionVfxSpawner explosionVfxSpawner;
@@ -43,11 +51,38 @@ namespace RocketFooxball.Runtime.Weapons
         public float EnemyRocketImpulseMultiplier => enemyRocketImpulseMultiplier;
 
         /// <summary>Resolves one accepted rocket blast. Impact-owned gameplay targets remain eligible.</summary>
-        public void ResolveExplosion(Vector3 origin, RocketProjectile source = null, Collider impactCollider = null)
+        public void ResolveExplosion(
+            Vector3 origin,
+            RocketProjectile source = null,
+            Collider impactCollider = null)
         {
-            explosionVfxSpawner?.Play(origin);
-            targets.Clear();
+            ResolveExplosionCore(
+                origin,
+                source,
+                impactCollider,
+                source != null ? source.FiringTeam : (ParticipantTeam?)null);
+        }
+
+        /// <summary>Resolves a blast using the caller's immutable firing-team snapshot.</summary>
+        public void ResolveExplosion(
+            Vector3 origin,
+            RocketProjectile source,
+            Collider impactCollider,
+            ParticipantTeam? firingTeam)
+        {
+            ResolveExplosionCore(origin, source, impactCollider, firingTeam);
+        }
+
+        private void ResolveExplosionCore(
+            Vector3 origin,
+            RocketProjectile source,
+            Collider impactCollider,
+            ParticipantTeam? firingTeam)
+        {
             var sourceParticipant = source != null ? source.OwnerParticipant : null;
+            var teamSnapshot = ParticipantRelationshipAdapter.GetValidTeam(firingTeam);
+            explosionVfxSpawner?.Play(origin, blastRadius, teamSnapshot);
+            targets.Clear();
 
             var overlapCount = UnityEngine.Physics.OverlapSphereNonAlloc(origin, blastRadius, overlapBuffer, ~0, QueryTriggerInteraction.Ignore);
             AddImpactTarget(impactCollider, origin);
@@ -73,7 +108,7 @@ namespace RocketFooxball.Runtime.Weapons
                 }
             }
 
-            DispatchPlayers(origin, impactCollider, sourceParticipant);
+            DispatchPlayers(origin, impactCollider, sourceParticipant, teamSnapshot);
             DispatchBalls(origin, impactCollider, sourceParticipant);
         }
 
@@ -98,7 +133,11 @@ namespace RocketFooxball.Runtime.Weapons
             }
         }
 
-        private void DispatchPlayers(Vector3 origin, Collider impactCollider, ParticipantState sourceParticipant)
+        private void DispatchPlayers(
+            Vector3 origin,
+            Collider impactCollider,
+            ParticipantState sourceParticipant,
+            ParticipantTeam? firingTeam)
         {
             for (var i = 0; i < targets.PlayerCount; i++)
             {
@@ -112,7 +151,7 @@ namespace RocketFooxball.Runtime.Weapons
                 var strength = falloff * (IsOccluded(origin, targetCollider, targetCollider.ClosestPoint(origin), false, impactCollider) ? occludedForce : 1f);
                 var target = targets.GetPlayer(i);
                 // Legacy direct calls without a source projectile remain force-only.
-                var relationship = ParticipantRelationshipAdapter.Classify(target, sourceParticipant);
+                var relationship = ParticipantRelationshipAdapter.Classify(target, sourceParticipant, firingTeam);
                 if (!ParticipantRelationshipPolicy.CanReceiveRocketForce(relationship))
                 {
                     continue;
@@ -126,7 +165,12 @@ namespace RocketFooxball.Runtime.Weapons
                 if (ParticipantRelationshipPolicy.CanReceiveRocketDamage(relationship) && target.IsAlive && !target.IsImmune)
                 {
                     var damage = directRocketDamage * strength;
-                    target.TryApplyDamage(sourceParticipant, damage, ParticipantDamageCause.Rocket, "Rocket Launcher");
+                    target.TryApplyDamage(new ParticipantDamageRequest(
+                        sourceParticipant,
+                        damage,
+                        ParticipantDamageCause.Rocket,
+                        "Rocket Launcher",
+                        origin));
                 }
             }
         }
