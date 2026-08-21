@@ -423,6 +423,7 @@ namespace RocketFooxball.Editor
 
         internal static void RunCanonicalSceneInvariantSelfCheck()
         {
+            RunRepositoryInputDigestInvariantSelfCheck();
             var absolute = MovementLabManifestStore.ResolveProjectPath(MovementLabContract.ScenePath);
             if (!File.Exists(absolute)) return;
             var source = File.ReadAllText(absolute, Encoding.UTF8);
@@ -790,14 +791,54 @@ namespace RocketFooxball.Editor
 
         private static string NormalizeLineEndings(string value) => (value ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n");
 
+        private static void RunRepositoryInputDigestInvariantSelfCheck()
+        {
+            var lf = Encoding.UTF8.GetBytes("first\nsecond\n");
+            var crlf = Encoding.UTF8.GetBytes("first\r\nsecond\r\n");
+            var changed = Encoding.UTF8.GetBytes("first\nchanged\n");
+            if (!string.Equals(HashRepositoryInputBytes(lf), HashRepositoryInputBytes(crlf), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Repository input digest self-check failed: line endings changed digest.");
+            }
+            if (string.Equals(HashRepositoryInputBytes(lf), HashRepositoryInputBytes(changed), StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException("Repository input digest self-check failed: content mutation was ignored.");
+            }
+        }
+
         private static void AddRepositoryDigests(List<string> parts, string[] paths)
         {
             var expanded = ExpandRepositoryPaths(paths);
             foreach (var path in expanded.Select(MovementLabManifestStore.NormalizeRepositoryPath).Distinct(StringComparer.Ordinal).OrderBy(path => path, StringComparer.Ordinal))
             {
                 var absolute = MovementLabManifestStore.ResolveProjectPath(path);
-                parts.Add("file:" + path + ":" + (File.Exists(absolute) ? HashFile(absolute) : "missing"));
+                parts.Add("file:" + path + ":" + (File.Exists(absolute) ? HashRepositoryInputFile(absolute) : "missing"));
             }
+        }
+
+        private static string HashRepositoryInputFile(string path) => HashRepositoryInputBytes(File.ReadAllBytes(path));
+
+        private static string HashRepositoryInputBytes(byte[] bytes)
+        {
+            bytes = bytes ?? Array.Empty<byte>();
+            // Git treats NUL-containing inputs as binary; keep their exact bytes
+            // while canonicalizing checkout-specific line endings for text.
+            if (Array.IndexOf(bytes, (byte)0) >= 0 || Array.IndexOf(bytes, (byte)'\r') < 0) return HashBytes(bytes);
+
+            var normalized = new List<byte>(bytes.Length);
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                if (bytes[i] == (byte)'\r')
+                {
+                    normalized.Add((byte)'\n');
+                    if (i + 1 < bytes.Length && bytes[i + 1] == (byte)'\n') i++;
+                }
+                else
+                {
+                    normalized.Add(bytes[i]);
+                }
+            }
+            return HashBytes(normalized.ToArray());
         }
 
         private static IEnumerable<string> ExpandRepositoryPaths(string[] paths)
