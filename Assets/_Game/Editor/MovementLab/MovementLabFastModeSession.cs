@@ -547,8 +547,8 @@ namespace RocketFooxball.Editor
                  item.renderer.realtimeLightmapScaleOffset != item.realtimeLightmapScaleOffset)))
                 throw new InvalidOperationException("Fast preview restoration refused: renderer lightmap binding was changed during preview.");
             if (state.lights.Any(item => item.light != null &&
-                (item.light.lightmapBakeType != LightmapBakeType.Realtime ||
-                 item.light.shadows != (directionalHardShadows ? LightShadows.Hard : LightShadows.None) ||
+                (item.light.lightmapBakeType != (item.light == state.sun ? LightmapBakeType.Realtime : item.bakeType) ||
+                 item.light.shadows != (item.light == state.sun ? (directionalHardShadows ? LightShadows.Hard : LightShadows.None) : item.shadows) ||
                  !Mathf.Approximately(item.light.intensity, item.intensity) ||
                  !Mathf.Approximately(item.light.shadowStrength, item.shadowStrength) ||
                  !Mathf.Approximately(item.light.shadowBias, item.shadowBias) ||
