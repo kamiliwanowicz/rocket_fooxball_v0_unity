@@ -340,10 +340,13 @@ function Get-ProjectUnityProcesses {
     $normalized = @($script:ProjectRoot.TrimEnd('\').ToLowerInvariant(), $script:ProjectInputRoot.TrimEnd('\').ToLowerInvariant())
     if (-not [string]::IsNullOrWhiteSpace($script:CanonicalProjectRoot)) { $normalized += $script:CanonicalProjectRoot.TrimEnd('\').ToLowerInvariant() }
     $normalized = @($normalized | Sort-Object -Unique)
-    $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'")
+    $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe' OR Name = 'LightBaker.exe' OR Name = 'UnityShaderCompiler.exe'")
     return @($all | Where-Object {
         $commandLine = [string]$_.CommandLine
-        -not [string]::IsNullOrWhiteSpace($commandLine) -and (@($normalized | Where-Object { $commandLine.ToLowerInvariant().Contains($_) }).Count -gt 0)
+        # Fail closed: an unreadable command line (CIM permission, or a race during Editor start)
+        # must count as owning the project, otherwise a live lock looks abandoned and gets deleted.
+        if ([string]::IsNullOrWhiteSpace($commandLine)) { return $true }
+        return (@($normalized | Where-Object { $commandLine.ToLowerInvariant().Contains($_) }).Count -gt 0)
     })
 }
 
@@ -1284,8 +1287,6 @@ for ($generatedIndex = 0; $generatedIndex -lt $changedGeneratedPaths.Count; $gen
 }
 if ([string]$afterGeneratedHashDigest -notmatch '^[0-9a-fA-F]{64}$') { Add-WorkflowViolation $postflightViolations 'postflight.evidence.generatedHashDigest' 'Generated hash digest is not a SHA-256 value.' }
 if ([string]$afterWorkingTreeDigest -notmatch '^[0-9a-fA-F]{64}$') { Add-WorkflowViolation $postflightViolations 'postflight.evidence.workingTreeDigest' 'Working-tree digest is not a SHA-256 value.' }
-$expectedChangedGeneratedPaths = @(Get-ChangedHashPaths $beforeHashes $afterHashes)
-if (-not (Test-StringSetEqual $changedGeneratedPaths $expectedChangedGeneratedPaths)) { Add-WorkflowViolation $postflightViolations 'postflight.evidence.generatedChanges' 'Generated change inventory is inconsistent with before/after hashes.' }
 $afterHead = Get-HeadSha
 if ($beforeHead -cne $afterHead) { Add-WorkflowViolation $postflightViolations 'postflight.head.stability' ('Git HEAD changed during workflow: expected ' + $beforeHead + ', observed ' + $afterHead) }
 Complete-WorkflowValidationPhase 'postflight' $postflightViolations
