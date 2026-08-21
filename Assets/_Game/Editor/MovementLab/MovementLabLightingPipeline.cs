@@ -32,9 +32,12 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                private const float ProductionAmbientIntensity = 1.4f;
+                private static readonly Color ProductionAmbientSkyColor = new Color(0.55f, 0.62f, 0.70f);
+                private static readonly Color ProductionAmbientEquatorColor = new Color(0.42f, 0.46f, 0.50f);
+                private static readonly Color ProductionAmbientGroundColor = new Color(0.24f, 0.27f, 0.30f);
+                private const float ProductionAmbientIntensity = 1.35f;
                 private const float ProductionSunIntensity = 1.1f;
-                private const float ProductionSunShadowStrength = 0.70f;
+                private const float ProductionSunShadowStrength = 0.55f;
 
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
@@ -71,7 +74,10 @@ namespace RocketFooxball.Editor
 
                     RenderSettings.skybox = skyMaterial;
                     RenderSettings.sun = sun;
-                    RenderSettings.ambientMode = AmbientMode.Skybox;
+                    RenderSettings.ambientMode = AmbientMode.Trilight;
+                    RenderSettings.ambientSkyColor = ProductionAmbientSkyColor;
+                    RenderSettings.ambientEquatorColor = ProductionAmbientEquatorColor;
+                    RenderSettings.ambientGroundColor = ProductionAmbientGroundColor;
                     RenderSettings.ambientIntensity = ProductionAmbientIntensity;
                     RenderSettings.fog = true;
                     RenderSettings.fogColor = SkyHorizonColor;
@@ -378,13 +384,21 @@ namespace RocketFooxball.Editor
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - ProductionSunIntensity) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
                         sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
-                        Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f ||
-                        Mathf.Abs(RenderSettings.ambientIntensity - ProductionAmbientIntensity) > 0.001f)
+                        Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
                     {
                         throw new InvalidOperationException("MovementLab mixed sun contract invalid.");
                     }
                     MovementLabSerializedProperties.ValidatePersistentIdentity(sun, "Environment/Sun");
                     MovementLabSerializedProperties.ValidatePersistentIdentity(sunData, "Environment/Sun UniversalAdditionalLightData");
+
+                    if (RenderSettings.ambientMode != AmbientMode.Trilight ||
+                        RenderSettings.ambientSkyColor != ProductionAmbientSkyColor ||
+                        RenderSettings.ambientEquatorColor != ProductionAmbientEquatorColor ||
+                        RenderSettings.ambientGroundColor != ProductionAmbientGroundColor ||
+                        Mathf.Abs(RenderSettings.ambientIntensity - ProductionAmbientIntensity) > 0.001f)
+                    {
+                        throw new InvalidOperationException("MovementLab Trilight ambient fill contract invalid.");
+                    }
 
                     var sky = RenderSettings.skybox;
                     if (sky == null || sky.shader == null || sky.shader.name != "RocketFooxball/SunnyArenaSky" ||
