@@ -9,6 +9,7 @@ namespace RocketFooxball.Runtime.Feedback
     public sealed class ExplosionVfx : MonoBehaviour
     {
         public const float ReferenceVisualRadius = 4.5f;
+        public const float ReferenceVisualDiameter = ReferenceVisualRadius * 2f;
         public static readonly Color BlueFlashColor = new Color(0.22f, 0.62f, 1f, 1f);
         public static readonly Color RedFlashColor = new Color(1f, 0.24f, 0.20f, 1f);
         public static readonly Color NeutralFlashColor = new Color(1f, 0.55f, 0.18f, 1f);
@@ -27,6 +28,17 @@ namespace RocketFooxball.Runtime.Feedback
         public static float ComputeScale(float radius)
         {
             return ComputeVisualScale(radius);
+        }
+
+        /// <summary>Returns the world-space radius represented by an authored particle diameter.</summary>
+        public static float ComputeVisualRadius(float authoredDiameter, float requestedRadius)
+        {
+            if (!IsFinite(authoredDiameter) || !IsFinite(requestedRadius) || authoredDiameter <= 0f)
+            {
+                return 0f;
+            }
+
+            return authoredDiameter * 0.5f * ComputeVisualScale(requestedRadius);
         }
 
         /// <summary>Plays a neutral reference-sized effect for legacy callers.</summary>
@@ -58,22 +70,33 @@ namespace RocketFooxball.Runtime.Feedback
 
             var maximumLifetime = 0f;
             ParticleSystem flash = null;
+            ParticleSystem blastRadiusCue = null;
             for (var i = 0; i < systems.Length; i++)
             {
-                if (systems[i] != null && systems[i].name == "Flash")
+                var particleSystem = systems[i];
+                if (particleSystem != null && particleSystem.name == "Flash" && flash == null)
                 {
-                    flash = systems[i];
-                    break;
+                    flash = particleSystem;
+                }
+                else if (particleSystem != null && particleSystem.name == "BlastRadiusCue" && blastRadiusCue == null)
+                {
+                    blastRadiusCue = particleSystem;
                 }
             }
             if (flash == null && systems.Length > 0)
             {
                 flash = systems[0];
             }
+            var flashColor = GetFlashColor(team);
             if (flash != null)
             {
                 var flashMain = flash.main;
-                flashMain.startColor = GetFlashColor(team);
+                flashMain.startColor = flashColor;
+            }
+            if (blastRadiusCue != null)
+            {
+                var cueMain = blastRadiusCue.main;
+                cueMain.startColor = flashColor;
             }
 
             for (var i = 0; i < systems.Length; i++)
@@ -111,6 +134,11 @@ namespace RocketFooxball.Runtime.Feedback
             }
 
             return NeutralFlashColor;
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

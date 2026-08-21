@@ -110,3 +110,4 @@ InitTestScene*.unity*
 *temp*/
 temp.txt
 .vscode/
+/Tools/Blender/__pycache__/

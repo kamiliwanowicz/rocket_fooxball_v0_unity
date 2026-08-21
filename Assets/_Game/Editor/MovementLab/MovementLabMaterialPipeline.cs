@@ -481,7 +481,8 @@ namespace RocketFooxball.Editor
                     var occlusion = label == "WeaponMetal" ? LoadTexture(WeaponMetalOcclusionTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkOcclusionTexturePath) : LoadTexture(WeaponAccentOcclusionTexturePath);
                     var emission = label == "WeaponAccent" ? LoadTexture(WeaponAccentEmissionTexturePath) : null;
                     ValidatePbrMaterial(material, texture, normal, metallic, occlusion, emission, LoadTexture(DetailNormalTexturePath), Vector2.one, label);
-                    ValidatePbrScalars(material, 1f, 1f, 0.90f, 1f, label == "WeaponAccent" ? 1.5f : 0f, label);
+                    var occlusionStrength = label == "WeaponMetal" || label == "WeaponDark" ? 0.70f : 0.90f;
+                    ValidatePbrScalars(material, 1f, 1f, occlusionStrength, 1f, label == "WeaponAccent" ? 1.5f : 0f, label);
                     ValidateEmission(material, label == "WeaponAccent" ? new Color(1f, 0.16f, 0.03f, 1f) : Color.clear, label == "WeaponAccent" ? 1.5f : 0f, label);
                     if (HasSerializedKeyword(material, "_EMISSION") != (label == "WeaponAccent")) throw new InvalidOperationException(label + " emission keyword contract mismatch.");
                     var actual = material.GetColor("_BaseColor");

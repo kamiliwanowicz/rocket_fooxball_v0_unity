@@ -29,5 +29,18 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(ExplosionVfx.ComputeVisualScale(11.7f), Is.EqualTo(2.6f).Within(0.0001f));
             Assert.That(ExplosionVfx.ComputeVisualScale(0f), Is.EqualTo(0.01f / 4.5f).Within(0.0001f));
         }
+
+        [Test]
+        public void ExplosionRadiusCueMapsAuthoredDiameterToRequestedRadius()
+        {
+            Assert.That(ExplosionVfx.ReferenceVisualDiameter, Is.EqualTo(9f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(9f, 11.7f), Is.EqualTo(11.7f).Within(0.0001f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(9f, 0f), Is.EqualTo(0.01f).Within(0.0001f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(9f, -2f), Is.EqualTo(0.01f).Within(0.0001f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(0f, 11.7f), Is.EqualTo(0f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(-1f, 11.7f), Is.EqualTo(0f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(float.NaN, 11.7f), Is.EqualTo(0f));
+            Assert.That(ExplosionVfx.ComputeVisualRadius(9f, float.PositiveInfinity), Is.EqualTo(0f));
+        }
     }
 }

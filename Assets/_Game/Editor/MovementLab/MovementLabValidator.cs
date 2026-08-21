@@ -448,7 +448,7 @@ namespace RocketFooxball.Editor
             }
             accumulator.Capture("scene/render", "scene-environment", () =>
             {
-                if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Skybox ||
+                if (RenderSettings.skybox == null || RenderSettings.ambientMode != UnityEngine.Rendering.AmbientMode.Trilight ||
                     !RenderSettings.fog || Mathf.Abs(RenderSettings.fogStartDistance - 75f) > 0.01f ||
                     Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f)
                     throw new InvalidOperationException("Scene environment contract invalid.");
