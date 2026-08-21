@@ -330,18 +330,18 @@ SURFACE_PHASES = {
 # inclusive authoring bounds; PNG quantization may move a boundary by one u8.
 WEAPON_READABILITY_TARGETS = {
     "metal": {
-        "palette": ((0.18, 0.12, 0.075), (0.50, 0.36, 0.21), (0.78, 0.60, 0.36)),
+        "palette": ((0.26, 0.19, 0.12), (0.58, 0.44, 0.27), (0.78, 0.60, 0.36)),
         "metallic": 0.65,
         "smoothness": (0.52, 0.74),
-        "ao": (0.78, 0.94),
-        "luminance": (0.12, 0.22, 0.42),
+        "ao": (0.86, 0.98),
+        "luminance": (0.19, 0.36, 0.50),
     },
     "dark": {
-        "palette": ((0.045, 0.055, 0.070), (0.14, 0.16, 0.19), (0.32, 0.35, 0.38)),
+        "palette": ((0.10, 0.12, 0.15), (0.22, 0.25, 0.30), (0.32, 0.35, 0.38)),
         "metallic": 0.05,
         "smoothness": (0.38, 0.58),
-        "ao": (0.78, 0.94),
-        "luminance": (0.045, 0.09, 0.22),
+        "ao": (0.86, 0.98),
+        "luminance": (0.11, 0.20, 0.28),
     },
 }
 

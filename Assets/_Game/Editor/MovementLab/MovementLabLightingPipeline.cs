@@ -33,7 +33,8 @@ namespace RocketFooxball.Editor
     internal static partial class MovementLabLightingPipeline
     {
                 private const float ProductionAmbientIntensity = 1.4f;
-                private const float ProductionSunShadowStrength = 0.82f;
+                private const float ProductionSunIntensity = 1.1f;
+                private const float ProductionSunShadowStrength = 0.70f;
 
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
@@ -53,7 +54,7 @@ namespace RocketFooxball.Editor
                     sun.transform.SetParent(environment.transform, false);
                     sun.type = LightType.Directional;
                     sun.color = SunColor;
-                    sun.intensity = 1.1f;
+                    sun.intensity = ProductionSunIntensity;
                     sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
                     sun.lightmapBakeType = LightmapBakeType.Mixed;
                     sun.shadows = LightShadows.Soft;
@@ -374,7 +375,7 @@ namespace RocketFooxball.Editor
                     var sun = GameObject.Find("Environment/Sun")?.GetComponent<Light>();
                     var sunData = sun != null ? sun.GetComponent<UniversalAdditionalLightData>() : null;
                     if (sun == null || sunData == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
-                        sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - 1.1f) > 0.001f ||
+                        sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - ProductionSunIntensity) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
                         sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
                         Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f ||
