@@ -56,6 +56,8 @@ Copy-Item -LiteralPath $sourcePath -Destination $snapshotPath -ErrorAction Stop
 4. Create unique `codex/<plan-slug>-<attempt-id>` branch + short isolated worktree from exact `launch_head_sha`; confirm child writability and worktree root/branch/`HEAD`.
 5. Bind full `HEAD` as immutable `start_sha`; derive/bind objective, requirements, exact dependency SHAs, ownership, checks, proof boundary, evidence from snapshot.
 
+In `user-direct`, the clean committed `launch_head_sha` is the authoritative attempt baseline. A plan field or task check named `Baseline` that records an older SHA is ancestry-checked provenance/dependency, not an equality requirement: bind checks, generated comparators, and final diff ranges that say `baseline` to `start_sha`. Require every recorded baseline/dependency SHA to be an ancestor of `start_sha`. Block when ancestry fails or launch dirt overlaps owned paths. Use an older exact SHA as `start_sha` only when the user explicitly requests execution from that historical SHA; do not infer historical execution from a plan's `Baseline` label alone.
+
 Missing critical boundary or creation failure -> `blocked` with evidence + one needed action. Keep completed worktree/branch for inspection; integration requires explicit user authority.
 
 ## Artifact gate
