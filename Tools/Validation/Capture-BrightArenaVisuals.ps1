@@ -1,126 +1,42 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectPath,
-    [switch]$FinalizeEvidence,
-    [string]$SourceDirectory,
-    [string]$TargetDirectory,
-    [int]$ParentPid,
-    [string]$FinalizerLog
+    [Parameter(Mandatory = $true)][string]$ProjectPath,
+    [Parameter(Mandatory = $true)][string]$EvidenceRoot,
+    [Parameter(Mandatory = $true)][string]$AttemptId
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ([string]::IsNullOrEmpty($ProjectPath)) { $ProjectPath = Split-Path -Parent (Split-Path -Parent $PSScriptRoot) }
 
-if ($FinalizeEvidence) {
-    try {
-        if ([string]::IsNullOrEmpty($SourceDirectory) -or [string]::IsNullOrEmpty($TargetDirectory) -or $ParentPid -le 0) { throw 'FinalizeEvidence requires source/target/parent.' }
-        $sourceFullPath = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\')
-        $targetFullPath = [System.IO.Path]::GetFullPath($TargetDirectory).TrimEnd('\')
-        $requiredEvidenceRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\Temp\BrightArenaVisuals')).TrimEnd('\')
-        $evidencePrefix = $requiredEvidenceRoot + [System.IO.Path]::DirectorySeparatorChar
-        if (-not $sourceFullPath.Equals($targetFullPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence finalizer must preserve the original Temp evidence path.' }
-        if (-not $sourceFullPath.StartsWith($evidencePrefix, [StringComparison]::OrdinalIgnoreCase)) { throw 'Evidence finalizer path is outside Temp/BrightArenaVisuals.' }
-        if (-not (Test-Path -LiteralPath $sourceFullPath -PathType Container)) { throw 'Evidence source directory is missing.' }
-        $manifestSource = Join-Path $SourceDirectory 'BrightArenaVisualManifest.json'
-        $readDeadline = [DateTime]::UtcNow.AddSeconds(45)
-        while (-not (Test-Path -LiteralPath $manifestSource -PathType Leaf) -and $null -ne (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $readDeadline) { Start-Sleep -Milliseconds 50 }
-        if (-not (Test-Path -LiteralPath $manifestSource -PathType Leaf)) { throw 'Capture manifest was not ready before Unity parent exited.' }
-        $payload = [ordered]@{}
-        foreach ($sourceFile in Get-ChildItem -LiteralPath $SourceDirectory -File -Force) {
-            $payload[$sourceFile.Name] = [IO.File]::ReadAllBytes($sourceFile.FullName)
-        }
-        $deadline = [DateTime]::UtcNow.AddSeconds(45)
-        while ($null -ne (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue) -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
-        if ($null -ne (Get-Process -Id $ParentPid -ErrorAction SilentlyContinue)) { throw 'Unity parent remained during evidence finalization.' }
-        if (Test-Path -LiteralPath $targetFullPath) {
-            foreach ($existingFile in Get-ChildItem -LiteralPath $targetFullPath -File -Force) { [IO.File]::SetAttributes($existingFile.FullName, [IO.FileAttributes]::Normal) }
-            [IO.File]::SetAttributes($targetFullPath, [IO.FileAttributes]::Directory)
-        } else {
-            [IO.Directory]::CreateDirectory($targetFullPath) | Out-Null
-        }
-        foreach ($name in $payload.Keys) { [IO.File]::WriteAllBytes((Join-Path $targetFullPath $name), $payload[$name]) }
-        foreach ($name in $payload.Keys) {
-            $restoredPath = Join-Path $targetFullPath $name
-            if (-not (Test-Path -LiteralPath $restoredPath -PathType Leaf) -or (Get-Item -LiteralPath $restoredPath).Length -ne $payload[$name].Length) { throw "Evidence finalizer failed to preserve $name." }
-        }
-        if (-not [string]::IsNullOrEmpty($FinalizerLog)) { [IO.File]::WriteAllText($FinalizerLog, 'FINALIZER_PASS') }
-        exit 0
-    } catch {
-        if (-not [string]::IsNullOrEmpty($FinalizerLog)) { [IO.File]::WriteAllText($FinalizerLog, ($_ | Out-String)) }
-        exit 1
-    }
+$ProjectPath = [System.IO.Path]::GetFullPath($ProjectPath).TrimEnd('\')
+$EvidenceRoot = [System.IO.Path]::GetFullPath($EvidenceRoot).TrimEnd('\')
+if ($AttemptId -notmatch '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' -or $AttemptId -in @('.', '..')) {
+    throw 'AttemptId must be 1-64 filename-safe characters.'
+}
+if ($EvidenceRoot.StartsWith('C:\', [StringComparison]::OrdinalIgnoreCase) -and
+    -not $EvidenceRoot.StartsWith('C:\wt\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'EvidenceRoot on C: must be below C:\wt.'
 }
 
-$ProjectPath = [System.IO.Path]::GetFullPath($ProjectPath)
-$UnityVersion = '6000.5.6f1'
-$UnityPath = Join-Path ${env:ProgramFiles} ('Unity\Hub\Editor\' + $UnityVersion + '\Editor\Unity.exe')
-$LogDirectory = Join-Path $ProjectPath 'Temp/BrightArenaVisuals'
-$LogPath = Join-Path $LogDirectory ('Capture-' + [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ') + '.log')
-$LockPaths = @(
-    (Join-Path $ProjectPath 'Temp/UnityLockfile'),
-    (Join-Path $ProjectPath 'Library/UnityLockfile')
-)
+$EvidenceDirectory = Join-Path $EvidenceRoot $AttemptId
+$LogPath = Join-Path $EvidenceRoot ("Capture-$AttemptId.log")
+$ResultPath = Join-Path $EvidenceDirectory 'CaptureResult.json'
+$LockPaths = @((Join-Path $ProjectPath 'Temp/UnityLockfile'), (Join-Path $ProjectPath 'Library/UnityLockfile'))
 $SourceScopeRoots = @('Assets', 'Tools', 'ProjectSettings', 'Packages')
 $RequiredSourceFiles = @('Assets/_Game/Editor/BrightArenaVisualCapture.cs', 'Tools/Validation/Capture-BrightArenaVisuals.ps1')
 
 function Get-ProjectUnityProcesses {
-    $normalized = $ProjectPath.TrimEnd('\').ToLowerInvariant()
-    Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" | Where-Object {
+    $normalized = $ProjectPath.ToLowerInvariant()
+    @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" | Where-Object {
         $commandLine = [string]$_.CommandLine
-        if ([string]::IsNullOrEmpty($commandLine)) { return $false }
-        $commandLine.ToLowerInvariant().Contains($normalized)
-    }
+        -not [string]::IsNullOrEmpty($commandLine) -and $commandLine.ToLowerInvariant().Contains($normalized)
+    })
 }
 
 function Assert-NoProjectProcessOrLock {
-    $active = @(Get-ProjectUnityProcesses)
-    if ($active.Count -gt 0) {
-        throw "Active Unity process already owns project: $ProjectPath"
-    }
+    if (@(Get-ProjectUnityProcesses).Count -gt 0) { throw "Active Unity process already owns project: $ProjectPath" }
     foreach ($lockPath in $LockPaths) {
-        if (Test-Path -LiteralPath $lockPath) {
-            throw "Unity project lock exists: $lockPath"
-        }
-    }
-}
-
-function Get-ScopedGitStatus {
-    $status = & git -C $ProjectPath status --porcelain=v1 --untracked-files=all -- $SourceScopeRoots
-    if ($LASTEXITCODE -ne 0) { throw 'git status failed.' }
-    return (($status -join "`n").Trim())
-}
-
-function Get-HeadSha {
-    $sha = (& git -C $ProjectPath rev-parse --verify HEAD | Out-String).Trim().ToLowerInvariant()
-    if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw 'Unable to resolve exact Git HEAD SHA.' }
-    return $sha
-}
-
-function Get-ScopedHashes {
-    $map = [ordered]@{}
-    foreach ($relativePath in $RequiredSourceFiles) {
-        $absolutePath = Join-Path $ProjectPath $relativePath
-        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Required source file missing before/after capture: $relativePath" }
-        $map[$relativePath] = (Get-FileHash -LiteralPath $absolutePath -Algorithm SHA256).Hash.ToLowerInvariant()
-    }
-    return $map
-}
-
-function Assert-ManifestSource {
-    param(
-        [Parameter(Mandatory = $true)]$Manifest,
-        [Parameter(Mandatory = $true)][string]$ExpectedSha,
-        [Parameter(Mandatory = $true)]$ExpectedHashes
-    )
-    if ($null -eq $Manifest.source) { throw 'Capture manifest source provenance is missing.' }
-    if ([string]$Manifest.source.gitSha -ne $ExpectedSha) { throw "Capture manifest Git SHA mismatch: expected $ExpectedSha, observed $($Manifest.source.gitSha)." }
-    $manifestFiles = @($Manifest.source.fileHashes)
-    foreach ($relativePath in $RequiredSourceFiles) {
-        $expectedHash = [string]$ExpectedHashes[$relativePath]
-        if ([string]::IsNullOrEmpty($expectedHash)) { throw "Required source hash missing before capture: $relativePath" }
-        $entry = $manifestFiles | Where-Object { [string]$_.path -eq $relativePath } | Select-Object -First 1
-        if ($null -eq $entry -or [string]$entry.sha256 -ne $expectedHash) { throw "Capture manifest source hash mismatch: $relativePath" }
+        if (Test-Path -LiteralPath $lockPath) { throw "Unity project lock exists: $lockPath" }
     }
 }
 
@@ -128,71 +44,151 @@ function Wait-ProjectRelease {
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
     do {
         $active = @(Get-ProjectUnityProcesses)
-        $lockFound = $false
-        foreach ($lockPath in $LockPaths) {
-            if (Test-Path -LiteralPath $lockPath) {
-                if ($active.Count -eq 0) {
-                    # Unity 6000 can leave zero-byte lock sentinel after a
-                    # batch exit. No process owns it now; remove only this
-                    # validated project-local sentinel, then verify absence.
-                    [System.IO.File]::Delete((Resolve-Path -LiteralPath $lockPath).Path)
-                }
-                $lockFound = $lockFound -or (Test-Path -LiteralPath $lockPath)
+        $locks = @($LockPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+        if ($active.Count -eq 0 -and $locks.Count -eq 0) { return }
+        if ($active.Count -eq 0) {
+            foreach ($lockPath in $locks) {
+                if ((Get-Item -LiteralPath $lockPath).Length -eq 0) { Remove-Item -LiteralPath $lockPath -Force }
             }
         }
-        if ($active.Count -eq 0 -and -not $lockFound) { return }
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Unity process or project lock remained after capture.'
 }
 
+function Get-ScopedGitStatus {
+    $status = & git -C $ProjectPath status --porcelain=v1 --untracked-files=all -- $SourceScopeRoots
+    if ($LASTEXITCODE -ne 0) { throw 'git status failed.' }
+    (($status -join "`n").Trim())
+}
+
+function Get-HeadSha {
+    $sha = (& git -C $ProjectPath rev-parse --verify HEAD | Out-String).Trim().ToLowerInvariant()
+    if ($LASTEXITCODE -ne 0 -or $sha -notmatch '^[0-9a-f]{40}$') { throw 'Unable to resolve exact Git HEAD SHA.' }
+    $sha
+}
+
+function Get-ScopedHashes {
+    $map = [ordered]@{}
+    foreach ($relativePath in $RequiredSourceFiles) {
+        $absolutePath = Join-Path $ProjectPath $relativePath
+        if (-not (Test-Path -LiteralPath $absolutePath -PathType Leaf)) { throw "Required capture source missing: $relativePath" }
+        $map[$relativePath] = (Get-FileHash -LiteralPath $absolutePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    }
+    $map
+}
+
+function Assert-ManifestSource {
+    param([Parameter(Mandatory = $true)]$Manifest, [Parameter(Mandatory = $true)][string]$ExpectedSha, [Parameter(Mandatory = $true)]$ExpectedHashes)
+    if ($null -eq $Manifest.source -or [string]$Manifest.source.gitSha -ne $ExpectedSha) { throw 'Capture manifest Git provenance mismatch.' }
+    foreach ($relativePath in $RequiredSourceFiles) {
+        $entry = @($Manifest.source.fileHashes) | Where-Object { [string]$_.path -eq $relativePath } | Select-Object -First 1
+        if ($null -eq $entry -or [string]$entry.sha256 -ne [string]$ExpectedHashes[$relativePath]) { throw "Capture source hash mismatch: $relativePath" }
+    }
+}
+
+function Assert-PngDimensions {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    Add-Type -AssemblyName System.Drawing
+    $image = [System.Drawing.Image]::FromFile($Path)
+    try {
+        if ($image.Width -ne 1920 -or $image.Height -ne 1080) { throw "Capture image is not 1920x1080: $Path" }
+    } finally { $image.Dispose() }
+}
+
 if (-not (Test-Path -LiteralPath $ProjectPath -PathType Container)) { throw "Project path not found: $ProjectPath" }
+if (Test-Path -LiteralPath $EvidenceDirectory) { throw "Attempt evidence already exists: $EvidenceDirectory" }
+New-Item -ItemType Directory -Force -Path $EvidenceRoot | Out-Null
+$versionFile = Join-Path $ProjectPath 'ProjectSettings/ProjectVersion.txt'
+if (-not (Test-Path -LiteralPath $versionFile -PathType Leaf)) { throw 'ProjectVersion.txt missing.' }
+$versionMatch = [Regex]::Match((Get-Content -Raw -LiteralPath $versionFile), 'm_EditorVersion:\s*([^\r\n]+)')
+if (-not $versionMatch.Success) { throw 'Unable to read Unity editor version.' }
+$UnityVersion = $versionMatch.Groups[1].Value.Trim()
+$UnityPath = Join-Path ${env:ProgramFiles} ("Unity\Hub\Editor\$UnityVersion\Editor\Unity.exe")
 if (-not (Test-Path -LiteralPath $UnityPath -PathType Leaf)) { throw "Unity $UnityVersion not found: $UnityPath" }
-if (-not (Test-Path -LiteralPath (Join-Path $ProjectPath 'ProjectSettings/ProjectVersion.txt') -PathType Leaf)) { throw 'ProjectVersion.txt missing.' }
-$projectVersion = Get-Content -Raw (Join-Path $ProjectPath 'ProjectSettings/ProjectVersion.txt')
-if ($projectVersion -notmatch ('m_EditorVersion:\s*' + [Regex]::Escape($UnityVersion))) { throw "Project Unity version is not $UnityVersion." }
-New-Item -ItemType Directory -Force -Path $LogDirectory | Out-Null
+
 Assert-NoProjectProcessOrLock
+$harnessStopwatch = [Diagnostics.Stopwatch]::StartNew()
+$harnessStdoutPath = Join-Path $EvidenceRoot ("Harness-$AttemptId.stdout.log")
+$harnessStderrPath = Join-Path $EvidenceRoot ("Harness-$AttemptId.stderr.log")
+$harnessArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $ProjectPath 'Tools/Tests/Invoke-HarnessTests.ps1') + '"'))
+$harnessProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $harnessArguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $harnessStdoutPath -RedirectStandardError $harnessStderrPath
+$harnessTimedOut = -not $harnessProcess.WaitForExit(90000)
+if ($harnessTimedOut) {
+    try {
+        if (-not $harnessProcess.HasExited) { $harnessProcess.Kill() }
+    } catch [InvalidOperationException] {
+        if (-not $harnessProcess.HasExited) { throw }
+    }
+    $harnessProcess.WaitForExit()
+}
+$harnessStopwatch.Stop()
+if (Test-Path -LiteralPath $harnessStdoutPath) { Get-Content -LiteralPath $harnessStdoutPath }
+if ((Test-Path -LiteralPath $harnessStderrPath) -and (Get-Item -LiteralPath $harnessStderrPath).Length -gt 0) {
+    Get-Content -LiteralPath $harnessStderrPath | ForEach-Object { Write-Output ('HARNESS_STDERR ' + $_) }
+}
+if ($harnessTimedOut) { throw "Harness pre-gate exceeded 90 seconds and was terminated. See $harnessStdoutPath and $harnessStderrPath." }
+$harnessExitCode = $harnessProcess.ExitCode
+if ($harnessExitCode -ne 0) { throw "Harness pre-gate failed with exit code $harnessExitCode. See $harnessStdoutPath and $harnessStderrPath." }
+Assert-NoProjectProcessOrLock
+
 $beforeStatus = Get-ScopedGitStatus
 $expectedGitSha = Get-HeadSha
 $beforeHashes = Get-ScopedHashes
 $arguments = @(
-    '-batchmode',
-    '-quit',
-    '-projectPath', $ProjectPath,
+    '-batchmode', '-quit',
+    '-projectPath', ('"' + $ProjectPath + '"'),
     '-executeMethod', 'RocketFooxball.Editor.BrightArenaVisualCapture.Capture',
-    '-logFile', $LogPath
+    '-captureEvidenceRoot', ('"' + $EvidenceRoot + '"'),
+    '-captureAttemptId', $AttemptId,
+    '-logFile', ('"' + $LogPath + '"')
 )
-Write-Output ('BRIGHT_ARENA_CAPTURE_UNITY ' + $UnityPath)
-Write-Output ('BRIGHT_ARENA_CAPTURE_LOG ' + $LogPath)
+Write-Output ('MOVEMENT_LAB_CAPTURE_UNITY ' + $UnityPath)
+Write-Output ('MOVEMENT_LAB_CAPTURE_LOG ' + $LogPath)
+$unityStopwatch = [Diagnostics.Stopwatch]::StartNew()
 $unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+$unityStopwatch.Stop()
 $exitCode = $unityProcess.ExitCode
 Wait-ProjectRelease
-if ($exitCode -ne 0) {
-    throw "Unity capture failed with exit code $exitCode. See $LogPath"
-}
+if ($exitCode -ne 0) { throw "Unity capture failed with exit code $exitCode. See $LogPath" }
 if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) { throw "Unity log missing: $LogPath" }
-$logText = Get-Content -Raw -LiteralPath $LogPath
-$marker = [Regex]::Match($logText, 'BRIGHT_ARENA_CAPTURE_PASS\s+(.+)')
+
+$marker = [Regex]::Match((Get-Content -Raw -LiteralPath $LogPath), 'BRIGHT_ARENA_CAPTURE_PASS\s+(.+)')
 if (-not $marker.Success) { throw "Capture pass marker missing from Unity log: $LogPath" }
-$manifestPath = $marker.Groups[1].Value.Trim()
-for ($i = 0; $i -lt 120 -and -not (Test-Path -LiteralPath $manifestPath -PathType Leaf); $i++) { Start-Sleep -Milliseconds 250 }
+$manifestPath = [System.IO.Path]::GetFullPath($marker.Groups[1].Value.Trim())
+$expectedManifestPath = Join-Path $EvidenceDirectory 'BrightArenaVisualManifest.json'
+if (-not $manifestPath.Equals($expectedManifestPath, [StringComparison]::OrdinalIgnoreCase)) { throw "Unexpected manifest path: $manifestPath" }
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "Capture manifest missing: $manifestPath" }
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 if (-not $manifest.pass) { throw 'Capture manifest pass=false.' }
 Assert-ManifestSource -Manifest $manifest -ExpectedSha $expectedGitSha -ExpectedHashes $beforeHashes
-if ($null -eq $manifest.images -or $manifest.images.Count -ne 6) { throw 'Capture manifest must contain six images.' }
-foreach ($image in $manifest.images) {
-    if (-not (Test-Path -LiteralPath $image.path -PathType Leaf)) { throw "Capture image missing: $($image.path)" }
-    $hash = (Get-FileHash -LiteralPath $image.path -Algorithm SHA256).Hash.ToLowerInvariant()
-    if ($hash -ne $image.sha256.ToLowerInvariant()) { throw "Capture image SHA-256 mismatch: $($image.path)" }
-    if ((Get-Item -LiteralPath $image.path).Length -le 0) { throw "Capture image is empty: $($image.path)" }
+if ($null -eq $manifest.images -or @($manifest.images).Count -ne 6) { throw 'Capture manifest must contain six images.' }
+
+$qualityCounts = @{ High = 0; Low = 0 }
+$resultImages = @()
+foreach ($item in @($manifest.images)) {
+    $imagePath = [System.IO.Path]::GetFullPath([string]$item.path)
+    if (-not $imagePath.StartsWith($EvidenceDirectory + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "Image escaped attempt directory: $imagePath" }
+    if (-not (Test-Path -LiteralPath $imagePath -PathType Leaf)) { throw "Capture image missing: $imagePath" }
+    Assert-PngDimensions -Path $imagePath
+    if ([int]$item.width -ne 1920 -or [int]$item.height -ne 1080) { throw "Manifest dimensions invalid: $imagePath" }
+    $hash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($hash -ne ([string]$item.sha256).ToLowerInvariant()) { throw "Capture hash mismatch: $imagePath" }
+    $quality = [string]$item.qualityLevel
+    if (-not $qualityCounts.ContainsKey($quality)) { throw "Unexpected quality: $quality" }
+    $qualityCounts[$quality]++
+    $resultImages += [ordered]@{ view = [string]$item.view; quality = $quality; path = $imagePath; sha256 = $hash; width = 1920; height = 1080 }
 }
-$afterStatus = Get-ScopedGitStatus
-if ($beforeStatus -cne $afterStatus) { throw 'Git status changed during non-mutating capture.' }
-$afterGitSha = Get-HeadSha
-if ($expectedGitSha -cne $afterGitSha) { throw "Git HEAD changed during capture: expected $expectedGitSha, observed $afterGitSha." }
-Write-Output ('BRIGHT_ARENA_CAPTURE_EVIDENCE ' + $manifest.evidenceDirectory)
-Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST ' + $manifestPath)
-Write-Output ('BRIGHT_ARENA_CAPTURE_MANIFEST_SHA256 ' + (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant())
-Write-Output ('BRIGHT_ARENA_CAPTURE_EXIT ' + $exitCode)
+if ($qualityCounts.High -ne 3 -or $qualityCounts.Low -ne 3) { throw 'Capture must contain three High and three Low images.' }
+if ($beforeStatus -cne (Get-ScopedGitStatus)) { throw 'Git status changed during non-mutating capture.' }
+if ($expectedGitSha -cne (Get-HeadSha)) { throw 'Git HEAD changed during capture.' }
+
+$result = [ordered]@{
+    schemaVersion = 1; pass = $true; attemptId = $AttemptId; projectPath = $ProjectPath
+    evidenceDirectory = $EvidenceDirectory; manifestPath = $manifestPath; logPath = $LogPath; unityExitCode = $exitCode
+    harnessMilliseconds = [Math]::Round($harnessStopwatch.Elapsed.TotalMilliseconds)
+    unityMilliseconds = [Math]::Round($unityStopwatch.Elapsed.TotalMilliseconds); images = $resultImages
+}
+[System.IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
+Write-Output ('MOVEMENT_LAB_CAPTURE_RESULT ' + $ResultPath)
+Write-Output (($result | ConvertTo-Json -Depth 5 -Compress))
