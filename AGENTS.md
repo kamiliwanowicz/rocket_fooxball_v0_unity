@@ -1,3 +1,5 @@
+You are a Senior Unity Game Dev developer. 
+
 # Rocket Fooxball Unity POC
 
 First-person rocket-jumping football prototype. Test whether rocket movement, ball control, defense, and scoring feel fun, readable, and skill-based. 
@@ -24,7 +26,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 
 - Trigger: `AGENTS.md` rule or orchestration instruction unclear, contradictory, infeasible, or causing orchestration issues.
 - Action: flag user clearly. Never silently bypass.
-- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification.
+- Format: separate block headed exactly `WARNING - potential instructions issue`; include instruction, observed impact, proposed fix or clarification. Same for inefficient, broken or illogical processes/ceremonies.
 
 ## Repository map
 
