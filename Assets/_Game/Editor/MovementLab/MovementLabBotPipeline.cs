@@ -187,7 +187,7 @@ namespace RocketFooxball.Editor
                 UnityEngine.Object.FindObjectsByType<BotPerception>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 6 ||
                 UnityEngine.Object.FindObjectsByType<BotNavigationGraph>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 1 ||
                 UnityEngine.Object.FindObjectsByType<BotTeamRoleCoordinator>(FindObjectsInactive.Include, FindObjectsSortMode.None).Length != 2)
-                throw new InvalidOperationException("MovementLab must contain exactly six participant bot sets, one graph, and two coordinators; scene replacements are not allowed.");
+                throw new InvalidOperationException("MovementLab must contain exactly six participant bot sets, one graph, and two coordinators; the builder produced a different component population. Check bot composition for duplicate instantiation or stray AddComponent calls.");
             if (!blueCoordinator.enabled || !redCoordinator.enabled)
                 throw new InvalidOperationException("Both bot role coordinators must be enabled after composition.");
             if (!graph.TryValidate(out var graphReason)) throw new InvalidOperationException("Bot navigation graph is invalid: " + graphReason);
@@ -585,7 +585,7 @@ namespace RocketFooxball.Editor
             ValidatePersistentIdentity(instance, label);
             var source = PrefabUtility.GetCorrespondingObjectFromSource(instance);
             if (source == null || source != expected || !string.Equals(AssetDatabase.GetAssetPath(source), MovementLabContract.PlayerPrefabPath, StringComparison.Ordinal))
-                throw new InvalidOperationException(label + " must correspond to the Player prefab component; scene-added or replacement components are not allowed.");
+                throw new InvalidOperationException(label + " must correspond to the Player prefab component, but its prefab source link is absent or points elsewhere; the builder added this component to the scene instance instead of instantiating it from the Player prefab.");
             ValidatePersistentIdentity(source, label + " prefab source");
         }
 
