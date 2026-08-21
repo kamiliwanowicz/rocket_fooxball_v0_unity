@@ -64,14 +64,16 @@ function Invoke-GitNullDelimitedCapture {
     $process = New-Object Diagnostics.Process
     $process.StartInfo = $startInfo
     [void]$process.Start()
+    $outputTask = $process.StandardOutput.ReadToEndAsync()
     $errorTask = $process.StandardError.ReadToEndAsync()
-    $output = $process.StandardOutput.ReadToEnd()
-    if (-not $process.WaitForExit(120000)) {
+    $timedOut = -not $process.WaitForExit(120000)
+    if ($timedOut) {
         try { $process.Kill() } catch { }
-        throw 'Git path listing timed out after 120s.'
     }
     $process.WaitForExit()
+    $output = $outputTask.Result
     $errorOutput = $errorTask.Result
+    if ($timedOut) { throw 'Git path listing timed out after 120s.' }
     if ($process.ExitCode -ne 0) { throw ('Git path listing failed: ' + $errorOutput.Trim()) }
     return ,@($output.Split([char[]]@([char]0), [StringSplitOptions]::RemoveEmptyEntries))
 }

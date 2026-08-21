@@ -185,7 +185,11 @@ function Test-GeneratedYamlComparatorCoverage {
     if ($outsideInventoryExitCode -eq 0 -or ($outsideInventory -join "`n") -notmatch 'outside the authoritative generated inventory') {
         return New-HarnessFail ('non-authoritative requested path did not fail closed: ' + ($outsideInventory -join ' | '))
     }
-    return New-HarnessPass 'controller/cue paths covered; uncovered and non-authoritative requests rejected'
+    $pipeDrainResult = Test-GeneratedYamlComparatorAsyncPipeDrain $State
+    if (-not [bool](Get-HarnessField $pipeDrainResult 'pass')) {
+        return New-HarnessFail ('async pipe drain contract failed: ' + [string](Get-HarnessField $pipeDrainResult 'message'))
+    }
+    return New-HarnessPass 'controller/cue paths covered; uncovered and non-authoritative requests rejected; async pipe drain guarded'
 }
 
 function Test-GeneratedYamlComparatorDefaultMetaCoverage {
@@ -449,7 +453,88 @@ function Test-PlanOnlyPendingOnly {
     }, $true))
     if ($condition.Count -ne 1) { return New-HarnessFail 'pending assignment is not guarded by exact if ($PlanOnly)' }
     if ($condition[0].Extent.Text -match '(?im)\$row\.status\s*=\s*''pending''') { return New-HarnessFail 'PlanOnly branch assigns pending to arbitrary rows' }
-    return New-HarnessPass 'PlanOnly pending assignment is production-bake-only'
+    $outcomeResult = Test-ProductionBakeOutcomePreserved $State
+    if (-not [bool](Get-HarnessField $outcomeResult 'pass')) {
+        return New-HarnessFail ('production bake outcome contract failed: ' + [string](Get-HarnessField $outcomeResult 'message'))
+    }
+    return New-HarnessPass 'PlanOnly pending assignment is production-bake-only; production bake outcome preserved'
+}
+
+function Test-ProductionBakeOutcomePreserved {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $assertPreserved = {
+        param([string]$Source)
+        $ast = Get-HarnessAst $Source
+        $outcomeAssignments = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                [string]$Node.Extent.Text -match '(?im)^\s*\$productionBakeRow\.status\s*=\s*\[string\]\$productionBakeOutcome\.status\s*$'
+        }, $true))
+        if ($outcomeAssignments.Count -ne 1) { return 'production bake outcome must be assigned exactly once' }
+
+        $executedAssignments = @($ast.FindAll({
+            param($Node)
+            $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+                [string]$Node.Extent.Text -match '(?im)^\s*\$row\.status\s*=\s*''executed''\s*$'
+        }, $true))
+        if ($executedAssignments.Count -ne 1) { return 'generic executed status assignment must occur exactly once' }
+
+        $ancestor = $executedAssignments[0].Parent
+        while ($null -ne $ancestor) {
+            if ($ancestor -is [System.Management.Automation.Language.IfStatementAst] -and
+                [string]$ancestor.Extent.Text -match '(?im)^\s*if\s*\(\s*\[string\]\$row\.check_id\s+-ne\s+''production-bake''\s*\)') {
+                return $null
+            }
+            $ancestor = $ancestor.Parent
+        }
+        return 'generic executed status assignment does not exclude production-bake'
+    }
+
+    $failure = & $assertPreserved $State.CurrentSource
+    if ($null -ne $failure) { return New-HarnessFail $failure }
+    $expected = "if ([string]`$row.check_id -ne 'production-bake') { `$row.status = 'executed' }"
+    $scratch = $State.CurrentSource.Replace($expected, "if (`$true) { `$row.status = 'executed' }")
+    $scratchFailure = & $assertPreserved $scratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'production-bake overwrite scratch unexpectedly passed' }
+    return New-HarnessPass 'production-bake reused/executed outcome survives generic ledger finalization'
+}
+
+function Test-GeneratedYamlComparatorAsyncPipeDrain {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $assertAsyncDrain = {
+        param([string]$Source)
+        $function = Get-HarnessFunctionAst $Source 'Invoke-GitNullDelimitedCapture'
+        $text = [string]$function.Extent.Text
+        $required = @(
+            '$outputTask = $process.StandardOutput.ReadToEndAsync()',
+            '$errorTask = $process.StandardError.ReadToEndAsync()',
+            '$timedOut = -not $process.WaitForExit(120000)',
+            '$process.WaitForExit()',
+            '$output = $outputTask.Result',
+            '$errorOutput = $errorTask.Result'
+        )
+        foreach ($needle in $required) {
+            if ($text.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return 'missing required pipe-drain operation: ' + $needle }
+        }
+        $killIndex = $text.IndexOf('$process.Kill()', [StringComparison]::Ordinal)
+        $waitIndex = $text.IndexOf('$process.WaitForExit()', [StringComparison]::Ordinal)
+        $outputIndex = $text.IndexOf('$output = $outputTask.Result', [StringComparison]::Ordinal)
+        $errorIndex = $text.IndexOf('$errorOutput = $errorTask.Result', [StringComparison]::Ordinal)
+        if ($killIndex -lt 0 -or $killIndex -gt $waitIndex -or $waitIndex -gt $outputIndex -or $outputIndex -gt $errorIndex) {
+            return 'timeout cleanup must kill, wait, then consume both asynchronous stream tasks'
+        }
+        return $null
+    }
+
+    $source = [IO.File]::ReadAllText($State.ComparatorPath)
+    $failure = & $assertAsyncDrain $source
+    if ($null -ne $failure) { return New-HarnessFail $failure }
+    $scratch = $source.Replace('StandardOutput.ReadToEndAsync()', 'StandardOutput.ReadToEnd()')
+    $scratchFailure = & $assertAsyncDrain $scratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'sequential stdout drain scratch unexpectedly passed' }
+    return New-HarnessPass 'stdout/stderr drain asynchronously; timeout kills, waits, then consumes both tasks'
 }
 
 function Test-GuardG1 {

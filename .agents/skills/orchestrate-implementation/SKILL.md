@@ -271,17 +271,17 @@ Orchestrator assigns checkpoint-scoped finding IDs.
 
 ## Check ledger
 
-Declared check schema -> [`Check contract`](../write-orchestrator-coding-plan/SKILL.md#check-contract). Workflow owns `check-ledger.json`; state records absolute path + SHA-256 only. Execution adds `status`, `executed_sha`, `validated_sha`, `evidence_path`, `evidence_digest`, `subsumed_checks`. One owner binds every production-final row.
+Declared check schema -> [`Check contract`](../write-orchestrator-coding-plan/SKILL.md#check-contract). Workflow owns `check-ledger.json`; state records absolute path + SHA-256 only. Execution records `status`, `executed_sha`, `validated_sha`, `evidence_path`, and `evidence_digest`. One owner binds every production-final row.
 
-Final verification runs pending/invalidated rows only; exact-SHA evidence reusable. Consume workflow `invalidation_paths` from ledger. Merge/fix path intersection invalidates row; lighting-input intersection follows production-bake gate. Workers claim only assigned checks.
+After a merge or accepted fix, final verification reruns every applicable workflow check. Prior exact-SHA evidence remains audit evidence only; production bake determines reuse internally from current lighting inputs. Workers claim only assigned checks.
 
 ## Execution loop
 
 1. Parse graph/tasks/checkpoints; for each ready disjoint fan-out group, bind the complete concurrent/fan-out ownership/generated-output map into every sibling contract before its first writer dispatch. Dispatch a later sibling only after every already-running potentially overlapping writer is already bound to protect that sibling's exact paths; otherwise wait or serialize. Then dispatch every ready disjoint sibling, otherwise next serial writer.
 2. Process every terminal writer -> inspect `Unowned Churn`, then verify report/files/Git/scope/checks/identity. Handle recurrence before next writer dispatch; same unowned-churn path set across two dispatches -> investigator directly, not writer replacement. Eligible complete writer -> [Worker -> reviewer barrier](#worker---reviewer-barrier) -> reviewer. Repeated issue -> [Repeated-struggle takeover](#repeated-struggle-takeover).
 3. Reviewer result -> verify reviewer return acceptance; accept verdict + qualifying Critical/High only. No accepted finding -> checkpoint accepted. Accepted finding -> fresh narrow fix writer.
-4. Fix -> barrier -> scope verify -> commit/freeze -> rerun invalidated rows -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
-5. Final exact committed `HEAD`: pending/invalidated checks, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
+4. Fix -> barrier -> scope verify -> commit/freeze -> rerun every applicable workflow check -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
+5. Final exact committed `HEAD`: every applicable required workflow check, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
 
 Required unowned non-generated edit, decomposition change, dependency drift, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
 

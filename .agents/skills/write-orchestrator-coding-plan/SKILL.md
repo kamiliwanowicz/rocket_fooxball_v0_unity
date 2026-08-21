@@ -163,7 +163,7 @@ Example: `record walkable hit normal, project velocity along ramp, preserve laun
 
 ### Check contract
 
-Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected discriminatory evidence>`. Do not require full ledger fields for ordinary checks. Production row grammar: `check_id=<id>; tier=production-final; owner=<task-slot|execution-orchestrator>; expected_status=<single status or deterministic pre-run selector>; command=<command/workflow>; mutates_project=<true|false>; input_paths=[exact paths]; input_digest=<recipe>; environment_fingerprint=<recipe>; invalidation_paths=[exact paths]; subsumes=[ids]; run_point=<named gate>; evidence=<predicate>`. Selector resolves exactly one status before invocation. Workflow-owned ledger resolves concrete digest/fingerprint; execution adds `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Never invent plan-time values only knowable after execution. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation.
+Ordinary task checks (`fast|development`) use exactly one line: `proof: <command> -> <expected discriminatory evidence>`. Do not require full ledger fields for ordinary checks. Production row grammar: `check_id=<id>; tier=production-final; owner=<task-slot|execution-orchestrator>; expected_status=<single status or deterministic pre-run selector>; command=<command/workflow>; mutates_project=<true|false>; input_paths=[exact paths]; run_point=<named gate>; evidence=<predicate>`. Selector resolves exactly one status before invocation. Workflow owns its current-state decisions, including production-bake `reused` versus `executed`; execution records `executed_sha`, `validated_sha`, `status`, and evidence path/digest. Never invent plan-time values only knowable after execution. Require one owner and [`AGENTS.md`](../../../AGENTS.md)-compliant run point for every production-final row after source fan-in and accepted fixes. Review never substitutes for required project validation. After a merge or accepted fix, plan to rerun every applicable workflow check rather than reuse cache evidence.
 
 ### Validation authoring rules
 
@@ -231,7 +231,7 @@ Dependencies: [accepted full SHAs or None]
 - expensive_proof_execution: `same_dispatch | orchestrator_phase | None`
 - implementation: [complete ordered coding recipe; exact symbols, signatures, logic, order, integration, lifecycle, fallbacks, edge handling, and caller changes; no worker-owned design choices]
 - done when: [observable acceptance]
-- checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, input digest/fingerprint recipes, invalidation, one pre-run `expected_status` selector, evidence predicates, and remaining plan-time check contract fields
+- checks: ordinary -> `proof: <command> -> <expected discriminatory evidence>`; `production-final` -> owner, command/workflow, input paths, one pre-run `expected_status` selector, evidence predicates, and remaining plan-time check contract fields; merge or accepted fix -> rerun every applicable workflow check
 - review_focus: [concrete trigger, harmful outcome, and evidence target for material Critical/High failure or delivery risks]
 - review_checkpoint: [unique checkpoint ID by default; shared ID only for justified grouped review]
 

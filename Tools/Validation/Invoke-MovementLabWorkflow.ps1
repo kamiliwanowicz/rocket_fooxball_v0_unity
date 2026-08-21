@@ -1295,7 +1295,9 @@ $ledgerPayloadPath = Join-Path $script:EvidenceDirectory 'check-ledger-payload.j
 foreach ($row in $ledger) {
     if ($PlanOnly -and [string]$row.status -eq 'pending') { $row.status = 'deferred' }
     elseif ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
-        $row.status = 'executed'
+        # ProductionBake is classified by the builder's exact skip marker. Do not
+        # replace its authoritative reused/executed result with a generic ledger state.
+        if ([string]$row.check_id -ne 'production-bake') { $row.status = 'executed' }
         $row.executed_sha = $beforeHead
         $row.validated_sha = $afterHead
         $row.generated_hashes = $afterHashes
