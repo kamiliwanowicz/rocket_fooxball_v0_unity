@@ -77,7 +77,6 @@ namespace RocketFooxball.Runtime.Weapons
             }
 
             body.MovePosition(body.position + flightDirection * distance);
-            body.linearVelocity = Vector3.zero;
         }
 
         private void OnCollisionEnter(Collision collision)
@@ -231,7 +230,6 @@ namespace RocketFooxball.Runtime.Weapons
             body.isKinematic = true;
             body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
             body.interpolation = RigidbodyInterpolation.Interpolate;
-            body.linearVelocity = Vector3.zero;
         }
 
         private void IgnoreOwnerCollisions()

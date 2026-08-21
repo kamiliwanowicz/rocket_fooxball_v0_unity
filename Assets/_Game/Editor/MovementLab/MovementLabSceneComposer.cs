@@ -223,7 +223,8 @@ namespace RocketFooxball.Editor
                         SetObjectReference(match, "southGoal", arena.SouthGoal.Trigger);
                          SetFloat(match, "matchDuration", MatchDuration);
                          SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
-                        SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
+                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
+                         SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
                          SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                          SetVector3(match, "resetLookTarget", Vector3.zero);
                          WirePresentationSceneReferences(participantStates, localParticipant, match);
@@ -557,7 +558,8 @@ namespace RocketFooxball.Editor
                      SetFloat(match, "matchDuration", MatchDuration);
                      SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                     SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                     SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
+                    SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                    SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                      SetVector3(match, "resetLookTarget", Vector3.zero);
                      WirePresentationSceneReferences(participantStates, localParticipant, match);
                     var healthPickups = BuildHealthPickupInstances(LoadRequiredAsset<GameObject>(HealthPickupPrefabPath), match);

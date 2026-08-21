@@ -9,7 +9,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 7;
+        internal const int SerializedContractVersion = 8;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -108,6 +108,8 @@ namespace RocketFooxball.Editor
         internal const float PlayerControllerHeight = 3.6f;
         internal static readonly Vector3 PlayerControllerCenter = new Vector3(0f, 1.8f, 0f);
         internal const float PlayerControllerSkinWidth = 0.08f;
+        internal const float PlayableFloorTop = 0f;
+        internal const float ParticipantRecoveryThreshold = -1f;
         internal const float WorldVisualScale = 2f;
         internal const float PlayerHeadHeight = 3.1f;
         internal const float TeamCueScaleMultiplier = 2f;

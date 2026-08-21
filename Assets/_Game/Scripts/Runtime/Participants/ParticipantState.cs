@@ -249,6 +249,35 @@ namespace RocketFooxball.Runtime.Participants
             FinishKickoffReset(previous);
         }
 
+        /// <summary>Recovers an alive participant without changing combat or lifecycle state.</summary>
+        public bool RecoverAt(Vector3 worldPosition, Quaternion worldRotation)
+        {
+            if (!IsAlive || !IsFinite(worldPosition) || !IsFinite(worldRotation))
+            {
+                return false;
+            }
+
+            BeginLifecycleReset();
+            motor?.ResetState(worldPosition, worldRotation);
+            if (motor == null)
+            {
+                transform.SetPositionAndRotation(worldPosition, worldRotation);
+            }
+
+            look?.ResetView(transform.forward);
+            input?.ResetInputState();
+            kick?.ResetState();
+            launcher?.SetSimulationEnabled(false);
+            shotgun?.SetSimulationEnabled(false);
+            cameraFeedback?.ResetFeedback();
+            botController?.ResetState();
+            presentation?.SetAlive(true);
+            ApplyLeafSimulation();
+            CollisionStateChanged?.Invoke(this);
+            PublishReadModel();
+            return true;
+        }
+
         /// <summary>Moves participant to an authored spawn and grants post-respawn immunity.</summary>
         public void RespawnAt(Vector3 worldPosition, Quaternion worldRotation)
         {
@@ -696,6 +725,16 @@ namespace RocketFooxball.Runtime.Participants
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
+
+        private static bool IsFinite(Vector3 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
+        }
+
+        private static bool IsFinite(Quaternion value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z) && IsFinite(value.w);
+        }
 
         private Vector3 ResolveLegacyDamageSource(ParticipantState attacker)
         {

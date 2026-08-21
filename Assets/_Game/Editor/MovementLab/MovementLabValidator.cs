@@ -723,6 +723,7 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabSceneComposer.MatchDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalCelebrationOrbitDuration", context.Match, "goalCelebrationOrbitDuration", MovementLabSceneComposer.GoalSummaryDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
+                CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.participantRecoveryThreshold", context.Match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
             }
@@ -1284,6 +1285,10 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("MatchController diagnostics compatibility property missing: " + compatibilityProperties[i] + ".");
             }
 
+            var recoveryThreshold = matchType.GetProperty(nameof(MatchController.ParticipantRecoveryThreshold), publicInstance);
+            if (recoveryThreshold == null || recoveryThreshold.PropertyType != typeof(float) || !recoveryThreshold.CanRead)
+                throw new InvalidOperationException("MatchController participant recovery threshold surface is missing or changed.");
+
             if (!Enum.IsDefined(typeof(MatchController.MatchState), MatchController.MatchState.GoalFreeze))
                 throw new InvalidOperationException("MatchController.MatchState.GoalFreeze compatibility value is missing.");
 
@@ -1515,6 +1520,8 @@ namespace RocketFooxball.Editor
                     if (spawnSet.BlueCandidates[i] == null || spawnSet.RedCandidates[i] == null) throw new InvalidOperationException("ParticipantSpawnSet candidate is null.");
                     if (Vector3.Distance(spawnSet.BlueCandidates[i].position, ParticipantSlots[i].Position) > 0.01f || Vector3.Distance(spawnSet.RedCandidates[i].position, ParticipantSlots[i + 3].Position) > 0.01f)
                         throw new InvalidOperationException("ParticipantSpawnSet candidate transform mismatch.");
+                    ValidateRecoverySpawnGeometry(spawnSet.BlueCandidates[i], "BlueSpawn_" + i);
+                    ValidateRecoverySpawnGeometry(spawnSet.RedCandidates[i], "RedSpawn_" + i);
                     var blueCue = spawnSet.BlueCandidates[i].Find("BlueCircleCue");
                     var redCue = spawnSet.RedCandidates[i].Find("RedTriangleCue");
                     if (blueCue == null || redCue == null || blueCue.GetComponent<MeshFilter>()?.sharedMesh == null || redCue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(blueCue.GetComponent<MeshFilter>().sharedMesh) != BlueCircleCueMeshPath || AssetDatabase.GetAssetPath(redCue.GetComponent<MeshFilter>().sharedMesh) != RedTriangleCueMeshPath)
@@ -1536,6 +1543,21 @@ namespace RocketFooxball.Editor
             CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", 30f);
             CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", 30f);
             CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", 30f);
+        }
+
+        private static void ValidateRecoverySpawnGeometry(Transform candidate, string label)
+        {
+            if (candidate == null || !ParticipantRecoveryRules.IsValidDestination(candidate.position, ParticipantRecoveryThreshold))
+                throw new InvalidOperationException("Participant recovery spawn is below the configured threshold: " + label);
+
+            var capsuleBottom = candidate.position.y + PlayerControllerCenter.y - PlayerControllerHeight * 0.5f;
+            var capsuleTop = candidate.position.y + PlayerControllerCenter.y + PlayerControllerHeight * 0.5f;
+            if (capsuleBottom < PlayableFloorTop - PlayerControllerSkinWidth || capsuleTop <= capsuleBottom ||
+                Mathf.Abs(candidate.position.x) + PlayerControllerRadius > 65f - PlayerControllerSkinWidth ||
+                Mathf.Abs(candidate.position.z) + PlayerControllerRadius > 45f - PlayerControllerSkinWidth)
+            {
+                throw new InvalidOperationException("Participant recovery spawn capsule clearance invalid: " + label);
+            }
         }
 
         private static void ValidateImportedVisualAndAnimatorContracts(ValidationContext context,
