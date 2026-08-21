@@ -39,6 +39,20 @@ namespace RocketFooxball.Editor
                 private const float ProductionAmbientIntensity = 0.65f;
                 private const float ProductionSunIntensity = 2.0f;
                 private const float ProductionSunShadowStrength = 0.90f;
+                private static readonly Color WallFillColor = new Color(1.0f, 0.82f, 0.64f, 1f);
+                private const float WallFillIntensity = 1100f;
+                private const float WallFillRange = 28f;
+                private const float WallFillOuterAngle = 110f;
+                private const float WallFillInnerAngle = 70f;
+                private static readonly (string name, Vector3 position, Vector3 target)[] WallFillLightContract =
+                {
+                    ("WallFill_North_West", new Vector3(-43f, 10f, -27f), new Vector3(-43f, 4f, -44.5f)),
+                    ("WallFill_North_Center", new Vector3(0f, 10f, -27f), new Vector3(0f, 4f, -44.5f)),
+                    ("WallFill_North_East", new Vector3(43f, 10f, -27f), new Vector3(43f, 4f, -44.5f)),
+                    ("WallFill_South_West", new Vector3(-43f, 10f, 27f), new Vector3(-43f, 4f, 44.5f)),
+                    ("WallFill_South_Center", new Vector3(0f, 10f, 27f), new Vector3(0f, 4f, 44.5f)),
+                    ("WallFill_South_East", new Vector3(43f, 10f, 27f), new Vector3(43f, 4f, 44.5f))
+                };
 
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
@@ -91,6 +105,7 @@ namespace RocketFooxball.Editor
                     RenderSettings.reflectionIntensity = 1f;
 
                     ConfigureAccentLights(environment.transform);
+                    ConfigureWallFillLights(environment.transform);
                     BindExistingGlobalVolume(environment.transform);
                     ConfigureLightProbes(environment.transform);
                     ConfigureReflectionProbes(environment.transform);
@@ -175,6 +190,28 @@ namespace RocketFooxball.Editor
                         light.range = 14f;
                         light.shadows = LightShadows.None;
                         light.lightmapBakeType = LightmapBakeType.Realtime;
+                    }
+                }
+
+                private static void ConfigureWallFillLights(Transform parent)
+                {
+                    for (var i = 0; i < WallFillLightContract.Length; i++)
+                    {
+                        var contract = WallFillLightContract[i];
+                        var light = new GameObject(contract.name).AddComponent<Light>();
+                        light.GetUniversalAdditionalLightData();
+                        light.transform.SetParent(parent, false);
+                        light.transform.localPosition = contract.position;
+                        light.transform.rotation = Quaternion.LookRotation(contract.target - contract.position);
+                        light.type = LightType.Spot;
+                        light.color = WallFillColor;
+                        light.intensity = WallFillIntensity;
+                        light.range = WallFillRange;
+                        light.spotAngle = WallFillOuterAngle;
+                        light.innerSpotAngle = WallFillInnerAngle;
+                        light.shadows = LightShadows.Soft;
+                        light.shadowStrength = 0.85f;
+                        light.lightmapBakeType = LightmapBakeType.Baked;
                     }
                 }
 
@@ -416,6 +453,7 @@ namespace RocketFooxball.Editor
 
                     var accents = GameObject.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
                     var accentCount = 0;
+                    var wallFillCount = 0;
                     for (var i = 0; i < accents.Length; i++)
                     {
                         var accent = accents[i];
@@ -423,20 +461,42 @@ namespace RocketFooxball.Editor
                         var contractIndex = -1;
                         for (var j = 0; j < AccentLightContract.Length; j++)
                             if (accent.name == AccentLightContract[j].name) contractIndex = j;
-                        if (contractIndex < 0) throw new InvalidOperationException("Unexpected shadow/light source: " + accent.name);
-                        var contract = AccentLightContract[contractIndex];
-                        var accentData = accent.GetComponent<UniversalAdditionalLightData>();
-                        if (accentData == null || accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
-                            Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
-                            Mathf.Abs(accent.intensity - 500f) > 0.01f || Mathf.Abs(accent.range - 14f) > 0.001f)
+                        if (contractIndex >= 0)
                         {
-                            throw new InvalidOperationException("Goal accent light contract invalid: " + accent.name);
+                            var contract = AccentLightContract[contractIndex];
+                            var accentData = accent.GetComponent<UniversalAdditionalLightData>();
+                            if (accentData == null || accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
+                                Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
+                                Mathf.Abs(accent.intensity - 500f) > 0.01f || Mathf.Abs(accent.range - 14f) > 0.001f)
+                            {
+                                throw new InvalidOperationException("Goal accent light contract invalid: " + accent.name);
+                            }
+                            MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + accent.name);
+                            MovementLabSerializedProperties.ValidatePersistentIdentity(accentData, "Environment/" + accent.name + " UniversalAdditionalLightData");
+                            accentCount++;
+                            continue;
+                        }
+
+                        for (var j = 0; j < WallFillLightContract.Length; j++)
+                            if (accent.name == WallFillLightContract[j].name) contractIndex = j;
+                        if (contractIndex < 0) throw new InvalidOperationException("Unexpected shadow/light source: " + accent.name);
+                        var wallContract = WallFillLightContract[contractIndex];
+                        var wallData = accent.GetComponent<UniversalAdditionalLightData>();
+                        var expectedRotation = Quaternion.LookRotation(wallContract.target - wallContract.position);
+                        if (wallData == null || accent.type != LightType.Spot || accent.shadows != LightShadows.Soft || accent.lightmapBakeType != LightmapBakeType.Baked ||
+                            Vector3.Distance(accent.transform.position, wallContract.position) > 0.001f || Quaternion.Angle(accent.transform.rotation, expectedRotation) > 0.1f ||
+                            accent.color != WallFillColor || Mathf.Abs(accent.intensity - WallFillIntensity) > 0.01f || Mathf.Abs(accent.range - WallFillRange) > 0.001f ||
+                            Mathf.Abs(accent.spotAngle - WallFillOuterAngle) > 0.001f || Mathf.Abs(accent.innerSpotAngle - WallFillInnerAngle) > 0.001f ||
+                            Mathf.Abs(accent.shadowStrength - 0.85f) > 0.001f)
+                        {
+                            throw new InvalidOperationException("Wall fill light contract invalid: " + accent.name);
                         }
                         MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + accent.name);
-                        MovementLabSerializedProperties.ValidatePersistentIdentity(accentData, "Environment/" + accent.name + " UniversalAdditionalLightData");
-                        accentCount++;
+                        MovementLabSerializedProperties.ValidatePersistentIdentity(wallData, "Environment/" + accent.name + " UniversalAdditionalLightData");
+                        wallFillCount++;
                     }
                     if (accentCount != AccentLightContract.Length) throw new InvalidOperationException("Goal accent light count invalid.");
+                    if (wallFillCount != WallFillLightContract.Length) throw new InvalidOperationException("Wall fill light count invalid.");
 
                     var volume = GameObject.Find("Environment/GlobalVolume")?.GetComponent<Volume>();
                     var expectedProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
