@@ -32,12 +32,13 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                private static readonly Color ProductionAmbientSkyColor = new Color(0.55f, 0.62f, 0.70f);
-                private static readonly Color ProductionAmbientEquatorColor = new Color(0.42f, 0.46f, 0.50f);
-                private static readonly Color ProductionAmbientGroundColor = new Color(0.24f, 0.27f, 0.30f);
-                private const float ProductionAmbientIntensity = 1.35f;
-                private const float ProductionSunIntensity = 1.1f;
-                private const float ProductionSunShadowStrength = 0.55f;
+                private static readonly Color ProductionAmbientSkyColor = new Color(0.30f, 0.34f, 0.38f);
+                private static readonly Color ProductionAmbientEquatorColor = new Color(0.16f, 0.18f, 0.20f);
+                private static readonly Color ProductionAmbientGroundColor = new Color(0.07f, 0.08f, 0.09f);
+                private static readonly Vector3 ProductionSunEuler = new Vector3(45f, 300f, 0f);
+                private const float ProductionAmbientIntensity = 0.65f;
+                private const float ProductionSunIntensity = 2.0f;
+                private const float ProductionSunShadowStrength = 0.90f;
 
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
@@ -58,7 +59,7 @@ namespace RocketFooxball.Editor
                     sun.type = LightType.Directional;
                     sun.color = SunColor;
                     sun.intensity = ProductionSunIntensity;
-                    sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+                    sun.transform.rotation = Quaternion.Euler(ProductionSunEuler);
                     sun.lightmapBakeType = LightmapBakeType.Mixed;
                     sun.shadows = LightShadows.Soft;
                     sun.shadowStrength = ProductionSunShadowStrength;
@@ -382,7 +383,7 @@ namespace RocketFooxball.Editor
                     var sunData = sun != null ? sun.GetComponent<UniversalAdditionalLightData>() : null;
                     if (sun == null || sunData == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - ProductionSunIntensity) > 0.001f ||
-                        Vector3.Distance(sun.transform.eulerAngles, new Vector3(50f, 330f, 0f)) > 0.1f ||
+                        Vector3.Distance(sun.transform.eulerAngles, ProductionSunEuler) > 0.1f ||
                         sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
                         Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
                     {
