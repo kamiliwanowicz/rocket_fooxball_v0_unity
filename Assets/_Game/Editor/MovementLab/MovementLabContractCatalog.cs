@@ -217,7 +217,7 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
-        internal const int ExpectedLightmapCount = 5;
+        internal const int ExpectedLightmapCount = 4;
         internal const int ExpectedReflectionProbeBakeCount = 4;
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
         internal const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
@@ -295,7 +295,6 @@ namespace RocketFooxball.Editor
             BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
             BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
             BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-4_comp_dir.png", BakedLightingPath + "/Lightmap-4_comp_light.exr", BakedLightingPath + "/Lightmap-4_comp_shadowmask.png",
             BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
         };
 
