@@ -19,15 +19,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "powershell.exe",
+            "command": "node",
             "args": [
-              "-NoProfile",
-              "-ExecutionPolicy",
-              "Bypass",
-              "-File",
-              "${CLAUDE_PROJECT_DIR}/Tools/Tests/Invoke-HarnessTests.ps1",
-              "-HookMode",
-              "PreToolUse"
+              "${CLAUDE_PROJECT_DIR}/Tools/Tests/harness-pregate.mjs"
             ]
           }
         ]

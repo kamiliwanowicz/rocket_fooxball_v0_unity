@@ -880,6 +880,15 @@ function Test-HookSettings {
     $entries = @(Get-HookSettingsProperty $settings.hooks 'PreToolUse' | Where-Object { $null -ne $_ })
     if ($entries.Count -eq 0) { return New-HarnessFail 'no PreToolUse hook configured; Unity/workflow pre-gate is not wired up' }
 
+    $preGatePath = Join-Path $State.ProjectRoot 'Tools/Tests/harness-pregate.mjs'
+    if (-not (Test-Path -LiteralPath $preGatePath -PathType Leaf)) {
+        return New-HarnessFail 'missing Tools/Tests/harness-pregate.mjs PreToolUse dispatcher'
+    }
+    $preGateSource = Get-Content -Raw -LiteralPath $preGatePath
+    if ($preGateSource -notmatch '(?i)Invoke-HarnessTests\.ps1' -or $preGateSource -notmatch '(?i)-HookMode\s+PreToolUse') {
+        return New-HarnessFail 'harness-pregate.mjs does not invoke Invoke-HarnessTests.ps1 -HookMode PreToolUse'
+    }
+
     $covered = $false
     foreach ($entry in $entries) {
         if ($null -eq $entry) { continue }
@@ -893,15 +902,14 @@ function Test-HookSettings {
         foreach ($hook in @(Get-HookSettingsProperty $entry 'hooks')) {
             if ($null -eq $hook) { continue }
             $invocation = Get-HookInvocationText $hook
-            if ($invocation -match '(?i)Invoke-HarnessTests\.ps1' -and $invocation -match '(?i)-HookMode\s+PreToolUse') {
-                $covered = $true
-                break
-            }
+            if ($invocation -notmatch '(?i)harness-pregate\.mjs') { continue }
+            $covered = $true
+            break
         }
         if ($covered) { break }
     }
     if (-not $covered) {
-        return New-HarnessFail 'no PreToolUse hook covering Bash/PowerShell invokes Invoke-HarnessTests.ps1 -HookMode PreToolUse'
+        return New-HarnessFail 'no PreToolUse hook covering Bash/PowerShell invokes harness-pregate.mjs which invokes Invoke-HarnessTests.ps1 -HookMode PreToolUse'
     }
     return New-HarnessPass 'PreToolUse harness gate present for Bash/PowerShell'
 }
