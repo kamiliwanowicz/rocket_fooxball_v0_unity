@@ -13,6 +13,11 @@ namespace RocketFooxball.Runtime.Participants
     [DisallowMultipleComponent]
     public sealed class ParticipantState : MonoBehaviour
     {
+        public const float DefaultMaxHealth = 100f;
+        public const float DefaultDeathWait = 8f;
+        public const float DefaultImmunityDuration = 2f;
+        public const int DefaultShotgunShellCapacity = 16;
+
         [Header("Identity")]
         [SerializeField] private int slotId;
         [SerializeField] private string displayName = "Participant";
@@ -20,10 +25,10 @@ namespace RocketFooxball.Runtime.Participants
         [SerializeField] private bool localParticipant;
 
         [Header("Vitals")]
-        [SerializeField, Min(1f)] private float maxHealth = 100f;
-        [SerializeField, Min(0f)] private float deathWait = 8f;
-        [SerializeField, Min(0f)] private float immunityDuration = 2f;
-        [SerializeField, Min(1)] private int shotgunShellCapacity = 16;
+        [SerializeField, Min(1f)] private float maxHealth = DefaultMaxHealth;
+        [SerializeField, Min(0f)] private float deathWait = DefaultDeathWait;
+        [SerializeField, Min(0f)] private float immunityDuration = DefaultImmunityDuration;
+        [SerializeField, Min(1)] private int shotgunShellCapacity = DefaultShotgunShellCapacity;
 
         [Header("Leaf Owners")]
         [SerializeField] private PlayerMotor motor;

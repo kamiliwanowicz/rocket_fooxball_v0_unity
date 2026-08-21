@@ -217,7 +217,7 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
-        internal const int ExpectedLightmapCount = 4;
+        internal const int ExpectedLightmapCount = MovementLabContract.ExpectedLightmapCount;
         internal const int ExpectedReflectionProbeBakeCount = 4;
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
         internal const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
@@ -290,15 +290,7 @@ namespace RocketFooxball.Editor
             WorldControllerPath, FpsControllerPath
         };
 
-        internal static readonly string[] GeneratedBakedLightingPaths =
-        {
-            BakedLightingPath + "/LightingData.asset",
-            BakedLightingPath + "/Lightmap-0_comp_dir.png", BakedLightingPath + "/Lightmap-0_comp_light.exr", BakedLightingPath + "/Lightmap-0_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-1_comp_dir.png", BakedLightingPath + "/Lightmap-1_comp_light.exr", BakedLightingPath + "/Lightmap-1_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-2_comp_dir.png", BakedLightingPath + "/Lightmap-2_comp_light.exr", BakedLightingPath + "/Lightmap-2_comp_shadowmask.png",
-            BakedLightingPath + "/Lightmap-3_comp_dir.png", BakedLightingPath + "/Lightmap-3_comp_light.exr", BakedLightingPath + "/Lightmap-3_comp_shadowmask.png",
-            BakedLightingPath + "/ReflectionProbe-0.exr", BakedLightingPath + "/ReflectionProbe-1.exr", BakedLightingPath + "/ReflectionProbe-2.exr", BakedLightingPath + "/ReflectionProbe-3.exr"
-        };
+        internal static readonly string[] GeneratedBakedLightingPaths = CreateGeneratedBakedLightingPaths();
 
         internal static readonly string[] GeneratedImporterMetadataPaths =
         {
@@ -318,6 +310,7 @@ namespace RocketFooxball.Editor
             ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
 
+        // Unread by design: constructing this list IS the .meta-coverage check (see ValidateGeneratedFingerprintPathList).
         internal static readonly string[] GeneratedFingerprintPaths = CreateGeneratedFingerprintPaths();
 
         internal static readonly Color SkyHorizonColor = new Color(0.7254902f, 0.8627451f, 0.9490196f, 1f);
@@ -373,6 +366,18 @@ namespace RocketFooxball.Editor
 
         internal static string ComputeBuilderSignature() => "serialized-contract-v" + MovementLabContract.SerializedContractVersion;
         internal static string GetBuildMarkerName(string builderSignature) => BuildMarkerPrefix + builderSignature;
+
+        private static string[] CreateGeneratedBakedLightingPaths()
+        {
+            var lightmapPaths = MovementLabContract.BakedLightmapPaths(ExpectedLightmapCount);
+            var paths = new string[1 + lightmapPaths.Length + ExpectedReflectionProbeBakeCount];
+            paths[0] = BakedLightingPath + "/LightingData.asset";
+            Array.Copy(lightmapPaths, 0, paths, 1, lightmapPaths.Length);
+            var reflectionOffset = 1 + lightmapPaths.Length;
+            for (var i = 0; i < ExpectedReflectionProbeBakeCount; i++)
+                paths[reflectionOffset + i] = BakedLightingPath + "/ReflectionProbe-" + i + ".exr";
+            return paths;
+        }
 
         private static string[] CreateGeneratedFingerprintPaths()
         {

@@ -14,6 +14,8 @@ namespace RocketFooxball.Runtime.Weapons
         public const float DefaultFarMultiplier = 0.20f;
         public const float DefaultPerPelletBallImpulse = 3.4f;
         public const float DefaultBallImpulseCap = 20.4f;
+        public const float DefaultSpreadAngleDegrees = 7f;
+        public const float DefaultPumpDelay = 0.85f;
 
         /// <summary>Clamps a requested pellet count to the fixed spread's usable range.</summary>
         public static int ClampPelletCount(int requested)

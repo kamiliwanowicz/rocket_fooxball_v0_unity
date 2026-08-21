@@ -22,15 +22,15 @@ namespace RocketFooxball.Runtime.Ball
         [SerializeField] private ParticipantState ownerParticipant;
 
         [Header("Dash Contact")]
-        [SerializeField, Min(0f)] private float dashContactStartDelay = 0.10f;
-        [SerializeField, Min(0.1f)] private float dashContactReach = 2f;
-        [SerializeField, Min(0f)] private float dashContactRadiusPadding = 0.35f;
-        [SerializeField, Min(0.01f)] private float cooldown = 3f;
-        [SerializeField, Range(0f, 1f)] private float speedFraction = 0.91f;
-        [SerializeField, Range(0f, 1f)] private float playerMomentumShare = 0.20f;
-        [SerializeField, Min(0f)] private float enemyContactDamage = 20f;
-        [SerializeField, Min(0f)] private float enemyShoveImpulse = 6f;
-        [SerializeField, Range(0f, 1f)] private float enemyDashRetention = 0.20f;
+        [SerializeField, Min(0f)] private float dashContactStartDelay = BallKickDefaults.DashContactStartDelay;
+        [SerializeField, Min(0.1f)] private float dashContactReach = BallKickDefaults.DashContactReach;
+        [SerializeField, Min(0f)] private float dashContactRadiusPadding = BallKickDefaults.DashContactRadiusPadding;
+        [SerializeField, Min(0.01f)] private float cooldown = BallKickDefaults.Cooldown;
+        [SerializeField, Range(0f, 1f)] private float speedFraction = BallKickDefaults.SpeedFraction;
+        [SerializeField, Range(0f, 1f)] private float playerMomentumShare = BallKickDefaults.PlayerMomentumShare;
+        [SerializeField, Min(0f)] private float enemyContactDamage = BallKickDefaults.EnemyContactDamage;
+        [SerializeField, Min(0f)] private float enemyShoveImpulse = BallKickDefaults.EnemyShoveImpulse;
+        [SerializeField, Range(0f, 1f)] private float enemyDashRetention = BallKickDefaults.EnemyDashRetention;
 
         private const float Epsilon = 0.000001f;
         private readonly Collider[] contactBuffer = new Collider[32];

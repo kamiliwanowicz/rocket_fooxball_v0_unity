@@ -51,12 +51,6 @@ namespace RocketFooxball.Editor
 
     internal static partial class MovementLabMaterialPipeline
     {
-                internal static void SetMaterialKeyword(Material material, string keyword, bool enabled)
-                {
-                    if (enabled) material.EnableKeyword(keyword);
-                    else material.DisableKeyword(keyword);
-                }
-
                 internal static void FinalizeGeneratedMaterialPersistence()
                 {
                     var materialPaths = new List<string>();

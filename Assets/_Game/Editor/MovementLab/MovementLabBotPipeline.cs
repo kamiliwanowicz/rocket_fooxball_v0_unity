@@ -112,9 +112,9 @@ namespace RocketFooxball.Editor
                 SetObjectReference(perception, "ownGoal", participant.Team == ParticipantTeam.Red ? redDefendedGoal : blueDefendedGoal);
                 SetObjectReference(perception, "enemyGoal", participant.Team == ParticipantTeam.Red ? blueDefendedGoal : redDefendedGoal);
                 SetLayerMask(perception, "obstacleMask", obstacleMask);
-                SetFloat(perception, "sightDistance", 75f);
-                SetFloat(perception, "fieldOfViewDegrees", 130f);
-                SetFloat(perception, "memorySeconds", 1.5f);
+                SetFloat(perception, "sightDistance", BotPerception.ExpectedSightDistance);
+                SetFloat(perception, "fieldOfViewDegrees", BotPerception.ExpectedFieldOfViewDegrees);
+                SetFloat(perception, "memorySeconds", BotPerception.ExpectedMemorySeconds);
 
                 var coordinator = participant.Team == ParticipantTeam.Blue ? blueCoordinator : redCoordinator;
                 SetObjectReference(controller, "participant", participant);
@@ -128,7 +128,7 @@ namespace RocketFooxball.Editor
                 SetObjectReference(controller, "perception", perception);
                 SetObjectReference(controller, "roleCoordinator", coordinator);
                 SetLayerMask(controller, "combatObstacleMask", obstacleMask);
-                SetFloat(controller, "maxPitchDegrees", 89f);
+                SetFloat(controller, "maxPitchDegrees", BotController.ExpectedMaxPitchDegrees);
                 SetFloat(controller, "jumpProbeDistance", BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance);
             }
 
@@ -243,9 +243,9 @@ namespace RocketFooxball.Editor
                 ValidateReference(perception, "ownGoal", participant.Team == ParticipantTeam.Red ? redDefendedGoal : blueDefendedGoal, "BotPerception.ownGoal");
                 ValidateReference(perception, "enemyGoal", participant.Team == ParticipantTeam.Red ? blueDefendedGoal : redDefendedGoal, "BotPerception.enemyGoal");
                 ValidateSerializedLayerMask(perception, "obstacleMask", LayerMaskMaskWithout(MovementLabContract.ParticipantsLayerName, MovementLabContract.ProjectilesLayerName), "BotPerception.obstacleMask");
-                ValidateSerializedFloat(perception, "sightDistance", 75f, "BotPerception.sightDistance");
-                ValidateSerializedFloat(perception, "fieldOfViewDegrees", 130f, "BotPerception.fieldOfViewDegrees");
-                ValidateSerializedFloat(perception, "memorySeconds", 1.5f, "BotPerception.memorySeconds");
+                ValidateSerializedFloat(perception, "sightDistance", BotPerception.ExpectedSightDistance, "BotPerception.sightDistance");
+                ValidateSerializedFloat(perception, "fieldOfViewDegrees", BotPerception.ExpectedFieldOfViewDegrees, "BotPerception.fieldOfViewDegrees");
+                ValidateSerializedFloat(perception, "memorySeconds", BotPerception.ExpectedMemorySeconds, "BotPerception.memorySeconds");
                 ValidateReference(controller, "participant", participant, "BotController.participant");
                 ValidateReference(controller, "match", match, "BotController.match");
                 ValidateReference(controller, "motor", participant.Motor, "BotController.motor");
@@ -257,7 +257,7 @@ namespace RocketFooxball.Editor
                 ValidateReference(controller, "perception", perception, "BotController.perception");
                 ValidateReference(controller, "roleCoordinator", participant.Team == ParticipantTeam.Blue ? blueCoordinator : redCoordinator, "BotController.roleCoordinator");
                 ValidateSerializedLayerMask(controller, "combatObstacleMask", LayerMaskMaskWithout(MovementLabContract.ParticipantsLayerName, MovementLabContract.ProjectilesLayerName), "BotController.combatObstacleMask");
-                ValidateSerializedFloat(controller, "maxPitchDegrees", 89f, "BotController.maxPitchDegrees");
+                ValidateSerializedFloat(controller, "maxPitchDegrees", BotController.ExpectedMaxPitchDegrees, "BotController.maxPitchDegrees");
                 ValidateSerializedFloat(controller, "jumpProbeDistance", BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance, "BotController.jumpProbeDistance");
                 ValidateReference(input, "actions", inputAsset, "PlayerInputReader.actions");
             }
@@ -415,12 +415,12 @@ namespace RocketFooxball.Editor
 
         private static void SetCoordinatorTuning(BotTeamRoleCoordinator coordinator)
         {
-            SetFloat(coordinator, "evaluationInterval", 0.5f);
-            SetFloat(coordinator, "roleHoldSeconds", 2f);
-            SetFloat(coordinator, "switchMargin", 0.15f);
-            SetFloat(coordinator, "humanShotgunYieldDistance", 12f);
-            SetFloat(coordinator, "healthYieldDistance", 10f);
-            SetFloat(coordinator, "criticalHealthRatio", 0.30f);
+            SetFloat(coordinator, "evaluationInterval", BotTeamRoleCoordinator.ExpectedEvaluationInterval);
+            SetFloat(coordinator, "roleHoldSeconds", BotTeamRoleCoordinator.ExpectedRoleHoldSeconds);
+            SetFloat(coordinator, "switchMargin", BotTeamRoleCoordinator.ExpectedSwitchMargin);
+            SetFloat(coordinator, "humanShotgunYieldDistance", BotTargetRules.HumanShotgunYieldDistance);
+            SetFloat(coordinator, "healthYieldDistance", BotTargetRules.HealthYieldDistance);
+            SetFloat(coordinator, "criticalHealthRatio", BotTargetRules.CriticalHealthRatio);
         }
 
         private static int LayerMaskMaskWithout(params string[] layerNames)
@@ -609,12 +609,12 @@ namespace RocketFooxball.Editor
             ValidateReference(coordinator, "navigationGraph", graph, "BotTeamRoleCoordinator.navigationGraph");
             ValidateReferenceArray(coordinator, "participants", participants.Cast<UnityEngine.Object>().ToArray(), "BotTeamRoleCoordinator.participants");
             ValidateReferenceArray(coordinator, "perceptions", perceptions.Cast<UnityEngine.Object>().ToArray(), "BotTeamRoleCoordinator.perceptions");
-            ValidateSerializedFloat(coordinator, "evaluationInterval", 0.5f, "BotTeamRoleCoordinator.evaluationInterval");
-            ValidateSerializedFloat(coordinator, "roleHoldSeconds", 2f, "BotTeamRoleCoordinator.roleHoldSeconds");
-            ValidateSerializedFloat(coordinator, "switchMargin", 0.15f, "BotTeamRoleCoordinator.switchMargin");
-            ValidateSerializedFloat(coordinator, "humanShotgunYieldDistance", 12f, "BotTeamRoleCoordinator.humanShotgunYieldDistance");
-            ValidateSerializedFloat(coordinator, "healthYieldDistance", 10f, "BotTeamRoleCoordinator.healthYieldDistance");
-            ValidateSerializedFloat(coordinator, "criticalHealthRatio", 0.30f, "BotTeamRoleCoordinator.criticalHealthRatio");
+            ValidateSerializedFloat(coordinator, "evaluationInterval", BotTeamRoleCoordinator.ExpectedEvaluationInterval, "BotTeamRoleCoordinator.evaluationInterval");
+            ValidateSerializedFloat(coordinator, "roleHoldSeconds", BotTeamRoleCoordinator.ExpectedRoleHoldSeconds, "BotTeamRoleCoordinator.roleHoldSeconds");
+            ValidateSerializedFloat(coordinator, "switchMargin", BotTeamRoleCoordinator.ExpectedSwitchMargin, "BotTeamRoleCoordinator.switchMargin");
+            ValidateSerializedFloat(coordinator, "humanShotgunYieldDistance", BotTargetRules.HumanShotgunYieldDistance, "BotTeamRoleCoordinator.humanShotgunYieldDistance");
+            ValidateSerializedFloat(coordinator, "healthYieldDistance", BotTargetRules.HealthYieldDistance, "BotTeamRoleCoordinator.healthYieldDistance");
+            ValidateSerializedFloat(coordinator, "criticalHealthRatio", BotTargetRules.CriticalHealthRatio, "BotTeamRoleCoordinator.criticalHealthRatio");
         }
 
         private static void ValidateExecutionOrders()

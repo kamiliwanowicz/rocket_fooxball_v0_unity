@@ -497,8 +497,8 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootForwardImpulseScale", context.Resolver, "underfootForwardImpulseScale", UnderfootForwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootUpwardImpulseScale", context.Resolver, "underfootUpwardImpulseScale", UnderfootUpwardImpulseScale);
                 CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.underfootHighSpeedVerticalRedirect", context.Resolver, "underfootHighSpeedVerticalRedirect", UnderfootHighSpeedVerticalRedirect);
-                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", 50f);
-                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", 1f);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.directRocketDamage", context.Resolver, "directRocketDamage", ExplosionResolver.DefaultDirectRocketDamage);
+                CaptureSerialized(accumulator, "gameplay/serialized", "ExplosionResolver.enemyRocketImpulseMultiplier", context.Resolver, "enemyRocketImpulseMultiplier", ExplosionResolver.DefaultEnemyRocketImpulseMultiplier);
             }
 
             var goals = UnityEngine.Object.FindObjectsByType<GoalTrigger>(FindObjectsInactive.Include, FindObjectsSortMode.None);
@@ -594,7 +594,7 @@ namespace RocketFooxball.Editor
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.ball", participant.Shotgun, "ball", context.BallMotor);
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.ownerParticipant", participant.Shotgun, "ownerParticipant", participant);
                      CaptureSerializedInteger(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pelletCount", participant.Shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
-                     CaptureSerialized(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pumpDelay", participant.Shotgun, "pumpDelay", 0.85f);
+                     CaptureSerialized(accumulator, "gameplay/serialized", "Participant[" + participantIndex + "].Shotgun.pumpDelay", participant.Shotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay);
                      accumulator.Capture("gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.hitMask", () =>
                      {
                          var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
@@ -666,13 +666,13 @@ namespace RocketFooxball.Editor
                  });
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pelletDamage", context.Shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
                  CaptureSerializedInteger(accumulator, "gameplay/serialized", "ShotgunWeapon.pelletCount", context.Shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
-                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.spreadAngleDegrees", context.Shotgun, "spreadAngleDegrees", 7f);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.spreadAngleDegrees", context.Shotgun, "spreadAngleDegrees", ShotgunDamageRules.DefaultSpreadAngleDegrees);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.fullDamageRange", context.Shotgun, "fullDamageRange", ShotgunDamageRules.DefaultFullDamageRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.mediumRange", context.Shotgun, "mediumRange", ShotgunDamageRules.DefaultMediumRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.maxRange", context.Shotgun, "maxRange", ShotgunDamageRules.DefaultMaxRange);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.mediumMultiplier", context.Shotgun, "mediumMultiplier", ShotgunDamageRules.DefaultMediumMultiplier);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.farMultiplier", context.Shotgun, "farMultiplier", ShotgunDamageRules.DefaultFarMultiplier);
-                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pumpDelay", context.Shotgun, "pumpDelay", 0.85f);
+                 CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.pumpDelay", context.Shotgun, "pumpDelay", ShotgunDamageRules.DefaultPumpDelay);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.ballImpulsePerPellet", context.Shotgun, "ballImpulsePerPellet", ShotgunDamageRules.DefaultPerPelletBallImpulse);
                  CaptureSerialized(accumulator, "gameplay/serialized", "ShotgunWeapon.ballImpulseCap", context.Shotgun, "ballImpulseCap", ShotgunDamageRules.DefaultBallImpulseCap);
              }
@@ -1250,21 +1250,21 @@ namespace RocketFooxball.Editor
                 return;
 
             var label = "Participant[" + participantIndex + "]";
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashBurstSpeed", participant.Motor, "dashBurstSpeed", 12f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashDuration", participant.Motor, "dashDuration", 0.33f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSteerRateDegrees", participant.Motor, "dashSteerRateDegrees", 180f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSpeedCap", participant.Motor, "dashSpeedCap", 30f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactStartDelay", participant.Kick, "dashContactStartDelay", 0.10f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactReach", participant.Kick, "dashContactReach", 2f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactRadiusPadding", participant.Kick, "dashContactRadiusPadding", 0.35f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.cooldown", participant.Kick, "cooldown", 3f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.speedFraction", participant.Kick, "speedFraction", 0.91f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.playerMomentumShare", participant.Kick, "playerMomentumShare", 0.20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyContactDamage", participant.Kick, "enemyContactDamage", 20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyShoveImpulse", participant.Kick, "enemyShoveImpulse", 6f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyDashRetention", participant.Kick, "enemyDashRetention", 0.20f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulse", participant.CameraFeedback, "dashKickImpulse", 0.025f);
-            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", 0.12f);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashBurstSpeed", participant.Motor, "dashBurstSpeed", PlayerMotorDefaults.DashBurstSpeed);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashDuration", participant.Motor, "dashDuration", PlayerMotorDefaults.DashDuration);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSteerRateDegrees", participant.Motor, "dashSteerRateDegrees", PlayerMotorDefaults.DashSteerRateDegrees);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerMotor.dashSpeedCap", participant.Motor, "dashSpeedCap", PlayerMotorDefaults.DashSpeedCap);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactStartDelay", participant.Kick, "dashContactStartDelay", BallKickDefaults.DashContactStartDelay);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactReach", participant.Kick, "dashContactReach", BallKickDefaults.DashContactReach);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.dashContactRadiusPadding", participant.Kick, "dashContactRadiusPadding", BallKickDefaults.DashContactRadiusPadding);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.cooldown", participant.Kick, "cooldown", BallKickDefaults.Cooldown);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.speedFraction", participant.Kick, "speedFraction", BallKickDefaults.SpeedFraction);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.playerMomentumShare", participant.Kick, "playerMomentumShare", BallKickDefaults.PlayerMomentumShare);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyContactDamage", participant.Kick, "enemyContactDamage", BallKickDefaults.EnemyContactDamage);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyShoveImpulse", participant.Kick, "enemyShoveImpulse", BallKickDefaults.EnemyShoveImpulse);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".BallKick.enemyDashRetention", participant.Kick, "enemyDashRetention", BallKickDefaults.EnemyDashRetention);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulse", participant.CameraFeedback, "dashKickImpulse", PlayerCameraFeedback.DefaultDashKickImpulse);
+            CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration);
         }
 
         private static void ValidateMatchPublicContract()
@@ -1394,10 +1394,10 @@ namespace RocketFooxball.Editor
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantFpsShotgun.gameObject);
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantWorldShotgun.gameObject);
                  });
-                 CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", 100f);
+                 CaptureSerialized(accumulator, "scene/roster", "health:" + expected.SlotId, participant, "maxHealth", ParticipantState.DefaultMaxHealth);
                   CaptureSerialized(accumulator, "scene/roster", "death-wait:" + expected.SlotId, participant, "deathWait", expected.IsLocal ? LocalRespawnDelay : BotRespawnDelay);
-                 CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", 2f);
-                 CaptureSerializedInteger(accumulator, "scene/roster", "shotgun-capacity:" + expected.SlotId, participant, "shotgunShellCapacity", 16);
+                 CaptureSerialized(accumulator, "scene/roster", "immunity:" + expected.SlotId, participant, "immunityDuration", ParticipantState.DefaultImmunityDuration);
+                 CaptureSerializedInteger(accumulator, "scene/roster", "shotgun-capacity:" + expected.SlotId, participant, "shotgunShellCapacity", ParticipantState.DefaultShotgunShellCapacity);
                 var camera = participant.GetComponentInChildren<Camera>(true);
                 var listener = participant.GetComponentInChildren<AudioListener>(true);
                 if (camera != null && camera.enabled) localCameraCount++;
@@ -1532,17 +1532,17 @@ namespace RocketFooxball.Editor
                 var expectedMask = ~(1 << participantLayer | 1 << projectilesLayer);
                 if (spawnSet.VisibilityMask.value != expectedMask) throw new InvalidOperationException("ParticipantSpawnSet visibility mask must exclude Participants and Projectiles.");
             });
-            CaptureSerialized(accumulator, "scene/spawn-set", "eyeHeight", spawnSet, "eyeHeight", 2.4f);
-             CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", 2f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", 1f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", 0.5f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", 1f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "noVisibleEnemyBonus", spawnSet, "noVisibleEnemyBonus", 4f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "visibleEnemyCountPenalty", spawnSet, "visibleEnemyCountPenalty", 2f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedFallbackPenalty", spawnSet, "occupiedFallbackPenalty", 8f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", 30f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", 30f);
-            CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", 30f);
+            CaptureSerialized(accumulator, "scene/spawn-set", "eyeHeight", spawnSet, "eyeHeight", ParticipantSpawnSet.ExpectedEyeHeight);
+             CaptureSerialized(accumulator, "scene/spawn-set", "occupiedRadius", spawnSet, "occupiedRadius", ParticipantSpawnSet.ExpectedOccupiedRadius);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceWeight", spawnSet, "ballDistanceWeight", ParticipantSpawnSet.ExpectedBallDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceWeight", spawnSet, "enemyGoalDistanceWeight", ParticipantSpawnSet.ExpectedEnemyGoalDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "nearestEnemyDistanceWeight", spawnSet, "nearestEnemyDistanceWeight", ParticipantSpawnSet.ExpectedNearestEnemyDistanceWeight);
+            CaptureSerialized(accumulator, "scene/spawn-set", "noVisibleEnemyBonus", spawnSet, "noVisibleEnemyBonus", ParticipantSpawnSet.ExpectedNoVisibleEnemyBonus);
+            CaptureSerialized(accumulator, "scene/spawn-set", "visibleEnemyCountPenalty", spawnSet, "visibleEnemyCountPenalty", ParticipantSpawnSet.ExpectedVisibleEnemyCountPenalty);
+            CaptureSerialized(accumulator, "scene/spawn-set", "occupiedFallbackPenalty", spawnSet, "occupiedFallbackPenalty", ParticipantSpawnSet.ExpectedOccupiedFallbackPenalty);
+            CaptureSerialized(accumulator, "scene/spawn-set", "ballDistanceCap", spawnSet, "ballDistanceCap", ParticipantSpawnSet.ExpectedBallDistanceCap);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyGoalDistanceCap", spawnSet, "enemyGoalDistanceCap", ParticipantSpawnSet.ExpectedEnemyGoalDistanceCap);
+            CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", ParticipantSpawnSet.ExpectedEnemyDistanceCap);
         }
 
         private static void ValidateRecoverySpawnGeometry(Transform candidate, string label)

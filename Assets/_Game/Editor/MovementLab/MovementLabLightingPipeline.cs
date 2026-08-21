@@ -115,39 +115,6 @@ namespace RocketFooxball.Editor
                     BindExistingLightingSettings(scene);
                 }
 
-                internal static Material GetOrCreateSkyMaterial(Light sun)
-                {
-                    var shader = Shader.Find("RocketFooxball/SunnyArenaSky");
-                    if (shader == null)
-                    {
-                        throw new InvalidOperationException("SunnyArenaSky shader is unavailable.");
-                    }
-
-                    var material = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
-                    if (material == null)
-                    {
-                        material = new Material(shader) { name = "RetroSunnySky" };
-                        AssetDatabase.CreateAsset(material, SkyMaterialPath);
-                    }
-
-                    material.shader = shader;
-                    material.SetTexture("_Panorama", LoadTexture(SkyTexturePath));
-                    material.SetColor("_HorizonColor", SkyHorizonColor);
-                    material.SetColor("_ZenithColor", SkyZenithColor);
-                    material.SetColor("_CloudTint", SkyCloudColor);
-                    material.SetFloat("_CloudCoverage", 0.22f);
-                    material.SetFloat("_CloudSoftness", 0.65f);
-                    material.SetVector("_SunDirection", -sun.transform.forward);
-                    material.SetColor("_SunColor", SunColor);
-                    material.SetFloat("_SunAngularRadius", 0.012f);
-                    material.SetFloat("_SunIntensity", 3f);
-                    material.SetColor("_FogHorizonColor", SkyHorizonColor);
-                    material.SetFloat("_FogHorizonHeight", 0.02f);
-                    material.SetFloat("_FogHorizonWidth", 0.28f);
-                    EditorUtility.SetDirty(material);
-                    return material;
-                }
-
                 private static void BindExistingGlobalVolume(Transform parent)
                 {
                     var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
@@ -215,66 +182,6 @@ namespace RocketFooxball.Editor
                         light.shadowStrength = 0.85f;
                         light.lightmapBakeType = LightmapBakeType.Baked;
                     }
-                }
-
-                internal static void ConfigureGlobalVolume(Transform parent)
-                {
-                    var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
-                    if (profile == null)
-                    {
-                        profile = ScriptableObject.CreateInstance<VolumeProfile>();
-                        profile.name = "MovementLabVolumeProfile";
-                        AssetDatabase.CreateAsset(profile, VolumeProfilePath);
-                    }
-
-                    VolumeComponent[] stale = profile.components.ToArray();
-                    for (var i = 0; i < stale.Length; i++)
-                    {
-                        if (stale[i] != null)
-                        {
-                            profile.Remove(stale[i].GetType());
-                            UnityEngine.Object.DestroyImmediate(stale[i], true);
-                        }
-                    }
-                    profile.components.Clear();
-
-                    var tonemapping = AddPersistentVolumeComponent<Tonemapping>(profile);
-                    tonemapping.active = true;
-                    tonemapping.mode.value = TonemappingMode.ACES;
-                    tonemapping.mode.overrideState = true;
-
-                    var bloom = AddPersistentVolumeComponent<Bloom>(profile);
-                    bloom.active = true;
-                    bloom.threshold.value = 1.1f;
-                    bloom.threshold.overrideState = true;
-                    bloom.intensity.value = 0.20f;
-                    bloom.intensity.overrideState = true;
-                    bloom.scatter.value = 0.60f;
-                    bloom.scatter.overrideState = true;
-                    bloom.clamp.value = 10f;
-                    bloom.clamp.overrideState = true;
-                    bloom.highQualityFiltering.value = false;
-                    bloom.highQualityFiltering.overrideState = true;
-
-                    var color = AddPersistentVolumeComponent<ColorAdjustments>(profile);
-                    color.active = true;
-                    color.postExposure.value = 0f;
-                    color.postExposure.overrideState = true;
-                    color.contrast.value = 5f;
-                    color.contrast.overrideState = true;
-                    color.saturation.value = 4f;
-                    color.saturation.overrideState = true;
-
-                    var volumeObject = new GameObject("GlobalVolume");
-                    volumeObject.transform.SetParent(parent, false);
-                    var volume = volumeObject.AddComponent<Volume>();
-                    volume.isGlobal = true;
-                    volume.priority = 0f;
-                    // Editor-authored profile must use sharedProfile so serialized
-                    // scene YAML retains nonzero GUID/fileID reference.
-                    volume.sharedProfile = profile;
-                    EditorUtility.SetDirty(profile);
-                    EditorUtility.SetDirty(volume);
                 }
 
                 internal static T AddPersistentVolumeComponent<T>(VolumeProfile profile) where T : VolumeComponent
@@ -372,13 +279,6 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                internal static LightingSettings ConfigureLightingSettings(Scene scene)
-                {
-                    var settings = MovementLabLightingProfiles.EnsurePersistedProductionSettings();
-                    Lightmapping.SetLightingSettingsForScene(scene, settings);
-                    return settings;
-                }
-
                 internal static Scene BakeSceneLighting(Scene scene, string passPath)
                 {
                     return BakeSceneLighting(scene, passPath, MovementLabLightingProfiles.ProfileId.Production);
@@ -404,16 +304,115 @@ namespace RocketFooxball.Editor
                         SceneManager.GetActiveScene().handle != revalidatedScene.handle)
                         throw new InvalidOperationException("MovementLab lighting bake requires revalidation to leave the prepared MovementLab scene loaded and active.");
                     MovementLabLightingProfiles.ValidatePreparedScene(profile);
-                    var baked = Lightmapping.Bake();
-                    if (!baked)
+                    var preservedProductionOnlyLightmaps = profile == MovementLabLightingProfiles.ProfileId.Development
+                        ? CaptureProductionOnlyLightmaps()
+                        : Array.Empty<PreservedBakedOutput>();
+                    Exception bakeFailure = null;
+                    try
                     {
-                        throw new InvalidOperationException("Lightmapping.Bake returned false for MovementLab.");
+                        var baked = Lightmapping.Bake();
+                        if (!baked)
+                            throw new InvalidOperationException("Lightmapping.Bake returned false for MovementLab.");
+
+                        if (profile == MovementLabLightingProfiles.ProfileId.Development)
+                            ValidateBakedLightmapTopology(MovementLabContract.DevelopmentLightmapCount);
+                    }
+                    catch (Exception exception)
+                    {
+                        bakeFailure = exception;
+                        throw;
+                    }
+                    finally
+                    {
+                        if (preservedProductionOnlyLightmaps.Length > 0)
+                        {
+                            try
+                            {
+                                RestorePreservedBakedOutputs(preservedProductionOnlyLightmaps);
+                            }
+                            catch (Exception restoreException)
+                            {
+                                if (bakeFailure == null) throw;
+                                Debug.LogException(new InvalidOperationException(
+                                    "MovementLab development bake failed and production-only lightmap restoration also failed.",
+                                    restoreException));
+                            }
+                        }
                     }
 
                     // Authoritative probe cubemaps are generated by the
                     // normal bake into the scene folder. The obsolete named
                     // probe loop/EXRs intentionally no longer exist.
                     return revalidatedScene;
+                }
+
+                private static PreservedBakedOutput[] CaptureProductionOnlyLightmaps()
+                {
+                    var productionLightmaps = MovementLabContract.BakedLightmapPaths(MovementLabContract.ExpectedLightmapCount);
+                    var firstProductionOnlyIndex = MovementLabContract.DevelopmentLightmapCount * 3;
+                    var preserved = new List<PreservedBakedOutput>();
+                    for (var i = firstProductionOnlyIndex; i < productionLightmaps.Length; i++)
+                    {
+                        var assetPath = productionLightmaps[i];
+                        var assetAbsolutePath = MovementLabManifestStore.ResolveProjectPath(assetPath);
+                        var metaAbsolutePath = assetAbsolutePath + ".meta";
+                        var assetExists = File.Exists(assetAbsolutePath);
+                        var metaExists = File.Exists(metaAbsolutePath);
+                        if (assetExists != metaExists)
+                            throw new InvalidOperationException("MovementLab development bake cannot preserve a broken production-only lightmap pair: " + assetPath);
+                        if (!assetExists) continue;
+
+                        ValidateAssetMetaGuid(assetPath);
+                        preserved.Add(new PreservedBakedOutput(assetAbsolutePath, File.ReadAllBytes(assetAbsolutePath)));
+                        preserved.Add(new PreservedBakedOutput(metaAbsolutePath, File.ReadAllBytes(metaAbsolutePath)));
+                    }
+
+                    var expectedOutputCount = (MovementLabContract.ExpectedLightmapCount - MovementLabContract.DevelopmentLightmapCount) * 3;
+                    if (preserved.Count != 0 && preserved.Count != expectedOutputCount * 2)
+                        throw new InvalidOperationException("MovementLab development bake requires all production-only lightmap outputs to be present or absent as complete asset/meta pairs.");
+                    return preserved.ToArray();
+                }
+
+                private static void RestorePreservedBakedOutputs(PreservedBakedOutput[] preserved)
+                {
+                    for (var i = 0; i < preserved.Length; i++)
+                        MovementLabAtomicFile.WriteAllBytesAtomic(preserved[i].Bytes, preserved[i].AbsolutePath);
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                }
+
+                private static void ValidateBakedLightmapTopology(int expectedCount)
+                {
+                    var lightmaps = LightmapSettings.lightmaps;
+                    if (lightmaps == null || lightmaps.Length != expectedCount)
+                        throw new InvalidOperationException("MovementLab lightmap atlas count invalid: expected " + expectedCount + ".");
+
+                    var expectedPaths = MovementLabContract.BakedLightmapPaths(expectedCount);
+                    for (var i = 0; i < lightmaps.Length; i++)
+                    {
+                        var data = lightmaps[i];
+                        if (data == null || data.lightmapDir == null || data.lightmapColor == null || data.shadowMask == null)
+                            throw new InvalidOperationException("MovementLab lightmap data entry is incomplete: " + i);
+
+                        var pathIndex = i * 3;
+                        if (!string.Equals(AssetDatabase.GetAssetPath(data.lightmapDir), expectedPaths[pathIndex], StringComparison.Ordinal) ||
+                            !string.Equals(AssetDatabase.GetAssetPath(data.lightmapColor), expectedPaths[pathIndex + 1], StringComparison.Ordinal) ||
+                            !string.Equals(AssetDatabase.GetAssetPath(data.shadowMask), expectedPaths[pathIndex + 2], StringComparison.Ordinal))
+                        {
+                            throw new InvalidOperationException("MovementLab lightmap data reference is stale: " + i);
+                        }
+                    }
+                }
+
+                private readonly struct PreservedBakedOutput
+                {
+                    internal readonly string AbsolutePath;
+                    internal readonly byte[] Bytes;
+
+                    internal PreservedBakedOutput(string absolutePath, byte[] bytes)
+                    {
+                        AbsolutePath = absolutePath;
+                        Bytes = bytes;
+                    }
                 }
 
                 internal static void ValidateSceneEnvironment(Scene scene, GameObject arena, bool includeBakedLighting)
