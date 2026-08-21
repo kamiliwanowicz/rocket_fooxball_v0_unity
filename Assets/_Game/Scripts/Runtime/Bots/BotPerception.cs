@@ -500,14 +500,11 @@ namespace RocketFooxball.Runtime.Bots
                 pickupKinds[i] = kind;
             }
 
-            if (!Mathf.Approximately(sightDistance, ExpectedSightDistance) ||
-                !Mathf.Approximately(fieldOfViewDegrees, ExpectedFieldOfViewDegrees) ||
-                !Mathf.Approximately(memorySeconds, ExpectedMemorySeconds) ||
-                !IsFinite(sightDistance) || sightDistance <= 0f ||
+            if (!IsFinite(sightDistance) || sightDistance <= 0f ||
                 !IsFinite(fieldOfViewDegrees) || fieldOfViewDegrees <= 0f || fieldOfViewDegrees > 360f ||
                 !IsFinite(memorySeconds) || memorySeconds < 0f || ContainsForbiddenLayer(obstacleMask.value))
             {
-                Debug.LogError("BotPerception requires sightDistance=75, fieldOfViewDegrees=130, memorySeconds=1.5 and an obstacle mask excluding Participants and Projectiles.", this);
+                Debug.LogError("BotPerception requires positive finite sight distance, valid field of view and memory duration, and an obstacle mask excluding Participants and Projectiles.", this);
                 return false;
             }
 

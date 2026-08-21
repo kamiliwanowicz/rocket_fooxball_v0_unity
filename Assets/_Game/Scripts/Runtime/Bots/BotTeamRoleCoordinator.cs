@@ -652,14 +652,14 @@ namespace RocketFooxball.Runtime.Bots
                 }
             }
 
-            if (!IsFinite(evaluationInterval) || !Mathf.Approximately(evaluationInterval, ExpectedEvaluationInterval) ||
-                !IsFinite(roleHoldSeconds) || !Mathf.Approximately(roleHoldSeconds, ExpectedRoleHoldSeconds) ||
-                !IsFinite(switchMargin) || !Mathf.Approximately(switchMargin, ExpectedSwitchMargin) ||
-                !IsFinite(humanShotgunYieldDistance) || !Mathf.Approximately(humanShotgunYieldDistance, ExpectedHumanShotgunYieldDistance) ||
-                !IsFinite(healthYieldDistance) || !Mathf.Approximately(healthYieldDistance, ExpectedHealthYieldDistance) ||
-                !IsFinite(criticalHealthRatio) || !Mathf.Approximately(criticalHealthRatio, ExpectedCriticalHealthRatio))
+            if (!IsFinite(evaluationInterval) || evaluationInterval <= 0f ||
+                !IsFinite(roleHoldSeconds) || roleHoldSeconds < 0f ||
+                !IsFinite(switchMargin) || switchMargin < 0f ||
+                !IsFinite(humanShotgunYieldDistance) || humanShotgunYieldDistance <= 0f ||
+                !IsFinite(healthYieldDistance) || healthYieldDistance <= 0f ||
+                !IsFinite(criticalHealthRatio) || criticalHealthRatio <= 0f || criticalHealthRatio > 1f)
             {
-                Debug.LogError("BotTeamRoleCoordinator requires tuning 0.5s/2s/0.15/12m/10m/0.30.", this);
+                Debug.LogError("BotTeamRoleCoordinator requires positive finite tuning values, a non-negative switch margin, and a critical health ratio in (0, 1]; check prefab serialization.", this);
                 return false;
             }
 

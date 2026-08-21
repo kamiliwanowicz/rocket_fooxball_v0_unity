@@ -33,7 +33,7 @@ namespace RocketFooxball.Runtime.Bots
         private const int MaxPickupCandidates = 5;
         private const float CombatTargetDistanceEpsilon = 0.05f;
         private const string CompositionError =
-            "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, and exact 89-degree/8-meter tuning.";
+            "BotController requires a valid non-local participant and serialized match, motor, Head, kick, launcher, shotgun, navigator, perception, role coordinator, combat mask, positive pitch below 90 degrees, and a positive jump probe distance.";
 
         [Header("References")]
         [SerializeField] private ParticipantState participant;
@@ -2140,9 +2140,9 @@ namespace RocketFooxball.Runtime.Bots
                 participant.Shotgun != shotgun || participant.CharacterController == null ||
                 perception.ObserverSlotId != participant.SlotId || ContainsForbiddenLayer(combatObstacleMask.value) ||
                 !IsSupportedDifficulty(difficulty) || !IsFinite(maxPitchDegrees) ||
-                !Mathf.Approximately(maxPitchDegrees, ExpectedMaxPitchDegrees) ||
+                maxPitchDegrees <= 0f || maxPitchDegrees >= 90f ||
                 !IsFinite(jumpProbeDistance) ||
-                !Mathf.Approximately(jumpProbeDistance, ExpectedJumpProbeDistance))
+                jumpProbeDistance <= 0f)
             {
                 LogCompositionError();
                 return false;
