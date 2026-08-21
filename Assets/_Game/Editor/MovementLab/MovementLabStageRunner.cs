@@ -152,9 +152,11 @@ namespace RocketFooxball.Editor
                     string.Join(",", unresolved.Select(stage => stage.ToString()).ToArray()));
             }
 
-            var finalState = MovementLabStageGraph.MarkCurrent(final);
-            if (sawWork)
+            var pendingAuthoritativeStages = final.StaleStages
+                .Where(stage => !final.IsRawOutputDriftOnly(stage)).ToArray();
+            if (sawWork && pendingAuthoritativeStages.Length == 0)
             {
+                var finalState = MovementLabStageGraph.MarkCurrent(final);
                 MovementLabManifestStore.WriteAtomic(finalState);
                 AssetDatabase.ImportAsset(MovementLabContract.ManifestPath, ImportAssetOptions.ForceSynchronousImport);
             }
