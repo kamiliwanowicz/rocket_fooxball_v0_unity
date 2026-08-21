@@ -151,27 +151,17 @@ $state = [pscustomobject]@{
 }
 
 $cases = @(
-    [pscustomobject]@{ Id = 'shim-export-set'; Function = ${function:Test-ShimExportSet} },
-    [pscustomobject]@{ Id = 'gopv-ordered'; Function = ${function:Test-GopvOrdered} },
-    [pscustomobject]@{ Id = 'gopv-json'; Function = ${function:Test-GopvJson} },
-    [pscustomobject]@{ Id = 'gopv-absent'; Function = ${function:Test-GopvAbsent} },
     [pscustomobject]@{ Id = 'ledger-row-ordered-literal'; Function = ${function:Test-LedgerRowOrderedLiteral} },
     [pscustomobject]@{ Id = 'generated-path-surface-removed'; Function = ${function:Test-GeneratedPathSurfaceRemoved} },
     [pscustomobject]@{ Id = 'generated-yaml-comparator-coverage'; Function = ${function:Test-GeneratedYamlComparatorCoverage} },
     [pscustomobject]@{ Id = 'generated-yaml-comparator-default-meta-coverage'; Function = ${function:Test-GeneratedYamlComparatorDefaultMetaCoverage} },
-    [pscustomobject]@{ Id = 'row-reuse-equal'; Function = ${function:Test-RowReuseEqual} },
-    [pscustomobject]@{ Id = 'row-reuse-diff'; Function = ${function:Test-RowReuseDiff} },
     [pscustomobject]@{ Id = 'row-field-sweep'; Function = ${function:Test-RowFieldSweep} },
-    [pscustomobject]@{ Id = 'bake-inputs-literal'; Function = ${function:Test-BakeInputsLiteral} },
-    [pscustomobject]@{ Id = 'bake-inputs-asymmetry'; Function = ${function:Test-BakeInputsAsymmetry} },
     [pscustomobject]@{ Id = 'bake-count-production-method'; Function = ${function:Test-BakeCountProductionMethod} },
-    [pscustomobject]@{ Id = 'path-intersects'; Function = ${function:Test-PathIntersects} },
     [pscustomobject]@{ Id = 'evidence-path-budget'; Function = ${function:Test-EvidencePathBudget} },
     [pscustomobject]@{ Id = 'short-workspace-path'; Function = ${function:Test-ShortWorkspacePath} },
     [pscustomobject]@{ Id = 'stringset-null'; Function = ${function:Test-StringSetNull} },
     [pscustomobject]@{ Id = 'planonly-pending-only'; Function = ${function:Test-PlanOnlyPendingOnly} },
     [pscustomobject]@{ Id = 'guard-g1'; Function = ${function:Test-GuardG1} },
-    [pscustomobject]@{ Id = 'guard-g3'; Function = ${function:Test-GuardG3} },
     [pscustomobject]@{ Id = 'guard-g4'; Function = ${function:Test-GuardG4} },
     [pscustomobject]@{ Id = 'guard-g5'; Function = ${function:Test-GuardG5} },
     [pscustomobject]@{ Id = 'scratch-drill'; Function = ${function:Test-ScratchDrill} }

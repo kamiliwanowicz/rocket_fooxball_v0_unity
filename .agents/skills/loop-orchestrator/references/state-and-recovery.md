@@ -127,7 +127,7 @@ Workflow command only:
 
 `Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode <...> -ProjectPath <...>`
 
-Apply `-PlanOnly`, `-LedgerPath`, `-EvidenceRoot` when applicable. Carry prior accepted `-LedgerPath` across retries/dependencies. Never pass workflow arguments to test runner.
+Apply `-PlanOnly` and `-EvidenceRoot` when applicable. Never pass workflow arguments to test runner.
 
 Production-final order: zero writers -> clean exact SHA -> lease -> accepted reviews/fixes -> `ProductionPrepare` -> `ProductionValidate` semantic pass.
 

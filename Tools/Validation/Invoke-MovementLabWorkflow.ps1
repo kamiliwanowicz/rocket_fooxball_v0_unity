@@ -7,7 +7,6 @@ param(
     [string]$ProjectPath,
     [string]$EvidenceRoot,
     [string]$AttemptId,
-    [string]$LedgerPath,
     [string]$ProbePath,
     [switch]$PlanOnly,
     [int]$TimeoutSeconds = 900
@@ -28,8 +27,6 @@ $script:LeasePath = $null
 $script:LeaseToken = $null
 $script:LeaseReleaseProofPath = $null
 $script:InvocationId = $null
-$script:PriorLedgerHistory = New-Object System.Collections.Generic.List[object]
-$script:PriorManifestHistory = New-Object System.Collections.Generic.List[object]
 $script:WorkflowStarted = [DateTime]::UtcNow
 $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
@@ -685,60 +682,13 @@ function Get-EnvironmentFingerprint {
     try { return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
 }
 
-function Get-InputDigest {
-    param([Parameter(Mandatory = $true)][string[]]$Paths)
-    $entries = New-Object System.Collections.Generic.List[string]
-    foreach ($relative in $Paths) {
-        $relative = Assert-OneLineValue 'Ledger input path' ([string]$relative)
-        if ([System.IO.Path]::IsPathRooted($relative)) { throw ('Ledger input path must be project-relative: ' + $relative) }
-        $full = [System.IO.Path]::GetFullPath((Join-Path $script:ProjectRoot $relative))
-        $projectPrefix = $script:ProjectRoot.TrimEnd('\') + '\'
-        if (-not $full.StartsWith($projectPrefix, [StringComparison]::OrdinalIgnoreCase)) {
-            throw ('Ledger input path escapes project: ' + $relative)
-        }
-        # `.git` can contain hundreds of megabytes of object data. Bind
-        # ledger reuse to cheap Git facts instead of recursively hashing it.
-        $canonicalRelative = $full.Substring($script:ProjectRoot.Length).TrimStart('\', '/')
-        $canonicalRelative = $canonicalRelative.Replace('\', '/')
-        if ($canonicalRelative -eq '.git') {
-            $entries.Add('.git/HEAD=' + (Get-HeadSha))
-            $entries.Add('.git/status=' + (Invoke-Git @('status', '--porcelain=v1', '--untracked-files=all')))
-            continue
-        }
-        if ($canonicalRelative.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase)) {
-            throw ('Ledger input path may not recurse into .git: ' + $relative)
-        }
-        if (Test-Path -LiteralPath $full -PathType Leaf) {
-            $entries.Add($relative.Replace('\', '/') + '=' + (Get-FileHash -LiteralPath $full -Algorithm SHA256).Hash.ToLowerInvariant())
-        } elseif (Test-Path -LiteralPath $full -PathType Container) {
-            $files = @(Get-ChildItem -LiteralPath $full -File -Recurse -Force | Sort-Object FullName)
-            foreach ($file in $files) {
-                $child = $file.FullName.Substring($script:ProjectRoot.Length).TrimStart('\', '/')
-                $entries.Add($child.Replace('\', '/') + '=' + (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant())
-            }
-            if ($files.Count -eq 0) { $entries.Add($relative.Replace('\', '/') + '=__EMPTY__') }
-        } else {
-            $entries.Add($relative.Replace('\', '/') + '=__MISSING__')
-        }
-    }
-    $bytes = [System.Text.Encoding]::UTF8.GetBytes(($entries -join "`n"))
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    try { return ([System.BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant() } finally { $sha.Dispose() }
-}
-
 function New-LedgerRow {
     param(
         [Parameter(Mandatory = $true)][string]$CheckId,
         [Parameter(Mandatory = $true)][ValidateSet('fast', 'development', 'production-final')][string]$Tier,
         [Parameter(Mandatory = $true)][bool]$MutatesProject,
-        [Parameter(Mandatory = $true)][string[]]$InputPaths,
-        [Parameter(Mandatory = $true)][string[]]$InvalidationPaths,
-        [string[]]$Subsumes = @(),
         [Parameter(Mandatory = $true)][string]$RunPoint
     )
-    $inputPathArray = [string[]]@($InputPaths)
-    $invalidationPathArray = [string[]]@($InvalidationPaths)
-    $subsumesArray = [string[]]@($Subsumes)
     $generatedInventoryArray = [string[]]@(Get-AuthoritativeGeneratedInventory)
     $generatedHashes = Get-GeneratedHashes
     [ordered]@{
@@ -749,15 +699,11 @@ function New-LedgerRow {
         status = 'pending'
         run_point = $RunPoint
         mutates_project = $MutatesProject
-        input_paths = $inputPathArray
-        input_digest = Get-InputDigest -Paths $inputPathArray
         environment_fingerprint = Get-EnvironmentFingerprint
         generated_inventory = $generatedInventoryArray
         generated_hashes = $generatedHashes
         generated_hash_digest = Get-GeneratedHashDigest $generatedHashes
         working_tree_digest = Get-WorkingTreeDigest
-        invalidation_paths = $invalidationPathArray
-        subsumes = $subsumesArray
         executed_sha = $null
         validated_sha = $null
         evidence_path = $null
@@ -772,101 +718,26 @@ function New-LedgerRow {
 }
 
 function New-CheckLedger {
-    $commonInputs = @('Assets/_Game/Editor', 'Tools/Validation', 'ProjectSettings', 'Packages')
     $rows = New-Object System.Collections.Generic.List[object]
     switch ($Mode) {
         'Fast' {
-            $rows.Add((New-LedgerRow -CheckId 'compile' -Tier 'fast' -MutatesProject $false -InputPaths $commonInputs -InvalidationPaths @('Assets/_Game/Editor', 'Tools/Validation', 'ProjectSettings', 'Packages') -Subsumes @('validator-readonly') -RunPoint 'coding'))
-            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'coding'))
-            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated', 'Assets/_Game/Lighting') -Subsumes @() -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'compile' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
         }
         'Development' {
-            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'coding'))
-            $rows.Add((New-LedgerRow -CheckId 'development-bake' -Tier 'development' -MutatesProject $true -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes') -Subsumes @() -RunPoint 'checkpoint'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'development-bake' -Tier 'development' -MutatesProject $true -RunPoint 'checkpoint'))
         }
         'ProductionPrepare' {
-            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -InputPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -InvalidationPaths @('Assets/_Game/Editor/MovementLab', 'Assets/_Game/Generated') -Subsumes @() -RunPoint 'source-freeze'))
-            $productionBakeInputs = @(
-                'Assets/_Game/Lighting',
-                'Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs',
-                'Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs',
-                'Assets/_Game/Lighting/MovementLabLightingSettings.asset',
-                'Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta',
-                'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset',
-                'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset.meta',
-                'Assets/_Game/Lighting/MovementLabVolumeProfile.asset',
-                'Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta',
-                'Assets/_Game/Lighting/MovementLabLightingManifest.json',
-                'Assets/_Game/Lighting/MovementLabLightingManifest.json.meta'
-            )
-            $rows.Add((New-LedgerRow -CheckId 'production-bake' -Tier 'production-final' -MutatesProject $true -InputPaths $productionBakeInputs -InvalidationPaths $productionBakeInputs -Subsumes @() -RunPoint 'source-freeze'))
+            $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -RunPoint 'source-freeze'))
+            $rows.Add((New-LedgerRow -CheckId 'production-bake' -Tier 'production-final' -MutatesProject $true -RunPoint 'source-freeze'))
         }
         'ProductionValidate' {
-            $productionValidatorInputs = @('Assets/_Game/Editor', 'Assets/_Game/Scripts/Runtime', 'Assets/_Game/Generated', 'Tools/Validation', 'Packages', 'ProjectSettings')
-            $productionValidatorInvalidationPaths = @('Assets/_Game/Editor', 'Assets/_Game/Scripts/Runtime', 'Assets/_Game/Generated', 'Tools/Validation', 'Packages', 'ProjectSettings', 'Assets/_Game/Lighting', 'Assets/_Game/Scenes')
-            $rows.Add((New-LedgerRow -CheckId 'production-validator' -Tier 'production-final' -MutatesProject $false -InputPaths $productionValidatorInputs -InvalidationPaths $productionValidatorInvalidationPaths -Subsumes @('validator-readonly') -RunPoint 'final'))
+            $rows.Add((New-LedgerRow -CheckId 'production-validator' -Tier 'production-final' -MutatesProject $false -RunPoint 'final'))
         }
     }
     return ,([object[]]$rows.ToArray())
-}
-
-function Test-IsAncestor {
-    param([Parameter(Mandatory = $true)][string]$Ancestor, [Parameter(Mandatory = $true)][string]$Descendant)
-    $priorErrorAction = $ErrorActionPreference
-    try {
-        $ErrorActionPreference = 'Continue'
-        & git -C $script:ProjectRoot merge-base --is-ancestor $Ancestor $Descendant 2>$null
-        $exitCode = $LASTEXITCODE
-    } finally {
-        $ErrorActionPreference = $priorErrorAction
-    }
-    return ($exitCode -eq 0)
-}
-
-function Get-ChangedPathsSince {
-    param([Parameter(Mandatory = $true)][string]$FromSha, [Parameter(Mandatory = $true)][string]$ToSha)
-    if ($FromSha -eq $ToSha) { return @() }
-    if (-not (Test-IsAncestor $FromSha $ToSha)) { return $null }
-    $text = Invoke-Git @('diff', '--name-only', ($FromSha + '..' + $ToSha), '--')
-    return @($text -split "`n" | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
-}
-
-function Test-PathIntersects {
-    param([string[]]$ChangedPaths = @(), [string[]]$InvalidationPaths = @())
-    foreach ($changed in $ChangedPaths) {
-        foreach ($invalid in $InvalidationPaths) {
-            $left = $changed.Replace('\', '/').TrimEnd('/')
-            $right = $invalid.Replace('\', '/').TrimEnd('/')
-            if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
-                $left.StartsWith($right + '/', [StringComparison]::OrdinalIgnoreCase) -or
-                $right.StartsWith($left + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-        }
-    }
-    return $false
-}
-
-function Get-ObjectPropertyValue {
-    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
-    if ($Object -is [System.Collections.IDictionary]) {
-        if ($Object.Contains($Name)) { return $Object[$Name] }
-        return $null
-    }
-    if ($null -eq $Object -or -not ($Object.PSObject.Properties.Name -contains $Name)) { return $null }
-    return $Object.PSObject.Properties[$Name].Value
-}
-
-function Get-ObjectPropertyText {
-    param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)
-    $value = Get-ObjectPropertyValue $Object $Name
-    if ($null -eq $value) { return '' }
-    return [string]$value
-}
-
-function Test-RowReuseProof {
-    param([Parameter(Mandatory = $true)]$Prior, [Parameter(Mandatory = $true)]$Row)
-    if ((Get-ObjectPropertyText $Prior 'input_digest') -ne (Get-ObjectPropertyText $Row 'input_digest')) { return @{ valid = $false; reason = 'input digest changed' } }
-    if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
-    return @{ valid = $true; reason = $null }
 }
 
 function Test-StringSetEqual {
@@ -878,105 +749,6 @@ function Test-StringSetEqual {
         if (-not $leftValues[$index].Equals($rightValues[$index], [StringComparison]::OrdinalIgnoreCase)) { return $false }
     }
     return $true
-}
-
-function Set-CheckInvalidated {
-    param(
-        [Parameter(Mandatory = $true)]$Row,
-        [AllowEmptyString()][string]$Reason
-    )
-    $reasonText = if ($null -eq $Reason) { '' } else { $Reason.Trim() }
-    if ([string]::IsNullOrWhiteSpace($reasonText)) {
-        $reasonText = 'reuse proof rejected for check: ' + [string]$Row.check_id
-    }
-    $Row.status = 'invalidated'
-    $Row.invalidation_reason = $reasonText
-}
-
-function Merge-ExistingLedger {
-    param([Parameter(Mandatory = $true)][object[]]$Rows, [Parameter(Mandatory = $true)][string]$CurrentSha)
-    if ([string]::IsNullOrWhiteSpace($LedgerPath)) { return }
-    $full = Assert-DurableEvidencePath $LedgerPath 'LedgerPath'
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw ('Ledger file missing: ' + $full) }
-    $priorManifestPath = Join-Path (Split-Path -Parent $full) 'evidence-manifest.json'
-    if (Test-Path -LiteralPath $priorManifestPath -PathType Leaf) {
-        try { $priorManifest = Get-Content -Raw -LiteralPath $priorManifestPath | ConvertFrom-Json; $script:PriorManifestHistory.Add($priorManifest) } catch { throw ('Prior evidence manifest is malformed: ' + $priorManifestPath) }
-    }
-    $parsed = Get-Content -Raw -LiteralPath $full | ConvertFrom-Json
-    if ($parsed.PSObject.Properties.Name -contains 'history') {
-        foreach ($entry in @($parsed.history)) { $script:PriorLedgerHistory.Add($entry) }
-    }
-    $hasCheckLedger = $null -ne $parsed -and $parsed.PSObject.Properties.Name -contains 'checkLedger'
-    $hasRows = $null -ne $parsed -and $parsed.PSObject.Properties.Name -contains 'rows'
-    $priorRows = if ($hasCheckLedger) { @($parsed.checkLedger) } elseif ($hasRows) { @($parsed.rows) } else { @() }
-    foreach ($entry in $priorRows) { $script:PriorLedgerHistory.Add($entry) }
-    foreach ($row in $Rows) {
-        $prior = $priorRows | Where-Object { [string]$_.check_id -eq [string]$row.check_id } | Select-Object -First 1
-        if ($null -eq $prior -or [string]$prior.status -notin @('executed', 'reused')) { continue }
-        # ProductionValidate is a fresh semantic proof. Historical rows remain
-        # history only; no prior evidence may suppress this invocation.
-        if ([string]$row.check_id -eq 'production-validator') { continue }
-        $evidencePath = [string]$prior.evidence_path
-        if ([string]::IsNullOrWhiteSpace($evidencePath) -or -not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) { Set-CheckInvalidated $row 'evidence path missing'; continue }
-        try { $evidencePath = Assert-DurableEvidencePath $evidencePath 'Ledger evidence' } catch { Set-CheckInvalidated $row $_.Exception.Message; continue }
-        $evidenceDigest = [string]$prior.evidence_digest
-        if ([string]::IsNullOrWhiteSpace($evidenceDigest)) { Set-CheckInvalidated $row 'evidence digest missing'; continue }
-        if ((Get-FileHash -LiteralPath $evidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $evidenceDigest.ToLowerInvariant()) { Set-CheckInvalidated $row 'evidence digest mismatch'; continue }
-        $priorSha = [string]$prior.validated_sha
-        $changed = if ($priorSha) { Get-ChangedPathsSince $priorSha $CurrentSha } else { $null }
-        $sameInputs = [string]$prior.input_digest -eq [string]$row.input_digest
-        $sameEnvironment = [string]$prior.environment_fingerprint -eq [string]$row.environment_fingerprint
-        $exact = $priorSha -eq $CurrentSha
-        $pureReattest = (-not [bool]$row.mutates_project) -and $sameInputs -and $sameEnvironment -and $null -ne $changed -and -not (Test-PathIntersects @($changed) @($row.invalidation_paths))
-        $reuseProof = Test-RowReuseProof $prior $row
-        $manualProof = ([string]$row.check_id -match '(bake|manual)') -or ([string]$row.tier -eq 'production-final' -and [bool]$row.mutates_project)
-        # ProductionBake is always delegated to the C# builder gate. Historical
-        # rows cannot suppress the invocation because only its completed log
-        # can prove marker-based reuse versus an actual bake.
-        if ([string]$row.check_id -eq 'production-bake') { continue }
-        if ($exact) {
-            if (-not $sameInputs -or -not $sameEnvironment -or -not $reuseProof.valid) {
-                $reason = if (-not $sameInputs) { 'input digest changed' } elseif (-not $sameEnvironment) { 'environment fingerprint changed' } else { [string]$reuseProof.reason }
-                Set-CheckInvalidated $row $reason
-                continue
-            }
-            $row.status = 'reused'
-            $row.executed_sha = [string]$prior.executed_sha
-            $row.validated_sha = $CurrentSha
-            $row.evidence_path = $evidencePath
-            $row.evidence_digest = $evidenceDigest
-            $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
-        } elseif ($pureReattest -and -not $manualProof) {
-            $row.status = 'reused'
-            $row.executed_sha = [string]$prior.executed_sha
-            $row.validated_sha = $CurrentSha
-            $row.evidence_path = $evidencePath
-            $row.evidence_digest = $evidenceDigest
-            $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
-        } elseif ($pureReattest -and $manualProof -and $reuseProof.valid) {
-            $row.status = 'reused'
-            $row.executed_sha = [string]$prior.executed_sha
-            $row.validated_sha = $CurrentSha
-            $row.evidence_path = $evidencePath
-            $row.evidence_digest = $evidenceDigest
-            $row.evidence = [ordered]@{ path = $evidencePath; sha256 = $evidenceDigest }
-        } else {
-            $reason = if ($null -eq $changed) { 'ancestry or SHA changed' } elseif (Test-PathIntersects @($changed) @($row.invalidation_paths)) { 'input path changed' } elseif ($manualProof -and -not $reuseProof.valid) { [string]$reuseProof.reason } else { 'proof cannot reattest' }
-            Set-CheckInvalidated $row $reason
-        }
-    }
-}
-
-function Test-CheckPending {
-    param([Parameter(Mandatory = $true)][string]$CheckId)
-    $row = $script:LedgerRows | Where-Object { [string]$_.check_id -eq $CheckId } | Select-Object -First 1
-    return ($null -eq $row -or [string]$row.status -in @('pending', 'invalidated'))
-}
-
-function Mark-CheckReused {
-    param([Parameter(Mandatory = $true)][string]$CheckId)
-    # Keep exact-SHA evidence marked `reused`; never rewrite it as `executed`.
-    $null = $script:LedgerRows | Where-Object { [string]$_.check_id -eq $CheckId } | Select-Object -First 1
 }
 
 function Add-CommandRecord {
@@ -1370,17 +1142,14 @@ $attemptPathValue = if ($attemptPathSafe) { $attemptValue } else { [DateTime]::U
 $script:InvocationId = $attemptPathValue + '-' + [Guid]::NewGuid().ToString('N')
 $evidenceRootPathSafe = $true
 $probePathPathSafe = $true
-$ledgerPathPathSafe = $true
 foreach ($pathArgument in @(
     @{ name = 'EvidenceRoot'; value = [string]$EvidenceRoot },
-    @{ name = 'ProbePath'; value = [string]$ProbePath },
-    @{ name = 'LedgerPath'; value = [string]$LedgerPath }
+    @{ name = 'ProbePath'; value = [string]$ProbePath }
 )) {
     if (-not [string]::IsNullOrWhiteSpace($pathArgument.value) -and $pathArgument.value.IndexOfAny(@([char]0, [char]10, [char]13)) -ge 0) {
         Add-WorkflowViolation $preflightViolations ('preflight.argument.' + $pathArgument.name + '.shape') ($pathArgument.name + ' must be one line.')
         if ($pathArgument.name -eq 'EvidenceRoot') { $evidenceRootPathSafe = $false }
         elseif ($pathArgument.name -eq 'ProbePath') { $probePathPathSafe = $false }
-        elseif ($pathArgument.name -eq 'LedgerPath') { $ledgerPathPathSafe = $false }
     }
 }
 $evidenceBase = if ([string]::IsNullOrWhiteSpace($EvidenceRoot)) {
@@ -1397,7 +1166,6 @@ if (Test-Path -LiteralPath $script:EvidenceDirectory) { throw ('Evidence invocat
 } else {
     Assert-DurableEvidencePath $ProbePath 'ProbePath'
 }
-if (-not [string]::IsNullOrWhiteSpace($LedgerPath) -and $ledgerPathPathSafe) { $null = Assert-DurableEvidencePath $LedgerPath 'LedgerPath' }
 if (-not $PlanOnly -and (Test-Path -LiteralPath $script:ProbeOutputPath)) { throw ('Probe path already exists; refusing overwrite: ' + $script:ProbeOutputPath) }
 
 $beforeHead = Get-HeadSha
@@ -1422,21 +1190,20 @@ Assert-NoProjectProcessOrLock
 $beforeHashes = Get-GeneratedHashes
 $ledger = New-CheckLedger
 $script:LedgerRows = $ledger
-Merge-ExistingLedger $ledger $beforeHead
 $probeRecord = $null
 
 try {
     switch ($Mode) {
         'Fast' {
-            if (Test-CheckPending 'compile') { Invoke-UnityStep 'CompileAndProbe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'compile' } else { Mark-CheckReused 'compile' }
+            Invoke-UnityStep 'CompileAndProbe' 'RocketFooxball.Editor.MovementLabBuilder.ProbeMovementLabGeneratedState' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'compile'
             $probeRecord = Read-ProbeContract
             Assert-ProbeContractForMode $probeRecord 'Fast'
-            if (Test-CheckPending 'stage-probe') { Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
-            if (Test-CheckPending 'fast-build') { Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build' } else { Mark-CheckReused 'fast-build' }
+            Mark-CheckExecuted 'stage-probe'
+            Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
         }
         'Development' {
-            if (Test-CheckPending 'fast-build') { Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build' } else { Mark-CheckReused 'fast-build' }
-            if (Test-CheckPending 'development-bake') { Invoke-UnityStep 'DevelopmentBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLightingDevelopment' @('-movementLabProbePath', $script:ProbeOutputPath) $true; Mark-CheckExecuted 'development-bake' } else { Mark-CheckReused 'development-bake' }
+            Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
+            Invoke-UnityStep 'DevelopmentBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLightingDevelopment' @('-movementLabProbePath', $script:ProbeOutputPath) $true; Mark-CheckExecuted 'development-bake'
             $probeRecord = Read-ProbeContract
             Assert-ProbeContractForMode $probeRecord 'Development'
         }
@@ -1448,7 +1215,7 @@ try {
                 Assert-ProbeContractForMode $probeRecord 'ProductionPrepare'
             }
             Invoke-UnityStep 'ProductionBake' 'RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting' @('-movementLabPrepareProduction', '-movementLabProbePath', $script:ProbeOutputPath) $true
-            if (Test-CheckPending 'stage-probe') { Mark-CheckExecuted 'stage-probe' } else { Mark-CheckReused 'stage-probe' }
+            Mark-CheckExecuted 'stage-probe'
             Mark-CheckExecuted 'production-bake'
             $productionBakeOutcome = Resolve-ProductionBakeOutcome
             $productionBakeRow = $script:LedgerRows | Where-Object { [string]$_.check_id -eq 'production-bake' } | Select-Object -First 1
@@ -1465,7 +1232,7 @@ try {
             Assert-ProbeContractForMode $probeRecord 'ProductionPrepareFinal'
         }
         'ProductionValidate' {
-            if (Test-CheckPending 'production-validator') { Invoke-UnityStep 'ProductionValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'production-validator' } else { Mark-CheckReused 'production-validator' }
+            Invoke-UnityStep 'ProductionValidate' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLab' @('-movementLabProbePath', $script:ProbeOutputPath) $false -NoGraphics; Mark-CheckExecuted 'production-validator'
             $probeRecord = Read-ProbeContract
             Assert-ProbeContractForMode $probeRecord 'ProductionValidate'
         }
@@ -1528,7 +1295,7 @@ $ledgerPayloadPath = Join-Path $script:EvidenceDirectory 'check-ledger-payload.j
 foreach ($row in $ledger) {
     if ($PlanOnly -and [string]$row.status -eq 'pending') { $row.status = 'deferred' }
     elseif ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
-        $row.status = if ([string]$row.status -eq 'reused') { 'reused' } else { 'executed' }
+        $row.status = 'executed'
         $row.executed_sha = $beforeHead
         $row.validated_sha = $afterHead
         $row.generated_hashes = $afterHashes
@@ -1547,7 +1314,7 @@ foreach ($row in $ledger) {
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $null }
     }
 }
-Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
+Write-AtomicJson $ledgerPayloadPath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; rows = @($ledger) })
 $ledgerEvidenceDigest = (Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant()
 foreach ($row in $ledger) {
     if ($script:ExecutedCheckIds.Contains([string]$row.check_id)) {
@@ -1555,7 +1322,7 @@ foreach ($row in $ledger) {
         $row.evidence = [ordered]@{ path = $ledgerPayloadPath; sha256 = $ledgerEvidenceDigest }
     }
 }
-Write-AtomicJson $ledgerEvidencePath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; history = @($script:PriorLedgerHistory.ToArray()); rows = @($ledger) })
+Write-AtomicJson $ledgerEvidencePath ([ordered]@{ schemaVersion = 1; exactSha = $afterHead; invocationId = $script:InvocationId; rows = @($ledger) })
 $ledgerFinalDigest = (Get-FileHash -LiteralPath $ledgerEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ((Get-FileHash -LiteralPath $ledgerPayloadPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledgerEvidenceDigest) { throw 'Ledger payload digest changed after final writes.' }
 if ((Get-FileHash -LiteralPath $ledgerEvidencePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $ledgerFinalDigest) { throw 'Ledger evidence digest changed after final writes.' }
@@ -1615,7 +1382,6 @@ $manifest = [ordered]@{
     checkLedgerPayloadSha256 = $ledgerEvidenceDigest
     checkLedgerSha256 = $ledgerFinalDigest
     checkLedger = @($ledger)
-    history = @($script:PriorManifestHistory.ToArray())
     lockReleaseProof = @($script:ReleaseProof.ToArray())
     predicateClassification = $predicateClassification
     gitMutation = $false
