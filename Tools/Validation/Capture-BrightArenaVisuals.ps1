@@ -109,10 +109,8 @@ if (-not (Test-Path -LiteralPath $UnityPath -PathType Leaf)) { throw "Unity $Uni
 
 Assert-NoProjectProcessOrLock
 $harnessStopwatch = [Diagnostics.Stopwatch]::StartNew()
-$harnessStdoutPath = Join-Path $EvidenceRoot ("Harness-$AttemptId.stdout.log")
-$harnessStderrPath = Join-Path $EvidenceRoot ("Harness-$AttemptId.stderr.log")
 $harnessArguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + (Join-Path $ProjectPath 'Tools/Tests/Invoke-HarnessTests.ps1') + '"'))
-$harnessProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $harnessArguments -WindowStyle Hidden -PassThru -RedirectStandardOutput $harnessStdoutPath -RedirectStandardError $harnessStderrPath
+$harnessProcess = Start-Process -FilePath 'powershell.exe' -ArgumentList $harnessArguments -WindowStyle Hidden -PassThru
 $harnessTimedOut = -not $harnessProcess.WaitForExit(90000)
 if ($harnessTimedOut) {
     try {
@@ -120,16 +118,13 @@ if ($harnessTimedOut) {
     } catch [InvalidOperationException] {
         if (-not $harnessProcess.HasExited) { throw }
     }
-    $harnessProcess.WaitForExit()
 }
+$harnessProcess.WaitForExit()
+$harnessProcess.Refresh()
 $harnessStopwatch.Stop()
-if (Test-Path -LiteralPath $harnessStdoutPath) { Get-Content -LiteralPath $harnessStdoutPath }
-if ((Test-Path -LiteralPath $harnessStderrPath) -and (Get-Item -LiteralPath $harnessStderrPath).Length -gt 0) {
-    Get-Content -LiteralPath $harnessStderrPath | ForEach-Object { Write-Output ('HARNESS_STDERR ' + $_) }
-}
-if ($harnessTimedOut) { throw "Harness pre-gate exceeded 90 seconds and was terminated. See $harnessStdoutPath and $harnessStderrPath." }
+if ($harnessTimedOut) { throw 'Harness pre-gate exceeded 90 seconds and was terminated.' }
 $harnessExitCode = $harnessProcess.ExitCode
-if ($harnessExitCode -ne 0) { throw "Harness pre-gate failed with exit code $harnessExitCode. See $harnessStdoutPath and $harnessStderrPath." }
+if ($harnessExitCode -ne 0) { throw "Harness pre-gate failed with exit code $harnessExitCode." }
 Assert-NoProjectProcessOrLock
 
 $beforeStatus = Get-ScopedGitStatus

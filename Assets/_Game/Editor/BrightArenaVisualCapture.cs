@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using RocketFooxball.Runtime.Rendering;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -221,6 +222,7 @@ namespace RocketFooxball.Editor
             RenderTexture renderTarget = null;
             GameObject externalCameraObject = null;
             Camera gameplayCamera = null;
+            GraphicsQualityRuntime graphicsQualityRuntime = null;
             Camera externalCamera = null;
             CameraState gameplayState = default;
             ObjectState viewmodelsState = default;
@@ -275,6 +277,7 @@ namespace RocketFooxball.Editor
 
                 var player = Require(GameObject.Find("Player"), "Player root");
                 gameplayCamera = Require(player.transform.Find("Head/Camera")?.GetComponent<Camera>(), "Player camera");
+                graphicsQualityRuntime = Require(gameplayCamera.GetComponent<GraphicsQualityRuntime>(), "Player camera GraphicsQualityRuntime");
                 var viewmodels = Require(gameplayCamera.transform.Find("Viewmodels")?.gameObject, "Viewmodels");
                 var crosshair = Require(gameplayCamera.transform.Find("CrosshairCanvas")?.gameObject, "CrosshairCanvas");
                 var rocket = Require(viewmodels.transform.Find("WeaponVisual")?.gameObject, "rocket FPS viewmodel");
@@ -313,6 +316,7 @@ namespace RocketFooxball.Editor
                 {
                     var quality = qualityLevels[qualityIndex];
                     QualitySettings.SetQualityLevel(quality.Item1, true);
+                    graphicsQualityRuntime.ApplyCurrentQuality();
                     gameplayCamera.Render();
                     for (var i = 0; i < views.Length; i++)
                     {
@@ -424,6 +428,10 @@ namespace RocketFooxball.Editor
                 if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
                 if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
                 QualitySettings.SetQualityLevel(initialQualityLevel, true);
+                if (graphicsQualityRuntime != null)
+                {
+                    graphicsQualityRuntime.ApplyCurrentQuality();
+                }
                 if (externalCameraObject != null)
                 {
                     UnityEngine.Object.DestroyImmediate(externalCameraObject);
