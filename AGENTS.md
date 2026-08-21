@@ -18,6 +18,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 ## Delivery posture
 
 - PoC -> optimize for fast gameplay learning, not production completeness.
+- Fast efficient development is the target. Slow, bugged or inefficient ceremonies or processes must be highlighted to user. 
 - Prefer smallest reversible change proving intended behavior. Reuse existing patterns and assets.
 - Spend effort on issues likely to break playtests, builds, integration, project assets, or iteration speed.
 - Defer broad abstraction, speculative future-proofing, production hardening, exhaustive edge-case handling, and untargeted polish unless required for core-loop reliability or explicitly requested.
