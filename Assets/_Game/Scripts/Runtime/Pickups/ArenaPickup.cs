@@ -10,7 +10,9 @@ namespace RocketFooxball.Runtime.Pickups
         [SerializeField] private MatchController match;
         [SerializeField] private Collider pickupTrigger;
         [SerializeField] private GameObject visualRoot;
-        [SerializeField, Min(0f)] private float respawnDelay = 15f;
+        public const float DefaultRespawnDelay = 15f;
+
+        [SerializeField, Min(0f)] private float respawnDelay = DefaultRespawnDelay;
 
         private PickupRespawnState respawnState = new PickupRespawnState();
         private bool compositionValid;

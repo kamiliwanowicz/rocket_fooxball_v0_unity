@@ -1,6 +1,9 @@
 using System;
 using UnityEditor.Animations;
 using UnityEngine;
+using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 
 namespace RocketFooxball.Editor
 {
@@ -49,7 +52,7 @@ namespace RocketFooxball.Editor
         internal const string HealthPickupsRootName = "HealthPickups";
         internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
         internal const string HealthPickupEastSouthName = "HealthPickup_EastSouth";
-        internal const float HealthPickupRespawnDelay = 15f;
+        internal const float HealthPickupRespawnDelay = ArenaPickup.DefaultRespawnDelay;
         internal const float HealthPickupRestoreFraction = 0.33f;
         internal const float HealthPickupTriggerRadius = 1.50f;
         internal const string ShotgunPickupsRootName = "ShotgunPickups";
@@ -100,8 +103,8 @@ namespace RocketFooxball.Editor
         internal const float BlastRadius = 11.7f;
         internal const float GoalAxisPosition = 64f;
         internal const float PlayerSpawnOffset = 12f;
-        internal const float CelebrationOrbitRadius = 11f;
-        internal const float CelebrationOrbitHeight = 5f;
+        internal const float CelebrationOrbitRadius = PlayerCameraFeedback.ExpectedCelebrationOrbitRadius;
+        internal const float CelebrationOrbitHeight = PlayerCameraFeedback.ExpectedCelebrationOrbitHeight;
         internal const float CelebrationLookHeight = 2.1f;
         internal const float CelebrationOrbitDegrees = 360f;
         internal const float CelebrationFov = 60f;
@@ -114,7 +117,7 @@ namespace RocketFooxball.Editor
         internal const float TeamCueScaleMultiplier = 2f;
         internal const float ImmunityShieldScaleMultiplier = 2f;
         internal const float NameplateHeight = 4.1f;
-        internal const float LocalRespawnDelay = 8f;
+        internal const float LocalRespawnDelay = ParticipantState.DefaultDeathWait;
         internal const float BotRespawnDelay = 5f;
         internal const float RocketTrailLifetime = 0.55f;
         internal const float RocketTrailRateOverDistance = 1.5f;

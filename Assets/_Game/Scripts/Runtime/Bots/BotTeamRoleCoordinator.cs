@@ -12,12 +12,9 @@ namespace RocketFooxball.Runtime.Bots
     public sealed class BotTeamRoleCoordinator : MonoBehaviour
     {
         private const int TeamRosterSize = 3;
-        private const float ExpectedEvaluationInterval = 0.5f;
-        private const float ExpectedRoleHoldSeconds = 2f;
-        private const float ExpectedSwitchMargin = 0.15f;
-        private const float ExpectedHumanShotgunYieldDistance = 12f;
-        private const float ExpectedHealthYieldDistance = 10f;
-        private const float ExpectedCriticalHealthRatio = 0.30f;
+        public const float ExpectedEvaluationInterval = 0.5f;
+        public const float ExpectedRoleHoldSeconds = 2f;
+        public const float ExpectedSwitchMargin = 0.15f;
         private const int MaxParticipantSlotId = 6;
 
         [Header("Team")]
@@ -31,9 +28,9 @@ namespace RocketFooxball.Runtime.Bots
         [SerializeField, Min(0f)] private float evaluationInterval = ExpectedEvaluationInterval;
         [SerializeField, Min(0f)] private float roleHoldSeconds = ExpectedRoleHoldSeconds;
         [SerializeField] private float switchMargin = ExpectedSwitchMargin;
-        [SerializeField, Min(0f)] private float humanShotgunYieldDistance = ExpectedHumanShotgunYieldDistance;
-        [SerializeField, Min(0f)] private float healthYieldDistance = ExpectedHealthYieldDistance;
-        [SerializeField, Range(0f, 1f)] private float criticalHealthRatio = ExpectedCriticalHealthRatio;
+        [SerializeField, Min(0f)] private float humanShotgunYieldDistance = BotTargetRules.HumanShotgunYieldDistance;
+        [SerializeField, Min(0f)] private float healthYieldDistance = BotTargetRules.HealthYieldDistance;
+        [SerializeField, Range(0f, 1f)] private float criticalHealthRatio = BotTargetRules.CriticalHealthRatio;
 
         private readonly float[] roleHeldSeconds = new float[MaxParticipantSlotId];
         private BotTargetCandidate[][] pickupCandidates = new BotTargetCandidate[0][];

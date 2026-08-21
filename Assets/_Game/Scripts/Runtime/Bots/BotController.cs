@@ -13,7 +13,7 @@ namespace RocketFooxball.Runtime.Bots
     [DefaultExecutionOrder(-200)]
     public sealed class BotController : MonoBehaviour
     {
-        private const float ExpectedMaxPitchDegrees = 89f;
+        public const float ExpectedMaxPitchDegrees = 89f;
         private const float ExpectedJumpProbeDistance = BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance;
         private const float ObservationMemorySeconds = 1.5f;
         private const float EmergencyCrossingWindowSeconds = 2.5f;

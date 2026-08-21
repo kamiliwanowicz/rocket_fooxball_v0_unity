@@ -15,9 +15,9 @@ namespace RocketFooxball.Runtime.Bots
     {
         private const int RosterSize = 6;
         private const int PickupCount = 5;
-        private const float ExpectedSightDistance = 75f;
-        private const float ExpectedFieldOfViewDegrees = 130f;
-        private const float ExpectedMemorySeconds = 1.5f;
+        public const float ExpectedSightDistance = 75f;
+        public const float ExpectedFieldOfViewDegrees = 130f;
+        public const float ExpectedMemorySeconds = 1.5f;
         private const float TargetDistanceEpsilon = 0.05f;
         private const float PositionEpsilon = 0.000001f;
 

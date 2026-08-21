@@ -12,6 +12,8 @@ namespace RocketFooxball.Runtime.Feedback
         public const float ExpectedCelebrationOrbitRadius = 11f;
         public const float ExpectedCelebrationOrbitHeight = 5f;
         public const float ExpectedCelebrationLookHeight = 2.1f;
+        public const float DefaultDashKickImpulse = 0.025f;
+        public const float DefaultDashKickImpulseDuration = 0.12f;
         public static readonly Vector3 ExpectedSpectatorOffset = new Vector3(0f, 5f, -10f);
 
         [Header("References")]
@@ -31,8 +33,8 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField, Min(0f)] private float shakeFrequency = 28f;
 
         [Header("Dash Kick Impulse")]
-        [SerializeField, Min(0f)] private float dashKickImpulse = 0.025f;
-        [SerializeField, Min(0.01f)] private float dashKickImpulseDuration = 0.12f;
+        [SerializeField, Min(0f)] private float dashKickImpulse = DefaultDashKickImpulse;
+        [SerializeField, Min(0.01f)] private float dashKickImpulseDuration = DefaultDashKickImpulseDuration;
 
         [Header("Goal Celebration Orbit")]
         [SerializeField, Min(0.1f)] private float celebrationOrbitRadius = ExpectedCelebrationOrbitRadius;

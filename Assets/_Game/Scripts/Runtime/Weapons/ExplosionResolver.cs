@@ -11,16 +11,24 @@ namespace RocketFooxball.Runtime.Weapons
     [MovedFrom("RocketFooxball")]
     public sealed class ExplosionResolver : MonoBehaviour
     {
+        public const float DefaultPlayerImpulseStrength = 24f;
+        public const float DefaultBallImpulseStrength = 16f;
+        public const float DefaultOccludedForce = 0.25f;
+        public const float DefaultPlayerUpBias = 0.18f;
+        public const float DefaultDirectRocketDamage = 50f;
+        public const float DefaultEnemyRocketImpulseMultiplier = 1f;
+        public const float DefaultCameraFeedbackScale = 0.8f;
+
         [Header("Blast")]
         [SerializeField, Min(0.1f)] private float blastRadius = 11.7f;
-        [SerializeField, Min(0f)] private float playerImpulseStrength = 24f;
-        [SerializeField, Min(0f)] private float ballImpulseStrength = 16f;
-        [SerializeField, Range(0f, 1f)] private float occludedForce = 0.25f;
-        [SerializeField, Range(0f, 1f)] private float playerUpBias = 0.18f;
+        [SerializeField, Min(0f)] private float playerImpulseStrength = DefaultPlayerImpulseStrength;
+        [SerializeField, Min(0f)] private float ballImpulseStrength = DefaultBallImpulseStrength;
+        [SerializeField, Range(0f, 1f)] private float occludedForce = DefaultOccludedForce;
+        [SerializeField, Range(0f, 1f)] private float playerUpBias = DefaultPlayerUpBias;
 
         [Header("Participant Damage")]
-        [SerializeField, Min(0f)] private float directRocketDamage = 50f;
-        [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = 1f;
+        [SerializeField, Min(0f)] private float directRocketDamage = DefaultDirectRocketDamage;
+        [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = DefaultEnemyRocketImpulseMultiplier;
 
         [Header("Rocket Jump")]
         [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
@@ -29,7 +37,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private GoalShieldSet goalShieldSet;
 
         [Header("Feedback")]
-        [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = 0.8f;
+        [SerializeField, Range(0f, 1f)] private float cameraFeedbackScale = DefaultCameraFeedbackScale;
 
         [Header("Presentation")]
         [SerializeField] private ExplosionVfxSpawner explosionVfxSpawner;
