@@ -151,6 +151,7 @@ namespace RocketFooxball.Editor
                       "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
                       "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
                       "Assets/_Game/Scripts/Runtime/Input/PlayerInputReader.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/ParticipantRelationship.cs",
@@ -224,6 +225,7 @@ namespace RocketFooxball.Editor
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, new[] { MovementLabStage.Lighting }, BakedContract,
                 new[]
                 {
+                    "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
                     MovementLabContract.BakedLightingPath + "/LightingData.asset",
                     MovementLabContract.LightingManifestPath
                 }, Array.Empty<string>(), WithMetas(MovementLabContract.BakedOutputPaths), includeUnityVersion: false)
