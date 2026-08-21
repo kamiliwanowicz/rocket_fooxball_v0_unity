@@ -17,6 +17,7 @@ User new to Unity. Explain Unity-specific concepts at junior level. Keep general
 
 ## Delivery posture
 
+- Change channel: code only, authored by AI agents. No manual edits in Unity UI — no Inspector tuning, no hand-authored scene or prefab edits, no Editor-window value changes. Every tuned value originates in a C# constant; builder writes it into generated scene/prefabs. Consequence: scene never legitimately diverges from code, so divergence is a builder bug, not a user edit to preserve. Do not add tooling to rescue, diff, or promote Inspector-side values.
 - PoC -> optimize for fast gameplay learning, not production completeness.
 - Fast efficient development is the target. Slow, bugged or inefficient ceremonies or processes must be highlighted to user. 
 - Prefer smallest reversible change proving intended behavior. Reuse existing patterns and assets.
@@ -105,6 +106,7 @@ Project-owned gameplay assets -> `Assets/_Game/`. Leave Unity starter content ou
 - Movement, input, generated-lab, or other builder-generated change -> run builder protocol.
 - Builder protocol: ensure production bake current (bake command self-skips when inputs unchanged) -> one authoritative build -> semantic validate in a separate Unity process. Separate process proves references persisted to disk. Do not require second builds.
 - Semantic proof always comes from the builder's validate entry point run directly. Automated screen capture never substitutes for it. Human visual review stays on demand.
+- Visual-evidence capture tooling: `Tools/Validation/Capture-BrightArenaVisuals.ps1` + `Assets/_Game/Editor/BrightArenaVisualCapture.cs`. Zero callers is intentional -> retained as template for agent screenshot capture. Never delete as dead code. Reuse blockers before hooking it anywhere: fixed six images (three hardcoded views x High/Low, exact count asserted), `EvidenceRoot` must sit under `C:\wt\`, refuses to run while any Editor owns project, runs full harness pre-gate first. Carries pre-hardening lock delete and `Unity.exe`-only process probe; hardened equivalents live in `Tools/Validation/Invoke-MovementLabWorkflow.ps1`.
 - Validator scope matches owner scope: contract assertions run against owning subtree. New presentation object never invalidates unrelated owner's contract.
 - Render budgets are report-only. Renderer counts, triangle counts, opaque passes, transparent statics, and texture memory are measured and logged/manifested, never enforced. No build, import, validate, or Blender generate step fails on a budget. Do not reintroduce a budget throw without explicit user instruction.
 - Scene, prefab, or Editor-tool changes: save, reopen or validate, inspect log and Git diff.
