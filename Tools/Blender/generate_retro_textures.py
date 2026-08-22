@@ -30,7 +30,10 @@ except ImportError as exc:  # pragma: no cover - exercised by Blender installs w
 
 REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEXTURE_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Textures")
-PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "RetroTextures")
+PREVIEW_DIRECTORY = os.environ.get(
+    "ROCKET_FOOXBALL_TEXTURE_EVIDENCE_ROOT",
+    os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "RetroTextures"),
+)
 SEED = 0xF00B411
 MIB = 1024.0 * 1024.0
 BALL_PANEL_RADIUS = 0.29
@@ -325,6 +328,147 @@ SURFACE_PHASES = {
 }
 
 
+INDUSTRIAL_SURFACE_CONTRACT = {
+    "grass": {
+        "tile_grid": (2, 2),
+        "plate_count": 4,
+        "seam_width": 0.045,
+        "fastener_radius": 0.025,
+        "fasteners_per_plate": 4,
+        "fastener_count": 16,
+        "stain_count": 5,
+        "scratch_count": 8,
+        "palette_u8": ((24, 20, 15), (142, 118, 110)),
+        "minimum_luminance_contrast": 0.16,
+        "metallic": (0.25, 0.55),
+        "smoothness": (0.28, 0.50),
+        "seam_ao": 0.55,
+        "interior_ao": 0.88,
+    },
+    "wall": {
+        "tile_grid": (4, 2),
+        "slab_count": 8,
+        "seam_width": 0.035,
+        "rib_width": 0.055,
+        "rib_count": 4,
+        "stain_count": 4,
+        "scratch_count": 6,
+        "palette_u8": ((40, 26, 12), (202, 150, 82)),
+        "minimum_luminance_contrast": 0.18,
+        "metallic": (0.0, 0.0),
+        "smoothness": (0.30, 0.52),
+        "seam_ao": 0.50,
+        "interior_ao": 0.86,
+    },
+}
+
+
+_INDUSTRIAL_WEAR = {
+    "grass": {
+        "stains": ((0.17, 0.23, 0.085, 0.050), (0.42, 0.77, 0.060, 0.095), (0.68, 0.18, 0.105, 0.055), (0.79, 0.62, 0.075, 0.045), (0.23, 0.52, 0.050, 0.070)),
+        "scratches": ((0.08, 0.14, 0.19, 0.20, 0.0035), (0.28, 0.32, 0.41, 0.29, 0.0025), (0.57, 0.11, 0.72, 0.16, 0.0030), (0.76, 0.37, 0.91, 0.31, 0.0025), (0.10, 0.71, 0.22, 0.65, 0.0030), (0.36, 0.89, 0.49, 0.82, 0.0025), (0.58, 0.61, 0.69, 0.69, 0.0035), (0.81, 0.84, 0.93, 0.79, 0.0025)),
+    },
+    "wall": {
+        "stains": ((0.12, 0.27, 0.070, 0.110), (0.39, 0.72, 0.050, 0.080), (0.66, 0.38, 0.075, 0.060), (0.87, 0.81, 0.045, 0.085)),
+        "scratches": ((0.07, 0.18, 0.18, 0.22, 0.0025), (0.30, 0.63, 0.43, 0.57, 0.0030), (0.53, 0.16, 0.62, 0.23, 0.0025), (0.69, 0.78, 0.81, 0.72, 0.0025), (0.82, 0.43, 0.93, 0.48, 0.0030), (0.15, 0.88, 0.25, 0.83, 0.0025)),
+    },
+}
+
+
+def _periodic_grid_distance(values, cell_size):
+    local = np.mod(values, cell_size)
+    return np.minimum(local, cell_size - local)
+
+
+def _periodic_ellipse_mask(u, v, centre_u, centre_v, radius_u, radius_v):
+    du = np.abs(np.mod(u - centre_u + 0.5, 1.0) - 0.5) / radius_u
+    dv = np.abs(np.mod(v - centre_v + 0.5, 1.0) - 0.5) / radius_v
+    return du * du + dv * dv <= 1.0
+
+
+def _segment_mask(u, v, segment):
+    x0, y0, x1, y1, width = segment
+    vx, vy = x1 - x0, y1 - y0
+    denominator = vx * vx + vy * vy
+    amount = np.clip(((u - x0) * vx + (v - y0) * vy) / denominator, 0.0, 1.0)
+    dx = u - (x0 + amount * vx)
+    dy = v - (y0 + amount * vy)
+    return dx * dx + dy * dy <= width * width
+
+
+def _industrial_surface_fields(kind: str, u, v, n, n01):
+    """Derive every industrial PBR channel from one explicit motif mask set."""
+    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
+    columns, rows = contract["tile_grid"]
+    cell_width, cell_height = 1.0 / columns, 1.0 / rows
+    distance_x = _periodic_grid_distance(u, cell_width)
+    distance_y = _periodic_grid_distance(v, cell_height)
+    seam = np.logical_or(distance_x <= contract["seam_width"] * 0.5, distance_y <= contract["seam_width"] * 0.5)
+    cell_x = np.floor(np.minimum(u, np.nextafter(1.0, 0.0)) * columns).astype(np.int64)
+    cell_y = np.floor(np.minimum(v, np.nextafter(1.0, 0.0)) * rows).astype(np.int64)
+    plate_variant = ((cell_x + cell_y * 2) % 4).astype(np.float64) / 3.0
+
+    stains = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=bool)
+    for stain in _INDUSTRIAL_WEAR[kind]["stains"]:
+        stains |= _periodic_ellipse_mask(u, v, *stain)
+    scratches = np.zeros_like(stains)
+    for scratch in _INDUSTRIAL_WEAR[kind]["scratches"]:
+        scratches |= _segment_mask(u, v, scratch)
+
+    if kind == "grass":
+        local_u, local_v = np.mod(u, cell_width), np.mod(v, cell_height)
+        inset = 0.070
+        fastener_dx = np.minimum(np.abs(local_u - inset), np.abs(local_u - (cell_width - inset)))
+        fastener_dy = np.minimum(np.abs(local_v - inset), np.abs(local_v - (cell_height - inset)))
+        fasteners = fastener_dx * fastener_dx + fastener_dy * fastener_dy <= contract["fastener_radius"] ** 2
+        gunmetal = ((cell_x + cell_y) % 2).astype(np.float64)
+        brown = np.stack((0.30 + n01 * 0.13, 0.235 + n01 * 0.105, 0.16 + n01 * 0.085), axis=-1)
+        steel = np.stack((0.25 + n01 * 0.13, 0.27 + n01 * 0.12, 0.275 + n01 * 0.115), axis=-1)
+        colour = brown * (1.0 - gunmetal[..., None] * 0.72) + steel * (gunmetal[..., None] * 0.72)
+        colour *= (0.93 + plate_variant[..., None] * 0.08)
+        colour = np.where(seam[..., None], np.array((0.135, 0.122, 0.106)), colour)
+        colour = np.where(stains[..., None], colour * np.array((0.72, 0.67, 0.60)), colour)
+        colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.24 + 0.035), colour)
+        colour = np.where(fasteners[..., None], np.array((0.49, 0.38, 0.20)), colour)
+        height = 0.55 + n * 0.025 - seam * 0.14 - stains * 0.018 - scratches * 0.045 + fasteners * 0.075
+        metallic = 0.28 + gunmetal * 0.16 + n01 * 0.06
+        metallic = np.where(seam, 0.25, metallic)
+        metallic = np.where(fasteners, 0.55, metallic)
+        smoothness = 0.28 + n01 * 0.22
+        smoothness = np.where(seam, 0.30, smoothness)
+        smoothness = np.where(scratches, 0.28, smoothness)
+        ao = 0.86 + n01 * 0.04
+        ao = np.where(stains, 0.78, ao)
+        ao = np.where(scratches, 0.68, ao)
+        ao = np.where(fasteners, 0.80, ao)
+        ao = np.where(seam, contract["seam_ao"], ao)
+        masks = {"seam": seam, "fasteners": fasteners, "stains": stains, "scratches": scratches}
+        return colour, height, metallic, smoothness, ao, masks
+
+    vertical_seam = distance_x <= contract["seam_width"] * 0.5
+    horizontal_seam = distance_y <= contract["seam_width"] * 0.5
+    ribs = distance_x <= contract["rib_width"] * 0.5
+    raised_rib = ribs & ~vertical_seam
+    warm = np.stack((0.48 + n01 * 0.20, 0.34 + n01 * 0.16, 0.16 + n01 * 0.10), axis=-1)
+    colour = warm * (0.94 + plate_variant[..., None] * 0.07)
+    colour = np.where(raised_rib[..., None], np.minimum(1.0, colour * np.array((1.06, 1.02, 0.91)) + 0.025), colour)
+    colour = np.where(seam[..., None], np.array((0.21, 0.15, 0.086)), colour)
+    colour = np.where(stains[..., None], colour * np.array((0.76, 0.70, 0.59)), colour)
+    colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.18 + 0.025), colour)
+    height = 0.53 + n * 0.025 - seam * 0.13 + raised_rib * 0.095 - stains * 0.016 - scratches * 0.040
+    metallic = np.zeros_like(n)
+    smoothness = 0.30 + n01 * 0.22
+    smoothness = np.where(seam, 0.30, smoothness)
+    smoothness = np.where(scratches, 0.31, smoothness)
+    ao = 0.84 + n01 * 0.04
+    ao = np.where(stains, 0.76, ao)
+    ao = np.where(scratches, 0.66, ao)
+    ao = np.where(raised_rib, 0.82, ao)
+    ao = np.where(seam, contract["seam_ao"], ao)
+    masks = {"seam": seam, "ribs": ribs, "stains": stains, "scratches": scratches, "horizontal_seam": horizontal_seam}
+    return colour, height, metallic, smoothness, ao, masks
+
+
 # Weapon maps are authored from explicit readability targets so the scalar
 # Blender path and the NumPy path have one source of truth.  The ranges are
 # inclusive authoring bounds; PNG quantization may move a boundary by one u8.
@@ -358,23 +502,16 @@ def _surface_fields(kind: str, u: float, v: float):
     phases = SURFACE_PHASES[kind]
     n = periodic_noise(u, v, phases)
     n01 = clamp01(0.5 + n * 0.50)
-    panel = 0.0
-    seam = 0.0
-    if kind == "grass":
-        stripe = 0.5 + 0.5 * math.sin(math.tau * (u * 8.0))
-        panel = 1.0 if (u * 8.0) % 1.0 < 0.035 or (v * 8.0) % 1.0 < 0.035 else 0.0
-        base = (mix(0.018, 0.055, n01), mix(0.20, 0.43, n01), mix(0.20, 0.36, n01))
-        base = tuple(mix(value, value + 0.10, stripe * 0.16) for value in base)
-        height = 0.47 + n * 0.06 - panel * 0.08
-        return base, height, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
-    if kind == "wall":
-        seam = 1.0 if (u * 16.0) % 1.0 < 0.028 or (v * 16.0) % 1.0 < 0.028 else 0.0
-        base = (mix(0.46, 0.76, n01), mix(0.53, 0.80, n01), mix(0.51, 0.72, n01))
-        base = tuple(mix(value, (0.06, 0.40, 0.47)[i], seam * 0.62) for i, value in enumerate(base))
-        height = 0.50 + n * 0.07 - seam * 0.10
-        # Concrete remains non-metallic. Seam response lives in height/AO,
-        # never in metallic R.
-        return base, height, 0.0, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+    if kind in INDUSTRIAL_SURFACE_CONTRACT:
+        values = _industrial_surface_fields(
+            kind,
+            np.asarray(u, dtype=np.float64),
+            np.asarray(v, dtype=np.float64),
+            np.asarray(n, dtype=np.float64),
+            np.asarray(n01, dtype=np.float64),
+        )
+        base, height, metallic, smoothness, ao, _masks = values
+        return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
     if kind == "trim":
         stripe = (u * 12.0 + v * 12.0) % 1.0
         edge = 1.0 if stripe < 0.12 else 0.0
@@ -445,19 +582,9 @@ def _surface_fields_array(kind: str, u, v):
     n01 = np.clip(0.5 + n * 0.50, 0.0, 1.0)
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
-    if kind == "grass":
-        stripe = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 8.0))
-        panel = np.logical_or(np.mod(u * 8.0, 1.0) < 0.035, np.mod(v * 8.0, 1.0) < 0.035).astype(np.float64)
-        base = np.stack((0.018 + (0.055 - 0.018) * n01, 0.20 + (0.43 - 0.20) * n01, 0.20 + (0.36 - 0.20) * n01), axis=-1)
-        base += stripe[..., None] * 0.16 * np.array((0.10, 0.10, 0.10), dtype=np.float64)
-        height = 0.47 + n * 0.06 - panel * 0.08
-        return base, height, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
-    if kind == "wall":
-        seam = np.logical_or(np.mod(u * 16.0, 1.0) < 0.028, np.mod(v * 16.0, 1.0) < 0.028).astype(np.float64)
-        base = np.stack((0.46 + (0.76 - 0.46) * n01, 0.53 + (0.80 - 0.53) * n01, 0.51 + (0.72 - 0.51) * n01), axis=-1)
-        base = base * (1.0 - seam[..., None] * 0.62) + np.array((0.06, 0.40, 0.47), dtype=np.float64) * (seam[..., None] * 0.62)
-        height = 0.50 + n * 0.07 - seam * 0.10
-        return base, height, zero, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+    if kind in INDUSTRIAL_SURFACE_CONTRACT:
+        base, height, metallic, smoothness, ao, _masks = _industrial_surface_fields(kind, u, v, n, n01)
+        return base, height, metallic, smoothness, ao
     if kind == "trim":
         stripe = np.mod(u * 12.0 + v * 12.0, 1.0)
         edge = (stripe < 0.12).astype(np.float64)
@@ -519,6 +646,7 @@ def generate_surface_maps(kind: str, width: int, height: int):
     normal = _rgba_array(source_width, source_height)
     metallic = _rgba_array(source_width, source_height)
     occlusion = _rgba_array(source_width, source_height)
+    industrial_height = np.empty((source_height, source_width), dtype=np.float64) if kind in INDUSTRIAL_SURFACE_CONTRACT else None
     x_values = np.arange(source_width, dtype=np.float64) / float(source_width - 1)
     chunk_rows = max(1, min(source_height, 64))
     frequency = {"grass": 8.0, "wall": 16.0, "trim": 12.0, "hazard": 10.0, "metal": 16.0, "dark": 16.0, "accent": 16.0}[kind]
@@ -528,7 +656,7 @@ def generate_surface_maps(kind: str, width: int, height: int):
         y_values = np.arange(start, stop, dtype=np.float64) / float(source_height - 1)
         u = x_values[None, :]
         v = y_values[:, None]
-        colour, _height, metal, smooth, ao = _surface_fields_array(kind, u, v)
+        colour, surface_height, metal, smooth, ao = _surface_fields_array(kind, u, v)
         dx = 0.055 * np.cos(np.float64(math.tau) * frequency * u + 0.37) + 0.022 * np.sin(np.float64(math.tau) * (frequency * 0.5 * v + u))
         dy = 0.055 * np.sin(np.float64(math.tau) * frequency * v + 0.93) + 0.022 * np.cos(np.float64(math.tau) * (frequency * 0.5 * u - v))
         if kind == "hazard":
@@ -538,10 +666,21 @@ def generate_surface_maps(kind: str, width: int, height: int):
         ny = np.clip(0.5 - dy * strength, 0.0, 1.0)
         nz = np.clip(1.0 - 0.45 * (np.abs(dx) + np.abs(dy)), 0.0, 1.0)
         base[start:stop, :, :3] = _u8_array(colour)
-        normal[start:stop, :, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))
+        if industrial_height is None:
+            normal[start:stop, :, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))
+        else:
+            industrial_height[start:stop, :] = surface_height
         metallic[start:stop, :, 0] = _u8_array(metal)
         metallic[start:stop, :, 3] = _u8_array(smooth)
         occlusion[start:stop, :, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))
+    if industrial_height is not None:
+        slope_x = (np.roll(industrial_height, -1, axis=1) - np.roll(industrial_height, 1, axis=1)) * 3.8
+        slope_y = (np.roll(industrial_height, -1, axis=0) - np.roll(industrial_height, 1, axis=0)) * 3.8
+        vector_x = -slope_x
+        vector_y = -slope_y
+        vector_z = np.ones_like(industrial_height)
+        lengths = np.sqrt(vector_x * vector_x + vector_y * vector_y + vector_z * vector_z)
+        normal[:, :, :3] = _u8_array(np.stack((vector_x / lengths * 0.5 + 0.5, vector_y / lengths * 0.5 + 0.5, vector_z / lengths * 0.5 + 0.5), axis=-1))
     for buffer in (base, normal, metallic, occlusion):
         close_repeat_edges(buffer, source_width, source_height)
     if (source_width, source_height) != (width, height):
@@ -1530,6 +1669,101 @@ def audit_weapon_readability(generated, selected_families=None):
     }
 
 
+def audit_industrial_surface(kind, generated):
+    """Audit motif inventory, palette readability, and the shared PBR masks."""
+    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
+    prefix = "Retro" + kind.capitalize()
+    expected_names = tuple(FAMILY_REGISTRY[kind]["outputs"])
+    entries = {name: generated.get(name) for name in expected_names}
+    complete = all(entry is not None for entry in entries.values())
+    dimensions_ok = complete and all(entry["dimensions"] == [1024, 1024] for entry in entries.values())
+    if not complete:
+        return {"pass": False, "gates": {"inventory": False, "dimensions": False}, "expected": list(expected_names)}
+
+    width, height = entries[prefix]["dimensions"]
+    base = _rgba_view(entries[prefix]["buffer"], width, height)
+    normal = _rgba_view(entries[prefix + "_Normal"]["buffer"], width, height)
+    metallic = _rgba_view(entries[prefix + "_MetallicSmoothness"]["buffer"], width, height)
+    occlusion = _rgba_view(entries[prefix + "_Occlusion"]["buffer"], width, height)
+
+    x_values = np.arange(width, dtype=np.float64) / float(width - 1)
+    y_values = np.arange(height, dtype=np.float64) / float(height - 1)
+    u, v = x_values[None, :], y_values[:, None]
+    noise = _periodic_noise_array(kind, u, v)
+    noise01 = np.clip(0.5 + noise * 0.50, 0.0, 1.0)
+    _colour, _height, _metal, _smooth, _ao, masks = _industrial_surface_fields(kind, u, v, noise, noise01)
+
+    rgb = base[:, :, :3].astype(np.float64) / 255.0
+    luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
+    palette_ranges = [[int(np.min(base[:, :, channel])), int(np.max(base[:, :, channel]))] for channel in range(3)]
+    palette_floor, palette_ceiling = contract["palette_u8"]
+    palette_ok = all(palette_ranges[channel][0] >= palette_floor[channel] - 1 and palette_ranges[channel][1] <= palette_ceiling[channel] + 1 for channel in range(3))
+    contrast = float(np.max(luminance) - np.min(luminance))
+
+    metal_values = metallic[:, :, 0].astype(np.float64) / 255.0
+    smooth_values = metallic[:, :, 3].astype(np.float64) / 255.0
+    ao_values = occlusion[:, :, 0].astype(np.float64) / 255.0
+    tolerance = (1.0 / 255.0) + 1e-6
+    metallic_range = [float(np.min(metal_values)), float(np.max(metal_values))]
+    smoothness_range = [float(np.min(smooth_values)), float(np.max(smooth_values))]
+    metallic_ok = metallic_range[0] >= contract["metallic"][0] - tolerance and metallic_range[1] <= contract["metallic"][1] + tolerance
+    smoothness_ok = smoothness_range[0] >= contract["smoothness"][0] - tolerance and smoothness_range[1] <= contract["smoothness"][1] + tolerance
+
+    seam_values = ao_values[masks["seam"]]
+    excluded = masks["seam"] | masks["stains"] | masks["scratches"]
+    excluded |= masks.get("fasteners", np.zeros_like(excluded))
+    excluded |= masks.get("ribs", np.zeros_like(excluded))
+    interior_values = ao_values[~excluded]
+    seam_ao = float(np.mean(seam_values))
+    interior_ao = float(np.mean(interior_values))
+    ao_ok = abs(seam_ao - contract["seam_ao"]) <= tolerance and abs(interior_ao - contract["interior_ao"]) <= 0.025
+
+    columns, rows = contract["tile_grid"]
+    motif_counts = {
+        "tile_cells": columns * rows,
+        "stains": len(_INDUSTRIAL_WEAR[kind]["stains"]),
+        "scratches": len(_INDUSTRIAL_WEAR[kind]["scratches"]),
+    }
+    motif_gates = {
+        "tile_cells": motif_counts["tile_cells"] == contract["plate_count" if kind == "grass" else "slab_count"],
+        "stains": motif_counts["stains"] == contract["stain_count"],
+        "scratches": motif_counts["scratches"] == contract["scratch_count"],
+    }
+    if kind == "grass":
+        motif_counts["fasteners"] = columns * rows * contract["fasteners_per_plate"]
+        motif_gates["fasteners"] = motif_counts["fasteners"] == contract["fastener_count"]
+    else:
+        motif_counts["ribs"] = columns
+        motif_gates["ribs"] = motif_counts["ribs"] == contract["rib_count"]
+
+    normal_audit = _normal_map_audit(normal, width, height)
+    normal_xy_ranges = [[int(np.min(normal[:, :, channel])), int(np.max(normal[:, :, channel]))] for channel in range(2)]
+    normal_nonflat = normal_audit["valid"] and all(maximum - minimum >= 8 for minimum, maximum in normal_xy_ranges)
+    gates = {
+        "inventory": tuple(entries) == expected_names,
+        "dimensions": dimensions_ok,
+        "motif_counts": all(motif_gates.values()),
+        "palette_bounds": palette_ok,
+        "palette_contrast": contrast >= contract["minimum_luminance_contrast"],
+        "normal_nonflat": normal_nonflat,
+        "metallic_range": metallic_ok,
+        "smoothness_range": smoothness_ok,
+        "ao_masks": ao_ok,
+        "wall_nonmetallic": kind != "wall" or metallic_range == [0.0, 0.0],
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "contract": contract,
+        "motifs": {"counts": motif_counts, "gates": motif_gates},
+        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_contrast": contrast},
+        "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges},
+        "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
+        "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
+        "ao": {"seam_mean": seam_ao, "seam_target": contract["seam_ao"], "interior_mean": interior_ao, "interior_target": contract["interior_ao"]},
+    }
+
+
 def run_semantic_audits(generated, frames=None, selected_families=None):
     """Run only semantic checks whose family buffers were selected/generated."""
     selected = set(selected_families or FAMILY_IDS)
@@ -1550,15 +1784,9 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         )
     if "explosion" in selected and "RetroExplosion" in generated:
         checks["explosion"] = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
-    if "wall" in selected and "RetroWall_MetallicSmoothness" in generated:
-        wall_metallic = generated["RetroWall_MetallicSmoothness"]["buffer"]
-        wall_width, wall_height = generated["RetroWall_MetallicSmoothness"]["dimensions"]
-        wall_metallic_r_max = int(np.max(_rgba_view(wall_metallic, wall_width, wall_height)[:, :, 0]))
-        checks["wall"] = {
-            "pass": wall_metallic_r_max == 0,
-            "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
-            "metallic_r_max": wall_metallic_r_max,
-        }
+    for kind in ("grass", "wall"):
+        if kind in selected:
+            checks[kind] = audit_industrial_surface(kind, generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
         checks["weapon_readability"] = audit_weapon_readability(generated, selected)
     normal_maps = {}
@@ -1568,7 +1796,7 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
             normal_maps[name] = _normal_map_audit(entry["buffer"], width, height)
     normal_pass = all(result["valid"] for result in normal_maps.values())
     ball_nonmetallic = checks.get("ball", {}).get("gates", {}).get("nonmetallic", True)
-    wall_nonmetallic = checks.get("wall", {}).get("gates", {}).get("concrete_nonmetallic", True)
+    wall_nonmetallic = checks.get("wall", {}).get("gates", {}).get("wall_nonmetallic", True)
     pbr = {"pass": normal_pass and ball_nonmetallic and wall_nonmetallic, "normal_maps": normal_maps, "nonmetallic_ball": ball_nonmetallic, "nonmetallic_concrete": wall_nonmetallic}
     checks["pbr_channels"] = pbr
     failed = []
@@ -1961,22 +2189,21 @@ def compare_generation_runs(first, second):
 def build_argument_parser():
     parser = argparse.ArgumentParser(description="Generate deterministic Rocket Fooxball PBR textures.")
     parser.add_argument("--family", action="append", choices=("all",) + FAMILY_IDS, help="Generate one family; repeatable. Default/all selects the full registry.")
-    parser.add_argument("--proof-two-run", action="store_true", help="Run the full selection twice and compare all named hashes.")
+    parser.add_argument("--proof-two-run", action="store_true", help="Run the selected families twice and compare every selected output and preview hash.")
     return parser
 
 
 def main(argv=None):
     args = build_argument_parser().parse_args(argv)
     selected = resolve_families(args.family)
-    if args.proof_two_run and tuple(selected) != FAMILY_IDS:
-        raise SystemExit("--proof-two-run requires full selection (omit --family or use --family all)")
     result = _run_once(selected, write_manifest=not args.proof_two_run)
     if args.proof_two_run:
         second = _run_once(selected, write_manifest=False)
         compare_generation_runs(result, second)
-        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, "retro_texture_manifest.json"), second["manifest"])
+        manifest_name = "retro_texture_manifest.json" if tuple(selected) == FAMILY_IDS else "retro_texture_manifest_targeted.json"
+        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, manifest_name), second["manifest"])
         result = second
-        print(f"PROOF RetroTextures: PASS ({FULL_OUTPUT_COUNT} output hashes, {FULL_PREVIEW_COUNT} preview hashes)")
+        print(f"PROOF RetroTextures: PASS ({result['manifest']['counts']['outputs']} output hashes, {result['manifest']['counts']['previews']} preview hashes)")
     print(f"MEMORY RetroTextures: compressed forecast {result['manifest']['memory_forecast']['compressed_mib']:.3f} MiB / 96.000 MiB")
     print(f"AUDIT RetroTextures: PASS ({result['manifest']['counts']['outputs']} outputs, {result['manifest']['counts']['previews']} previews, families={','.join(selected)}, seed {SEED})")
     return result
