@@ -61,7 +61,10 @@ CONNECTION_MAP = (
 )
 
 MATERIAL_GROUPS = {
-    "WeaponMetal": ("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight", "BarrelClamp"),
+    "WeaponMetal": (
+        "Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight", "BarrelClamp",
+        "ReceiverPinFrontLeft", "ReceiverPinFrontRight", "ReceiverPinRearLeft", "ReceiverPinRearRight",
+    ),
     "WeaponDark": ("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort", "Trigger", "TriggerGuard", "LoadingPortInset"),
     "WeaponAccentCore": ("ReceiverAccentLeftCore", "ReceiverAccentRightCore", "MuzzleAccentCore"),
     "WeaponAccent": ("ReceiverAccentLeftShell", "ReceiverAccentRightShell", "MuzzleAccentShell"),
@@ -424,19 +427,22 @@ def create_geometry(profile, materials):
         parts[rib_name] = bpy.data.objects[rib_name]
         part_bounds[rib_name] = world_bounds(parts[rib_name])
 
-    def group(names, object_name, material_name):
+    created_part_names = tuple(parts)
+    group_inventory = material_groups_for_parts(created_part_names)
+    audit_declared_group_inventory(created_part_names, group_inventory)
+
+    def group(group_name):
+        names = group_inventory[group_name]
         return assign_and_join(
             [parts[name] if name in parts else bpy.data.objects[name] for name in names],
-            object_name,
-            materials[material_name],
+            group_name,
+            materials[group_name],
             profile["key"],
         )
 
-    metal = group(("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight", "BarrelClamp"), "WeaponMetal", "WeaponMetal")
-    dark = group(("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort", "Trigger", "TriggerGuard", "LoadingPortInset"), "WeaponDark", "WeaponDark")
-    core = group(("ReceiverAccentLeftCore", "ReceiverAccentRightCore", "MuzzleAccentCore", *rib_core_names), "WeaponAccentCore", "WeaponAccentCore")
-    accent = group(("ReceiverAccentLeftShell", "ReceiverAccentRightShell", "MuzzleAccentShell", *rib_shell_names), "WeaponAccent", "WeaponAccent")
-    return (metal, dark, core, accent), part_bounds
+    groups = tuple(group(group_name) for group_name in GROUP_NAMES)
+    audit_export_group_inventory(created_part_names, groups, group_inventory)
+    return groups, part_bounds
 
 
 def assign_and_join(parts, object_name, material, asset_key):
@@ -471,6 +477,83 @@ def assign_and_join(parts, object_name, material, asset_key):
     result.data.uv_layers.active.name = "UVMap"
     result.data.update(calc_edges=True)
     return result
+
+
+def material_groups_for_parts(created_part_names):
+    """Add profile-generated pump ribs to the fixed material group inventory."""
+    group_inventory = {group_name: tuple(MATERIAL_GROUPS[group_name]) for group_name in GROUP_NAMES}
+    shell_names = tuple(
+        sorted(name for name in created_part_names if name.startswith("PumpRib") and name.endswith("Shell"))
+    )
+    core_names = tuple(
+        sorted(name for name in created_part_names if name.startswith("PumpRib") and name.endswith("Core"))
+    )
+    if len(shell_names) != len(core_names):
+        raise RuntimeError(f"Pump rib group inventory is not bijective: shells={shell_names}, cores={core_names}")
+    group_inventory["WeaponAccent"] += shell_names
+    group_inventory["WeaponAccentCore"] += core_names
+    return group_inventory
+
+
+def audit_declared_group_inventory(created_part_names, group_inventory):
+    """Prove every source mesh part is declared in exactly one export group."""
+    expected_groups = set(GROUP_NAMES)
+    actual_groups = set(group_inventory)
+    if actual_groups != expected_groups:
+        raise RuntimeError(
+            f"Material group inventory mismatch: expected={sorted(expected_groups)}, actual={sorted(actual_groups)}"
+        )
+
+    created = tuple(created_part_names)
+    if len(created) != len(set(created)):
+        raise RuntimeError(f"Created mesh part names are not unique: {created}")
+    created_set = set(created)
+    memberships = {name: [] for name in created}
+    declared_names = []
+    for group_name in GROUP_NAMES:
+        for part_name in group_inventory[group_name]:
+            declared_names.append(part_name)
+            memberships.setdefault(part_name, []).append(group_name)
+
+    missing = sorted(created_set - set(declared_names))
+    unknown = sorted(set(declared_names) - created_set)
+    duplicate = sorted(name for name, groups in memberships.items() if len(groups) != 1)
+    if missing or unknown or duplicate or len(declared_names) != len(created):
+        duplicate_details = {
+            name: memberships[name]
+            for name in sorted(memberships)
+            if len(memberships[name]) != 1
+        }
+        raise RuntimeError(
+            "Mesh part group inventory failed: "
+            f"missing={missing}, unknown={unknown}, duplicate={duplicate_details}, "
+            f"created={len(created)}, declared={len(declared_names)}"
+        )
+    print(
+        f"AUDIT group inventory: created_parts={len(created)}, groups={len(GROUP_NAMES)}, "
+        "membership=exactly-one"
+    )
+
+
+def audit_export_group_inventory(created_part_names, objects, group_inventory):
+    """Prove joined output contains only the four declared exported mesh groups."""
+    audit_declared_group_inventory(created_part_names, group_inventory)
+    exported_names = tuple(obj.name for obj in objects)
+    if exported_names != GROUP_NAMES:
+        raise RuntimeError(f"Export group inventory mismatch: expected={GROUP_NAMES}, actual={exported_names}")
+
+    mesh_objects = tuple(obj for obj in bpy.data.objects if obj.type == "MESH")
+    mesh_names = tuple(obj.name for obj in mesh_objects)
+    ungrouped = sorted(name for name in mesh_names if name not in GROUP_NAMES)
+    if ungrouped or set(mesh_names) != set(GROUP_NAMES) or len(mesh_objects) != len(GROUP_NAMES):
+        raise RuntimeError(
+            f"Ungrouped mesh remains before preview/export: ungrouped={ungrouped}, "
+            f"mesh_objects={mesh_names}"
+        )
+    print(
+        f"AUDIT exported groups: meshes={len(mesh_objects)}, names={exported_names}, "
+        "ungrouped=none"
+    )
 
 
 def audit_connections(part_bounds):
