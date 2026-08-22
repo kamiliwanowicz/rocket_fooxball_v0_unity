@@ -1,9 +1,14 @@
 ---
 name: use-blender
-description: Use when task creates, edits, exports, validates, or troubleshoots Blender 3D assets for this Unity project.
+description: Use when task creates, edits, exports, validates, or troubleshoots Blender mesh, rig, animation, .blend, or FBX assets for this Unity project. Do not use for procedural PNG or PBR texture generation.
 ---
 
 # Blender -> Unity asset workflow
+
+## Scope boundary
+
+- use for Blender-authored 3D geometry, UVs, normals, vertex colors, rigs, animation, `.blend`, and FBX export/import.
+- do not use for procedural PNG or PBR texture generation, even when generator lives under `Tools/Blender/` or can run in Blender Python. Follow repository `AGENTS.md` plus generator-owned CLI, output inventory, determinism proof, and semantic audits.
 
 ## Source choice
 
@@ -15,7 +20,7 @@ description: Use when task creates, edits, exports, validates, or troubleshoots 
 
 ## Asset contract
 
-Choose branch before geometry. Record target Unity owner, dimensions, origin, forward axis, triangle budget, material slots, UV needs, animation needs in generator or export script. Missing brief -> match nearby project assets; use smallest geometry satisfying silhouette.
+Choose branch before geometry. Record target Unity owner, dimensions, origin, forward axis, optional triangle-count review target, material slots, UV needs, animation needs in generator or export script. Missing brief -> match nearby project assets; use smallest geometry satisfying silhouette.
 
 - static gameplay prop or projectile: applied mesh transforms; stable material slots; asymmetric forward marker when orientation matters; Unity root owns collider, `Rigidbody`, gameplay scripts.
 - modular environment piece: explicit module dimensions, snap grid, edge connections, pivot placement; static render mesh; Unity owns collision and scene placement.
@@ -42,7 +47,7 @@ Choose branch before geometry. Record target Unity owner, dimensions, origin, fo
    - exported object rotation near zero and scale near one; origin and world bounds match asset contract
    - unique stable object, mesh, material-slot, armature, bone, and action names as applicable
    - UV layers and material slots match branch contract; no unused slots
-   - evaluated vertex and triangle counts within budget
+   - measure and print evaluated vertex and triangle counts plus optional review-target comparison; counts and target ranges are report-only and never fail generation, export, or validation
    - every connection-map joint meets required world-space overlap
    - print audit results, world bounds, evaluated vertex/triangle counts, output path
 5. Render automated previews from final evaluated geometry before export:
@@ -58,7 +63,7 @@ Choose branch before geometry. Record target Unity owner, dimensions, origin, fo
 & $blenderExe --background --factory-startup --python Tools/Blender/generate_<asset>.py
 ```
 
-Completion: Blender exit `0`; FBX exists and is non-empty; audit passes; six previews exist and were inspected; counts and bounds fit asset contract.
+Completion: Blender exit `0`; FBX exists and is non-empty; audit passes; six previews exist and were inspected; bounds fit asset contract; counts reported.
 
 ## Unity contract
 
