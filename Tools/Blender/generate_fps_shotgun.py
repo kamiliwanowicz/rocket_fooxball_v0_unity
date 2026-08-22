@@ -20,10 +20,15 @@ MODEL_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Models")
 PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "shotgun")
 MIN_OVERLAP = 0.005
 TARGET_TOLERANCE = 0.025
+CORE_INSET_MIN = 0.002
+CORE_INSET_MAX = 0.004
+GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
+DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
     "WeaponMetal": (0.38, 0.055, 0.045, 1.0),
     "WeaponDark": (0.018, 0.012, 0.014, 1.0),
-    "WeaponAccent": (0.82, 0.70, 0.48, 1.0),
+    "WeaponAccentCore": (0.50, 0.018, 0.018, 1.0),
+    "WeaponAccent": (0.82, 0.075, 0.045, 1.0),
 }
 
 # Declared before geometry. Axis text mirrors the authored contacts: Blender -Y
@@ -42,15 +47,34 @@ CONNECTION_MAP = (
     ("Receiver", "RearSight", "Receiver.top(+Z)->RearSight.bottom(-Z)"),
     ("Barrel", "FrontSight", "Barrel.top(+Z)->FrontSight.bottom(-Z)"),
     ("Receiver", "EjectionPort", "Receiver.right(+X)->EjectionPort.left(-X)"),
-    ("ReceiverAccentLeft", "Receiver", "Receiver accent inward X face -> receiver left side"),
-    ("ReceiverAccentRight", "Receiver", "Receiver accent inward X face -> receiver right side"),
-    ("MuzzleAccent", "MuzzleBand", "MuzzleAccent -> muzzle band"),
+    ("ReceiverAccentLeftShell", "Receiver", "Receiver left accent inward X face -> receiver"),
+    ("ReceiverAccentRightShell", "Receiver", "Receiver right accent inward X face -> receiver"),
+    ("MuzzleAccentShell", "MuzzleBand", "MuzzleAccentShell -> muzzle band"),
+    ("Receiver", "Trigger", "trigger-to-receiver"),
+    ("Receiver", "TriggerGuard", "guard-to-receiver"),
+    ("Receiver", "LoadingPortInset", "loading-port-to-receiver"),
+    ("Receiver", "ReceiverPinFrontLeft", "front receiver pin left"),
+    ("Receiver", "ReceiverPinFrontRight", "front receiver pin right"),
+    ("Receiver", "ReceiverPinRearLeft", "rear receiver pin left"),
+    ("Receiver", "ReceiverPinRearRight", "rear receiver pin right"),
+    ("Barrel", "BarrelClamp", "barrel-clamp"),
 )
 
 MATERIAL_GROUPS = {
-    "WeaponMetal": ("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight"),
-    "WeaponDark": ("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort"),
+    "WeaponMetal": ("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight", "BarrelClamp"),
+    "WeaponDark": ("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort", "Trigger", "TriggerGuard", "LoadingPortInset"),
+    "WeaponAccentCore": ("ReceiverAccentLeftCore", "ReceiverAccentRightCore", "MuzzleAccentCore"),
+    "WeaponAccent": ("ReceiverAccentLeftShell", "ReceiverAccentRightShell", "MuzzleAccentShell"),
 }
+
+PAIR_FIXED_RECORDS = (
+    ("ReceiverAccentLeftShell", "ReceiverAccentLeftCore", "WeaponAccent", "WeaponAccentCore"),
+    ("ReceiverAccentRightShell", "ReceiverAccentRightCore", "WeaponAccent", "WeaponAccentCore"),
+    ("MuzzleAccentShell", "MuzzleAccentCore", "WeaponAccent", "WeaponAccentCore"),
+)
+# Named fixed records remain available for source audits; pair_records() adds
+# the profile-specific pump-rib records before the join.
+PAIR_RECORDS = PAIR_FIXED_RECORDS
 
 
 PROFILES = {
@@ -192,6 +216,23 @@ def add_cylinder(name, y_front, y_rear, radius_x, radius_z, z_center, segments, 
     return obj
 
 
+def add_cylinder_x(name, x_center, depth, radius, y_center, z_center, segments=12, bevel=0.001):
+    bpy.ops.mesh.primitive_cylinder_add(
+        vertices=segments,
+        radius=radius,
+        depth=depth,
+        end_fill_type="NGON",
+        location=(x_center, y_center, z_center),
+        rotation=(0.0, math.radians(90.0), 0.0),
+    )
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = f"{name}Mesh"
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    apply_bevel(obj, min(bevel, radius * 0.18))
+    return obj
+
+
 def add_torus(name, center_y, center_z, radius_x, radius_z, tube_radius, segments):
     bpy.ops.mesh.primitive_torus_add(
         major_segments=segments,
@@ -204,10 +245,11 @@ def add_torus(name, center_y, center_z, radius_x, radius_z, tube_radius, segment
     obj = bpy.context.object
     obj.name = name
     obj.data.name = f"{name}Mesh"
-    # Non-degenerate source torus has outer radius 1.35 and tube radius 0.35.
-    # Scale after rotation in world axes to hit declared muzzle-band bounds.
+    # Apply rotation before scaling: the rotated source half extents are
+    # (1.35, .35, 1.35) in world X/Y/Z.
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=False)
     obj.scale = Vector((radius_x / 1.35, tube_radius / 0.35, radius_z / 1.35))
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
     # Move mesh along Y after transform application; keeps object origin at part center.
     obj.location.y = center_y
     obj.location.z = center_z
@@ -233,14 +275,19 @@ def add_measured_pump_ribs(profile, pump_bounds):
     measured_height = pump_bounds[1].z - pump_bounds[0].z
     rib_width = measured_width + (0.010 if not profile["world_scale"] else 0.008)
     rib_height = min(measured_height + 0.006, height + 0.012)
-    names = []
+    shell_names = []
+    core_names = []
+    rib_depth = 0.014 if not profile["world_scale"] else 0.012
     for index in range(count):
         t = index / max(1, count - 1)
         y = y_front + 0.020 + (y_rear - y_front - 0.040) * t
-        name = f"PumpRib{index + 1:02d}"
-        add_box(name, (0.0, y, z_center), (rib_width, 0.014 if not profile["world_scale"] else 0.012, rib_height), 0.002)
-        names.append(name)
-    return names
+        shell_name = f"PumpRib{index + 1:02d}Shell"
+        core_name = f"PumpRib{index + 1:02d}Core"
+        add_box(shell_name, (0.0, y, z_center), (rib_width, rib_depth, rib_height), 0.002)
+        add_box(core_name, (0.0, y, z_center), (rib_width - 0.006, rib_depth - 0.006, rib_height - 0.006), 0.001)
+        shell_names.append(shell_name)
+        core_names.append(core_name)
+    return shell_names, core_names
 
 
 def create_geometry(profile, materials):
@@ -275,7 +322,7 @@ def create_geometry(profile, materials):
         0.006,
     )
     pump_bounds = world_bounds(parts["Pump"])
-    rib_names = add_measured_pump_ribs(profile, pump_bounds)
+    rib_shell_names, rib_core_names = add_measured_pump_ribs(profile, pump_bounds)
 
     muzzle_band_front = barrel_front + (0.0 if not profile["world_scale"] else 0.006)
     # Rear edge runs slightly past magazine-tube front to prove a real overlap,
@@ -311,22 +358,71 @@ def create_geometry(profile, materials):
         "EjectionPort", (receiver_width * 0.49, 0.015, 0.045 * sight_scale),
         (ejection_width, 0.105 * sight_scale, 0.055 * sight_scale), 0.002
     )
-    accent_x = receiver_width * 0.48
-    accent_width = 0.014 if not profile["world_scale"] else 0.012
-    parts["ReceiverAccentLeft"] = add_box(
-        "ReceiverAccentLeft", (-accent_x, -0.010, 0.028), (accent_width, 0.135 * sight_scale, 0.018 * sight_scale), 0.002
+    # A visible trigger and guard make the receiver read as a usable weapon.
+    parts["Trigger"] = add_box(
+        "Trigger", (0.0, 0.005, receiver_bottom + 0.035),
+        (0.018 * sight_scale, 0.045 * sight_scale, 0.060 * sight_scale), 0.002
     )
-    parts["ReceiverAccentRight"] = add_box(
-        "ReceiverAccentRight", (accent_x, -0.010, 0.028), (accent_width, 0.135 * sight_scale, 0.018 * sight_scale), 0.002
+    parts["TriggerGuard"] = add_box(
+        "TriggerGuard", (0.0, 0.018, receiver_bottom - 0.010),
+        (0.062 * sight_scale, 0.072 * sight_scale, 0.062 * sight_scale), 0.003
     )
-    parts["MuzzleAccent"] = add_torus(
-        "MuzzleAccent", muzzle_band_front + 0.018, barrel_z, band_radius_x * 0.84, band_radius_z * 0.86,
-        0.010 if not profile["world_scale"] else 0.008, cylinder_segments
+    # The dark right-side loading-port inset is deliberately smaller than the
+    # receiver and overlaps its side by more than the declared joint margin.
+    parts["LoadingPortInset"] = add_box(
+        "LoadingPortInset", (receiver_width * 0.49, 0.010, receiver_top * 0.42),
+        (0.014 * sight_scale, 0.105 * sight_scale, 0.050 * sight_scale), 0.002
+    )
+    pin_x = receiver_width * 0.49
+    pin_radius = 0.009 * sight_scale
+    for name, y, z in (
+        ("ReceiverPinFront", -0.052, 0.045 * sight_scale),
+        ("ReceiverPinRear", 0.055, 0.041 * sight_scale),
+    ):
+        parts[name + "Left"] = add_cylinder_x(name + "Left", -pin_x, 0.020 * sight_scale, pin_radius, y, z, 12, 0.001)
+        parts[name + "Right"] = add_cylinder_x(name + "Right", pin_x, 0.020 * sight_scale, pin_radius, y, z, 12, 0.001)
+    # Ring clamp wraps the barrel ahead of the pump and remains within the
+    # profile envelope while making the barrel/magazine assembly legible.
+    parts["BarrelClamp"] = add_torus(
+        "BarrelClamp", -0.220 if not profile["world_scale"] else -0.205, barrel_z,
+        band_radius_x * 0.88, band_radius_z * 0.88,
+        0.012 if not profile["world_scale"] else 0.010, cylinder_segments
     )
 
+    accent_x = receiver_width * 0.48
+    accent_width = 0.014 if not profile["world_scale"] else 0.012
+    accent_depth = 0.135 * sight_scale
+    accent_height = 0.018 * sight_scale
+    parts["ReceiverAccentLeftShell"] = add_box(
+        "ReceiverAccentLeftShell", (-accent_x, -0.010, 0.028), (accent_width, accent_depth, accent_height), 0.002
+    )
+    parts["ReceiverAccentLeftCore"] = add_box(
+        "ReceiverAccentLeftCore", (-accent_x, -0.010, 0.028), (accent_width - 0.006, accent_depth - 0.006, accent_height - 0.006), 0.001
+    )
+    parts["ReceiverAccentRightShell"] = add_box(
+        "ReceiverAccentRightShell", (accent_x, -0.010, 0.028), (accent_width, accent_depth, accent_height), 0.002
+    )
+    parts["ReceiverAccentRightCore"] = add_box(
+        "ReceiverAccentRightCore", (accent_x, -0.010, 0.028), (accent_width - 0.006, accent_depth - 0.006, accent_height - 0.006), 0.001
+    )
+    muzzle_accent_y = muzzle_band_front + 0.018
+    muzzle_accent_outer_x = band_radius_x * 0.84
+    muzzle_accent_outer_z = band_radius_z * 0.86
+    muzzle_accent_depth = 0.010 if not profile["world_scale"] else 0.008
+    parts["MuzzleAccentShell"] = add_torus(
+        "MuzzleAccentShell", muzzle_accent_y, barrel_z, muzzle_accent_outer_x, muzzle_accent_outer_z,
+        muzzle_accent_depth, cylinder_segments
+    )
+    parts["MuzzleAccentCore"] = add_torus(
+        "MuzzleAccentCore", muzzle_accent_y, barrel_z, muzzle_accent_outer_x - 0.003, muzzle_accent_outer_z - 0.003,
+        muzzle_accent_depth - 0.003, cylinder_segments
+    )
+
+    # Keep every named source part in the pre-join bounds map.
     part_bounds = {name: world_bounds(obj) for name, obj in parts.items()}
-    for rib_name in rib_names:
-        part_bounds[rib_name] = world_bounds(bpy.data.objects[rib_name])
+    for rib_name in rib_shell_names + rib_core_names:
+        parts[rib_name] = bpy.data.objects[rib_name]
+        part_bounds[rib_name] = world_bounds(parts[rib_name])
 
     def group(names, object_name, material_name):
         return assign_and_join(
@@ -336,10 +432,11 @@ def create_geometry(profile, materials):
             profile["key"],
         )
 
-    metal = group(("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight"), "WeaponMetal", "WeaponMetal")
-    dark = group(("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort"), "WeaponDark", "WeaponDark")
-    accent = group(("ReceiverAccentLeft", "ReceiverAccentRight", "MuzzleAccent", *rib_names), "WeaponAccent", "WeaponAccent")
-    return (metal, dark, accent), part_bounds
+    metal = group(("Receiver", "Barrel", "MagazineTube", "MuzzleBand", "FrontSight", "RearSight", "BarrelClamp"), "WeaponMetal", "WeaponMetal")
+    dark = group(("Stock", "PistolGrip", "Pump", "MuzzleFace", "EjectionPort", "Trigger", "TriggerGuard", "LoadingPortInset"), "WeaponDark", "WeaponDark")
+    core = group(("ReceiverAccentLeftCore", "ReceiverAccentRightCore", "MuzzleAccentCore", *rib_core_names), "WeaponAccentCore", "WeaponAccentCore")
+    accent = group(("ReceiverAccentLeftShell", "ReceiverAccentRightShell", "MuzzleAccentShell", *rib_shell_names), "WeaponAccent", "WeaponAccent")
+    return (metal, dark, core, accent), part_bounds
 
 
 def assign_and_join(parts, object_name, material, asset_key):
@@ -355,7 +452,7 @@ def assign_and_join(parts, object_name, material, asset_key):
     result.data.name = f"{asset_key}_{object_name}Mesh"
     result.data.materials.clear()
     result.data.materials.append(material)
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
     bpy.context.scene.cursor.location = (0.0, 0.0, 0.0)
     bpy.context.view_layer.objects.active = result
     bpy.ops.object.origin_set(type="ORIGIN_CURSOR", center="MEDIAN")
@@ -396,7 +493,57 @@ def audit_connections(part_bounds):
             raise RuntimeError(f"Connection Pump->{rib_name} overlap failed: {overlap}")
         overlaps[f"Pump->{rib_name}"] = tuple(round(value, 6) for value in overlap)
         print(f"AUDIT connection every pump rib {rib_name}->Pump: overlap={overlaps[f'Pump->{rib_name}']}")
+    for shell, core, _, _ in pair_records(part_bounds):
+        shell_min, shell_max = part_bounds[shell]
+        core_min, core_max = part_bounds[core]
+        overlap = tuple(min(shell_max[i], core_max[i]) - max(shell_min[i], core_min[i]) for i in range(3))
+        if min(overlap) < MIN_OVERLAP - 1.0e-6:
+            raise RuntimeError(f"Connection {shell}->{core} overlap failed: {overlap}")
+        overlaps[f"{shell}->{core}"] = tuple(round(value, 6) for value in overlap)
+        print(f"AUDIT connection {shell}->{core}: overlap={overlaps[f'{shell}->{core}']}")
     return overlaps
+
+
+def pair_records(part_bounds):
+    records = list(PAIR_FIXED_RECORDS)
+    for shell in sorted(name for name in part_bounds if name.startswith("PumpRib") and name.endswith("Shell")):
+        core = shell[:-5] + "Core"
+        records.append((shell, core, "WeaponAccent", "WeaponAccentCore"))
+    return tuple(records)
+
+
+def audit_pair_records(part_bounds):
+    records = pair_records(part_bounds)
+    expected_shells = {record[0] for record in records}
+    expected_cores = {record[1] for record in records}
+    actual_shells = {name for name in part_bounds if name.endswith("Shell")}
+    actual_cores = {name for name in part_bounds if name.endswith("Core")}
+    if actual_shells != expected_shells or actual_cores != expected_cores or len(records) != len(expected_shells) or len(records) != len(expected_cores):
+        raise RuntimeError(f"Shell/core pair bijection failed: shells={sorted(actual_shells)}, cores={sorted(actual_cores)}, records={len(records)}")
+    results = {}
+    for shell, core, shell_group, core_group in records:
+        if shell not in part_bounds or core not in part_bounds:
+            raise RuntimeError(f"Shell/core pair record missing: {shell}->{core}")
+        shell_min, shell_max = part_bounds[shell]
+        core_min, core_max = part_bounds[core]
+        inset = tuple(min(core_min[i] - shell_min[i], shell_max[i] - core_max[i]) for i in range(3))
+        containment = all(
+            core_min[i] >= shell_min[i] + CORE_INSET_MIN - 1.0e-6 and core_max[i] <= shell_max[i] - CORE_INSET_MIN + 1.0e-6
+            for i in range(3)
+        )
+        intersection = tuple(min(shell_max[i], core_max[i]) - max(shell_min[i], core_min[i]) for i in range(3))
+        if not containment or any(value < CORE_INSET_MIN - 1.0e-6 or value > CORE_INSET_MAX + 1.0e-6 for value in inset):
+            raise RuntimeError(f"Shell/core inset failed {shell}->{core}: inset={tuple(round(value, 6) for value in inset)}")
+        if min(intersection) <= 0.0:
+            raise RuntimeError(f"Shell/core intersection failed {shell}->{core}: {intersection}")
+        results[f"{shell}->{core}"] = {
+            "inset": tuple(round(value, 6) for value in inset),
+            "intersection": tuple(round(value, 6) for value in intersection),
+            "shell_group": shell_group,
+            "core_group": core_group,
+        }
+        print(f"AUDIT pair {shell}->{core}: inset={results[f'{shell}->{core}']['inset']}, intersection={results[f'{shell}->{core}']['intersection']}")
+    return results
 
 
 def audit_mesh(obj):
@@ -432,7 +579,7 @@ def audit_mesh(obj):
     triangles = len(obj.data.loop_triangles)
     print(
         f"AUDIT mesh {obj.name}: vertices={len(obj.data.vertices)}, triangles={triangles}, "
-        f"manifold=yes, normals=outward, UVMap=yes, transform=applied"
+        f"manifold=yes, open=none, UV0=yes, transform=applied"
     )
     return len(obj.data.vertices), triangles
 
@@ -445,11 +592,11 @@ def combined_bounds(objects):
 
 
 def audit_asset(profile, objects, part_bounds, imported=False):
-    expected_names = ("WeaponMetal", "WeaponDark", "WeaponAccent")
-    if tuple(obj.name for obj in objects) != expected_names:
+    if tuple(obj.name for obj in objects) != GROUP_NAMES:
         raise RuntimeError(f"Stable export object names failed: {tuple(obj.name for obj in objects)}")
     if len({obj.data.name for obj in objects}) != len(objects):
         raise RuntimeError("Mesh data names are not unique")
+    pair_results = audit_pair_records(part_bounds) if part_bounds is not None else {}
     connection_overlaps = audit_connections(part_bounds) if part_bounds is not None else {}
     counts = [audit_mesh(obj) for obj in objects]
     total_vertices = sum(count[0] for count in counts)
@@ -464,6 +611,12 @@ def audit_asset(profile, objects, part_bounds, imported=False):
             f"Target dimensions failed: dimensions={tuple(round(value, 6) for value in dimensions)}, "
             f"target={tuple(round(value, 6) for value in target_dimensions)}"
         )
+    for axis in range(3):
+        if abs(minimum[axis] - profile["target_min"][axis]) > TARGET_TOLERANCE or abs(maximum[axis] - profile["target_max"][axis]) > TARGET_TOLERANCE:
+            raise RuntimeError(
+                f"Target bounds failed: actual={tuple(minimum)}..{tuple(maximum)} "
+                f"target={tuple(profile['target_min'])}..{tuple(profile['target_max'])}"
+            )
     if part_bounds is not None:
         grip_min, grip_max = part_bounds["PistolGrip"]
         if any(not grip_min[i] - 1.0e-6 <= 0.0 <= grip_max[i] + 1.0e-6 for i in range(3)):
@@ -480,7 +633,7 @@ def audit_asset(profile, objects, part_bounds, imported=False):
     unity_butt_z = -butt_max_y
     if unity_muzzle_z <= unity_butt_z:
         raise RuntimeError("Unity +Z anchor ordering failed")
-    print(f"AUDIT total {profile['key']}: vertices={total_vertices}, triangles={total_triangles}")
+    print(f"AUDIT total {profile['key']}: vertices={total_vertices}, triangles={total_triangles} (report-only counts)")
     print(
         f"AUDIT bounds {profile['key']}: min={tuple(round(value, 6) for value in minimum)}, "
         f"max={tuple(round(value, 6) for value in maximum)}"
@@ -504,6 +657,7 @@ def audit_asset(profile, objects, part_bounds, imported=False):
         "bounds_max": tuple(round(value, 7) for value in maximum),
         "dimensions": tuple(round(value, 7) for value in dimensions),
         "connection_overlaps": connection_overlaps,
+        "pairs": pair_results,
         "muzzle_min_y": round(muzzle_min_y, 7),
         "butt_max_y": round(butt_max_y, 7),
         "unity_muzzle_z": round(unity_muzzle_z, 7),
@@ -513,7 +667,7 @@ def audit_asset(profile, objects, part_bounds, imported=False):
     }
 
 
-def canonical_signature(profile, objects, connection_overlaps, minimum, maximum):
+def canonical_signature(profile, objects, connection_overlaps, minimum, maximum, pairs=None):
     records = []
     for obj in objects:
         mesh = obj.data
@@ -536,6 +690,7 @@ def canonical_signature(profile, objects, connection_overlaps, minimum, maximum)
         "objects": records,
         "bounds": (tuple(round(value, 6) for value in minimum), tuple(round(value, 6) for value in maximum)),
         "connections": connection_overlaps,
+        "pairs": pairs or {},
         "anchors": (round(minimum.y, 6), round(maximum.y, 6)),
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -595,13 +750,11 @@ def render_previews(profile, objects, minimum, maximum):
         point_camera(light, center)
 
     os.makedirs(PREVIEW_DIRECTORY, exist_ok=True)
-    expected = ("fps_first-person.png",) if not profile["world_scale"] else (
-        "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"
-    )
-    for filename in expected:
-        path = os.path.join(PREVIEW_DIRECTORY, filename)
-        if os.path.exists(path):
-            os.remove(path)
+    if not profile["world_scale"]:
+        # FPS is always generated first and establishes a clean exact inventory.
+        for filename in os.listdir(PREVIEW_DIRECTORY):
+            if filename.lower().endswith(".png"):
+                os.remove(os.path.join(PREVIEW_DIRECTORY, filename))
 
     def render_one(filename):
         path = os.path.join(PREVIEW_DIRECTORY, filename)
@@ -611,9 +764,18 @@ def render_previews(profile, objects, minimum, maximum):
             raise RuntimeError(f"Preview render missing or empty: {path}")
         print(f"PREVIEW {filename}: {path} ({os.path.getsize(path)} bytes)")
 
+    span = maximum - minimum
+    cardinal_prefix = "world" if profile["world_scale"] else "fps"
+    cardinal = (
+        (f"{cardinal_prefix}_front.png", Vector((0.0, -1.0, 0.0)), max(span.x, span.z)),
+        (f"{cardinal_prefix}_rear.png", Vector((0.0, 1.0, 0.0)), max(span.x, span.z)),
+        (f"{cardinal_prefix}_left.png", Vector((-1.0, 0.0, 0.0)), max(span.y, span.z)),
+        (f"{cardinal_prefix}_right.png", Vector((1.0, 0.0, 0.0)), max(span.y, span.z)),
+        (f"{cardinal_prefix}_top.png", Vector((0.0, 0.0, 1.0)), max(span.x, span.y)),
+    )
+
     if not profile["world_scale"]:
         camera.data.type = "PERSP"
-        # 23.5mm on 36mm sensor approximates requested 75 degree horizontal FOV.
         camera.data.lens = 23.5
         camera.data.sensor_width = 36.0
         camera.data.shift_x = -0.12
@@ -621,50 +783,29 @@ def render_previews(profile, objects, minimum, maximum):
         camera.location = center + Vector((0.35, -0.62, 0.26))
         point_camera(camera, center + Vector((0.0, -0.04, -0.005)))
         render_one("fps_first-person.png")
-    else:
-        span = maximum - minimum
-        cardinal = (
-            ("world_front.png", Vector((0.0, -1.0, 0.0)), max(span.x, span.z)),
-            ("world_rear.png", Vector((0.0, 1.0, 0.0)), max(span.x, span.z)),
-            ("world_left.png", Vector((-1.0, 0.0, 0.0)), max(span.y, span.z)),
-            ("world_right.png", Vector((1.0, 0.0, 0.0)), max(span.y, span.z)),
-            ("world_top.png", Vector((0.0, 0.0, 1.0)), max(span.x, span.y)),
-        )
-        for filename, direction, view_span in cardinal:
-            camera.data.type = "ORTHO"
-            camera.data.shift_x = 0.0
-            camera.data.shift_y = 0.0
-            camera.data.ortho_scale = view_span * 1.22
-            camera.location = center + direction * max(1.0, view_span * 3.0)
-            point_camera(camera, center)
-            render_one(filename)
+    # Exact five orthographic views plus one three-quarter perspective view for
+    # each profile. FPS also retains its dedicated first-person perspective.
+    for filename, direction, view_span in cardinal:
+        camera.data.type = "ORTHO"
+        camera.data.shift_x = 0.0
+        camera.data.shift_y = 0.0
+        camera.data.ortho_scale = view_span * 1.22
+        camera.location = center + direction * max(1.0, view_span * 3.0)
+        point_camera(camera, center)
+        render_one(filename)
+    camera.data.type = "PERSP"
+    camera.data.lens = 52.0
+    camera.location = center + Vector((0.82, -1.18, 0.58))
+    point_camera(camera, center + Vector((0.0, 0.0, -0.01)))
+    render_one(f"{cardinal_prefix}_three-quarter.png")
 
-        preview_material = make_material("ShotgunPreviewScale", (0.08, 0.12, 0.18, 1.0))
-        post_x = maximum.x + 0.070
-        post = create_preview_box("PreviewScalePost", (post_x, center.y + 0.07, 0.015), (0.012, 0.012, 0.38), preview_material)
-        tick_objects = [post]
-        for index, z in enumerate((-0.14, -0.04, 0.06, 0.16)):
-            tick_objects.append(create_preview_box(
-                f"PreviewScaleTick{index}", (post_x, center.y + 0.07, z), (0.050, 0.016, 0.008), preview_material
-            ))
-        camera.data.type = "PERSP"
-        camera.data.lens = 52.0
-        camera.location = center + Vector((0.82, -1.18, 0.58))
-        point_camera(camera, center + Vector((0.0, 0.0, -0.01)))
-        render_one("world_three-quarter.png")
-        for helper in tick_objects:
-            bpy.data.objects.remove(helper, do_unlink=True)
-        bpy.data.materials.remove(preview_material)
-
-    actual = sorted(filename for filename in os.listdir(PREVIEW_DIRECTORY) if filename.lower().endswith(".png"))
-    all_expected = sorted(("fps_first-person.png", "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"))
-    if any(filename not in all_expected for filename in actual):
-        raise RuntimeError(f"Preview inventory contains unexpected PNG: {actual}")
-    if profile["world_scale"] and actual != all_expected:
-        raise RuntimeError(f"Preview inventory mismatch: expected={all_expected}, actual={actual}")
-    if not profile["world_scale"] and "fps_first-person.png" not in actual:
-        raise RuntimeError(f"FPS preview inventory missing required image: {actual}")
-    print(f"PREVIEW inventory: count={len(actual)} (profile={profile['key']}), names={actual}")
+    fps_expected = {"fps_first-person.png", "fps_front.png", "fps_rear.png", "fps_left.png", "fps_right.png", "fps_top.png", "fps_three-quarter.png"}
+    world_expected = {"world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"}
+    expected = fps_expected if not profile["world_scale"] else fps_expected | world_expected
+    actual = {filename for filename in os.listdir(PREVIEW_DIRECTORY) if filename.lower().endswith(".png")}
+    if actual != expected:
+        raise RuntimeError(f"Preview inventory mismatch for {profile['key']}: expected={sorted(expected)}, actual={sorted(actual)}")
+    print(f"PREVIEW inventory: count={len(actual)} (profile={profile['key']}), names={sorted(actual)}")
 
 
 def export_fbx(profile, objects):
@@ -695,9 +836,9 @@ def import_roundtrip(profile, source_record):
     reset_scene()
     bpy.ops.import_scene.fbx(filepath=profile["output"])
     meshes = [obj for obj in bpy.context.scene.objects if obj.type == "MESH"]
-    if len(meshes) != 3:
+    if len(meshes) != len(GROUP_NAMES):
         raise RuntimeError(f"Round-trip mesh count failed for {profile['key']}: {len(meshes)}")
-    expected_names = ("WeaponMetal", "WeaponDark", "WeaponAccent")
+    expected_names = GROUP_NAMES
     by_name = {obj.name: obj for obj in meshes}
     if tuple(sorted(by_name)) != tuple(sorted(expected_names)):
         raise RuntimeError(f"Round-trip object names failed for {profile['key']}: {tuple(sorted(by_name))}")
@@ -710,7 +851,7 @@ def import_roundtrip(profile, source_record):
         if any(abs(a - b) > 0.0005 for a, b in zip(imported_record[key], source_record[key])):
             raise RuntimeError(f"Round-trip {key} mismatch for {profile['key']}: {imported_record[key]} != {source_record[key]}")
     print(
-        f"ROUNDTRIP {profile['key']}: objects=3, vertices={imported_record['vertex_count']}, "
+        f"ROUNDTRIP {profile['key']}: objects=4, vertices={imported_record['vertex_count']}, "
         f"triangles={imported_record['triangle_count']}, bounds_match=yes, transforms=applied, static=yes"
     )
     print(
@@ -726,7 +867,7 @@ def generate_profile(profile):
     objects = tuple(objects)
     minimum, maximum = combined_bounds(objects)
     record = audit_asset(profile, objects, part_bounds)
-    signature, _ = canonical_signature(profile, objects, record["connection_overlaps"], minimum, maximum)
+    signature, _ = canonical_signature(profile, objects, record["connection_overlaps"], minimum, maximum, record.get("pairs", {}))
     record["signature"] = signature
     render_previews(profile, objects, minimum, maximum)
     export_fbx(profile, objects)
@@ -745,16 +886,16 @@ def compare_runs(first, second):
                 f"Two-run semantic signature mismatch for {first_record['profile']}: "
                 f"{first_record['signature']} != {second_record['signature']}"
             )
-        for key in ("vertex_count", "triangle_count", "bounds_min", "bounds_max", "dimensions", "connection_overlaps"):
+        for key in ("vertex_count", "triangle_count", "bounds_min", "bounds_max", "dimensions", "connection_overlaps", "pairs"):
             if first_record[key] != second_record[key]:
                 raise RuntimeError(f"Two-run semantic mismatch for {first_record['profile']} field {key}")
-    expected = sorted(("fps_first-person.png", "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"))
+    expected = sorted(("fps_first-person.png", "fps_front.png", "fps_rear.png", "fps_left.png", "fps_right.png", "fps_top.png", "fps_three-quarter.png", "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"))
     actual = sorted(filename for filename in os.listdir(PREVIEW_DIRECTORY) if filename.lower().endswith(".png"))
     if actual != expected:
         raise RuntimeError(f"Two-run preview inventory mismatch: {actual}")
     if first[0]["signature"] == first[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
-    print(f"PROOF two-run semantic match: profiles={len(first)}, signatures_distinct=yes, previews={len(actual)}")
+    print(f"PROOF two-run semantic match: profiles={len(first)}, signatures_distinct=yes, previews={len(actual)} (exact=13)")
 
 
 def main():
