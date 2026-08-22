@@ -500,6 +500,15 @@ WEAPON_ACCENT_CONTRACT = {
     "emission_coverage": (0.055, 0.12),
 }
 
+# Weapon clean surfaces use broad periodic lobes instead of the general-purpose
+# multi-frequency noise. This keeps the material tileable without competing
+# with the authored scratches, chips, polish, and grime.
+WEAPON_TONAL_PHASES = {
+    "metal": ((1, 0, 0.37, 0.34), (0, 1, 1.13, 0.30), (2, 0, 2.41, 0.19), (0, 2, 3.07, 0.17)),
+    "dark": ((1, 0, 1.31, 0.32), (0, 1, 2.17, 0.34), (2, 0, 3.43, 0.16), (0, 2, 0.71, 0.18)),
+    "accent": ((1, 0, 2.03, 0.52), (0, 1, 4.11, 0.48)),
+}
+
 # Explicit motifs keep weapon wear stable across Python/NumPy versions. Every
 # mask below is consumed by base colour, height/normal, metallic, smoothness,
 # and AO so the maps describe the same physical damage rather than unrelated
@@ -550,11 +559,25 @@ def _weapon_wear_masks(u, v):
     return masks
 
 
-def _weapon_surface_fields(kind, u, v, n, n01):
+def _weapon_tonal_field(kind, u, v):
+    """Return deterministic low-frequency tileable variation in ``[-1, 1]``."""
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    value = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
+    weight = 0.0
+    for frequency_u, frequency_v, phase, amplitude in WEAPON_TONAL_PHASES[kind]:
+        value += np.sin(np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase) * amplitude
+        weight += amplitude
+    return value / weight
+
+
+def _weapon_surface_fields(kind, u, v):
     """Build one weapon material from shared deterministic physical masks."""
+    tonal = _weapon_tonal_field(kind, u, v)
+    tonal01 = np.clip(0.5 + tonal * 0.50, 0.0, 1.0)
     if kind == "accent":
         shadow, base_colour, highlight = (np.asarray(value, dtype=np.float64) for value in WEAPON_ACCENT_CONTRACT["palette"])
-        value = np.rint(n01 * 10.0) / 10.0
+        value = 0.46 + tonal01 * 0.16
         low_amount = np.clip(value / 0.58, 0.0, 1.0)
         high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
         low_base = shadow + (base_colour - shadow) * low_amount[..., None]
@@ -562,15 +585,15 @@ def _weapon_surface_fields(kind, u, v, n, n01):
         base = np.where((value <= 0.58)[..., None], low_base, high_base)
         pane = np.logical_or(np.mod(u * 8.0, 1.0) < 0.055, np.mod(v * 8.0, 1.0) < 0.055).astype(np.float64)
         base = np.clip(base + pane[..., None] * np.array((0.035, 0.010, 0.012)), 0.0, 1.0)
-        height = 0.50 + n * 0.010 + pane * 0.006
-        metallic = np.full_like(n, 0.008)
-        smoothness = 0.90 + n01 * 0.08
-        ao = 0.94 + n01 * 0.05
+        height = 0.50 + tonal * 0.004 + pane * 0.006
+        metallic = np.full_like(tonal, 0.008)
+        smoothness = 0.935 + tonal01 * 0.025
+        ao = 0.965 + tonal01 * 0.020
         return base, height, metallic, smoothness, ao, {"pane": pane > 0.0}
 
     targets = WEAPON_READABILITY_TARGETS[kind]
     shadow, base_colour, highlight = (np.asarray(value, dtype=np.float64) for value in targets["palette"])
-    value = np.rint(n01 * 8.0) / 8.0
+    value = 0.30 + tonal01 * 0.44
     low_amount = np.clip(value / 0.58, 0.0, 1.0)
     high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
     low_base = shadow + (base_colour - shadow) * low_amount[..., None]
@@ -586,12 +609,12 @@ def _weapon_surface_fields(kind, u, v, n, n01):
         base = np.where(chips[..., None], np.array((0.66, 0.61, 0.52)), base)
         base = np.where(polish[..., None], np.minimum(1.0, base * 1.17 + 0.025), base)
         base = np.where(grime[..., None], base * np.array((0.50, 0.46, 0.40)), base)
-        metallic = np.full_like(n, 0.65)
+        metallic = np.full_like(tonal, 0.65)
         metallic = np.where(scratches, 0.86, metallic)
         metallic = np.where(chips, 0.78, metallic)
         metallic = np.where(polish, 0.75, metallic)
         metallic = np.where(grime, 0.48, metallic)
-        smoothness = 0.52 + n01 * 0.22
+        smoothness = 0.56 + tonal01 * 0.12
         smoothness = np.where(scratches, 0.36, smoothness)
         smoothness = np.where(chips, 0.33, smoothness)
         smoothness = np.where(polish, 0.88, smoothness)
@@ -601,20 +624,20 @@ def _weapon_surface_fields(kind, u, v, n, n01):
         base = np.where(chips[..., None], np.array((0.45, 0.43, 0.40)), base)
         base = np.where(polish[..., None], np.minimum(1.0, base * 1.24 + 0.018), base)
         base = np.where(grime[..., None], base * np.array((0.48, 0.50, 0.52)), base)
-        metallic = np.full_like(n, 0.05)
+        metallic = np.full_like(tonal, 0.05)
         metallic = np.where(scratches, 0.68, metallic)
         metallic = np.where(chips, 0.62, metallic)
         metallic = np.where(polish, 0.12, metallic)
         metallic = np.where(grime, 0.02, metallic)
-        smoothness = 0.38 + n01 * 0.20
+        smoothness = 0.42 + tonal01 * 0.10
         smoothness = np.where(scratches, 0.62, smoothness)
         smoothness = np.where(chips, 0.40, smoothness)
         smoothness = np.where(polish, 0.82, smoothness)
         smoothness = np.where(grime, 0.24, smoothness)
 
-    height = 0.50 + n * 0.045 + grid * 0.012
+    height = 0.50 + tonal * 0.018 + grid * 0.012
     height = height - scratches * 0.040 - chips * 0.026 + polish * 0.010 - grime * 0.007
-    ao = 0.90 + n01 * 0.08
+    ao = 0.92 + tonal01 * 0.05
     ao = np.where(scratches, 0.70, ao)
     ao = np.where(chips, 0.66, ao)
     ao = np.where(polish, 0.98, ao)
@@ -660,8 +683,6 @@ def _surface_fields(kind: str, u: float, v: float):
             kind,
             np.asarray(u, dtype=np.float64),
             np.asarray(v, dtype=np.float64),
-            np.asarray(n, dtype=np.float64),
-            np.asarray(n01, dtype=np.float64),
         )
         return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
     raise ValueError(f"Unknown surface kind: {kind}")
@@ -707,7 +728,7 @@ def _surface_fields_array(kind: str, u, v):
         height = 0.49 + n * 0.035 + np.where(yellow > 0.0, 0.07, -0.015)
         return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - yellow * 0.10
     if kind in ("metal", "dark", "accent"):
-        base, height, metallic, smoothness, ao, _masks = _weapon_surface_fields(kind, u, v, n, n01)
+        base, height, metallic, smoothness, ao, _masks = _weapon_surface_fields(kind, u, v)
         return base, height, metallic, smoothness, ao
     raise ValueError(f"Unknown surface kind: {kind}")
 
@@ -770,7 +791,7 @@ def generate_weapon_accent_emission(width=2048, height=2048):
     source_height = min(height, 1024)
     u = np.arange(source_width, dtype=np.float64)[None, :] / float(source_width - 1)
     v = np.arange(source_height, dtype=np.float64)[:, None] / float(source_height - 1)
-    noise = _periodic_noise_array("accent", u, v)
+    noise = _weapon_tonal_field("accent", u, v)
     mask = np.mod(u * 8.0, 1.0) < 0.075
     intensity = np.clip(0.72 + noise * 0.12 + 0.05 * np.cos(np.float64(math.tau) * v * 4.0), 0.62, 0.90)
     emission = _rgba_array(source_width, source_height, (0, 0, 0, 255))
