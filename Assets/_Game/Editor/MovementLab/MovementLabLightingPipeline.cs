@@ -83,11 +83,7 @@ namespace RocketFooxball.Editor
                     sun.shadowNormalBias = 0.4f;
                     sun.cullingMask = -1;
 
-                    var skyMaterial = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
-                    if (skyMaterial == null)
-                    {
-                        throw new InvalidOperationException("Lighting-owned sky material is missing: " + SkyMaterialPath);
-                    }
+                    var skyMaterial = AuthorSkyMaterial(-sun.transform.forward);
 
                     RenderSettings.skybox = skyMaterial;
                     RenderSettings.sun = sun;
@@ -113,6 +109,20 @@ namespace RocketFooxball.Editor
                     ConfigureReflectionProbes(environment.transform);
                     MarkArenaStaticForLighting(arena.Root);
                     BindExistingLightingSettings(scene);
+                }
+
+                private static Material AuthorSkyMaterial(Vector3 sunDirection)
+                {
+                    var skyMaterial = AssetDatabase.LoadAssetAtPath<Material>(SkyMaterialPath);
+                    if (skyMaterial == null)
+                    {
+                        throw new InvalidOperationException("Lighting-owned sky material is missing: " + SkyMaterialPath);
+                    }
+
+                    skyMaterial.SetVector("_SunDirection", sunDirection);
+                    EditorUtility.SetDirty(skyMaterial);
+                    AssetDatabase.SaveAssetIfDirty(skyMaterial);
+                    return skyMaterial;
                 }
 
                 private static void BindExistingGlobalVolume(Transform parent)

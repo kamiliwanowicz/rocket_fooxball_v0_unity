@@ -1841,16 +1841,44 @@ namespace RocketFooxball.Editor
                     var vertices = mesh != null ? mesh.vertices : Array.Empty<Vector3>();
                     var triangles = mesh != null ? mesh.triangles : Array.Empty<int>();
                     var triangleCount = triangles.Length / 3;
-                    var triangleNeighbors = new List<int>[vertices.Length];
-                    for (var vertex = 0; vertex < triangleNeighbors.Length; vertex++) triangleNeighbors[vertex] = new List<int>();
+                    var weldedVertexIds = GetWeldedVertexIds(vertices);
+                    var triangleNeighbors = new List<int>[triangleCount];
+                    for (var triangle = 0; triangle < triangleCount; triangle++)
+                        triangleNeighbors[triangle] = new List<int>();
+
+                    var trianglesByEdge = new Dictionary<UndirectedMeshEdge, List<int>>();
                     for (var triangle = 0; triangle < triangleCount; triangle++)
                     {
+                        var triangleStart = triangle * 3;
                         for (var corner = 0; corner < 3; corner++)
                         {
-                            var vertex = triangles[triangle * 3 + corner];
-                            if (vertex >= 0 && vertex < triangleNeighbors.Length) triangleNeighbors[vertex].Add(triangle);
+                            var firstVertex = triangles[triangleStart + corner];
+                            var secondVertex = triangles[triangleStart + (corner + 1) % 3];
+                            if (firstVertex < 0 || firstVertex >= weldedVertexIds.Length ||
+                                secondVertex < 0 || secondVertex >= weldedVertexIds.Length)
+                                continue;
+
+                            var firstWeldedVertex = weldedVertexIds[firstVertex];
+                            var secondWeldedVertex = weldedVertexIds[secondVertex];
+                            if (firstWeldedVertex == secondWeldedVertex) continue;
+                            var edge = new UndirectedMeshEdge(firstWeldedVertex, secondWeldedVertex);
+                            if (!trianglesByEdge.TryGetValue(edge, out var edgeTriangles))
+                            {
+                                edgeTriangles = new List<int>();
+                                trianglesByEdge.Add(edge, edgeTriangles);
+                            }
+                            for (var edgeTriangleIndex = 0; edgeTriangleIndex < edgeTriangles.Count; edgeTriangleIndex++)
+                            {
+                                var edgeTriangle = edgeTriangles[edgeTriangleIndex];
+                                if (edgeTriangle == triangle) continue;
+                                triangleNeighbors[triangle].Add(edgeTriangle);
+                                triangleNeighbors[edgeTriangle].Add(triangle);
+                            }
+                            if (edgeTriangles.Count == 0 || edgeTriangles[edgeTriangles.Count - 1] != triangle)
+                                edgeTriangles.Add(triangle);
                         }
                     }
+
                     var visited = new bool[triangleCount];
                     var islands = new List<Bounds>();
                     for (var start = 0; start < triangleCount; start++)
@@ -1871,16 +1899,148 @@ namespace RocketFooxball.Editor
                                 var point = visual.transform.InverseTransformPoint(renderer.transform.TransformPoint(vertices[vertexIndex]));
                                 if (hasBounds) islandBounds.Encapsulate(point);
                                 else { islandBounds = new Bounds(point, Vector3.zero); hasBounds = true; }
-                                for (var neighborIndex = 0; neighborIndex < triangleNeighbors[vertexIndex].Count; neighborIndex++)
-                                {
-                                    var neighbor = triangleNeighbors[vertexIndex][neighborIndex];
-                                    if (!visited[neighbor]) { visited[neighbor] = true; queue.Enqueue(neighbor); }
-                                }
+                            }
+                            for (var neighborIndex = 0; neighborIndex < triangleNeighbors[triangle].Count; neighborIndex++)
+                            {
+                                var neighbor = triangleNeighbors[triangle][neighborIndex];
+                                if (!visited[neighbor]) { visited[neighbor] = true; queue.Enqueue(neighbor); }
                             }
                         }
                         if (hasBounds) islands.Add(islandBounds);
                     }
                     return islands;
+                }
+
+                private static int[] GetWeldedVertexIds(Vector3[] vertices)
+                {
+                    var weldedVertexIds = new int[vertices.Length];
+                    var weldedPositions = new List<Vector3>();
+                    var positionBuckets = new Dictionary<MeshPositionCell, List<int>>();
+                    for (var vertex = 0; vertex < vertices.Length; vertex++)
+                    {
+                        var position = vertices[vertex];
+                        var cell = new MeshPositionCell(position);
+                        var weldedVertex = -1;
+                        for (var x = -1; x <= 1 && weldedVertex < 0; x++)
+                        for (var y = -1; y <= 1 && weldedVertex < 0; y++)
+                        for (var z = -1; z <= 1 && weldedVertex < 0; z++)
+                        {
+                            var nearbyCell = cell.Offset(x, y, z);
+                            if (!positionBuckets.TryGetValue(nearbyCell, out var nearbyVertices)) continue;
+                            for (var nearbyIndex = 0; nearbyIndex < nearbyVertices.Count; nearbyIndex++)
+                            {
+                                var candidate = nearbyVertices[nearbyIndex];
+                                if (AreCoincidentMeshPositions(position, weldedPositions[candidate]))
+                                {
+                                    weldedVertex = candidate;
+                                    break;
+                                }
+                            }
+                        }
+                        if (weldedVertex < 0)
+                        {
+                            weldedVertex = weldedPositions.Count;
+                            weldedPositions.Add(position);
+                            if (!positionBuckets.TryGetValue(cell, out var cellVertices))
+                            {
+                                cellVertices = new List<int>();
+                                positionBuckets.Add(cell, cellVertices);
+                            }
+                            cellVertices.Add(weldedVertex);
+                        }
+                        weldedVertexIds[vertex] = weldedVertex;
+                    }
+                    return weldedVertexIds;
+                }
+
+                private static bool AreCoincidentMeshPositions(Vector3 first, Vector3 second)
+                {
+                    return (first - second).sqrMagnitude <=
+                           WeaponMeshIslandPositionTolerance * WeaponMeshIslandPositionTolerance;
+                }
+
+                private readonly struct MeshPositionCell : IEquatable<MeshPositionCell>
+                {
+                    private readonly int x;
+                    private readonly int y;
+                    private readonly int z;
+
+                    internal MeshPositionCell(Vector3 position)
+                    {
+                        x = Mathf.FloorToInt(position.x / WeaponMeshIslandPositionTolerance);
+                        y = Mathf.FloorToInt(position.y / WeaponMeshIslandPositionTolerance);
+                        z = Mathf.FloorToInt(position.z / WeaponMeshIslandPositionTolerance);
+                    }
+
+                    private MeshPositionCell(int x, int y, int z)
+                    {
+                        this.x = x;
+                        this.y = y;
+                        this.z = z;
+                    }
+
+                    internal MeshPositionCell Offset(int offsetX, int offsetY, int offsetZ)
+                    {
+                        return new MeshPositionCell(x + offsetX, y + offsetY, z + offsetZ);
+                    }
+
+                    public bool Equals(MeshPositionCell other)
+                    {
+                        return x == other.x && y == other.y && z == other.z;
+                    }
+
+                    public override bool Equals(object obj)
+                    {
+                        return obj is MeshPositionCell other && Equals(other);
+                    }
+
+                    public override int GetHashCode()
+                    {
+                        unchecked
+                        {
+                            var hash = x;
+                            hash = hash * 397 ^ y;
+                            return hash * 397 ^ z;
+                        }
+                    }
+                }
+
+                private readonly struct UndirectedMeshEdge : IEquatable<UndirectedMeshEdge>
+                {
+                    private readonly int first;
+                    private readonly int second;
+
+                    internal UndirectedMeshEdge(int first, int second)
+                    {
+                        if (first <= second)
+                        {
+                            this.first = first;
+                            this.second = second;
+                        }
+                        else
+                        {
+                            this.first = second;
+                            this.second = first;
+                        }
+                    }
+
+                    public bool Equals(UndirectedMeshEdge other)
+                    {
+                        return first == other.first && second == other.second;
+                    }
+
+                    public override bool Equals(object obj)
+                    {
+                        return obj is UndirectedMeshEdge other && Equals(other);
+                    }
+
+                    public override int GetHashCode()
+                    {
+                        unchecked
+                        {
+                            return first * 397 ^ second;
+                        }
+                    }
                 }
 
                 internal static void ValidateNoPhysics(GameObject root, string label)

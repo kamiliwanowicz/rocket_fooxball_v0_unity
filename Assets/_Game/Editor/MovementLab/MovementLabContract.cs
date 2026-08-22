@@ -152,6 +152,7 @@ namespace RocketFooxball.Editor
         internal const float WeaponAccentCoreEmissionStrength = 2f;
         internal const float WeaponBoundsTolerance = 0.025f;
         internal const float WeaponShellCoreInset = 0.002f;
+        internal const float WeaponMeshIslandPositionTolerance = 0.0001f;
         internal static readonly Vector3 LauncherWeaponBoundsMin = new Vector3(-0.16f, -0.14f, -0.20f);
         internal static readonly Vector3 LauncherWeaponBoundsMax = new Vector3(0.16f, 0.11f, 0.55f);
         internal static readonly Vector3 FpsShotgunBoundsMin = new Vector3(-0.11f, -0.18f, -0.29f);

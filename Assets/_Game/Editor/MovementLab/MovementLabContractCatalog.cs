@@ -290,6 +290,7 @@ namespace RocketFooxball.Editor
         internal const float WeaponAccentCoreEmissionStrength = MovementLabContract.WeaponAccentCoreEmissionStrength;
         internal const float WeaponBoundsTolerance = MovementLabContract.WeaponBoundsTolerance;
         internal const float WeaponShellCoreInset = MovementLabContract.WeaponShellCoreInset;
+        internal const float WeaponMeshIslandPositionTolerance = MovementLabContract.WeaponMeshIslandPositionTolerance;
         internal static readonly Vector3 LauncherWeaponBoundsMin = MovementLabContract.LauncherWeaponBoundsMin;
         internal static readonly Vector3 LauncherWeaponBoundsMax = MovementLabContract.LauncherWeaponBoundsMax;
         internal static readonly Vector3 FpsShotgunBoundsMin = MovementLabContract.FpsShotgunBoundsMin;
