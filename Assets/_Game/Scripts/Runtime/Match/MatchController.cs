@@ -15,6 +15,8 @@ namespace RocketFooxball.Runtime.Match
     [MovedFrom("RocketFooxball")]
     public sealed class MatchController : MonoBehaviour
     {
+        public const bool DefaultBotsEnabled = true;
+
         [MovedFrom(false, "RocketFooxball", "RocketFooxball.Runtime", "MatchController/MatchState")]
         public enum MatchState
         {
@@ -32,6 +34,10 @@ namespace RocketFooxball.Runtime.Match
         [SerializeField] private ParticipantState[] participants = new ParticipantState[6];
         [SerializeField] private ParticipantState localParticipant;
         [SerializeField] private ParticipantSpawnSet spawnSet;
+
+        [Header("Bot Setup")]
+        [SerializeField] private bool botsEnabledByDefault = DefaultBotsEnabled;
+        [SerializeField] private GameObject botSystemsRoot;
 
         [Header("Match Owners")]
         [SerializeField] private BallMotor ball;
@@ -62,9 +68,13 @@ namespace RocketFooxball.Runtime.Match
         private MatchOutcome outcome = MatchOutcome.InProgress;
         private MatchDecisionRule decisionRule = MatchDecisionRule.None;
         private bool compositionValid;
+        private bool selectedBotsEnabled = DefaultBotsEnabled;
+        private bool lockedBotsEnabled = DefaultBotsEnabled;
+        private bool configurationLocked;
+        private bool botParticipantsPresent;
+        private IReadOnlyList<ParticipantState> localOnlyRoster = Array.Empty<ParticipantState>();
         private BotDifficulty selectedEnemyDifficulty = BotDifficulty.Medium;
         private BotDifficulty lockedEnemyDifficulty = BotDifficulty.Medium;
-        private bool difficultyLocked;
         private readonly HashSet<ParticipantState> recoverySuppressed = new HashSet<ParticipantState>();
 
         public MatchState State => (MatchState)state;
@@ -81,9 +91,13 @@ namespace RocketFooxball.Runtime.Match
         public bool HasLastGoalSummary => hasLastGoalSummary;
         public MatchOutcome Outcome => outcome;
         public MatchDecisionRule DecisionRule => decisionRule;
+        public bool SelectedBotsEnabled => selectedBotsEnabled;
+        public bool LockedBotsEnabled => lockedBotsEnabled;
+        public bool BotsEnabled => configurationLocked ? lockedBotsEnabled : selectedBotsEnabled;
+        public bool ConfigurationLocked => configurationLocked;
         public BotDifficulty SelectedEnemyDifficulty => selectedEnemyDifficulty;
         public BotDifficulty LockedEnemyDifficulty => lockedEnemyDifficulty;
-        public bool DifficultyLocked => difficultyLocked;
+        public bool DifficultyLocked => configurationLocked;
 
         // Compatibility surface used by the existing diagnostics HUD.
         public float FreezeRemaining => state == MatchRules.MatchState.GoalFreeze ? PhaseRemaining : 0f;
@@ -106,9 +120,12 @@ namespace RocketFooxball.Runtime.Match
             matchTimeRemaining = Mathf.Max(matchDuration, 0f);
             phaseRemaining = 0f;
             state = MatchRules.MatchState.Setup;
+            selectedBotsEnabled = botsEnabledByDefault;
+            lockedBotsEnabled = botsEnabledByDefault;
+            configurationLocked = false;
+            botParticipantsPresent = false;
             selectedEnemyDifficulty = BotDifficulty.Medium;
             lockedEnemyDifficulty = BotDifficulty.Medium;
-            difficultyLocked = false;
             compositionValid = ValidateComposition();
             if (!compositionValid)
             {
@@ -208,7 +225,7 @@ namespace RocketFooxball.Runtime.Match
             for (var i = 0; i < participants.Length; i++)
             {
                 var participant = participants[i];
-                if (participant == null)
+                if (participant == null || !participant.gameObject.activeInHierarchy)
                 {
                     continue;
                 }
@@ -326,9 +343,11 @@ namespace RocketFooxball.Runtime.Match
 
         private void EnterSetup(bool clearPreviousMatch)
         {
+            selectedBotsEnabled = botsEnabledByDefault;
+            lockedBotsEnabled = botsEnabledByDefault;
+            configurationLocked = false;
             selectedEnemyDifficulty = BotDifficulty.Medium;
             lockedEnemyDifficulty = BotDifficulty.Medium;
-            difficultyLocked = false;
             matchTimeRemaining = Mathf.Max(matchDuration, 0f);
             phaseRemaining = 0f;
 
@@ -345,6 +364,7 @@ namespace RocketFooxball.Runtime.Match
 
             SetState(MatchRules.MatchState.Setup);
             ApplyGameplayGate(false);
+            ApplyBotPresence(selectedBotsEnabled);
         }
 
         private void BeginNewMatch(MatchResetReason reason)
@@ -386,7 +406,7 @@ namespace RocketFooxball.Runtime.Match
 
         public bool TrySelectEnemyDifficulty(BotDifficulty difficulty)
         {
-            if (!compositionValid || !MatchRules.CanSelectEnemyDifficulty(state, difficultyLocked, difficulty))
+            if (!compositionValid || !MatchRules.CanSelectEnemyDifficulty(state, configurationLocked, selectedBotsEnabled, difficulty))
             {
                 return false;
             }
@@ -395,15 +415,29 @@ namespace RocketFooxball.Runtime.Match
             return true;
         }
 
+        public bool TrySelectBotsEnabled(bool botsEnabled)
+        {
+            if (!compositionValid || !MatchRules.CanSelectBotsEnabled(state, configurationLocked))
+            {
+                return false;
+            }
+
+            selectedBotsEnabled = botsEnabled;
+            ApplyBotPresence(botsEnabled);
+            return true;
+        }
+
         public bool TryStartConfiguredMatch()
         {
-            if (!compositionValid || !MatchRules.CanStartConfiguredMatch(state, difficultyLocked, selectedEnemyDifficulty))
+            if (!compositionValid || !MatchRules.CanStartConfiguredMatch(state, configurationLocked, selectedBotsEnabled, selectedEnemyDifficulty))
             {
                 return false;
             }
 
             lockedEnemyDifficulty = selectedEnemyDifficulty;
-            difficultyLocked = true;
+            lockedBotsEnabled = selectedBotsEnabled;
+            configurationLocked = true;
+            ApplyBotPresence(lockedBotsEnabled);
             BeginNewMatch(MatchResetReason.MatchStart);
             return true;
         }
@@ -453,7 +487,7 @@ namespace RocketFooxball.Runtime.Match
 
         public BotDifficulty GetBotDifficulty(ParticipantTeam participantTeam)
         {
-            if (!difficultyLocked || localParticipant == null)
+            if (!configurationLocked || !lockedBotsEnabled || localParticipant == null)
             {
                 return BotDifficulty.Medium;
             }
@@ -581,6 +615,42 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
             ball?.SetSimulationEnabled(enabled);
+        }
+
+        private void ApplyBotPresence(bool enabled)
+        {
+            if (!compositionValid || botSystemsRoot == null || participants == null)
+            {
+                return;
+            }
+
+            if (!enabled)
+            {
+                botSystemsRoot.SetActive(false);
+                for (var i = 1; i < participants.Length; i++)
+                {
+                    participants[i]?.gameObject.SetActive(false);
+                }
+                botParticipantsPresent = false;
+                return;
+            }
+
+            for (var i = 1; i < participants.Length; i++)
+            {
+                participants[i]?.gameObject.SetActive(true);
+            }
+
+            for (var i = 1; i < participants.Length; i++)
+            {
+                participants[i]?.SetMatchSimulationEnabled(GameplayEnabled);
+            }
+            botSystemsRoot.SetActive(true);
+            botParticipantsPresent = true;
+        }
+
+        private IReadOnlyList<ParticipantState> QueryRoster()
+        {
+            return botParticipantsPresent ? participants : localOnlyRoster;
         }
 
         private void ClearMatchPause()
@@ -726,7 +796,7 @@ namespace RocketFooxball.Runtime.Match
             }
 
             var from = participant.transform.position;
-            var spawn = spawnSet.SelectSafestSpawn(participant, ball, participants);
+            var spawn = spawnSet.SelectSafestSpawn(participant, ball, QueryRoster());
             if (!IsRecoverySpawnValid(spawn))
             {
                 spawn = spawnSet.GetKickoffSpawn(participant, FindParticipantIndex(participant));
@@ -751,7 +821,7 @@ namespace RocketFooxball.Runtime.Match
         private void RecoverParticipant(ParticipantState participant, int rosterIndex)
         {
             var from = participant.transform.position;
-            var spawn = spawnSet != null ? spawnSet.SelectSafestSpawn(participant, ball, participants) : null;
+            var spawn = spawnSet != null ? spawnSet.SelectSafestSpawn(participant, ball, QueryRoster()) : null;
             if (!IsRecoverySpawnValid(spawn))
             {
                 spawn = spawnSet != null ? spawnSet.GetKickoffSpawn(participant, rosterIndex) : null;
@@ -878,12 +948,13 @@ namespace RocketFooxball.Runtime.Match
             }
 
             ParticipantState bestAlly = null;
-            if (participants != null && localParticipant != null)
+            var roster = QueryRoster();
+            if (roster != null && localParticipant != null)
             {
-                for (var i = 0; i < participants.Length; i++)
+                for (var i = 0; i < roster.Count; i++)
                 {
-                    var candidate = participants[i];
-                    if (candidate == null || candidate == localParticipant || !candidate.IsAlive || candidate.Team != localParticipant.Team)
+                    var candidate = roster[i];
+                    if (candidate == null || !candidate.gameObject.activeInHierarchy || candidate == localParticipant || !candidate.IsAlive || candidate.Team != localParticipant.Team)
                     {
                         continue;
                     }
@@ -915,18 +986,19 @@ namespace RocketFooxball.Runtime.Match
                 return;
             }
 
-            for (var i = 0; i < participants.Length; i++)
+            var roster = QueryRoster();
+            for (var i = 0; i < roster.Count; i++)
             {
-                var first = participants[i];
+                var first = roster[i];
                 var firstController = first != null ? first.CharacterController : null;
                 if (firstController == null)
                 {
                     continue;
                 }
 
-                for (var j = i + 1; j < participants.Length; j++)
+                for (var j = i + 1; j < roster.Count; j++)
                 {
-                    var second = participants[j];
+                    var second = roster[j];
                     var secondController = second != null ? second.CharacterController : null;
                     if (secondController == null || first == null || second == null)
                     {
@@ -996,14 +1068,20 @@ namespace RocketFooxball.Runtime.Match
 
         private bool IsRosterParticipant(ParticipantState participant)
         {
-            if (participant == null || participants == null)
+            if (participant == null)
             {
                 return false;
             }
 
-            for (var i = 0; i < participants.Length; i++)
+            var roster = QueryRoster();
+            if (roster == null)
             {
-                if (participants[i] == participant)
+                return false;
+            }
+
+            for (var i = 0; i < roster.Count; i++)
+            {
+                if (roster[i] == participant && participant.gameObject.activeInHierarchy)
                 {
                     return true;
                 }
@@ -1013,9 +1091,9 @@ namespace RocketFooxball.Runtime.Match
 
         private bool ValidateComposition()
         {
-            if (participants == null || participants.Length != 6 || localParticipant == null || spawnSet == null || ball == null || northGoal == null || southGoal == null)
+            if (participants == null || participants.Length != 6 || localParticipant == null || spawnSet == null || ball == null || northGoal == null || southGoal == null || botSystemsRoot == null)
             {
-                Debug.LogError("MatchController requires serialized references: six participants, localParticipant, spawnSet, ball, northGoal, southGoal.", this);
+                Debug.LogError("MatchController requires serialized references: six participants, localParticipant, spawnSet, ball, northGoal, southGoal, and botSystemsRoot.", this);
                 enabled = false;
                 return false;
             }
@@ -1029,15 +1107,18 @@ namespace RocketFooxball.Runtime.Match
 
             var ids = new HashSet<int>();
             var names = new HashSet<string>(StringComparer.Ordinal);
+            var roots = new HashSet<Transform>();
             var blueCount = 0;
             var redCount = 0;
             var localCount = 0;
             for (var i = 0; i < participants.Length; i++)
             {
                 var participant = participants[i];
-                if (participant == null || !ids.Add(participant.SlotId) || !names.Add(participant.DisplayName))
+                var participantRoot = participant != null && participant.transform != null ? participant.transform.root : null;
+                if (participant == null || participant.gameObject == null || participantRoot == null || string.IsNullOrEmpty(participant.DisplayName) ||
+                    !roots.Add(participantRoot) || !ids.Add(participant.SlotId) || !names.Add(participant.DisplayName))
                 {
-                    Debug.LogError("MatchController requires six non-null participants with unique slot IDs and display names.", this);
+                    Debug.LogError("MatchController requires six non-null participants with unique roots, slot IDs, and display names.", this);
                     enabled = false;
                     return false;
                 }
@@ -1046,9 +1127,15 @@ namespace RocketFooxball.Runtime.Match
                 {
                     blueCount++;
                 }
-                else
+                else if (participant.Team == ParticipantTeam.Red)
                 {
                     redCount++;
+                }
+                else
+                {
+                    Debug.LogError("MatchController requires participants to use exactly Blue or Red teams.", this);
+                    enabled = false;
+                    return false;
                 }
                 if (participant.IsLocalParticipant)
                 {
@@ -1056,13 +1143,17 @@ namespace RocketFooxball.Runtime.Match
                 }
             }
 
-            if (!Array.Exists(participants, participant => participant == localParticipant) || localCount != 1 || localParticipant.Team != ParticipantTeam.Blue || blueCount != 3 || redCount != 3)
+            if (participants[0] != localParticipant || localParticipant.SlotId != 0 ||
+                !Array.Exists(participants, participant => participant == localParticipant) ||
+                !localParticipant.IsLocalParticipant || localCount != 1 ||
+                localParticipant.Team != ParticipantTeam.Blue || blueCount != 3 || redCount != 3)
             {
-                Debug.LogError("MatchController requires one local Blue participant and exactly three participants per team.", this);
+                Debug.LogError("MatchController requires participant slot 0 to be the one local Blue participant and exactly three participants per team.", this);
                 enabled = false;
                 return false;
             }
 
+            localOnlyRoster = Array.AsReadOnly(new[] { localParticipant });
             return true;
         }
     }

@@ -94,14 +94,42 @@ namespace RocketFooxball.Runtime.Match
                    difficulty == BotDifficulty.High;
         }
 
+        public static bool CanSelectBotsEnabled(MatchState state, bool configurationLocked)
+        {
+            return state == MatchState.Setup && !configurationLocked;
+        }
+
+        public static bool CanSelectEnemyDifficulty(
+            MatchState state,
+            bool configurationLocked,
+            bool botsEnabled,
+            BotDifficulty difficulty)
+        {
+            return state == MatchState.Setup &&
+                   !configurationLocked &&
+                   botsEnabled &&
+                   IsSupportedDifficulty(difficulty);
+        }
+
         public static bool CanSelectEnemyDifficulty(MatchState state, bool difficultyLocked, BotDifficulty difficulty)
         {
-            return state == MatchState.Setup && !difficultyLocked && IsSupportedDifficulty(difficulty);
+            return CanSelectEnemyDifficulty(state, difficultyLocked, true, difficulty);
+        }
+
+        public static bool CanStartConfiguredMatch(
+            MatchState state,
+            bool configurationLocked,
+            bool botsEnabled,
+            BotDifficulty difficulty)
+        {
+            return state == MatchState.Setup &&
+                   !configurationLocked &&
+                   (!botsEnabled || IsSupportedDifficulty(difficulty));
         }
 
         public static bool CanStartConfiguredMatch(MatchState state, bool difficultyLocked, BotDifficulty difficulty)
         {
-            return state == MatchState.Setup && !difficultyLocked && IsSupportedDifficulty(difficulty);
+            return CanStartConfiguredMatch(state, difficultyLocked, true, difficulty);
         }
 
         public static bool CanPauseMatch(MatchState state, float matchTimeRemaining)
