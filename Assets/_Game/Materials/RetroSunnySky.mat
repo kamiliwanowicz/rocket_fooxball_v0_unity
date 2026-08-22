@@ -19,7 +19,7 @@ Material:
   m_CustomRenderQueue: -1
   stringTagMap: {}
   disabledShaderPasses: []
-  m_LockedProperties:
+  m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
@@ -40,7 +40,7 @@ Material:
     - _FogHorizonColor: {r: 0.7254902, g: 0.8627451, b: 0.9490196, a: 1}
     - _HorizonColor: {r: 0.7254902, g: 0.8627451, b: 0.9490196, a: 1}
     - _SunColor: {r: 1, g: 0.8392157, b: 0.6392157, a: 1}
-    - _SunDirection: {r: 0.32139382, g: 0.76604456, b: -0.5566703, a: 0}
+    - _SunDirection: {r: -0, g: 1.0000001, b: 0.00000011920929, a: 0}
     - _ZenithColor: {r: 0.2980392, g: 0.5686275, b: 0.8470588, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
