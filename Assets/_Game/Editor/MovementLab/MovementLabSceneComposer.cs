@@ -64,8 +64,8 @@ namespace RocketFooxball.Editor
                     EnsureFolders();
 
                     var ballSurface = GetOrCreatePhysicMaterial();
-                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
-                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
+                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), FloorTextureScale, Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
+                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), WallTextureScale, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
                     var trimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Trim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
                     var hazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Hazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
                     var markingMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Marking", null, null, null, null, null, null, Vector2.one, new Color(1.00f, 0.96f, 0.78f, 1f), Color.clear, 0f, 0f, 0.5f, 1f, 1f));
@@ -107,7 +107,7 @@ namespace RocketFooxball.Editor
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
                     BuildHealthPickupPrefab(healthPickupMaterial);
                     BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
-                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), LoadRequiredAsset<Material>(ShotgunAccentCoreMaterialPath), teamBlueMaterial, teamRedMaterial);
                     BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
@@ -224,7 +224,8 @@ namespace RocketFooxball.Editor
                          SetFloat(match, "matchDuration", MatchDuration);
                          SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                        SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                         SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                         SetBool(match, "botsEnabledByDefault", BotsEnabledByDefault);
                          SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                          SetVector3(match, "resetLookTarget", Vector3.zero);
                          WirePresentationSceneReferences(participantStates, localParticipant, match);

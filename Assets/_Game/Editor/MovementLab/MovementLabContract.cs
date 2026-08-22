@@ -2,6 +2,7 @@ using System;
 using UnityEditor.Animations;
 using UnityEngine;
 using RocketFooxball.Runtime.Feedback;
+using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Pickups;
 
@@ -12,7 +13,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 8;
+        internal const int SerializedContractVersion = 9;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -48,7 +49,10 @@ namespace RocketFooxball.Editor
         internal const string ShotgunModelPath = "Assets/_Game/Models/Shotgun.fbx";
         internal const string ShotgunMetalMaterialPath = MaterialsPath + "/ShotgunMetal.mat";
         internal const string ShotgunDarkMaterialPath = MaterialsPath + "/ShotgunDark.mat";
+        internal const string WeaponAccentMaterialPath = MaterialsPath + "/WeaponAccent.mat";
         internal const string ShotgunAccentMaterialPath = MaterialsPath + "/ShotgunAccent.mat";
+        internal const string WeaponAccentCoreMaterialPath = MaterialsPath + "/WeaponAccentCore.mat";
+        internal const string ShotgunAccentCoreMaterialPath = MaterialsPath + "/ShotgunAccentCore.mat";
 
         internal const string HealthPickupsRootName = "HealthPickups";
         internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
@@ -130,6 +134,30 @@ namespace RocketFooxball.Editor
         internal const float UnderfootForwardImpulseScale = 0.5625f;
         internal const float UnderfootUpwardImpulseScale = 1f;
         internal const float UnderfootHighSpeedVerticalRedirect = 1f;
+        internal static readonly Vector2 FloorTextureScale = new Vector2(13f, 9f);
+        internal static readonly Vector2 WallTextureScale = new Vector2(4f, 1f);
+        internal const bool BotsEnabledByDefault = MatchController.DefaultBotsEnabled;
+
+        internal static readonly Color WeaponAccentShellBaseColor = new Color(0.68f, 0.03f, 0.015f, 0.42f);
+        internal const float WeaponAccentShellMetallic = 0f;
+        internal const float WeaponAccentShellSmoothness = 0.96f;
+        internal const float WeaponAccentShellOcclusion = 0.85f;
+        internal const float WeaponAccentShellBumpScale = 0.35f;
+        internal static readonly Color WeaponAccentCoreBaseColor = new Color(0.25f, 0.005f, 0.002f, 1f);
+        internal const float WeaponAccentCoreMetallic = 0.15f;
+        internal const float WeaponAccentCoreSmoothness = 0.80f;
+        internal const float WeaponAccentCoreOcclusion = 0.90f;
+        internal const float WeaponAccentCoreBumpScale = 0.50f;
+        internal static readonly Color WeaponAccentCoreEmissionColor = new Color(1f, 0.08f, 0.015f, 1f);
+        internal const float WeaponAccentCoreEmissionStrength = 2f;
+        internal const float WeaponBoundsTolerance = 0.025f;
+        internal const float WeaponShellCoreInset = 0.002f;
+        internal static readonly Vector3 LauncherWeaponBoundsMin = new Vector3(-0.16f, -0.14f, -0.20f);
+        internal static readonly Vector3 LauncherWeaponBoundsMax = new Vector3(0.16f, 0.11f, 0.55f);
+        internal static readonly Vector3 FpsShotgunBoundsMin = new Vector3(-0.11f, -0.18f, -0.29f);
+        internal static readonly Vector3 FpsShotgunBoundsMax = new Vector3(0.11f, 0.12f, 0.66f);
+        internal static readonly Vector3 WorldShotgunBoundsMin = new Vector3(-0.09f, -0.16f, -0.28f);
+        internal static readonly Vector3 WorldShotgunBoundsMax = new Vector3(0.09f, 0.10f, 0.64f);
 
         internal static readonly Color RocketTrailStartColor = new Color(0.58f, 0.55f, 0.50f, 0.75f);
         internal static readonly Color RocketTrailEndColor = new Color(0.20f, 0.19f, 0.18f, 1f);
@@ -137,7 +165,7 @@ namespace RocketFooxball.Editor
         internal static readonly Color RocketBaseColor = Color.white;
         internal static readonly Color WeaponMetalBaseColor = new Color(0.95f, 0.86f, 0.70f, 1f);
         internal static readonly Color WeaponDarkBaseColor = new Color(0.88f, 0.90f, 0.92f, 1f);
-        internal static readonly Color WeaponAccentBaseColor = new Color(0.95f, 0.56f, 0.38f, 1f);
+        internal static readonly Color WeaponAccentBaseColor = new Color(0.68f, 0.03f, 0.015f, 0.42f);
         internal static readonly Color ExplosionFireMaterialColor = Color.white;
         internal static readonly Color ExplosionSmokeMaterialColor = new Color(0.52f, 0.49f, 0.44f, 0.72f);
         internal static readonly Color GridColor = new Color(0.12f, 0.50f, 0.72f, 1f);
@@ -180,8 +208,8 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/ContainmentGridCeiling.mat", MaterialsPath + "/ContainmentGridLongWall.mat", MaterialsPath + "/ContainmentGridEndWall.mat",
             MaterialsPath + "/RetroSunnySky.mat", MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat",
-            MaterialsPath + "/WeaponDark.mat", MaterialsPath + "/WeaponAccent.mat",
-            ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentMaterialPath,
+            MaterialsPath + "/WeaponDark.mat", WeaponAccentCoreMaterialPath, WeaponAccentMaterialPath,
+            ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentCoreMaterialPath, ShotgunAccentMaterialPath,
             MaterialsPath + "/TeamBlue.mat", MaterialsPath + "/TeamRed.mat",
             MaterialsPath + "/TeamBlueShield.mat", MaterialsPath + "/TeamRedShield.mat",
             MaterialsPath + "/TeamBlueTrail.mat", MaterialsPath + "/TeamRedTrail.mat",
@@ -228,6 +256,47 @@ namespace RocketFooxball.Editor
         }
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
+
+        internal static readonly string[] ArenaPylonNames =
+        {
+            "NorthWallPylon_-48", "NorthWallPylon_-24", "NorthWallPylon_0", "NorthWallPylon_24", "NorthWallPylon_48",
+            "SouthWallPylon_-48", "SouthWallPylon_-24", "SouthWallPylon_0", "SouthWallPylon_24", "SouthWallPylon_48"
+        };
+
+        internal static readonly float[] ArenaPylonXs = { -48f, -24f, 0f, 24f, 48f };
+        internal const float ArenaNorthWallPylonZ = -44f;
+        internal const float ArenaSouthWallPylonZ = 44f;
+        internal static readonly Quaternion ArenaNorthWallPylonRotation = Quaternion.identity;
+        internal static readonly Quaternion ArenaSouthWallPylonRotation = Quaternion.Euler(0f, 180f, 0f);
+
+        internal readonly struct CollisionGeometrySpecification
+        {
+            internal readonly string Name;
+            internal readonly Vector3 Position;
+            internal readonly Vector3 Scale;
+            internal readonly Quaternion Rotation;
+
+            internal CollisionGeometrySpecification(string name, Vector3 position, Vector3 scale, Quaternion rotation)
+            {
+                Name = name;
+                Position = position;
+                Scale = scale;
+                Rotation = rotation;
+            }
+        }
+
+        internal static readonly CollisionGeometrySpecification[] PrimaryCollisionGeometry =
+        {
+            new CollisionGeometrySpecification("Floor", new Vector3(0f, -0.5f, 0f), new Vector3(130f, 1f, 90f), Quaternion.identity),
+            new CollisionGeometrySpecification("NorthWall", new Vector3(0f, 4f, -44.5f), new Vector3(130f, 8f, 1f), Quaternion.identity),
+            new CollisionGeometrySpecification("SouthWall", new Vector3(0f, 4f, 44.5f), new Vector3(130f, 8f, 1f), Quaternion.identity),
+            new CollisionGeometrySpecification("WestWallNorth", new Vector3(-64.5f, 4f, -31.75f), new Vector3(1f, 8f, 26.5f), Quaternion.identity),
+            new CollisionGeometrySpecification("WestWallSouth", new Vector3(-64.5f, 4f, 31.75f), new Vector3(1f, 8f, 26.5f), Quaternion.identity),
+            new CollisionGeometrySpecification("EastWallNorth", new Vector3(64.5f, 4f, -31.75f), new Vector3(1f, 8f, 26.5f), Quaternion.identity),
+            new CollisionGeometrySpecification("EastWallSouth", new Vector3(64.5f, 4f, 31.75f), new Vector3(1f, 8f, 26.5f), Quaternion.identity),
+            new CollisionGeometrySpecification("RampWest", new Vector3(-22f, 2.1f, 2f), new Vector3(18f, 0.5f, 20f), Quaternion.Euler(-15f, -90f, 0f)),
+            new CollisionGeometrySpecification("RampEast", new Vector3(22f, 2.1f, -2f), new Vector3(18f, 0.5f, 20f), Quaternion.Euler(-15f, 90f, 0f))
+        };
 
         internal readonly struct GeometrySpecification
         {

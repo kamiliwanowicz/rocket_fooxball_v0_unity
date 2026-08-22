@@ -302,7 +302,8 @@ namespace RocketFooxball.Editor
                 VolumeProfilePath, LightingSettingsPath, LightingManifestPath,
                  TeamBlueMaterialPath, TeamRedMaterialPath, TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath,
                  TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath, ShotgunMetalMaterialPath, ShotgunDarkMaterialPath,
-                 ShotgunAccentMaterialPath, BlueCircleCueMeshPath, RedTriangleCueMeshPath
+                 WeaponAccentMaterialPath, WeaponAccentCoreMaterialPath, ShotgunAccentMaterialPath, ShotgunAccentCoreMaterialPath,
+                 BlueCircleCueMeshPath, RedTriangleCueMeshPath
             };
             for (var i = 0; i < paths.Length; i++)
             {
@@ -709,6 +710,8 @@ namespace RocketFooxball.Editor
                     CaptureReference(accumulator, "gameplay/wiring", "MatchController.northGoal", context.Match, "northGoal", context.North);
                     CaptureReference(accumulator, "gameplay/wiring", "MatchController.southGoal", context.Match, "southGoal", context.South);
                 }
+                var botSystems = GameObject.Find(MovementLabBotPipeline.SystemsRootName);
+                CaptureReference(accumulator, "gameplay/wiring", "MatchController.botSystemsRoot", context.Match, "botSystemsRoot", botSystems);
                 accumulator.Capture("gameplay/contract", "GoalTrigger.event-owner", () =>
                 {
                     var goalType = typeof(GoalTrigger);
@@ -724,6 +727,7 @@ namespace RocketFooxball.Editor
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalCelebrationOrbitDuration", context.Match, "goalCelebrationOrbitDuration", MovementLabSceneComposer.GoalSummaryDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.participantRecoveryThreshold", context.Match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                accumulator.Capture("gameplay/serialized", "MatchController.botsEnabledByDefault", () => ValidateSerializedBool(context.Match, "botsEnabledByDefault", BotsEnabledByDefault, "MatchController.botsEnabledByDefault"));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.ballResetPosition", context.Match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                 CaptureSerializedVector(accumulator, "gameplay/serialized", "MatchController.resetLookTarget", context.Match, "resetLookTarget", Vector3.zero);
             }
@@ -958,6 +962,9 @@ namespace RocketFooxball.Editor
                     if (model == null) throw new InvalidOperationException(pickup.name + " imported shotgun model is missing.");
                     MovementLabMaterialPipeline.ValidateShotgunMaterials(model.gameObject);
                     MovementLabPrefabPipeline.ValidateImportedVisual(model.gameObject, ShotgunModelPath, pickup.name + " imported shotgun model");
+                    MovementLabPrefabPipeline.ValidateWeaponVisualContract(model.gameObject, pickup.name + " imported shotgun model", WorldShotgunBoundsMin, WorldShotgunBoundsMax);
+                    MovementLabPrefabPipeline.ValidateNoPhysics(model.gameObject, pickup.name + " imported shotgun model");
+                    MovementLabPrefabPipeline.ValidateNoAnimators(model.gameObject, pickup.name + " imported shotgun model");
                     MovementLabPrefabPipeline.ValidateImportedVisualForward(model, pickup.name + " imported shotgun model");
                     ValidateScenePickupCuePair(visualRoot, pickup.name);
                     if (visualRoot.GetComponentsInChildren<Collider>(true).Length != 0 || visualRoot.GetComponentsInChildren<Rigidbody>(true).Length != 0 ||
@@ -1306,6 +1313,19 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("MatchController Blue/Red read property missing: " + teamReadProperties[i] + ".");
             }
 
+            var botReadProperties = new[]
+            {
+                nameof(MatchController.SelectedBotsEnabled), nameof(MatchController.LockedBotsEnabled), nameof(MatchController.BotsEnabled),
+                nameof(MatchController.ConfigurationLocked), nameof(MatchController.DifficultyLocked),
+                nameof(MatchController.SelectedEnemyDifficulty), nameof(MatchController.LockedEnemyDifficulty)
+            };
+            for (var i = 0; i < botReadProperties.Length; i++)
+            {
+                var property = matchType.GetProperty(botReadProperties[i], publicInstance);
+                if (property == null || !property.CanRead)
+                    throw new InvalidOperationException("MatchController bot setup read property missing: " + botReadProperties[i] + ".");
+            }
+
             var resetEvent = matchType.GetEvent(nameof(MatchController.CoordinatedResetRequested), publicInstance);
             if (resetEvent == null)
                 throw new InvalidOperationException("MatchController.CoordinatedResetRequested event is missing.");
@@ -1421,7 +1441,9 @@ namespace RocketFooxball.Editor
                          throw new InvalidOperationException("Participant shotgun presentation mode mismatch: " + expected.DisplayName);
                      MovementLabPrefabPipeline.ValidateShotgunPresentation(participant.gameObject, camera, fpsShotgun, worldVisual, worldMount, worldShotgun, expected.DisplayName);
                      MovementLabPrefabPipeline.ValidateTeamTintRenderers(participant.Presentation, worldVisual, worldMount,
-                         MovementLabPrefabPipeline.FindRendererByName(worldShotgun.gameObject, "WeaponAccent"), expected.DisplayName + ".presentation.teamTintRenderers");
+                         MovementLabPrefabPipeline.FindRendererByName(worldShotgun.gameObject, "WeaponAccent"),
+                         MovementLabPrefabPipeline.FindRendererByName(worldShotgun.gameObject, "WeaponAccentCore"),
+                         expected.DisplayName + ".presentation.teamTintRenderers");
                      var worldLayers = worldVisual.GetComponentsInChildren<Transform>(true);
                     for (var layerIndex = 0; layerIndex < worldLayers.Length; layerIndex++)
                     {
@@ -1627,7 +1649,9 @@ namespace RocketFooxball.Editor
                 if (availableAssets != null && availableAssets.Contains(WeaponModelPath))
                     accumulator.Capture("visual/imported", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WeaponVisual.gameObject, WeaponModelPath, "WeaponVisual"));
                 accumulator.Capture("visual/material", "WeaponMaterials", () => MovementLabMaterialPipeline.ValidateWeaponMaterials(context.WeaponVisual.gameObject));
+                accumulator.Capture("visual/geometry", "WeaponBoundsAndIslands", () => MovementLabPrefabPipeline.ValidateWeaponVisualContract(context.WeaponVisual.gameObject, "WeaponVisual", LauncherWeaponBoundsMin, LauncherWeaponBoundsMax));
                 accumulator.Capture("visual/physics", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.WeaponVisual.gameObject, "WeaponVisual"));
+                accumulator.Capture("visual/animator", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateNoAnimators(context.WeaponVisual.gameObject, "WeaponVisual"));
             }
             if (context.FpsShotgunVisual != null && context.WorldShotgunVisual != null && context.WorldShotgunMount != null && context.WorldVisual != null && context.Camera != null)
             {
@@ -1635,6 +1659,8 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("visual/imported", "WorldShotgunVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WorldShotgunVisual.gameObject, ShotgunModelPath, "WorldShotgunVisual"));
                 accumulator.Capture("visual/material", "FpsShotgunMaterials", () => MovementLabMaterialPipeline.ValidateShotgunMaterials(context.FpsShotgunVisual.gameObject));
                 accumulator.Capture("visual/material", "WorldShotgunMaterials", () => MovementLabMaterialPipeline.ValidateShotgunMaterials(context.WorldShotgunVisual.gameObject));
+                accumulator.Capture("visual/geometry", "FpsShotgunBoundsAndIslands", () => MovementLabPrefabPipeline.ValidateWeaponVisualContract(context.FpsShotgunVisual.gameObject, "FpsShotgunVisual", FpsShotgunBoundsMin, FpsShotgunBoundsMax));
+                accumulator.Capture("visual/geometry", "WorldShotgunBoundsAndIslands", () => MovementLabPrefabPipeline.ValidateWeaponVisualContract(context.WorldShotgunVisual.gameObject, "WorldShotgunVisual", WorldShotgunBoundsMin, WorldShotgunBoundsMax));
                 accumulator.Capture("visual/physics", "FpsShotgunVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.FpsShotgunVisual.gameObject, "FpsShotgunVisual"));
                 accumulator.Capture("visual/physics", "WorldShotgunVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.WorldShotgunVisual.gameObject, "WorldShotgunVisual"));
                 accumulator.Capture("visual/animator", "ShotgunAnimators", () =>
@@ -1647,6 +1673,7 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("visual/presentation", "ShotgunTeamTint", () => MovementLabPrefabPipeline.ValidateTeamTintRenderers(
                     context.Presentation, context.WorldVisual, context.WorldShotgunMount,
                     MovementLabPrefabPipeline.FindRendererByName(context.WorldShotgunVisual.gameObject, "WeaponAccent"),
+                    MovementLabPrefabPipeline.FindRendererByName(context.WorldShotgunVisual.gameObject, "WeaponAccentCore"),
                     "Scene Player PlayerPresentation.teamTintRenderers"));
             }
             if (context.FpsVisual != null && context.FpsAnimator != null)
@@ -1720,6 +1747,7 @@ namespace RocketFooxball.Editor
         {
             if (context?.Arena == null) return;
             accumulator.Capture("arena", "materials", () => MovementLabArenaPipeline.ValidateArenaMaterials(context.Arena, context.BallSurface));
+            accumulator.Capture("arena", "collision-geometry", () => MovementLabArenaPipeline.ValidatePrimaryCollisionGeometry(context.Arena, context.BallSurface));
             accumulator.Capture("arena", "architecture", () => MovementLabArenaPipeline.ValidateArenaArchitecture(context.Arena));
             accumulator.Capture("arena", "required-children", () => MovementLabArenaPipeline.Validate());
         }
@@ -1784,6 +1812,15 @@ namespace RocketFooxball.Editor
             UnityEngine.Object target, string property, float expected)
         {
             accumulator.Capture(scope, check, () => ValidateSerializedFloat(target, property, expected, check));
+        }
+
+        private static void ValidateSerializedBool(UnityEngine.Object target, string propertyName, bool expected, string label)
+        {
+            if (target == null) throw new InvalidOperationException(label + " target is null.");
+            var serialized = new SerializedObject(target);
+            var property = serialized.FindProperty(propertyName);
+            if (property == null || property.propertyType != SerializedPropertyType.Boolean || property.boolValue != expected)
+                throw new InvalidOperationException(label + " serialized value mismatch.");
         }
 
         private static void ValidateShotgunRuntimeSurface()

@@ -419,12 +419,7 @@ namespace RocketFooxball.Editor
                 {
                     ValidateRigImporter(CharacterModelPath);
                     ValidateRigImporter(FpsKickModelPath);
-                    var weapon = AssetImporter.GetAtPath(WeaponModelPath) as ModelImporter;
-                    if (weapon == null || weapon.animationType != ModelImporterAnimationType.None || weapon.importAnimation || weapon.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(weapon.globalScale - 1f) > 0.0001f)
-                    {
-                        throw new InvalidOperationException("Weapon importer contract invalid.");
-                    }
-                    ValidatePbrModelImporter(weapon, false, "Weapon");
+                    ValidateStaticWeaponModel(WeaponModelPath, "Weapon");
                     ValidateStaticWeaponModel(FpsShotgunModelPath, "FpsShotgun");
                     ValidateStaticWeaponModel(ShotgunModelPath, "Shotgun");
                     var rocket = AssetImporter.GetAtPath(RocketModelPath) as ModelImporter;
@@ -453,7 +448,7 @@ namespace RocketFooxball.Editor
                     }
                     ValidatePbrModelImporter(importer, false, label);
 
-                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccent" };
+                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent" };
                     var assets = AssetDatabase.LoadAllAssetsAtPath(path);
                     var meshes = new List<Mesh>();
                     for (var i = 0; i < assets.Length; i++)
@@ -462,7 +457,7 @@ namespace RocketFooxball.Editor
                     }
                     if (meshes.Count != expectedGroups.Length)
                     {
-                        throw new InvalidOperationException(label + " imported mesh count must equal three.");
+                        throw new InvalidOperationException(label + " imported mesh count must equal four.");
                     }
                     var seen = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < meshes.Count; i++)
@@ -471,7 +466,7 @@ namespace RocketFooxball.Editor
                         var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
                         if (group == null || !seen.Add(group) || mesh.subMeshCount != 1)
                         {
-                            throw new InvalidOperationException(label + " imported mesh groups must be exactly WeaponMetal, WeaponDark, and WeaponAccent.");
+                            throw new InvalidOperationException(label + " imported mesh groups must be exactly WeaponMetal, WeaponDark, WeaponAccent, and WeaponAccentCore.");
                         }
                         ValidateMeshPbrChannels(mesh, false, label + "/" + group);
                     }

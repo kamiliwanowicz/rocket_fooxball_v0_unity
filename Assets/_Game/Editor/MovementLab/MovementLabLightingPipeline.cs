@@ -35,10 +35,10 @@ namespace RocketFooxball.Editor
                 private static readonly Color ProductionAmbientSkyColor = new Color(0.30f, 0.34f, 0.38f);
                 private static readonly Color ProductionAmbientEquatorColor = new Color(0.16f, 0.18f, 0.20f);
                 private static readonly Color ProductionAmbientGroundColor = new Color(0.07f, 0.08f, 0.09f);
-                private static readonly Vector3 ProductionSunEuler = new Vector3(50f, 330f, 0f);
+                private static readonly Vector3 ProductionSunEuler = new Vector3(90f, 0f, 0f);
                 private const float ProductionAmbientIntensity = 0.65f;
                 private const float ProductionSunIntensity = 2.0f;
-                private const float ProductionSunShadowStrength = 0.90f;
+                private const float ProductionSunShadowStrength = 0.65f;
                 private const float GoalAccentIntensity = 350f;
                 private const float GoalAccentRange = 24f;
                 private static readonly Color WallFillColor = new Color(1.0f, 0.82f, 0.64f, 1f);

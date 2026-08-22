@@ -50,7 +50,10 @@ namespace RocketFooxball.Editor
         internal const string TeamRedTrailMaterialPath = MaterialsPath + "/TeamRedTrail.mat";
         internal const string ShotgunMetalMaterialPath = MovementLabContract.ShotgunMetalMaterialPath;
         internal const string ShotgunDarkMaterialPath = MovementLabContract.ShotgunDarkMaterialPath;
+        internal const string WeaponAccentMaterialPath = MovementLabContract.WeaponAccentMaterialPath;
         internal const string ShotgunAccentMaterialPath = MovementLabContract.ShotgunAccentMaterialPath;
+        internal const string WeaponAccentCoreMaterialPath = MovementLabContract.WeaponAccentCoreMaterialPath;
+        internal const string ShotgunAccentCoreMaterialPath = MovementLabContract.ShotgunAccentCoreMaterialPath;
         internal const string BlueCircleCueMeshPath = MovementLabContract.BlueCircleCueMeshPath;
         internal const string RedTriangleCueMeshPath = MovementLabContract.RedTriangleCueMeshPath;
 
@@ -259,7 +262,7 @@ namespace RocketFooxball.Editor
         internal static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
         internal static readonly Color ShotgunMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
         internal static readonly Color ShotgunDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
-        internal static readonly Color ShotgunAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
+        internal static readonly Color ShotgunAccentBaseColor = MovementLabContract.WeaponAccentShellBaseColor;
         internal static readonly Color AmmoShellBaseColor = MovementLabContract.AmmoShellBaseColor;
         internal static readonly Color AmmoShellEmissionColor = MovementLabContract.AmmoShellEmissionColor;
         internal const float AmmoShellEmissionStrength = MovementLabContract.AmmoShellEmissionStrength;
@@ -270,6 +273,35 @@ namespace RocketFooxball.Editor
         internal const float UnderfootForwardImpulseScale = MovementLabContract.UnderfootForwardImpulseScale;
         internal const float UnderfootUpwardImpulseScale = MovementLabContract.UnderfootUpwardImpulseScale;
         internal const float UnderfootHighSpeedVerticalRedirect = MovementLabContract.UnderfootHighSpeedVerticalRedirect;
+        internal static readonly Vector2 FloorTextureScale = MovementLabContract.FloorTextureScale;
+        internal static readonly Vector2 WallTextureScale = MovementLabContract.WallTextureScale;
+        internal const bool BotsEnabledByDefault = MovementLabContract.BotsEnabledByDefault;
+        internal static readonly Color WeaponAccentShellBaseColor = MovementLabContract.WeaponAccentShellBaseColor;
+        internal const float WeaponAccentShellMetallic = MovementLabContract.WeaponAccentShellMetallic;
+        internal const float WeaponAccentShellSmoothness = MovementLabContract.WeaponAccentShellSmoothness;
+        internal const float WeaponAccentShellOcclusion = MovementLabContract.WeaponAccentShellOcclusion;
+        internal const float WeaponAccentShellBumpScale = MovementLabContract.WeaponAccentShellBumpScale;
+        internal static readonly Color WeaponAccentCoreBaseColor = MovementLabContract.WeaponAccentCoreBaseColor;
+        internal const float WeaponAccentCoreMetallic = MovementLabContract.WeaponAccentCoreMetallic;
+        internal const float WeaponAccentCoreSmoothness = MovementLabContract.WeaponAccentCoreSmoothness;
+        internal const float WeaponAccentCoreOcclusion = MovementLabContract.WeaponAccentCoreOcclusion;
+        internal const float WeaponAccentCoreBumpScale = MovementLabContract.WeaponAccentCoreBumpScale;
+        internal static readonly Color WeaponAccentCoreEmissionColor = MovementLabContract.WeaponAccentCoreEmissionColor;
+        internal const float WeaponAccentCoreEmissionStrength = MovementLabContract.WeaponAccentCoreEmissionStrength;
+        internal const float WeaponBoundsTolerance = MovementLabContract.WeaponBoundsTolerance;
+        internal const float WeaponShellCoreInset = MovementLabContract.WeaponShellCoreInset;
+        internal static readonly Vector3 LauncherWeaponBoundsMin = MovementLabContract.LauncherWeaponBoundsMin;
+        internal static readonly Vector3 LauncherWeaponBoundsMax = MovementLabContract.LauncherWeaponBoundsMax;
+        internal static readonly Vector3 FpsShotgunBoundsMin = MovementLabContract.FpsShotgunBoundsMin;
+        internal static readonly Vector3 FpsShotgunBoundsMax = MovementLabContract.FpsShotgunBoundsMax;
+        internal static readonly Vector3 WorldShotgunBoundsMin = MovementLabContract.WorldShotgunBoundsMin;
+        internal static readonly Vector3 WorldShotgunBoundsMax = MovementLabContract.WorldShotgunBoundsMax;
+        internal const float ArenaNorthWallPylonZ = MovementLabContract.ArenaNorthWallPylonZ;
+        internal const float ArenaSouthWallPylonZ = MovementLabContract.ArenaSouthWallPylonZ;
+        internal static readonly Quaternion ArenaNorthWallPylonRotation = MovementLabContract.ArenaNorthWallPylonRotation;
+        internal static readonly Quaternion ArenaSouthWallPylonRotation = MovementLabContract.ArenaSouthWallPylonRotation;
+        internal static readonly string[] ArenaPylonNames = MovementLabContract.ArenaPylonNames;
+        internal static readonly float[] ArenaPylonXs = MovementLabContract.ArenaPylonXs;
 
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
@@ -283,7 +315,8 @@ namespace RocketFooxball.Editor
             ExplosionSparksMaterialPath, MaterialsPath + "/Smoke.mat", GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath,
             SkyMaterialPath, VolumeProfilePath, LightingSettingsPath, MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat", MaterialsPath + "/WeaponDark.mat",
-            MaterialsPath + "/WeaponAccent.mat", ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentMaterialPath,
+            WeaponAccentCoreMaterialPath, WeaponAccentMaterialPath,
+            ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentCoreMaterialPath, ShotgunAccentMaterialPath,
             TeamBlueMaterialPath, TeamRedMaterialPath,
             TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath, TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath,
             BlueCircleCueMeshPath, RedTriangleCueMeshPath,

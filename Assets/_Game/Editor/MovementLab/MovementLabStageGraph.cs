@@ -66,10 +66,10 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:3";
-        private const string MaterialContract = "material-prefab-contract:11";
+        private const string MaterialContract = "material-prefab-contract:12";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:15";
+        private const string GameplayContract = "gameplay-scene-contract:16";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:3";
         private const string LightingContract = "lighting-contract:5";
@@ -89,7 +89,7 @@ namespace RocketFooxball.Editor
                 MovementLabContractCatalog.GeneratedImporterMetadataPaths, includeUnityVersion: true),
             new StageDefinition(MovementLabStage.MaterialPrefab, new[] { MovementLabStage.Importer }, Array.Empty<MovementLabStage>(),
                 MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
-                Concat(new[] { "Tools/Blender/generate_retro_textures.py" }, WithMetas(new[]
+                Concat(new[] { "Tools/Blender/generate_retro_textures.py", "Tools/Blender/generate_fps_rocket_launcher.py", "Tools/Blender/generate_fps_shotgun.py" }, WithMetas(new[]
                 {
                     MovementLabContract.InputActionsPath,
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
