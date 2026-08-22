@@ -469,7 +469,7 @@ namespace RocketFooxball.Editor
                         if (renderer == null || filter == null || filter.sharedMesh == null ||
                             (filter.sharedMesh.name != "ArenaWallPylonMesh" && filter.sharedMesh.name != "ArenaWallPylon") ||
                             AssetDatabase.GetAssetPath(filter.sharedMesh) != ArenaKitModelPath ||
-                            renderer.GetComponentsInChildren<Collider>(true).Length != 0 || renderer.GetComponent<Rigidbody>() != null)
+                            item.GetComponentsInChildren<Collider>(true).Length != 0 || item.GetComponentsInChildren<Rigidbody>(true).Length != 0)
                             throw new InvalidOperationException("Arena wall pylon provenance/physics contract invalid: " + MovementLabContract.ArenaPylonNames[i]);
                         var expectedMaterials = ResolveArenaKitMaterials("ArenaWallPylon", palette);
                         if (renderer.sharedMaterials == null || renderer.sharedMaterials.Length != expectedMaterials.Length ||

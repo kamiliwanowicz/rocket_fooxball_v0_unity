@@ -722,7 +722,7 @@ namespace RocketFooxball.Editor
                     if (goalType.GetEvent("GoalCrossed") == null || hasMatchReference)
                         throw new InvalidOperationException("GoalTrigger event-owner contract invalid.");
                 });
-                accumulator.Capture("gameplay/contract", "MatchController.public-surface", ValidateMatchPublicContract);
+                accumulator.Capture("gameplay/contract", "MatchController.public-surface", () => ValidateMatchPublicContract(context.Match));
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.matchDuration", context.Match, "matchDuration", MovementLabSceneComposer.MatchDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.goalCelebrationOrbitDuration", context.Match, "goalCelebrationOrbitDuration", MovementLabSceneComposer.GoalSummaryDuration);
                 CaptureSerialized(accumulator, "gameplay/serialized", "MatchController.kickoffCountdownDuration", context.Match, "kickoffCountdownDuration", MovementLabSceneComposer.KickoffCountdownDuration);
@@ -1274,8 +1274,11 @@ namespace RocketFooxball.Editor
             CaptureSerialized(accumulator, "gameplay/serialized", label + ".PlayerCameraFeedback.dashKickImpulseDuration", participant.CameraFeedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration);
         }
 
-        private static void ValidateMatchPublicContract()
+        private static void ValidateMatchPublicContract(MatchController match)
         {
+            if (match == null)
+                throw new InvalidOperationException("MatchController public contract requires a reopened MatchController instance.");
+
             var matchType = typeof(MatchController);
             var publicInstance = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public;
             var compatibilityProperties = new[]
@@ -1325,6 +1328,21 @@ namespace RocketFooxball.Editor
                 if (property == null || !property.CanRead)
                     throw new InvalidOperationException("MatchController bot setup read property missing: " + botReadProperties[i] + ".");
             }
+
+            if (match.SelectedBotsEnabled != BotsEnabledByDefault)
+                throw new InvalidOperationException("MatchController SelectedBotsEnabled must default to true.");
+            if (match.LockedBotsEnabled != BotsEnabledByDefault)
+                throw new InvalidOperationException("MatchController LockedBotsEnabled must default to true.");
+            if (match.BotsEnabled != BotsEnabledByDefault)
+                throw new InvalidOperationException("MatchController BotsEnabled must default to true.");
+            if (match.ConfigurationLocked)
+                throw new InvalidOperationException("MatchController ConfigurationLocked must default to false.");
+            if (match.DifficultyLocked)
+                throw new InvalidOperationException("MatchController DifficultyLocked must default to false.");
+            if (match.SelectedEnemyDifficulty != BotDifficulty.Medium)
+                throw new InvalidOperationException("MatchController SelectedEnemyDifficulty must default to Medium.");
+            if (match.LockedEnemyDifficulty != BotDifficulty.Medium)
+                throw new InvalidOperationException("MatchController LockedEnemyDifficulty must default to Medium.");
 
             var resetEvent = matchType.GetEvent(nameof(MatchController.CoordinatedResetRequested), publicInstance);
             if (resetEvent == null)

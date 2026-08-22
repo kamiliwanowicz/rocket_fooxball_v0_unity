@@ -899,18 +899,13 @@ namespace RocketFooxball.Editor
                         if (slots == null || slots.Length == 0) slots = new Material[1];
                         for (var j = 0; j < slots.Length; j++)
                         {
-                            var slotName = renderer.name + (j > 0 ? j.ToString() : string.Empty);
-                            var chosen = materials.Length > 0 ? materials[0] : null;
-                            if (slotName.IndexOf("Eye", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 3) chosen = materials[3];
-                            else if (slotName.IndexOf("Head", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 1) chosen = materials[1];
-                            else if (slotName.IndexOf("Body", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 2) chosen = materials[2];
-                            else if (slotName.IndexOf("Armor", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 0) chosen = materials[0];
-                            else if (slotName.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 3) chosen = materials[3];
-                            else if (slotName.IndexOf("Accent", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 2) chosen = materials[2];
-                            else if (slotName.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 1) chosen = materials[1];
-                            else if (slotName.IndexOf("Cream", StringComparison.OrdinalIgnoreCase) >= 0 && materials.Length > 2) chosen = materials[2];
-                            else if (slotName.IndexOf("Armor", StringComparison.OrdinalIgnoreCase) >= 0 || slotName.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) >= 0) chosen = materials.Length > 0 ? materials[0] : null;
-                            if (chosen != null) slots[j] = chosen;
+                            var weaponGroup = GetWeaponRendererGroup(renderer.name);
+                            var materialIndex = weaponGroup == null ? GetCharacterMaterialIndex(renderer.name) : GetWeaponMaterialIndex(weaponGroup);
+                            if (materialIndex < 0)
+                                throw new InvalidOperationException("Imported renderer has unknown material group: " + renderer.name + ".");
+                            if (materialIndex >= materials.Length || materials[materialIndex] == null)
+                                throw new InvalidOperationException("Imported renderer material group is not configured: " + renderer.name + ".");
+                            slots[j] = materials[materialIndex];
                         }
                         renderer.sharedMaterials = slots;
                     }
@@ -1781,11 +1776,30 @@ namespace RocketFooxball.Editor
                 private static string GetWeaponRendererGroup(string rendererName)
                 {
                     if (string.IsNullOrEmpty(rendererName)) return null;
-                    if (rendererName.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0) return "WeaponAccentCore";
-                    if (rendererName.IndexOf("Accent", StringComparison.OrdinalIgnoreCase) >= 0) return "WeaponAccent";
-                    if (rendererName.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0) return "WeaponDark";
-                    if (rendererName.IndexOf("Metal", StringComparison.OrdinalIgnoreCase) >= 0 || rendererName.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) >= 0) return "WeaponMetal";
+                    if (string.Equals(rendererName, "WeaponAccentCore", StringComparison.Ordinal)) return "WeaponAccentCore";
+                    if (string.Equals(rendererName, "WeaponAccent", StringComparison.Ordinal)) return "WeaponAccent";
+                    if (string.Equals(rendererName, "WeaponDark", StringComparison.Ordinal)) return "WeaponDark";
+                    if (string.Equals(rendererName, "WeaponMetal", StringComparison.Ordinal)) return "WeaponMetal";
                     return null;
+                }
+
+                private static int GetWeaponMaterialIndex(string group)
+                {
+                    if (string.Equals(group, "WeaponMetal", StringComparison.Ordinal)) return 0;
+                    if (string.Equals(group, "WeaponDark", StringComparison.Ordinal)) return 1;
+                    if (string.Equals(group, "WeaponAccentCore", StringComparison.Ordinal)) return 3;
+                    if (string.Equals(group, "WeaponAccent", StringComparison.Ordinal)) return 2;
+                    return -1;
+                }
+
+                private static int GetCharacterMaterialIndex(string rendererName)
+                {
+                    if (string.Equals(rendererName, "FpsKickMesh", StringComparison.Ordinal)) return 0;
+                    if (string.Equals(rendererName, "CharacterArmor", StringComparison.Ordinal)) return 0;
+                    if (string.Equals(rendererName, "CharacterHead", StringComparison.Ordinal)) return 1;
+                    if (string.Equals(rendererName, "CharacterBody", StringComparison.Ordinal)) return 2;
+                    if (string.Equals(rendererName, "CharacterEye", StringComparison.Ordinal)) return 3;
+                    return -1;
                 }
 
                 private static void ValidateShellCoreIslandContainment(GameObject visual, MeshRenderer shellRenderer,
@@ -1800,21 +1814,25 @@ namespace RocketFooxball.Editor
                     {
                         var coreBounds = coreIslands[coreIndex];
                         var match = -1;
+                        var containingShellCount = 0;
                         for (var shellIndex = 0; shellIndex < shellIslands.Count; shellIndex++)
                         {
-                            if (matchedShell[shellIndex]) continue;
                             var shellBounds = shellIslands[shellIndex];
                             var inset = Vector3.one * WeaponShellCoreInset;
                             if (coreBounds.min.x >= shellBounds.min.x + inset.x && coreBounds.min.y >= shellBounds.min.y + inset.y && coreBounds.min.z >= shellBounds.min.z + inset.z &&
                                 coreBounds.max.x <= shellBounds.max.x - inset.x && coreBounds.max.y <= shellBounds.max.y - inset.y && coreBounds.max.z <= shellBounds.max.z - inset.z)
                             {
-                                if (match >= 0) throw new InvalidOperationException(label + " core island " + coreIndex + " has multiple containing shell islands.");
+                                containingShellCount++;
                                 match = shellIndex;
                             }
                         }
-                        if (match < 0) throw new InvalidOperationException(label + " core island " + coreIndex + " lacks a unique containing shell island with the required inset.");
+                        if (containingShellCount != 1)
+                            throw new InvalidOperationException(label + " core island " + coreIndex + " must have exactly one containing shell island with the required inset; found " + containingShellCount + ".");
+                        if (matchedShell[match]) throw new InvalidOperationException(label + " shell island " + match + " contains multiple core islands.");
                         matchedShell[match] = true;
                     }
+                    for (var shellIndex = 0; shellIndex < matchedShell.Length; shellIndex++)
+                        if (!matchedShell[shellIndex]) throw new InvalidOperationException(label + " shell island " + shellIndex + " has no matching core island.");
                 }
 
                 private static List<Bounds> GetConnectedMeshIslands(GameObject visual, MeshRenderer renderer)
