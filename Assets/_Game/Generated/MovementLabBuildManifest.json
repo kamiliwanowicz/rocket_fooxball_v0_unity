@@ -1,9 +1,9 @@
 {
     "schemaVersion": 8,
-    "gitSha": "36956cc0371fd6bb85f33b80bd75904eeb9fdd00",
-    "manifestStatus": "current",
-    "sourceSignature": "708a9393a403dccc983e41c50aeb050b2d67ad2747850d8e6256dfa61bffa85f",
-    "generatedOutputFingerprint": "c331a67996977a8c475ab5ae906594ea44a748a3ef5cac5c339d104d7e1a64ec",
+    "gitSha": "447e4bda66e5dfa89ba0ca3d28d16b3b5dd75146",
+    "manifestStatus": "stale",
+    "sourceSignature": "821ddf3990cbcb30134830d079e0491093bc7b35b0a3fce9ec2b45dc5f93339d",
+    "generatedOutputFingerprint": "e1791c993eff2a0c894896b59b41e9379b47fedc64515e83f9f9a29301f8b90d",
     "unityVersion": "6000.5.6f1",
     "lightingInputDigest": "f753ebaeaa2910921e6a0efc3d36a6a5ab958ac0a707d4a21f708cd3338ad17c",
     "bakedProfile": "Production",
@@ -185,6 +185,11 @@
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr.meta",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr.meta",
+        "Assets/_Game/Textures/FpsRocketLauncher_BaseColor.png.meta",
+        "Assets/_Game/Textures/FpsRocketLauncher_Emission.png.meta",
+        "Assets/_Game/Textures/FpsRocketLauncher_MetallicSmoothness.png.meta",
+        "Assets/_Game/Textures/FpsRocketLauncher_Normal.png.meta",
+        "Assets/_Game/Textures/FpsRocketLauncher_Occlusion.png.meta",
         "Assets/_Game/Textures/RetroBall.png.meta",
         "Assets/_Game/Textures/RetroBall_MetallicSmoothness.png.meta",
         "Assets/_Game/Textures/RetroBall_Normal.png.meta",
@@ -239,15 +244,15 @@
     "fingerprintHashes": [
         "ba4fc8edfc32fe458aec04035cb0b227ac4b962a81f37167ec4f817fd2f16950",
         "f5bc136a081789f4d9511ec6a57bf45b",
-        "a360967e8ec72af3e68bf48bd9b1daf8712e5b2cd28c2c2559469345816723fe",
+        "a4b4316c6ebe2fd6c25120ca74f348b9cee38f9a940c7d82365af7c66d04409d",
         "c76fba8c0d489f545bc443c5dbe63d7f",
         "829b3f0d8a12fb4a02bdcef3f09e5f9bb431502472d88b27d5821fe999aa08a8",
         "5c65e42621597b94c928d46f9398c7f6",
-        "bc3072751b4f07313bdd585b2aa6c837cd360d5ef6927128040da2b7f2c8ffb2",
+        "ed3b998286cb596d2d1fa68449691ca6f3cd0daeef4113fc9650e06ed917e01f",
         "8dd7a1176297daf42ba9d79c78355466",
         "78ea8b6bacd09ea267054f578f316ec5468645438d7dce961f7c609ddaf6fb03",
         "4b83569d67af61e458304325a23e5dfd",
-        "5c32532003d5d56c9afecc4d7405072a2caa5fc06c21083553c5747297c80496",
+        "0092650d14a11c12f40dabcbb7dc1d95b3916aa2e9f17525d90f3b8385faf746",
         "f288ae1f4751b564a96ac7587541f7a2",
         "c1d793decc9c2c5394e42d1c52206fe89edb6cf92fc4492698944a2b7e4e4702",
         "3967b0aa6dbb9934c81a677b4334347d",
@@ -321,7 +326,7 @@
         "599476c8be31fcf469fa8827cac41190",
         "f680bd850ea46ac222451a76fa7ea7a2d47908e67b9ccd2b488ff1b04a49c346",
         "86c38d84feb12604dbd759c3dcb3b785",
-        "41e11d3e2d2fde51c26804888fe638dbfe07eec3dad12a8372dbcaf2cb20e503",
+        "2590c0c7cd24d359826f226acc3539e01bb0af3723194c6215fef80bf0ff9419",
         "a54eea506fb998d4683d215d9c9a0e02",
         "aa4eb6f9a2b5dc5c21ae5f53484bd355e12293a1c88637c240ee8f0e1b553075",
         "1e04bd978d45c0243b8f8fbcdc0ba73c",
@@ -347,13 +352,13 @@
         "fcdd2739449183b48aedb5cba5a1f8b9",
         "6d064b3c68440d0d070a840326c2c2a7dcaca290bdcabb47972b5edbf666b31c",
         "7a152a4b7f543df41a4721a78ffd259a",
-        "44c5d26f86334cc72379113d364598aa84ce19cead457d8efd1dd311b171bdf6",
+        "749155e72215d6ecca1fa5056c4f59210897025bb6a741f73b1c88554a51cd35",
         "8f518237f01f0174899ae335f094f6bf",
-        "0edc4eb7d63af7869fcb69a8e686efe3ca75bc52ab8aed3601a115cad342dd0b",
+        "ac647e6f409c60bdea29df26e7a35c810c96a2383558a0658ea3d0ec85c0b978",
         "206700dba5958614fbc5c1fd3780428e",
-        "fd972060f3c17b4818bf7967d3db10e2d88f71a9cfde00486b9e6ae89f5432aa",
+        "1a20bb3d45ac6b26c5b3545345e116f28732859db675038e06a6bed79ce07565",
         "d228f595a03728c458f807a169c1e510",
-        "0fff8eb057ead308b6ea6474f95ae7611b8a35a3c7f59d602a19fcba6d9556b5",
+        "d261b91cb0c912d941767f46a0a59a3ec221024c6c19a284ea6778562a8716eb",
         "95a08e83329145446913507a91e610ed",
         "5979bda68030bdf4e9475ce7c370ffb4",
         "a5b342686133f6f4b9d5dc96fcbac238",
@@ -370,7 +375,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "003e332ed963e7d4304e0fd2637d5f18c91be821183e5f2eb617bb3b96d712e2",
+        "8cb3f9eba00f9cb15b70fc6eb02ad3c428deeec9170cf51840249fa7f9b56431",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -412,6 +417,11 @@
         "409213d61ad893b498262420b6489218",
         "edd872fc7ef0ff123988605c461fcce608f8e0135811535c8e6f3fe672e1fb97",
         "0c9fe416b986053428f37c80c23cb43e",
+        "d44cd845f6cf0294c8860d4014496e51",
+        "57d2be1d9501c71479347db337265ef6",
+        "eb43e579a69d90844ab192451c66ba9c",
+        "203575a5abdfaff47a21081393584ead",
+        "55cd1c22641c6314aa3b01d6652884f4",
         "9200536f01d5149419d4c8d85d646f18",
         "5f67111bb8c961f46bc8e0524c2eb531",
         "1ad1e98b91b9b7b429cee5a715c05824",
@@ -467,12 +477,12 @@
         {
             "stage": "Importer",
             "schemaVersion": 8,
-            "contractVersion": "importer-contract:3",
+            "contractVersion": "importer-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "c5985aaa43de19ac67b718c83b27c596c0e59b9a50f6a32fbfa7c439156e9ed8",
-            "repositoryInputDigest": "c5985aaa43de19ac67b718c83b27c596c0e59b9a50f6a32fbfa7c439156e9ed8",
+            "inputDigest": "973b05d7c604bbaf6cc0bb48194b30abd1fe2f9551869415364984269a0e1a58",
+            "repositoryInputDigest": "973b05d7c604bbaf6cc0bb48194b30abd1fe2f9551869415364984269a0e1a58",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "27eaab7a0c3b09429dcaf208eb0c976a30f42beb15d6f6fa15d2267636b5bfee",
+            "outputDigest": "8d9f7ee9ca45eeb7c2b43b61420d208c5f9ee4c488ee00f52f668ff12a735266",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -512,6 +522,31 @@
                 {
                     "path": "Assets/_Game/Models/Shotgun.fbx.meta",
                     "digest": "7ecfad3c51015d246b366aee8d439a51",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/FpsRocketLauncher_BaseColor.png.meta",
+                    "digest": "d44cd845f6cf0294c8860d4014496e51",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/FpsRocketLauncher_Emission.png.meta",
+                    "digest": "57d2be1d9501c71479347db337265ef6",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/FpsRocketLauncher_MetallicSmoothness.png.meta",
+                    "digest": "eb43e579a69d90844ab192451c66ba9c",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/FpsRocketLauncher_Normal.png.meta",
+                    "digest": "203575a5abdfaff47a21081393584ead",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/FpsRocketLauncher_Occlusion.png.meta",
+                    "digest": "55cd1c22641c6314aa3b01d6652884f4",
                     "missing": false
                 },
                 {
@@ -739,12 +774,12 @@
         {
             "stage": "MaterialPrefab",
             "schemaVersion": 8,
-            "contractVersion": "material-prefab-contract:12;serialized:9",
+            "contractVersion": "material-prefab-contract:13;serialized:10",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "51f45b12adb4804699b3a315eae9f765cc0650dd1a8b856092845797522c68fc",
-            "repositoryInputDigest": "dfee882a1879ad95cc4efd637c821b1adb8191d05b9d67519d09495af9dd05f9",
-            "dependencyDigest": "d531c98b3f8641bce9e5053e26f7a0213f6bccaf9a1bca225f437af546db0bb2",
-            "outputDigest": "84ed3117770ef273e1675592171bf9d0ce3155c2666b1cf5c1aceb47fafd7ec4",
+            "inputDigest": "1e1ef6e0a061cd21b8f7fa04b7de0d8fcdb1873e2b934146ce2667bcf174aeec",
+            "repositoryInputDigest": "09bbf246ad42b1f108074bd6b9e0b0d7485f532a2a926436bcd54fe3c0b34ab5",
+            "dependencyDigest": "43abe9e37c7a7973e628bd2c5b0374204f69ec8f8cbe6302b90b377247a6e1fb",
+            "outputDigest": "645f37627f25d42eba3483afa9a21e7ea8b262d4c696164ddcda9618b52d1e23",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1083,7 +1118,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShotgunAccent.mat",
-                    "digest": "41e11d3e2d2fde51c26804888fe638dbfe07eec3dad12a8372dbcaf2cb20e503",
+                    "digest": "2590c0c7cd24d359826f226acc3539e01bb0af3723194c6215fef80bf0ff9419",
                     "missing": false
                 },
                 {
@@ -1213,7 +1248,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponAccent.mat",
-                    "digest": "44c5d26f86334cc72379113d364598aa84ce19cead457d8efd1dd311b171bdf6",
+                    "digest": "749155e72215d6ecca1fa5056c4f59210897025bb6a741f73b1c88554a51cd35",
                     "missing": false
                 },
                 {
@@ -1223,7 +1258,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponAccentCore.mat",
-                    "digest": "0edc4eb7d63af7869fcb69a8e686efe3ca75bc52ab8aed3601a115cad342dd0b",
+                    "digest": "ac647e6f409c60bdea29df26e7a35c810c96a2383558a0658ea3d0ec85c0b978",
                     "missing": false
                 },
                 {
@@ -1233,7 +1268,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponDark.mat",
-                    "digest": "fd972060f3c17b4818bf7967d3db10e2d88f71a9cfde00486b9e6ae89f5432aa",
+                    "digest": "1a20bb3d45ac6b26c5b3545345e116f28732859db675038e06a6bed79ce07565",
                     "missing": false
                 },
                 {
@@ -1243,7 +1278,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponMetal.mat",
-                    "digest": "0fff8eb057ead308b6ea6474f95ae7611b8a35a3c7f59d602a19fcba6d9556b5",
+                    "digest": "d261b91cb0c912d941767f46a0a59a3ec221024c6c19a284ea6778562a8716eb",
                     "missing": false
                 },
                 {
@@ -1293,7 +1328,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "003e332ed963e7d4304e0fd2637d5f18c91be821183e5f2eb617bb3b96d712e2",
+                    "digest": "8cb3f9eba00f9cb15b70fc6eb02ad3c428deeec9170cf51840249fa7f9b56431",
                     "missing": false
                 },
                 {
@@ -1326,12 +1361,12 @@
         {
             "stage": "GameplayScene",
             "schemaVersion": 8,
-            "contractVersion": "gameplay-scene-contract:16;serialized:9",
+            "contractVersion": "gameplay-scene-contract:16;serialized:10",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "2ccd3073c400fcebac08c2bbb039e9a9b8107b31be40139290cf011c1e7db10c",
-            "repositoryInputDigest": "7ec705b07672fdbe54f9fa22e5ade13c7286286d5c9e164110e863dc3ee2d57e",
-            "dependencyDigest": "a7c8ce215f81b21408c6049a5dbe200a3fa7f678bc6df3c98ebe3208a6391c13",
-            "outputDigest": "2647a8eea69b29a42507fcd2d9480d11ff0d7d25eb17f4dd6308d6cbc1df516d",
+            "inputDigest": "7672503efe53aea1f03cb8ec8b99a0e155b2b57095b10bd608e0caab547a40a7",
+            "repositoryInputDigest": "b8097c5ce608038b41154d4d8da42f4a2bc6c744ade4aa9989777ef4d8e40a88",
+            "dependencyDigest": "aabcd99a9df7ede23d1c21844f263bf97ebfec074300eacc9abf2cfcc4165266",
+            "outputDigest": "1f0dcefb4aa54ed704b81eaa458772691e4dc9527ecbd6e618d2965f9e3459dd",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1340,7 +1375,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "d0f8b4cd0ddd540219699a8ca304ca85c85f4b21fb3875d8b5247620e2b4715f",
+                    "digest": "259082c98fc41b925314422b168afd1970870130332b0a371ce5a5f6e43458a4",
                     "missing": false
                 },
                 {
@@ -1373,12 +1408,12 @@
         {
             "stage": "Quality",
             "schemaVersion": 8,
-            "contractVersion": "quality-contract:3",
+            "contractVersion": "quality-contract:4",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "a4eef767c8f05daaa78b1dfbfa1a0bef377d5ba6c43255c1a8bd1bb58f085746",
-            "repositoryInputDigest": "a4eef767c8f05daaa78b1dfbfa1a0bef377d5ba6c43255c1a8bd1bb58f085746",
+            "inputDigest": "c105091e1511b7fa2161aae839c2611c79053e8b194691baad1902a22a35ac9c",
+            "repositoryInputDigest": "c105091e1511b7fa2161aae839c2611c79053e8b194691baad1902a22a35ac9c",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "2c931106fa8628c8030b95431c1d0846e63024c67a681eb0f44acbaa371407bd",
+            "outputDigest": "b4f06b820bc6dfcd619c2b7145d6930cfe92b49a9d173333c17fb4ba38f9660f",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1397,7 +1432,7 @@
                 },
                 {
                     "path": "Assets/Settings/PC_Iteration_Renderer.asset",
-                    "digest": "a360967e8ec72af3e68bf48bd9b1daf8712e5b2cd28c2c2559469345816723fe",
+                    "digest": "a4b4316c6ebe2fd6c25120ca74f348b9cee38f9a940c7d82365af7c66d04409d",
                     "missing": false
                 },
                 {
@@ -1417,7 +1452,7 @@
                 },
                 {
                     "path": "Assets/Settings/PC_Low_Renderer.asset",
-                    "digest": "bc3072751b4f07313bdd585b2aa6c837cd360d5ef6927128040da2b7f2c8ffb2",
+                    "digest": "ed3b998286cb596d2d1fa68449691ca6f3cd0daeef4113fc9650e06ed917e01f",
                     "missing": false
                 },
                 {
@@ -1437,7 +1472,7 @@
                 },
                 {
                     "path": "Assets/Settings/PC_Renderer.asset",
-                    "digest": "5c32532003d5d56c9afecc4d7405072a2caa5fc06c21083553c5747297c80496",
+                    "digest": "0092650d14a11c12f40dabcbb7dc1d95b3916aa2e9f17525d90f3b8385faf746",
                     "missing": false
                 },
                 {
