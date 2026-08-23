@@ -15,6 +15,8 @@ $script:BuilderOutputContract = @(
     'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
     'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta'
 )
+# Deliberately omits the accepted Appendix-A TeamRedTrail material pair:
+# Assets/_Game/Materials/TeamRedTrail.mat and .meta.
 $legacyRow = [ordered]@{ requested_inventory = @() }
 
 function Assert-ShortWorkspacePath {

@@ -136,7 +136,34 @@ function Test-GeneratedPathSurfaceRemoved {
     $redSource = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $State.RedSource -ErrorAction Stop).Path)
     $redCount = [int](& $findLegacySurface $redSource)
     if ($redCount -eq 0) { return New-HarnessFail 'red baseline does not retain the legacy generated-path surface' }
-    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s)')
+
+    $teamRedTrailPaths = @(
+        'Assets/_Game/Materials/TeamRedTrail.mat',
+        'Assets/_Game/Materials/TeamRedTrail.mat.meta'
+    )
+    $currentAppendixValues = @(Get-HarnessStringAssignment $State.CurrentSource 'script:AppendixAPaths')
+    $currentAst = Get-HarnessAst $State.CurrentSource
+    $currentSourceValues = @($currentAst.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { [string]$_.Value })
+    $redBuilderValues = @(Get-HarnessStringAssignment $redSource 'script:BuilderOutputContract')
+    $builderAlias = @($currentAst.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            [string]$Node.Left.Extent.Text -ceq '$script:BuilderOutputContract' -and
+            [string]$Node.Right.Extent.Text.Trim() -ceq '$script:AppendixAPaths'
+    }, $true))
+    if ($builderAlias.Count -ne 1) { return New-HarnessFail ('BuilderOutputContract must derive from AppendixAPaths exactly once; observed ' + $builderAlias.Count) }
+    foreach ($path in $teamRedTrailPaths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one TeamRedTrail entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('TeamRedTrail entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing TeamRedTrail entry: ' + $path) }
+    }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail pair is closed and red baseline omits it')
 }
 
 function Test-GeneratedYamlComparatorCoverage {
