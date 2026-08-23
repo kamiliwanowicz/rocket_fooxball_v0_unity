@@ -732,7 +732,7 @@ namespace RocketFooxball.Editor
         private static void ClearSceneDirtiness(Scene scene)
         {
             if (!scene.IsValid()) return;
-            var method = typeof(EditorSceneManager).GetMethod("ClearSceneDirtiness", BindingFlags.Public | BindingFlags.Static);
+            var method = typeof(EditorSceneManager).GetMethod("ClearSceneDirtiness", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
             if (method != null) method.Invoke(null, new object[] { scene });
         }
 
