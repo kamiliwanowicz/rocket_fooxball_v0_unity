@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
@@ -32,13 +33,22 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                private static readonly Color ProductionAmbientSkyColor = new Color(0.30f, 0.34f, 0.38f);
-                private static readonly Color ProductionAmbientEquatorColor = new Color(0.16f, 0.18f, 0.20f);
-                private static readonly Color ProductionAmbientGroundColor = new Color(0.07f, 0.08f, 0.09f);
-                private static readonly Vector3 ProductionSunEuler = new Vector3(90f, 0f, 0f);
-                private const float ProductionAmbientIntensity = 0.65f;
-                private const float ProductionSunIntensity = 2.0f;
-                private const float ProductionSunShadowStrength = 0.65f;
+                internal static readonly Color ProductionAmbientSkyColor = new Color(0.42f, 0.40f, 0.36f, 1f);
+                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.28f, 0.25f, 0.22f, 1f);
+                internal static readonly Color ProductionAmbientGroundColor = new Color(0.16f, 0.14f, 0.12f, 1f);
+                internal static readonly Vector3 ProductionSunEuler = new Vector3(50f, 330f, 0f);
+                internal const float ProductionAmbientIntensity = 0.85f;
+                internal const float FastAmbientIntensity = 1.05f;
+                internal const float ProductionSunIntensity = 2.4f;
+                internal const float ProductionSunShadowStrength = 0.65f;
+                internal const float TonemappingPostExposure = 0.35f;
+                internal const float ColorAdjustmentsContrast = 2f;
+                internal const float ColorAdjustmentsSaturation = 2f;
+                internal const float BloomThreshold = 1.1f;
+                internal const float BloomIntensity = 0.20f;
+                internal const float BloomScatter = 0.60f;
+                internal const float BloomClamp = 10f;
+                internal const bool BloomHighQualityFiltering = false;
                 private const float GoalAccentIntensity = 350f;
                 private const float GoalAccentRange = 24f;
                 private static readonly Color WallFillColor = new Color(1.0f, 0.82f, 0.64f, 1f);
@@ -62,6 +72,7 @@ namespace RocketFooxball.Editor
                 // below and are loaded here without mutation.
                 internal static void BindSceneEnvironment(Scene scene, ArenaBuild arena)
                 {
+                    AuthorPersistedVolumeProfile();
                     var environment = new GameObject("Environment");
                     var sun = UnityEngine.Object.FindFirstObjectByType<Light>();
                     if (sun == null)
@@ -194,21 +205,176 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                internal static T AddPersistentVolumeComponent<T>(VolumeProfile profile) where T : VolumeComponent
+                [Serializable]
+                internal sealed class VolumeProfileIdentitySnapshot
                 {
-                    var component = profile.Add<T>();
-                    if (component == null)
+                    public string profileGuid;
+                    public long profileLocalId;
+                    public string[] componentTypes;
+                    public string[] componentGuids;
+                    public long[] componentLocalIds;
+                    public int componentCount;
+                    public int tonemappingCount;
+                    public int bloomCount;
+                    public int colorAdjustmentsCount;
+                }
+
+                [Serializable]
+                internal sealed class VolumeProfileAuthorSnapshot
+                {
+                    public string persistedHash;
+                    public VolumeProfileIdentitySnapshot identity;
+                }
+
+                internal static VolumeProfileAuthorSnapshot AuthorPersistedVolumeProfile()
+                {
+                    var before = CapturePersistedVolumeProfileSnapshot();
+                    var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+                    var components = ValidateVolumeProfileComposition(profile);
+                    var tonemapping = components.OfType<Tonemapping>().Single();
+                    var color = components.OfType<ColorAdjustments>().Single();
+                    var changed = false;
+
+                    changed |= SetActive(tonemapping, true);
+                    changed |= SetOverride(tonemapping.mode, true);
+                    changed |= SetValue(tonemapping.mode, TonemappingMode.ACES);
+                    changed |= SetActive(color, true);
+                    changed |= SetOverride(color.postExposure, true);
+                    changed |= SetValue(color.postExposure, TonemappingPostExposure);
+                    changed |= SetOverride(color.contrast, true);
+                    changed |= SetValue(color.contrast, ColorAdjustmentsContrast);
+                    changed |= SetOverride(color.saturation, true);
+                    changed |= SetValue(color.saturation, ColorAdjustmentsSaturation);
+
+                    if (changed)
                     {
-                        throw new InvalidOperationException("Unable to create Volume component: " + typeof(T).Name);
+                        EditorUtility.SetDirty(profile);
+                        EditorUtility.SetDirty(tonemapping);
+                        EditorUtility.SetDirty(components.OfType<Bloom>().Single());
+                        EditorUtility.SetDirty(color);
+                    }
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(VolumeProfilePath, ImportAssetOptions.ForceSynchronousImport);
+                    var after = CapturePersistedVolumeProfileSnapshot();
+                    AssertVolumeProfileIdentityStable(before.identity, after.identity);
+                    ValidateVolumeProfileValues(AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath));
+                    return after;
+                }
+
+                internal static VolumeProfileAuthorSnapshot CapturePersistedVolumeProfileSnapshot()
+                {
+                    var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+                    var components = ValidateVolumeProfileComposition(profile);
+                    if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(profile, out var profileGuid, out long profileLocalId) ||
+                        string.IsNullOrEmpty(profileGuid) || profileLocalId == 0)
+                        throw new InvalidOperationException("Lighting-owned VolumeProfile has no persistent GUID/local file ID.");
+
+                    var componentTypes = new string[components.Count];
+                    var componentGuids = new string[components.Count];
+                    var componentLocalIds = new long[components.Count];
+                    for (var i = 0; i < components.Count; i++)
+                    {
+                        var component = components[i];
+                        if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(component, out var componentGuid, out long componentLocalId) ||
+                            string.IsNullOrEmpty(componentGuid) || componentLocalId == 0)
+                            throw new InvalidOperationException("Lighting-owned VolumeProfile component has no persistent GUID/local file ID: " + component.GetType().Name);
+                        componentTypes[i] = component.GetType().FullName;
+                        componentGuids[i] = componentGuid;
+                        componentLocalIds[i] = componentLocalId;
                     }
 
-                    if (AssetDatabase.GetAssetPath(component) != VolumeProfilePath)
+                    var absolutePath = MovementLabManifestStore.ResolveProjectPath(VolumeProfilePath);
+                    if (!File.Exists(absolutePath)) throw new InvalidOperationException("Lighting-owned VolumeProfile bytes are missing: " + VolumeProfilePath);
+                    return new VolumeProfileAuthorSnapshot
                     {
-                        component.hideFlags = HideFlags.HideInHierarchy | HideFlags.HideInInspector;
-                        AssetDatabase.AddObjectToAsset(component, profile);
-                    }
-                    EditorUtility.SetDirty(component);
-                    return component;
+                        persistedHash = HashBytes(File.ReadAllBytes(absolutePath)),
+                        identity = new VolumeProfileIdentitySnapshot
+                        {
+                            profileGuid = profileGuid,
+                            profileLocalId = profileLocalId,
+                            componentTypes = componentTypes,
+                            componentGuids = componentGuids,
+                            componentLocalIds = componentLocalIds,
+                            componentCount = components.Count,
+                            tonemappingCount = components.Count(component => component is Tonemapping),
+                            bloomCount = components.Count(component => component is Bloom),
+                            colorAdjustmentsCount = components.Count(component => component is ColorAdjustments)
+                        }
+                    };
+                }
+
+                private static List<VolumeComponent> ValidateVolumeProfileComposition(VolumeProfile profile)
+                {
+                    if (profile == null) throw new InvalidOperationException("Lighting-owned VolumeProfile is missing: " + VolumeProfilePath);
+                    var components = profile.components;
+                    var persistedSubassets = AssetDatabase.LoadAllAssetsAtPath(VolumeProfilePath).OfType<VolumeComponent>().ToArray();
+                    if (components == null || components.Count != 3 ||
+                        components.Count(component => component is Tonemapping) != 1 ||
+                        components.Count(component => component is Bloom) != 1 ||
+                        components.Count(component => component is ColorAdjustments) != 1 ||
+                        persistedSubassets.Length != 3 ||
+                        persistedSubassets.Count(component => component is Tonemapping) != 1 ||
+                        persistedSubassets.Count(component => component is Bloom) != 1 ||
+                        persistedSubassets.Count(component => component is ColorAdjustments) != 1 ||
+                        components.Any(component => component == null || AssetDatabase.GetAssetPath(component) != VolumeProfilePath || !EditorUtility.IsPersistent(component)))
+                        throw new InvalidOperationException("Lighting-owned VolumeProfile must contain exactly one existing Tonemapping, Bloom, and ColorAdjustments subasset.");
+                    return components.ToList();
+                }
+
+                private static void ValidateVolumeProfileValues(VolumeProfile profile)
+                {
+                    var components = ValidateVolumeProfileComposition(profile);
+                    var tonemapping = components.OfType<Tonemapping>().Single();
+                    var bloom = components.OfType<Bloom>().Single();
+                    var color = components.OfType<ColorAdjustments>().Single();
+                    if (!tonemapping.active || !tonemapping.mode.overrideState || tonemapping.mode.value != TonemappingMode.ACES ||
+                        !bloom.active || !bloom.threshold.overrideState || Mathf.Abs(bloom.threshold.value - BloomThreshold) > 0.001f ||
+                        !bloom.intensity.overrideState || Mathf.Abs(bloom.intensity.value - BloomIntensity) > 0.001f ||
+                        !bloom.scatter.overrideState || Mathf.Abs(bloom.scatter.value - BloomScatter) > 0.001f ||
+                        !bloom.clamp.overrideState || Mathf.Abs(bloom.clamp.value - BloomClamp) > 0.001f ||
+                        !bloom.highQualityFiltering.overrideState || bloom.highQualityFiltering.value != BloomHighQualityFiltering ||
+                        !color.active || !color.postExposure.overrideState || Mathf.Abs(color.postExposure.value - TonemappingPostExposure) > 0.001f ||
+                        !color.contrast.overrideState || Mathf.Abs(color.contrast.value - ColorAdjustmentsContrast) > 0.001f ||
+                        !color.saturation.overrideState || Mathf.Abs(color.saturation.value - ColorAdjustmentsSaturation) > 0.001f)
+                        throw new InvalidOperationException("Lighting-owned VolumeProfile value contract invalid.");
+                }
+
+                private static void AssertVolumeProfileIdentityStable(VolumeProfileIdentitySnapshot expected, VolumeProfileIdentitySnapshot actual)
+                {
+                    if (expected == null || actual == null || expected.profileGuid != actual.profileGuid || expected.profileLocalId != actual.profileLocalId ||
+                        expected.componentCount != actual.componentCount || expected.tonemappingCount != actual.tonemappingCount ||
+                        expected.bloomCount != actual.bloomCount || expected.colorAdjustmentsCount != actual.colorAdjustmentsCount ||
+                        !expected.componentTypes.SequenceEqual(actual.componentTypes, StringComparer.Ordinal) ||
+                        !expected.componentGuids.SequenceEqual(actual.componentGuids, StringComparer.Ordinal) ||
+                        !expected.componentLocalIds.SequenceEqual(actual.componentLocalIds))
+                        throw new InvalidOperationException("Lighting-owned VolumeProfile identity changed while authoring.");
+                }
+
+                private static bool SetActive(VolumeComponent component, bool value)
+                {
+                    if (component.active == value) return false;
+                    component.active = value;
+                    return true;
+                }
+
+                private static bool SetOverride<T>(VolumeParameter<T> parameter, bool value)
+                {
+                    if (parameter.overrideState == value) return false;
+                    parameter.overrideState = value;
+                    return true;
+                }
+
+                private static bool SetValue<T>(VolumeParameter<T> parameter, T value)
+                {
+                    if (EqualityComparer<T>.Default.Equals(parameter.value, value)) return false;
+                    parameter.value = value;
+                    return true;
+                }
+
+                private static string HashBytes(byte[] bytes)
+                {
+                    using (var sha = SHA256.Create())
+                        return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
                 }
 
                 internal static void ConfigureLightProbes(Transform parent)
@@ -511,12 +677,13 @@ namespace RocketFooxball.Editor
 
                     var volume = GameObject.Find("Environment/GlobalVolume")?.GetComponent<Volume>();
                     var expectedProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
-                    if (volume == null || !volume.isGlobal || volume.sharedProfile == null || volume.sharedProfile != expectedProfile ||
-                        !EditorUtility.IsPersistent(volume.sharedProfile) ||
-                        !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(volume.sharedProfile, out _, out long profileLocalId) || profileLocalId == 0)
-                        throw new InvalidOperationException("Global post Volume reference invalid.");
-                    var volumeProfile = volume.sharedProfile;
-                    var volumeComponents = volumeProfile.components;
+                     if (volume == null || !volume.isGlobal || volume.sharedProfile == null || volume.sharedProfile != expectedProfile ||
+                         !EditorUtility.IsPersistent(volume.sharedProfile) ||
+                         !AssetDatabase.TryGetGUIDAndLocalFileIdentifier(volume.sharedProfile, out _, out long profileLocalId) || profileLocalId == 0)
+                         throw new InvalidOperationException("Global post Volume reference invalid.");
+                     var volumeProfile = volume.sharedProfile;
+                     ValidateVolumeProfileValues(volumeProfile);
+                     var volumeComponents = volumeProfile.components;
                     var requiredVolumeTypes = new[] { typeof(Tonemapping), typeof(Bloom), typeof(ColorAdjustments) };
                     if (volumeComponents == null || volumeComponents.Count != requiredVolumeTypes.Length ||
                         requiredVolumeTypes.Any(type => volumeComponents.Count(component => component != null && component.GetType() == type) != 1) ||
@@ -525,12 +692,12 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Global post VolumeProfile component persistence contract invalid.");
                     }
-                    if (!volumeProfile.TryGet<Tonemapping>(out var tonemapping) || !tonemapping.active || !tonemapping.mode.overrideState || tonemapping.mode.value != TonemappingMode.ACES ||
-                        !volumeProfile.TryGet<Bloom>(out var bloom) || !bloom.active || !bloom.threshold.overrideState || Mathf.Abs(bloom.threshold.value - 1.1f) > 0.001f ||
-                        !bloom.intensity.overrideState || Mathf.Abs(bloom.intensity.value - 0.20f) > 0.001f || !bloom.scatter.overrideState || Mathf.Abs(bloom.scatter.value - 0.60f) > 0.001f ||
-                        !bloom.clamp.overrideState || Mathf.Abs(bloom.clamp.value - 10f) > 0.001f || !bloom.highQualityFiltering.overrideState || bloom.highQualityFiltering.value ||
-                        !volumeProfile.TryGet<ColorAdjustments>(out var color) || !color.active || !color.contrast.overrideState || Mathf.Abs(color.contrast.value - 5f) > 0.001f ||
-                        !color.saturation.overrideState || Mathf.Abs(color.saturation.value - 4f) > 0.001f || !color.postExposure.overrideState || Mathf.Abs(color.postExposure.value) > 0.001f)
+                     if (!volumeProfile.TryGet<Tonemapping>(out var tonemapping) || !tonemapping.active || !tonemapping.mode.overrideState || tonemapping.mode.value != TonemappingMode.ACES ||
+                         !volumeProfile.TryGet<Bloom>(out var bloom) || !bloom.active || !bloom.threshold.overrideState || Mathf.Abs(bloom.threshold.value - BloomThreshold) > 0.001f ||
+                         !bloom.intensity.overrideState || Mathf.Abs(bloom.intensity.value - BloomIntensity) > 0.001f || !bloom.scatter.overrideState || Mathf.Abs(bloom.scatter.value - BloomScatter) > 0.001f ||
+                         !bloom.clamp.overrideState || Mathf.Abs(bloom.clamp.value - BloomClamp) > 0.001f || !bloom.highQualityFiltering.overrideState || bloom.highQualityFiltering.value != BloomHighQualityFiltering ||
+                         !volumeProfile.TryGet<ColorAdjustments>(out var color) || !color.active || !color.contrast.overrideState || Mathf.Abs(color.contrast.value - ColorAdjustmentsContrast) > 0.001f ||
+                         !color.saturation.overrideState || Mathf.Abs(color.saturation.value - ColorAdjustmentsSaturation) > 0.001f || !color.postExposure.overrideState || Mathf.Abs(color.postExposure.value - TonemappingPostExposure) > 0.001f)
                     {
                         throw new InvalidOperationException("Global Volume post contract invalid.");
                     }

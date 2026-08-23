@@ -23,9 +23,9 @@ namespace RocketFooxball.Editor
     {
         private const int FastQualityIndex = GraphicsQualityConfigurator.IterationQualityIndex;
         private const int FastReflectionBounces = 1;
-        private static readonly Color FastAmbientSky = new Color(0.62f, 0.70f, 0.78f, 1f);
-        private static readonly Color FastAmbientEquator = new Color(0.48f, 0.52f, 0.56f, 1f);
-        private static readonly Color FastAmbientGround = new Color(0.28f, 0.31f, 0.35f, 1f);
+        private static readonly Color FastAmbientSky = MovementLabLightingPipeline.ProductionAmbientSkyColor;
+        private static readonly Color FastAmbientEquator = MovementLabLightingPipeline.ProductionAmbientEquatorColor;
+        private static readonly Color FastAmbientGround = MovementLabLightingPipeline.ProductionAmbientGroundColor;
         private static Snapshot snapshot;
         private static bool applying;
         private static bool directionalHardShadows;
@@ -58,17 +58,31 @@ namespace RocketFooxball.Editor
 
         internal static void Enter()
         {
+            EnterInternal(FastQualityIndex, requireIteration: true);
+        }
+
+        internal static void EnterForCapture(int qualityIndex)
+        {
+            if (qualityIndex != GraphicsQualityConfigurator.HighQualityIndex && qualityIndex != GraphicsQualityConfigurator.LowQualityIndex)
+                throw new InvalidOperationException("Fast capture requires High or Low quality index: " + qualityIndex);
+            EnterInternal(qualityIndex, requireIteration: false);
+        }
+
+        private static void EnterInternal(int qualityIndex, bool requireIteration)
+        {
             if (IsActive) return;
+            if (requireIteration && qualityIndex != FastQualityIndex)
+                throw new InvalidOperationException("Interactive fast preview requires the Iteration quality profile.");
             var scene = SceneManager.GetActiveScene();
             if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
                 throw new InvalidOperationException("Fast preview requires the loaded MovementLab scene: " + MovementLabContract.ScenePath);
-            snapshot = Capture(scene);
+            snapshot = Capture(scene, qualityIndex);
             try
             {
                 applying = true;
                 Apply(snapshot);
                 AssertApplied(snapshot);
-                Debug.Log("Rocket Fooxball fast preview entered: quality=Iteration index=" + FastQualityIndex + "; renderer lightmap bindings detached.");
+                Debug.Log("Rocket Fooxball fast preview entered: quality=" + qualityIndex + "; renderer lightmap bindings detached.");
             }
             catch
             {
@@ -98,9 +112,21 @@ namespace RocketFooxball.Editor
             }
         }
 
-        internal static void AssertAppliedState() { if (snapshot == null) throw new InvalidOperationException("Fast preview is not active."); AssertApplied(snapshot); }
+        internal static void AssertAppliedState()
+        {
+            if (snapshot == null) throw new InvalidOperationException("Fast preview is not active.");
+            AssertApplied(snapshot);
+        }
 
-        private static Snapshot Capture(Scene scene)
+        internal static void AssertAppliedState(int expectedQualityIndex)
+        {
+            if (snapshot == null) throw new InvalidOperationException("Fast preview is not active.");
+            if (snapshot.appliedQualityIndex != expectedQualityIndex)
+                throw new InvalidOperationException("Fast capture quality contract mismatch: expected " + expectedQualityIndex + ".");
+            AssertApplied(snapshot);
+        }
+
+        private static Snapshot Capture(Scene scene, int appliedQualityIndex)
         {
             var allRenderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None)
                 .Where(renderer => renderer != null && renderer.gameObject.scene == scene)
@@ -172,6 +198,7 @@ namespace RocketFooxball.Editor
                 scene = scene,
                 sceneDirty = sceneDirty,
                 qualityIndex = QualitySettings.GetQualityLevel(),
+                appliedQualityIndex = appliedQualityIndex,
                 ambientMode = RenderSettings.ambientMode,
                 ambientSky = RenderSettings.ambientSkyColor,
                 ambientEquator = RenderSettings.ambientEquatorColor,
@@ -361,7 +388,7 @@ namespace RocketFooxball.Editor
 
         private static void Apply(Snapshot state)
         {
-            QualitySettings.SetQualityLevel(FastQualityIndex, true);
+            QualitySettings.SetQualityLevel(state.appliedQualityIndex, true);
             for (var i = 0; i < state.renderers.Length; i++)
             {
                 var renderer = state.renderers[i].renderer;
@@ -376,7 +403,7 @@ namespace RocketFooxball.Editor
             RenderSettings.ambientSkyColor = FastAmbientSky;
             RenderSettings.ambientEquatorColor = FastAmbientEquator;
             RenderSettings.ambientGroundColor = FastAmbientGround;
-            RenderSettings.ambientIntensity = 1.6f;
+            RenderSettings.ambientIntensity = MovementLabLightingPipeline.FastAmbientIntensity;
             RenderSettings.defaultReflectionMode = DefaultReflectionMode.Skybox;
             RenderSettings.defaultReflectionResolution = 64;
             RenderSettings.reflectionBounces = FastReflectionBounces;
@@ -539,7 +566,7 @@ namespace RocketFooxball.Editor
             var currentObjects = CaptureSceneObjects(state.scene);
             if (currentObjects.Length != state.sceneObjects.Length || currentObjects.Any(item => state.sceneObjects.All(old => old.target != item.target)))
                 throw new InvalidOperationException("Fast preview restoration refused: scene hierarchy changed during preview.");
-            if (QualitySettings.GetQualityLevel() != FastQualityIndex)
+            if (QualitySettings.GetQualityLevel() != state.appliedQualityIndex)
                 throw new InvalidOperationException("Fast preview restoration refused: quality changed while preview was active.");
             if (state.renderers.Any(item => item.renderer != null &&
                 (item.renderer.lightmapIndex != -1 || item.renderer.realtimeLightmapIndex != -1 ||
@@ -569,7 +596,7 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Fast preview restoration refused: SSAO feature was changed during preview.");
             if (RenderSettings.sun != state.sun || RenderSettings.ambientMode != AmbientMode.Trilight ||
                 RenderSettings.ambientSkyColor != FastAmbientSky || RenderSettings.ambientEquatorColor != FastAmbientEquator ||
-                RenderSettings.ambientGroundColor != FastAmbientGround || Mathf.Abs(RenderSettings.ambientIntensity - 1.6f) > 0.0001f ||
+                 RenderSettings.ambientGroundColor != FastAmbientGround || Mathf.Abs(RenderSettings.ambientIntensity - MovementLabLightingPipeline.FastAmbientIntensity) > 0.0001f ||
                 RenderSettings.defaultReflectionMode != DefaultReflectionMode.Skybox || RenderSettings.defaultReflectionResolution != 64 ||
                 RenderSettings.reflectionBounces != FastReflectionBounces || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
                 throw new InvalidOperationException("Fast preview restoration refused: RenderSettings changed during preview.");
@@ -585,10 +612,12 @@ namespace RocketFooxball.Editor
 
         private static void AssertApplied(Snapshot state)
         {
-            if (QualitySettings.GetQualityLevel() != FastQualityIndex) throw new InvalidOperationException("Fast preview quality profile was not applied.");
+            if (QualitySettings.GetQualityLevel() != state.appliedQualityIndex) throw new InvalidOperationException("Fast preview quality profile was not applied.");
             if (state.renderers.Any(item => item.renderer != null && (item.renderer.lightmapIndex != -1 || item.renderer.realtimeLightmapIndex != -1)))
                 throw new InvalidOperationException("Fast preview failed to detach a renderer lightmap binding.");
-            if (RenderSettings.ambientMode != AmbientMode.Trilight || RenderSettings.ambientIntensity != 1.6f)
+            if (RenderSettings.ambientMode != AmbientMode.Trilight || RenderSettings.ambientSkyColor != FastAmbientSky ||
+                RenderSettings.ambientEquatorColor != FastAmbientEquator || RenderSettings.ambientGroundColor != FastAmbientGround ||
+                Mathf.Abs(RenderSettings.ambientIntensity - MovementLabLightingPipeline.FastAmbientIntensity) > 0.0001f)
                 throw new InvalidOperationException("Fast preview ambient contract was not applied.");
             if (RenderSettings.defaultReflectionMode != DefaultReflectionMode.Skybox || RenderSettings.defaultReflectionResolution != 64 ||
                 RenderSettings.reflectionBounces != FastReflectionBounces || Mathf.Abs(RenderSettings.reflectionIntensity - 1f) > 0.0001f)
@@ -732,6 +761,7 @@ namespace RocketFooxball.Editor
             internal Scene scene;
             internal bool sceneDirty;
             internal int qualityIndex;
+            internal int appliedQualityIndex;
             internal AmbientMode ambientMode;
             internal Color ambientSky;
             internal Color ambientEquator;

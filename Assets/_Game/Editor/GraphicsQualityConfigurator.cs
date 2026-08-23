@@ -35,8 +35,8 @@ namespace RocketFooxball.Editor
         private const int HighShadowCascadeCount = 2;
         private const int HighShadowResolution = 2048;
         private const int LowShadowResolution = 256;
-        private const float SsaoIntensity = 1.2f;
-        private const float SsaoDirectLightingStrength = 0.25f;
+        private const float SsaoIntensity = 0.90f;
+        private const float SsaoDirectLightingStrength = 0.15f;
         private const float SsaoRadius = 0.035f;
         private const float SsaoFalloff = 100f;
 
