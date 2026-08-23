@@ -65,15 +65,15 @@ namespace RocketFooxball.Editor
 
     internal static class MovementLabStageGraph
     {
-        private const string ImporterContract = "importer-contract:3";
-        private const string MaterialContract = "material-prefab-contract:12";
+        private const string ImporterContract = "importer-contract:4";
+        private const string MaterialContract = "material-prefab-contract:13";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
         private const string GameplayContract = "gameplay-scene-contract:16";
         // T5 adds the persisted Iteration profile and its URP assets.
-        private const string QualityContract = "quality-contract:3";
-        private const string LightingContract = "lighting-contract:5";
-        private const string BakedContract = "baked-output-contract:5";
+        private const string QualityContract = "quality-contract:4";
+        private const string LightingContract = "lighting-contract:6";
+        private const string BakedContract = "baked-output-contract:6";
 
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a
@@ -200,12 +200,12 @@ namespace RocketFooxball.Editor
                 new[]
                 {
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
-                    MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta",
-                     MovementLabContract.VolumeProfilePath, MovementLabContract.VolumeProfilePath + ".meta",
-                     "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
-                     "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs"
-                 }, Array.Empty<string>(),
-                WithMetas(new[] { MovementLabContract.LightingSettingsPath, MovementLabContract.VolumeProfilePath }), includeUnityVersion: true),
+                     MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta",
+                      "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs"
+                  }, Array.Empty<string>(),
+                 WithMetas(new[] { MovementLabContract.LightingSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabContract.VolumeProfilePath }), includeUnityVersion: true),
             new StageDefinition(MovementLabStage.BakedOutput, new[] { MovementLabStage.Lighting }, new[] { MovementLabStage.Lighting }, BakedContract,
                 new[]
                 {

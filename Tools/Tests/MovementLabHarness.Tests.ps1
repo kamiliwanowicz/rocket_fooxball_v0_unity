@@ -118,22 +118,17 @@ function Test-GeneratedPathSurfaceRemoved {
     $findLegacySurface = {
         param([string]$Source)
         $ast = Get-HarnessAst $Source
-        $generatedPathVariables = @($ast.FindAll({
+        $legacyInventoryVariables = @($ast.FindAll({
             param($Node)
             $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            [string]$Node.VariablePath.UserPath -ceq 'GeneratedPath'
-        }, $true))
-        $requestedInventoryVariables = @($ast.FindAll({
-            param($Node)
-            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            [string]$Node.VariablePath.UserPath -ceq 'RequestedInventoryPaths'
+            [string]$Node.VariablePath.UserPath -in @('GeneratedRoots', 'AuthoritativeInventory', 'RequestedInventoryPaths', 'script:GeneratedRoots', 'script:AuthoritativeInventory', 'script:RequestedInventoryPaths')
         }, $true))
         $requestedInventoryFields = @($ast.FindAll({
             param($Node)
             $Node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
             [string]$Node.Value -ceq 'requested_inventory'
         }, $true))
-        return $generatedPathVariables.Count + $requestedInventoryVariables.Count + $requestedInventoryFields.Count
+        return $legacyInventoryVariables.Count + $requestedInventoryFields.Count
     }
 
     $headCount = [int](& $findLegacySurface $State.CurrentSource)
@@ -209,24 +204,28 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         [IO.Directory]::CreateDirectory($projectSettingsDirectory) | Out-Null
         Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1') -Force
         Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $validationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
-        $materialPath = Join-Path $materialsDirectory 'Fixture.mat'
+        $materialPath = Join-Path $materialsDirectory 'Floor.mat'
         $metaPath = $materialPath + '.meta'
-        $churnPath = Join-Path $materialsDirectory 'Churn.mat'
+        $physicMaterialPath = Join-Path $materialsDirectory 'BallSurface.physicMaterial'
+        $physicMaterialMetaPath = $physicMaterialPath + '.meta'
+        $churnPath = Join-Path $materialsDirectory 'Wall.mat'
         $churnMetaPath = $churnPath + '.meta'
-        $unknownPath = Join-Path $generatedDirectory 'Fixture.unknown'
-        $unknownMetaPath = $unknownPath + '.meta'
-        $projectSettingsPath = Join-Path $projectSettingsDirectory 'FixtureSettings.asset'
+        $generatedPath = Join-Path $generatedDirectory 'BlueCircleCueMesh.asset'
+        $generatedMetaPath = $generatedPath + '.meta'
+        $projectSettingsPath = Join-Path $projectSettingsDirectory 'QualitySettings.asset'
         $binaryPaths = @(
-            (Join-Path $movementLabDirectory 'Fixture.png'),
-            (Join-Path $movementLabDirectory 'Fixture.exr'),
+            (Join-Path $movementLabDirectory 'Lightmap-0_comp_dir.png'),
+            (Join-Path $movementLabDirectory 'Lightmap-0_comp_light.exr'),
             (Join-Path $movementLabDirectory 'LightingData.asset')
         )
         [IO.File]::WriteAllText($materialPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Fixture`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($metaPath, "fileFormatVersion: 2`nguid: 11111111111111111111111111111111`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($physicMaterialPath, "%YAML 1.1`n--- !u!134 &4`nPhysicMaterial:`n  m_Name: BallSurface`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($physicMaterialMetaPath, "fileFormatVersion: 2`nguid: 55555555555555555555555555555555`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnPath, "%YAML 1.1`n--- !u!21 &2`nMaterial:`n  m_Name: Churn`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: 22222222222222222222222222222222`n", (New-Object Text.UTF8Encoding($false)))
-        [IO.File]::WriteAllBytes($unknownPath, [Text.Encoding]::ASCII.GetBytes('unknown baseline'))
-        [IO.File]::WriteAllText($unknownMetaPath, "fileFormatVersion: 2`nguid: 33333333333333333333333333333333`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($generatedPath, "%YAML 1.1`n--- !u!114 &3`nMonoBehaviour:`n  m_Name: Cue`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($generatedMetaPath, "fileFormatVersion: 2`nguid: 33333333333333333333333333333333`n", (New-Object Text.UTF8Encoding($false)))
         foreach ($binaryPath in $binaryPaths) {
             [IO.File]::WriteAllBytes($binaryPath, [Text.Encoding]::ASCII.GetBytes('binary baseline ' + $binaryPath))
             [IO.File]::WriteAllText(($binaryPath + '.meta'), "fileFormatVersion: 2`nguid: 44444444444444444444444444444444`n", (New-Object Text.UTF8Encoding($false)))
@@ -242,21 +241,23 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git baseline commit failed' }
         [IO.File]::AppendAllText($materialPath, "  m_ShaderKeywords: CHANGED`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::AppendAllText($metaPath, "timeCreated: 1`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($physicMaterialPath, "  dynamicFriction: 0.5`n", (New-Object Text.UTF8Encoding($false)))
         foreach ($binaryPath in $binaryPaths) { [IO.File]::AppendAllText($binaryPath, "`nhead binary drift", (New-Object Text.UTF8Encoding($false))) }
-        [IO.File]::AppendAllText($unknownPath, "`nhead unknown drift", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($generatedPath, "  changed: true`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::AppendAllText($projectSettingsPath, "setting: head`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`n", (New-Object Text.UTF8Encoding($false)))
         Remove-Item -LiteralPath $churnPath -Force
 
         $fixtureComparator = Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1'
         $paths = @(
-            'Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta',
-            'Assets/_Game/Materials/Churn.mat', 'Assets/_Game/Materials/Churn.mat.meta',
-            'Assets/_Game/Generated/Fixture.unknown', 'Assets/_Game/Generated/Fixture.unknown.meta',
-            'Assets/_Game/Scenes/MovementLab/Fixture.png', 'Assets/_Game/Scenes/MovementLab/Fixture.png.meta',
-            'Assets/_Game/Scenes/MovementLab/Fixture.exr', 'Assets/_Game/Scenes/MovementLab/Fixture.exr.meta',
+            'Assets/_Game/Materials/Floor.mat', 'Assets/_Game/Materials/Floor.mat.meta',
+            'Assets/_Game/Materials/BallSurface.physicMaterial', 'Assets/_Game/Materials/BallSurface.physicMaterial.meta',
+            'Assets/_Game/Materials/Wall.mat', 'Assets/_Game/Materials/Wall.mat.meta',
+            'Assets/_Game/Generated/BlueCircleCueMesh.asset', 'Assets/_Game/Generated/BlueCircleCueMesh.asset.meta',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png.meta',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr.meta',
             'Assets/_Game/Scenes/MovementLab/LightingData.asset', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
-            'ProjectSettings/FixtureSettings.asset'
+            'ProjectSettings/QualitySettings.asset'
         )
         $quotedPaths = @($paths | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ', '
         $command = "& '" + $fixtureComparator.Replace("'", "''") + "' -Base 'HEAD' -Head 'WORKTREE' -Path @(" + $quotedPaths + ')'
@@ -269,16 +270,16 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         if ($text -notmatch '(?m)^SEMANTIC: changed$') {
             return New-HarnessFail 'intentional YAML/text semantic change was not reported'
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+metadata.*?guid\s+stable\s+11111111111111111111111111111111') {
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Floor\.mat\.meta.*?kind\s+metadata.*?guid\s+stable\s+11111111111111111111111111111111') {
             return New-HarnessFail 'stable GUID metadata was not reported'
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Materials/Churn\.mat\.meta.*?guid\s+churn\s+22222222222222222222222222222222\s+->\s+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') {
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Wall\.mat\.meta.*?guid\s+churn\s+22222222222222222222222222222222\s+->\s+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') {
             return New-HarnessFail 'GUID churn was not reported'
         }
         if ($text -notmatch '(?m)^  pair\s+broken') {
             return New-HarnessFail 'broken asset/meta pair was not reported'
         }
-        $projectSettingsSection = [regex]::Match($text, '(?s)== ProjectSettings/FixtureSettings\.asset.*?(?=\r?\n== |\r?\nCOVERAGE:)')
+        $projectSettingsSection = [regex]::Match($text, '(?s)== ProjectSettings/QualitySettings\.asset.*?(?=\r?\n== |\r?\nCOVERAGE:)')
         if (-not $projectSettingsSection.Success -or $projectSettingsSection.Value -notmatch '(?m)^  pair\s+not-applicable') {
             return New-HarnessFail 'ProjectSettings asset was not reported as pair not-applicable'
         }
@@ -286,26 +287,23 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
             return New-HarnessFail 'ProjectSettings asset incorrectly received pair/GUID analysis'
         }
         foreach ($path in @(
-            'Assets/_Game/Scenes/MovementLab/Fixture.png',
-            'Assets/_Game/Scenes/MovementLab/Fixture.exr',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr',
             'Assets/_Game/Scenes/MovementLab/LightingData.asset'
         )) {
             if ($text -notmatch ('(?s)== ' + [regex]::Escape($path) + '.*?kind\s+binary provenance.*?bytes\s+.*?blob\s+.*?provenance')) {
                 return New-HarnessFail ('binary provenance was not reported for ' + $path)
             }
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Generated/Fixture\.unknown\r?\n.*?kind\s+unsupported') {
-            return New-HarnessFail 'unknown generated type was not reported unsupported'
-        }
         foreach ($header in @('COVERAGE:', 'SEMANTIC:', 'DANGLING:', 'GUID:', 'PAIRS:', 'UNSUPPORTED:')) {
             if ($text -notmatch ('(?m)^' + [regex]::Escape($header))) { return New-HarnessFail ('comparator omitted exact summary header ' + $header) }
         }
-        if ($text -notmatch '(?m)^COVERAGE: 13/13 authoritative changed paths reported; semantic checked 3; NOT CHECKED 10$') {
+        if ($text -notmatch '(?m)^COVERAGE: 15/15 authoritative changed paths reported; semantic checked 5; NOT CHECKED 10$') {
             return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
         }
-        if ($text -notmatch '(?m)^GUID: stable 5; churn 1; added 0; removed 0; invalid 0$' -or
-            $text -notmatch '(?m)^PAIRS: intact 5; broken 1$' -or
-            $text -notmatch '(?m)^UNSUPPORTED: 1$') {
+        if ($text -notmatch '(?m)^GUID: stable 6; churn 1; added 0; removed 0; invalid 0$' -or
+            $text -notmatch '(?m)^PAIRS: intact 6; broken 1$' -or
+            $text -notmatch '(?m)^UNSUPPORTED: 0$') {
             return New-HarnessFail ('GUID/pair/unsupported summaries were incorrect: ' + $text)
         }
     } finally {

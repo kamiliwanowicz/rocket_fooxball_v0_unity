@@ -286,6 +286,7 @@ namespace RocketFooxball.Editor
             {
                 PrefabPath, BallPrefabPath, RocketPrefabPath, RocketModelPath, ArenaKitModelPath, CharacterModelPath,
                 FpsKickModelPath, WeaponModelPath, FpsShotgunModelPath, ShotgunModelPath, GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
+                LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath, LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
                 GrassOcclusionTexturePath, BallTexturePath, BallNormalTexturePath, BallMetallicTexturePath,
                 BallOcclusionTexturePath, WeaponMetalTexturePath, WeaponMetalNormalTexturePath, WeaponMetalMetallicTexturePath,
                 WeaponMetalOcclusionTexturePath, WeaponDarkTexturePath, WeaponDarkNormalTexturePath, WeaponDarkMetallicTexturePath,
@@ -299,7 +300,7 @@ namespace RocketFooxball.Editor
                 HealthPickupPrefabPath, HealthPickupMaterialPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, AmmoShellMaterialPath,
                 RocketHotMaterialPath, ProjectileGlowMaterialPath, ExplosionAdditiveMaterialPath, ExplosionSparksMaterialPath,
                 GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath, SkyMaterialPath,
-                VolumeProfilePath, LightingSettingsPath, LightingManifestPath,
+                 VolumeProfilePath, LightingSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath, LightingManifestPath,
                  TeamBlueMaterialPath, TeamRedMaterialPath, TeamBlueShieldMaterialPath, TeamRedShieldMaterialPath,
                  TeamBlueTrailMaterialPath, TeamRedTrailMaterialPath, ShotgunMetalMaterialPath, ShotgunDarkMaterialPath,
                  WeaponAccentMaterialPath, WeaponAccentCoreMaterialPath, ShotgunAccentMaterialPath, ShotgunAccentCoreMaterialPath,

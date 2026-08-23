@@ -214,16 +214,69 @@ namespace RocketFooxball.Editor
                     viewmodels.localRotation = Quaternion.identity;
                     // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
                     var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(-0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
-                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
-                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("WeaponDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
-                    var weaponAccent = GetOrCreateWeaponShellMaterial("WeaponAccent");
-                    var weaponAccentCore = GetOrCreateWeaponCoreMaterial("WeaponAccentCore");
+                    var launcherBaseMap = LoadTexture(LauncherBaseColorTexturePath);
+                    var launcherNormalMap = LoadTexture(LauncherNormalTexturePath);
+                    var launcherMetallicMap = LoadTexture(LauncherMetallicTexturePath);
+                    var launcherOcclusionMap = LoadTexture(LauncherOcclusionTexturePath);
+                    var launcherEmissionMap = LoadTexture(LauncherEmissionTexturePath);
+                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "WeaponMetal", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
+                        null, null, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
+                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "WeaponDark", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
+                        null, null, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
+                    var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "WeaponAccent", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
+                        null, null, Vector2.one, LauncherAccentBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
+                    SetTransparentWeaponShellState(weaponAccent);
+                    weaponAccent.SetColor("_EmissionColor", Color.clear);
+                    weaponAccent.SetTexture("_EmissionMap", null);
+                    weaponAccent.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    weaponAccent.DisableKeyword("_EMISSION");
+                    EditorUtility.SetDirty(weaponAccent);
+                    var weaponAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "WeaponAccentCore", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
+                        launcherEmissionMap, null, Vector2.one, LauncherAccentCoreBaseColor, WeaponAccentCoreEmissionColor,
+                        WeaponAccentCoreEmissionStrength, WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness,
+                        WeaponAccentCoreOcclusion, WeaponAccentCoreBumpScale));
+                    SetOpaqueLitState(weaponAccentCore);
+                    EditorUtility.SetDirty(weaponAccentCore);
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent, weaponAccentCore);
                     RemovePhysicsComponents(weaponVisual);
-                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath), LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
-                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification("ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath), LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f, 1f, 1f, 0.70f, 1f));
-                    var shotgunAccent = GetOrCreateWeaponShellMaterial("ShotgunAccent");
-                    var shotgunAccentCore = GetOrCreateWeaponCoreMaterial("ShotgunAccentCore");
+                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath),
+                        LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null,
+                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
+                        1f, 1f, 0.70f, 1f));
+                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath),
+                        LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null,
+                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
+                        1f, 1f, 0.70f, 1f));
+                    var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "ShotgunAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
+                        LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), null,
+                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
+                        WeaponAccentShellMetallic, WeaponAccentShellSmoothness, WeaponAccentShellOcclusion,
+                        WeaponAccentShellBumpScale));
+                    SetTransparentWeaponShellState(shotgunAccent);
+                    shotgunAccent.SetColor("_EmissionColor", Color.clear);
+                    shotgunAccent.SetTexture("_EmissionMap", null);
+                    shotgunAccent.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
+                    shotgunAccent.DisableKeyword("_EMISSION");
+                    EditorUtility.SetDirty(shotgunAccent);
+                    var shotgunAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
+                        "ShotgunAccentCore", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
+                        LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
+                        LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one,
+                        WeaponAccentCoreBaseColor, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
+                        WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness, WeaponAccentCoreOcclusion,
+                        WeaponAccentCoreBumpScale));
+                    SetOpaqueLitState(shotgunAccentCore);
+                    EditorUtility.SetDirty(shotgunAccentCore);
                     var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
                     RemovePhysicsAndAnimators(fpsShotgunVisual);
@@ -1743,6 +1796,13 @@ namespace RocketFooxball.Editor
                         if (filter == null || filter.sharedMesh == null)
                             throw new InvalidOperationException(label + " renderer mesh is missing: " + renderer.name);
                         ValidateMeshPbrChannels(filter.sharedMesh, false, label + "/" + group);
+                        if (label.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            var launcherZone = group == "WeaponMetal" ? LauncherMetalUvZone :
+                                group == "WeaponDark" ? LauncherDarkUvZone :
+                                group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
+                            ValidateMeshUvZone(filter.sharedMesh, launcherZone, label + "/" + group);
+                        }
                         if (group == "WeaponAccent") shell = renderer;
                         if (group == "WeaponAccentCore") core = renderer;
 

@@ -471,10 +471,15 @@ namespace RocketFooxball.Editor
                     var dark = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponDark.mat");
                     var accent = AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentMaterialPath);
                     var core = AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentCoreMaterialPath);
-                    ValidateWeaponMaterial(metal, AssetDatabase.LoadAssetAtPath<Texture2D>(WeaponMetalTexturePath), WeaponMetalBaseColor, "WeaponMetal");
-                    ValidateWeaponMaterial(dark, AssetDatabase.LoadAssetAtPath<Texture2D>(WeaponDarkTexturePath), WeaponDarkBaseColor, "WeaponDark");
-                    ValidateWeaponMaterial(accent, AssetDatabase.LoadAssetAtPath<Texture2D>(WeaponAccentTexturePath), WeaponAccentShellBaseColor, "WeaponAccent");
-                    ValidateWeaponCoreMaterial(core, "WeaponAccentCore");
+                    var baseMap = LoadTexture(LauncherBaseColorTexturePath);
+                    var normalMap = LoadTexture(LauncherNormalTexturePath);
+                    var metallicMap = LoadTexture(LauncherMetallicTexturePath);
+                    var occlusionMap = LoadTexture(LauncherOcclusionTexturePath);
+                    var emissionMap = LoadTexture(LauncherEmissionTexturePath);
+                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, LauncherMetalBaseColor, "WeaponMetal");
+                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, LauncherDarkBaseColor, "WeaponDark");
+                    ValidateLauncherMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, LauncherAccentBaseColor, "WeaponAccent");
+                    ValidateLauncherCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "WeaponAccentCore");
 
                     var seenMetal = false;
                     var seenDark = false;
@@ -516,6 +521,30 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Weapon material slots must contain exactly Metal, Dark, Accent, and AccentCore parts.");
                     }
+                }
+
+                internal static void ValidateLauncherMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
+                    Texture2D metallicMap, Texture2D occlusionMap, Color baseColor, string label)
+                {
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label);
+                    ValidatePbrScalars(material, LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale, 0f, label);
+                    ValidateEmission(material, Color.clear, 0f, label);
+                    if (label == "WeaponAccent") ValidateTransparentWeaponShellState(material, label);
+                    else ValidateOpaqueSurfaceState(material, label);
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), baseColor) > 0.001f)
+                        throw new InvalidOperationException(label + " launcher base color multiplier mismatch.");
+                }
+
+                internal static void ValidateLauncherCoreMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
+                    Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, string label)
+                {
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, null, Vector2.one, label);
+                    ValidatePbrScalars(material, WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness,
+                        WeaponAccentCoreOcclusion, WeaponAccentCoreBumpScale, WeaponAccentCoreEmissionStrength, label);
+                    ValidateEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength, label);
+                    ValidateOpaqueSurfaceState(material, label);
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), LauncherAccentCoreBaseColor) > 0.001f)
+                        throw new InvalidOperationException(label + " launcher base color multiplier mismatch.");
                 }
 
                 internal static void ValidateShotgunMaterials(GameObject visual)

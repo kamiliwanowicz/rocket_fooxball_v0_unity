@@ -13,7 +13,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 9;
+        internal const int SerializedContractVersion = 10;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -53,6 +53,16 @@ namespace RocketFooxball.Editor
         internal const string ShotgunAccentMaterialPath = MaterialsPath + "/ShotgunAccent.mat";
         internal const string WeaponAccentCoreMaterialPath = MaterialsPath + "/WeaponAccentCore.mat";
         internal const string ShotgunAccentCoreMaterialPath = MaterialsPath + "/ShotgunAccentCore.mat";
+        internal const string LauncherBaseColorTexturePath = TexturesPath + "/FpsRocketLauncher_BaseColor.png";
+        internal const string LauncherNormalTexturePath = TexturesPath + "/FpsRocketLauncher_Normal.png";
+        internal const string LauncherMetallicTexturePath = TexturesPath + "/FpsRocketLauncher_MetallicSmoothness.png";
+        internal const string LauncherOcclusionTexturePath = TexturesPath + "/FpsRocketLauncher_Occlusion.png";
+        internal const string LauncherEmissionTexturePath = TexturesPath + "/FpsRocketLauncher_Emission.png";
+        internal const int LauncherAtlasSize = 2048;
+        internal static readonly RectInt LauncherMetalUvZone = new RectInt(32, 864, 1984, 1152);
+        internal static readonly RectInt LauncherDarkUvZone = new RectInt(32, 352, 1280, 480);
+        internal static readonly RectInt LauncherAccentUvZone = new RectInt(1344, 352, 672, 480);
+        internal static readonly RectInt LauncherAccentCoreUvZone = new RectInt(32, 32, 1984, 288);
 
         internal const string HealthPickupsRootName = "HealthPickups";
         internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
@@ -167,6 +177,17 @@ namespace RocketFooxball.Editor
         internal static readonly Color WeaponMetalBaseColor = new Color(0.95f, 0.86f, 0.70f, 1f);
         internal static readonly Color WeaponDarkBaseColor = new Color(0.88f, 0.90f, 0.92f, 1f);
         internal static readonly Color WeaponAccentBaseColor = new Color(0.68f, 0.03f, 0.015f, 0.42f);
+        // Launcher maps are a single atlas. These are intentionally neutral
+        // multipliers so authored wear colours remain visible; shotgun
+        // materials continue to use the legacy weapon colour constants above.
+        internal static readonly Color LauncherMetalBaseColor = Color.white;
+        internal static readonly Color LauncherDarkBaseColor = Color.white;
+        internal static readonly Color LauncherAccentBaseColor = new Color(1f, 1f, 1f, 0.42f);
+        internal static readonly Color LauncherAccentCoreBaseColor = WeaponAccentCoreBaseColor;
+        internal const float LauncherMetallic = 1f;
+        internal const float LauncherSmoothness = 1f;
+        internal const float LauncherOcclusion = 1f;
+        internal const float LauncherBumpScale = 1f;
         internal static readonly Color ExplosionFireMaterialColor = Color.white;
         internal static readonly Color ExplosionSmokeMaterialColor = new Color(0.52f, 0.49f, 0.44f, 0.72f);
         internal static readonly Color GridColor = new Color(0.12f, 0.50f, 0.72f, 1f);
@@ -180,6 +201,8 @@ namespace RocketFooxball.Editor
             "Assets/_Game/Models/FpsRocketLauncher.fbx",
             FpsShotgunModelPath,
             ShotgunModelPath,
+            LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath,
+            LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
             TexturesPath + "/RetroGrass.png", TexturesPath + "/RetroGrass_Normal.png", TexturesPath + "/RetroGrass_MetallicSmoothness.png", TexturesPath + "/RetroGrass_Occlusion.png",
             TexturesPath + "/RetroWall.png", TexturesPath + "/RetroWall_Normal.png", TexturesPath + "/RetroWall_MetallicSmoothness.png", TexturesPath + "/RetroWall_Occlusion.png",
             TexturesPath + "/RetroTrim.png", TexturesPath + "/RetroTrim_Normal.png", TexturesPath + "/RetroTrim_MetallicSmoothness.png", TexturesPath + "/RetroTrim_Occlusion.png",

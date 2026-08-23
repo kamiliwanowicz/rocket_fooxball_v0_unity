@@ -41,6 +41,26 @@ namespace RocketFooxball.Editor
 
     internal static partial class MovementLabImportPipeline
     {
+        // T3 entry point: this deliberately has a closed six-asset surface.
+        // Do not call Apply here; the launcher proof must not reimport or
+        // rewrite unrelated source metas.
+        internal static void ImportLauncherVisualAssets()
+        {
+            ConfigureStaticModelImporter(WeaponModelPath);
+            ConfigureLauncherTextureImporter(LauncherBaseColorTexturePath, true, TextureImporterType.Default);
+            ConfigureLauncherTextureImporter(LauncherNormalTexturePath, false, TextureImporterType.NormalMap);
+            ConfigureLauncherTextureImporter(LauncherMetallicTexturePath, false, TextureImporterType.Default);
+            ConfigureLauncherTextureImporter(LauncherOcclusionTexturePath, false, TextureImporterType.Default);
+            ConfigureLauncherTextureImporter(LauncherEmissionTexturePath, false, TextureImporterType.Default);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+        }
+
+        private static void ConfigureLauncherTextureImporter(string path, bool sRgb, TextureImporterType textureType)
+        {
+            ConfigureTextureImporter(path, LauncherAtlasSize, sRgb, textureType,
+                TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
+        }
+
                 internal static void ConfigureTextureImporters()
                 {
                     ConfigureTextureImporter(GrassTexturePath, 1024, true, TextureImporterType.Default, TextureWrapMode.Repeat, TextureWrapMode.Repeat, FilterMode.Trilinear, 8);
@@ -393,6 +413,21 @@ namespace RocketFooxball.Editor
                     ValidateTextureImporter(ShieldTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ValidateTextureImporter(ExplosionTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ValidateTextureImporter(SmokeTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
+                    ValidateLauncherTextureImporterContracts();
+                }
+
+                internal static void ValidateLauncherTextureImporterContracts()
+                {
+                    ValidateTextureImporter(LauncherBaseColorTexturePath, LauncherAtlasSize, true, TextureImporterType.Default,
+                        TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
+                    ValidateTextureImporter(LauncherNormalTexturePath, LauncherAtlasSize, false, TextureImporterType.NormalMap,
+                        TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
+                    ValidateTextureImporter(LauncherMetallicTexturePath, LauncherAtlasSize, false, TextureImporterType.Default,
+                        TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
+                    ValidateTextureImporter(LauncherOcclusionTexturePath, LauncherAtlasSize, false, TextureImporterType.Default,
+                        TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
+                    ValidateTextureImporter(LauncherEmissionTexturePath, LauncherAtlasSize, false, TextureImporterType.Default,
+                        TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
                 }
 
                 internal static void ValidateTextureImporter(string path, int expectedSize, bool sRgb, TextureImporterType textureType, TextureWrapMode wrapU, TextureWrapMode wrapV, FilterMode filterMode, int anisoLevel)
@@ -420,6 +455,7 @@ namespace RocketFooxball.Editor
                     ValidateRigImporter(CharacterModelPath);
                     ValidateRigImporter(FpsKickModelPath);
                     ValidateStaticWeaponModel(WeaponModelPath, "Weapon");
+                    ValidateLauncherUvZones();
                     ValidateStaticWeaponModel(FpsShotgunModelPath, "FpsShotgun");
                     ValidateStaticWeaponModel(ShotgunModelPath, "Shotgun");
                     var rocket = AssetImporter.GetAtPath(RocketModelPath) as ModelImporter;
@@ -437,6 +473,44 @@ namespace RocketFooxball.Editor
                     }
                     if (!rocketSurface || !rocketHot) throw new InvalidOperationException("Rocket imported mesh names are incomplete.");
                     ValidateArenaKitModel();
+                }
+
+                internal static void ValidateLauncherUvZones()
+                {
+                    var assets = AssetDatabase.LoadAllAssetsAtPath(WeaponModelPath);
+                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent" };
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < assets.Length; i++)
+                    {
+                        var mesh = assets[i] as Mesh;
+                        if (mesh == null || AssetDatabase.GetAssetPath(mesh) != WeaponModelPath) continue;
+                        var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
+                        if (group == null) continue;
+                        var zone = group == "WeaponMetal" ? LauncherMetalUvZone :
+                            group == "WeaponDark" ? LauncherDarkUvZone :
+                            group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
+                        ValidateMeshUvZone(mesh, zone, "Launcher/" + group);
+                        seen.Add(group);
+                    }
+                    if (seen.Count != expectedGroups.Length)
+                        throw new InvalidOperationException("Launcher UV-zone mesh groups are incomplete.");
+                }
+
+                internal static void ValidateMeshUvZone(Mesh mesh, RectInt zone, string label)
+                {
+                    if (mesh == null || mesh.uv == null || mesh.uv.Length != mesh.vertexCount)
+                        throw new InvalidOperationException(label + " UV0 data is missing.");
+                    var minU = zone.xMin / (float)LauncherAtlasSize;
+                    var maxU = zone.xMax / (float)LauncherAtlasSize;
+                    var minV = zone.yMin / (float)LauncherAtlasSize;
+                    var maxV = zone.yMax / (float)LauncherAtlasSize;
+                    const float epsilon = 0.0005f;
+                    for (var i = 0; i < mesh.uv.Length; i++)
+                    {
+                        var uv = mesh.uv[i];
+                        if (uv.x < minU - epsilon || uv.x > maxU + epsilon || uv.y < minV - epsilon || uv.y > maxV + epsilon)
+                            throw new InvalidOperationException(label + " UV0 leaves atlas zone " + zone + ".");
+                    }
                 }
 
                 internal static void ValidateStaticWeaponModel(string path, string label)

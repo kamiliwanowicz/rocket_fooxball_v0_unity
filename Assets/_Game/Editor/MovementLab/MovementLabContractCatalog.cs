@@ -20,6 +20,11 @@ namespace RocketFooxball.Editor
         internal const string WeaponModelPath = "Assets/_Game/Models/FpsRocketLauncher.fbx";
         internal const string FpsShotgunModelPath = "Assets/_Game/Models/FpsShotgun.fbx";
         internal const string ShotgunModelPath = "Assets/_Game/Models/Shotgun.fbx";
+        internal const string LauncherBaseColorTexturePath = MovementLabContract.LauncherBaseColorTexturePath;
+        internal const string LauncherNormalTexturePath = MovementLabContract.LauncherNormalTexturePath;
+        internal const string LauncherMetallicTexturePath = MovementLabContract.LauncherMetallicTexturePath;
+        internal const string LauncherOcclusionTexturePath = MovementLabContract.LauncherOcclusionTexturePath;
+        internal const string LauncherEmissionTexturePath = MovementLabContract.LauncherEmissionTexturePath;
         internal const string ScenePath = MovementLabContract.ScenePath;
         internal const string InputActionsPath = MovementLabContract.InputActionsPath;
         internal const string MaterialsPath = MovementLabContract.MaterialsPath;
@@ -288,6 +293,19 @@ namespace RocketFooxball.Editor
         internal const float WeaponAccentCoreBumpScale = MovementLabContract.WeaponAccentCoreBumpScale;
         internal static readonly Color WeaponAccentCoreEmissionColor = MovementLabContract.WeaponAccentCoreEmissionColor;
         internal const float WeaponAccentCoreEmissionStrength = MovementLabContract.WeaponAccentCoreEmissionStrength;
+        internal static readonly Color LauncherMetalBaseColor = MovementLabContract.LauncherMetalBaseColor;
+        internal static readonly Color LauncherDarkBaseColor = MovementLabContract.LauncherDarkBaseColor;
+        internal static readonly Color LauncherAccentBaseColor = MovementLabContract.LauncherAccentBaseColor;
+        internal static readonly Color LauncherAccentCoreBaseColor = MovementLabContract.LauncherAccentCoreBaseColor;
+        internal const float LauncherMetallic = MovementLabContract.LauncherMetallic;
+        internal const float LauncherSmoothness = MovementLabContract.LauncherSmoothness;
+        internal const float LauncherOcclusion = MovementLabContract.LauncherOcclusion;
+        internal const float LauncherBumpScale = MovementLabContract.LauncherBumpScale;
+        internal const int LauncherAtlasSize = MovementLabContract.LauncherAtlasSize;
+        internal static readonly RectInt LauncherMetalUvZone = MovementLabContract.LauncherMetalUvZone;
+        internal static readonly RectInt LauncherDarkUvZone = MovementLabContract.LauncherDarkUvZone;
+        internal static readonly RectInt LauncherAccentUvZone = MovementLabContract.LauncherAccentUvZone;
+        internal static readonly RectInt LauncherAccentCoreUvZone = MovementLabContract.LauncherAccentCoreUvZone;
         internal const float WeaponBoundsTolerance = MovementLabContract.WeaponBoundsTolerance;
         internal const float WeaponShellCoreInset = MovementLabContract.WeaponShellCoreInset;
         internal const float WeaponMeshIslandPositionTolerance = MovementLabContract.WeaponMeshIslandPositionTolerance;
@@ -314,7 +332,8 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/ShieldRed.mat", MaterialsPath + "/ArenaPrimary.mat", MaterialsPath + "/ArenaTrim.mat", MaterialsPath + "/ArenaHazard.mat",
             MaterialsPath + "/ArenaGlow.mat", BallSurfacePath, MaterialsPath + "/Explosion.mat", ExplosionAdditiveMaterialPath,
             ExplosionSparksMaterialPath, MaterialsPath + "/Smoke.mat", GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath,
-            SkyMaterialPath, VolumeProfilePath, LightingSettingsPath, MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
+            SkyMaterialPath, VolumeProfilePath, LightingSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath,
+            MaterialsPath + "/CharacterRed.mat", MaterialsPath + "/CharacterBlack.mat",
             MaterialsPath + "/CharacterCream.mat", MaterialsPath + "/CharacterEye.mat", MaterialsPath + "/WeaponMetal.mat", MaterialsPath + "/WeaponDark.mat",
             WeaponAccentCoreMaterialPath, WeaponAccentMaterialPath,
             ShotgunMetalMaterialPath, ShotgunDarkMaterialPath, ShotgunAccentCoreMaterialPath, ShotgunAccentMaterialPath,
@@ -340,6 +359,8 @@ namespace RocketFooxball.Editor
             WeaponDarkTexturePath + ".meta", WeaponDarkNormalTexturePath + ".meta", WeaponDarkMetallicTexturePath + ".meta", WeaponDarkOcclusionTexturePath + ".meta",
             WeaponAccentTexturePath + ".meta", WeaponAccentNormalTexturePath + ".meta", WeaponAccentMetallicTexturePath + ".meta", WeaponAccentOcclusionTexturePath + ".meta",
             WeaponAccentEmissionTexturePath + ".meta",
+            LauncherBaseColorTexturePath + ".meta", LauncherNormalTexturePath + ".meta", LauncherMetallicTexturePath + ".meta",
+            LauncherOcclusionTexturePath + ".meta", LauncherEmissionTexturePath + ".meta",
             RocketTexturePath + ".meta", RocketNormalTexturePath + ".meta", RocketMetallicTexturePath + ".meta", RocketOcclusionTexturePath + ".meta", RocketEmissionTexturePath + ".meta", RocketGlowTexturePath + ".meta",
             ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };
@@ -433,20 +454,15 @@ namespace RocketFooxball.Editor
             AddGeneratedFingerprintPath(paths, seen, MovementLabContract.DynamicsManagerPath);
             AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TimeManagerPath);
             AddGeneratedFingerprintPath(paths, seen, MovementLabContract.TagManagerPath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighPipelinePath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.HighRendererPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowPipelinePath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowPipelinePath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowRendererPath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.LowRendererPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.QualitySettingsPath);
-            AddGeneratedFingerprintPath(paths, seen, GraphicsQualityConfigurator.ProjectSettingsPath);
+            for (var i = 0; i < MovementLabContract.QualityOutputs.Length; i++)
+            {
+                var qualityPath = MovementLabContract.QualityOutputs[i];
+                AddGeneratedFingerprintPath(paths, seen, qualityPath);
+                if (qualityPath.StartsWith("Assets/", StringComparison.Ordinal))
+                    AddGeneratedFingerprintPath(paths, seen, qualityPath + ".meta");
+            }
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath);
             AddGeneratedFingerprintPath(paths, seen, LightingManifestPath + ".meta");
-            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath);
-            AddGeneratedFingerprintPath(paths, seen, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta");
             for (var i = 0; i < GeneratedBakedLightingPaths.Length; i++)
             {
                 AddGeneratedFingerprintPath(paths, seen, GeneratedBakedLightingPaths[i]);
@@ -486,6 +502,13 @@ namespace RocketFooxball.Editor
             {
                 var bakedPath = NormalizeRepositoryRelativePath(GeneratedBakedLightingPaths[i]);
                 if (!seen.Contains(bakedPath) || !seen.Contains(bakedPath + ".meta")) throw new InvalidOperationException("Generated baked lighting fingerprint coverage is incomplete: " + bakedPath);
+            }
+            for (var i = 0; i < MovementLabContract.QualityOutputs.Length; i++)
+            {
+                var qualityPath = NormalizeRepositoryRelativePath(MovementLabContract.QualityOutputs[i]);
+                if (!seen.Contains(qualityPath)) throw new InvalidOperationException("Quality output fingerprint coverage is incomplete: " + qualityPath);
+                if (qualityPath.StartsWith("Assets/", StringComparison.Ordinal) && !seen.Contains(qualityPath + ".meta"))
+                    throw new InvalidOperationException("Quality output metadata fingerprint coverage is incomplete: " + qualityPath);
             }
         }
     }

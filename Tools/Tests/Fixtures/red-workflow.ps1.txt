@@ -1,9 +1,9 @@
 # Historical red baseline for harness red/green checks.
-# Intentionally violates generated-path and short-workspace contracts.
-param(
-    [string[]]$GeneratedPath = @()
-)
+# Intentionally violates exact Appendix-A inventory and short-workspace contracts.
+param([string[]]$GeneratedPath = @())
 
+$script:GeneratedRoots = @('Assets/_Game/Generated', 'ProjectSettings')
+$script:AuthoritativeInventory = @('Assets/_Game/Generated', 'ProjectSettings')
 $script:RequestedInventoryPaths = @()
 $script:ClosedImporterMetadataPaths = @(
     'Assets/_Game/Models/FpsShotgun.fbx.meta',

@@ -105,11 +105,11 @@ function Get-ChangedPaths {
     return Invoke-GitNullDelimitedCapture -Arguments @('diff', '--name-only', '-z', $BaseRevision, $HeadRevision)
 }
 
-function Get-AuthoritativeInventoryRoots {
+function Get-AppendixAPaths {
     param([Parameter(Mandatory = $true)][string]$Revision)
 
-    # The workflow owns the generated-inventory contract.  Parse its literal root array from
-    # each revision instead of maintaining a second comparator-specific path list that can drift.
+    # The workflow owns the exact Appendix-A path contract. Parse that one
+    # literal array from each revision; never expand directories here.
     $workflowPath = 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
     $lines = Get-BlobLines $Revision $workflowPath
     if ($null -eq $lines) { throw ('Authoritative inventory source is missing in ' + $Revision + ': ' + $workflowPath) }
@@ -124,31 +124,33 @@ function Get-AuthoritativeInventoryRoots {
         param($node)
         return $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
             $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            $node.Left.VariablePath.UserPath -ceq 'script:AuthoritativeInventory'
+            $node.Left.VariablePath.UserPath -ceq 'script:AppendixAPaths'
     }, $true))
-    if ($assignments.Count -ne 1) { throw ('Expected one $script:AuthoritativeInventory assignment in ' + $Revision + ', found ' + $assignments.Count + '.') }
+    # Historical revisions predate the exact inventory literal.  Treat that
+    # revision as having no inventory; the union below still requires the
+    # current side to provide one valid, nonempty exact set.
+    if ($assignments.Count -eq 0) { return @() }
+    if ($assignments.Count -ne 1) { throw ('Expected one $script:AppendixAPaths assignment in ' + $Revision + ', found ' + $assignments.Count + '.') }
 
     $roots = @($assignments[0].Right.FindAll({
         param($node)
         return $node -is [System.Management.Automation.Language.StringConstantExpressionAst]
     }, $true) | ForEach-Object { ([string]$_.Value).Trim().Replace('\\', '/') } | Where-Object { $_ })
-    if ($roots.Count -eq 0) { throw ('Authoritative inventory is empty in ' + $Revision + '.') }
+    if ($roots.Count -eq 0) { throw ('Appendix-A path set is empty in ' + $Revision + '.') }
     return @($roots | Sort-Object -Unique)
 }
 
-function Test-AuthoritativeInventoryMember {
+function Test-AppendixAPath {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryPaths
     )
 
     $candidate = $RelativePath.Replace('\\', '/').TrimStart('/')
-    foreach ($root in $InventoryRoots) {
-        $normalizedRoot = ([string]$root).Replace('\\', '/').Trim('/')
-        if ($candidate.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase) -or
-            $candidate.StartsWith($normalizedRoot + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    }
-    return $false
+    return @($InventoryPaths | Where-Object {
+        $normalized = ([string]$_).Replace('\\', '/').TrimStart('/')
+        $candidate.Equals($normalized, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -eq 1
 }
 
 function Get-PathCoverageKind {
@@ -160,6 +162,7 @@ function Get-PathCoverageKind {
         '.unity' { return 'supported text' }
         '.prefab' { return 'supported text' }
         '.mat' { return 'supported text' }
+        '.physicMaterial' { return 'supported text' }
         '.controller' { return 'supported text' }
         '.asset' { return 'supported text' }
         '.json' { return 'supported text' }
@@ -173,12 +176,12 @@ function Get-PathCoverageKind {
 function Resolve-SelectedPaths {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Candidates,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryPaths,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$RequestedPaths
     )
 
     $authoritative = @($Candidates | Where-Object {
-        Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots
+        Test-AppendixAPath -RelativePath ([string]$_) -InventoryPaths $InventoryPaths
     } | Sort-Object -Unique)
     if ($RequestedPaths.Count -eq 0) { return $authoritative }
 
@@ -189,7 +192,7 @@ function Resolve-SelectedPaths {
         $matches = @($Candidates | Where-Object { $_ -like $normalized } | Sort-Object -Unique)
         if ($matches.Count -eq 0) { throw ('Requested path is uncovered by both revisions: ' + $normalized) }
         $uncovered = @($matches | Where-Object {
-            -not (Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots)
+            -not (Test-AppendixAPath -RelativePath ([string]$_) -InventoryPaths $InventoryPaths)
         })
         if ($uncovered.Count -gt 0) {
             throw ('Requested path is outside the authoritative generated inventory: ' + ($uncovered -join ', '))
@@ -752,12 +755,13 @@ if ([string]::IsNullOrWhiteSpace($Base) -or [string]::IsNullOrWhiteSpace($Head))
 $basePaths = Get-RevisionPaths $Base
 $headPaths = Get-RevisionPaths $Head
 $candidates = @($basePaths + $headPaths | Sort-Object -Unique)
-$inventoryRoots = @(
-    (Get-AuthoritativeInventoryRoots $Base) +
-    (Get-AuthoritativeInventoryRoots $Head) |
-    Sort-Object -Unique
-)
-$selected = @(Resolve-SelectedPaths -Candidates $candidates -InventoryRoots $inventoryRoots -RequestedPaths @($Path))
+$baseAppendixPaths = @(Get-AppendixAPaths $Base)
+$headAppendixPaths = @(Get-AppendixAPaths $Head)
+$appendixPaths = @($baseAppendixPaths + $headAppendixPaths | Sort-Object -Unique)
+if ($appendixPaths.Count -eq 0) {
+    throw 'Neither revision supplies a valid, nonempty exact Appendix-A path set.'
+}
+$selected = @(Resolve-SelectedPaths -Candidates $candidates -InventoryPaths $appendixPaths -RequestedPaths @($Path))
 $explicitPathRequest = @($Path).Count -gt 0
 $basePathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $headPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
