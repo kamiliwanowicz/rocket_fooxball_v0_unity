@@ -183,7 +183,7 @@ namespace RocketFooxball.Editor
         internal static readonly Color LauncherMetalBaseColor = Color.white;
         internal static readonly Color LauncherDarkBaseColor = Color.white;
         internal static readonly Color LauncherAccentBaseColor = new Color(1f, 1f, 1f, 0.42f);
-        internal static readonly Color LauncherAccentCoreBaseColor = WeaponAccentCoreBaseColor;
+        internal static readonly Color LauncherAccentCoreBaseColor = Color.white;
         internal const float LauncherMetallic = 1f;
         internal const float LauncherSmoothness = 1f;
         internal const float LauncherOcclusion = 1f;

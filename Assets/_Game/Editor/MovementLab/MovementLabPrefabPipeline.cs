@@ -240,8 +240,8 @@ namespace RocketFooxball.Editor
                     var weaponAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponAccentCore", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
                         launcherEmissionMap, null, Vector2.one, LauncherAccentCoreBaseColor, WeaponAccentCoreEmissionColor,
-                        WeaponAccentCoreEmissionStrength, WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness,
-                        WeaponAccentCoreOcclusion, WeaponAccentCoreBumpScale));
+                        WeaponAccentCoreEmissionStrength, LauncherMetallic, LauncherSmoothness,
+                        LauncherOcclusion, LauncherBumpScale));
                     SetOpaqueLitState(weaponAccentCore);
                     EditorUtility.SetDirty(weaponAccentCore);
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent, weaponAccentCore);

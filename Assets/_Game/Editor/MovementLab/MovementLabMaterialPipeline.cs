@@ -539,8 +539,8 @@ namespace RocketFooxball.Editor
                     Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, string label)
                 {
                     ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, null, Vector2.one, label);
-                    ValidatePbrScalars(material, WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness,
-                        WeaponAccentCoreOcclusion, WeaponAccentCoreBumpScale, WeaponAccentCoreEmissionStrength, label);
+                    ValidatePbrScalars(material, LauncherMetallic, LauncherSmoothness,
+                        LauncherOcclusion, LauncherBumpScale, WeaponAccentCoreEmissionStrength, label);
                     ValidateEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength, label);
                     ValidateOpaqueSurfaceState(material, label);
                     if (Vector4.Distance(material.GetColor("_BaseColor"), LauncherAccentCoreBaseColor) > 0.001f)
