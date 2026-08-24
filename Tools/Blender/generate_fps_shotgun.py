@@ -1090,6 +1090,8 @@ def compare_runs(first, second):
         raise RuntimeError("Two-run UV/texture hash identity failed")
     if first["masks"] != second["masks"]:
         raise RuntimeError("Two-run mask audit mismatch")
+    if first["channels"] != second["channels"]:
+        raise RuntimeError("Two-run channel audit mismatch")
     if first_records[0]["signature"] == first_records[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
     print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures={len(first['texture_hashes'])}, previews=13")
@@ -1132,7 +1134,7 @@ def promote_and_write_proof(run, two_run_identical):
     if output_hashes != run["texture_hashes"]:
         raise RuntimeError("Shotgun atomic texture promotion hash mismatch")
     proof = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "seed": surface.SEED,
         "versions": {"blender": bpy.app.version_string, "python": sys.version.split()[0], "numpy": np.__version__},
         "geometry": {

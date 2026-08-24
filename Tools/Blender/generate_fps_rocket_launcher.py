@@ -34,6 +34,16 @@ ATLAS_DILATION = 16
 MICRODETAIL_SIZE = 1024
 MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
 MICRODETAIL_TILE_SCALE = 12.0
+# The Unity material applies this tile at a restrained 0.20 normal scale.  The
+# encoded tile therefore needs enough source slope to survive that attenuation
+# without becoming a broad, noisy normal at full strength.
+MICRODETAIL_NORMAL_SLOPE_GAIN = 95.0
+MICRODETAIL_MIN_CHANNEL_RANGE = 20
+MICRODETAIL_MIN_CHANNEL_STDDEV = 3.0
+MICRODETAIL_MIN_XY_RANGE = 0.12
+MICRODETAIL_MIN_XY_STDDEV = 0.025
+MICRODETAIL_MAX_XY_MAGNITUDE = 0.30
+MICRODETAIL_SEAM_EPSILON = 1.0e-5
 TEXTURE_NAMES = (
     "FpsRocketLauncher_BaseColor.png",
     "FpsRocketLauncher_Normal.png",
@@ -814,6 +824,112 @@ def _fbm(x, y, z):
     return total / normalization
 
 
+def _microdetail_height(u, v, phase):
+    """Return the periodic scratch/dust height field at normalized UVs."""
+    warp_u = np.sin(math.tau * (5.0 * v) + phase)
+    warp_v = np.sin(math.tau * (7.0 * u) - phase * 0.73)
+    scratch_a = np.sin(math.tau * (43.0 * u + 1.7 * warp_u) + phase * 1.13)
+    scratch_b = np.sin(math.tau * (71.0 * u - 1.3 * warp_v) - phase * 0.61)
+    cross_scratch = np.sin(math.tau * (29.0 * v + 0.9 * np.sin(math.tau * 3.0 * u + phase)))
+    dust_coarse = np.sin(math.tau * (11.0 * u + 17.0 * v) + phase * 0.37)
+    dust_fine = np.sin(math.tau * (97.0 * u - 53.0 * v) - phase * 1.41)
+    return (
+        0.00185 * scratch_a
+        + 0.00115 * scratch_b
+        + 0.00070 * cross_scratch
+        + 0.00075 * dust_coarse
+        + 0.00035 * dust_fine
+    ).astype(np.float32)
+
+
+def _microdetail_normal_from_height(height):
+    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
+    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
+    normal = np.stack((
+        -MICRODETAIL_NORMAL_SLOPE_GAIN * dx,
+        -MICRODETAIL_NORMAL_SLOPE_GAIN * dy,
+        np.ones_like(height),
+    ), axis=2)
+    return normal / np.maximum(np.linalg.norm(normal, axis=2, keepdims=True), 1.0e-12)
+
+
+def _microdetail_normal_at(u, v, phase):
+    texel = 1.0 / float(MICRODETAIL_SIZE)
+    dx = (_microdetail_height(u + texel, v, phase) - _microdetail_height(u - texel, v, phase)) * 0.5
+    dy = (_microdetail_height(u, v + texel, phase) - _microdetail_height(u, v - texel, phase)) * 0.5
+    normal = np.stack((
+        -MICRODETAIL_NORMAL_SLOPE_GAIN * dx,
+        -MICRODETAIL_NORMAL_SLOPE_GAIN * dy,
+        np.ones_like(dx),
+    ), axis=-1)
+    return normal / np.maximum(np.linalg.norm(normal, axis=-1, keepdims=True), 1.0e-12)
+
+
+def _audit_microdetail_normal(rgba, normal, phase):
+    """Fail closed if the repeatable detail normal regresses to a flat map."""
+    channel_audits = {}
+    for index, name in enumerate(("R", "G")):
+        values = rgba[:, :, index]
+        value_range = int(values.max()) - int(values.min())
+        standard_deviation = float(values.std())
+        if value_range < MICRODETAIL_MIN_CHANNEL_RANGE or standard_deviation < MICRODETAIL_MIN_CHANNEL_STDDEV:
+            raise RuntimeError(
+                f"Microdetail {name} channel is too flat: range={value_range}, stddev={standard_deviation:.6f}"
+            )
+        channel_audits[name] = {
+            "min": int(values.min()), "max": int(values.max()), "range": value_range,
+            "stddev": round(standard_deviation, 6), "uniqueValues": int(np.unique(values).size),
+        }
+    xy = normal[:, :, :2]
+    xy_ranges = [float(xy[:, :, index].max() - xy[:, :, index].min()) for index in range(2)]
+    xy_stddevs = [float(xy[:, :, index].std()) for index in range(2)]
+    xy_max_magnitude = float(np.sqrt(np.sum(xy * xy, axis=2)).max())
+    if min(xy_ranges) < MICRODETAIL_MIN_XY_RANGE or min(xy_stddevs) < MICRODETAIL_MIN_XY_STDDEV:
+        raise RuntimeError(f"Microdetail tangent-space XY variance is too flat: ranges={xy_ranges}, stddevs={xy_stddevs}")
+    if xy_max_magnitude > MICRODETAIL_MAX_XY_MAGNITUDE:
+        raise RuntimeError(f"Microdetail tangent-space XY is too strong: maxMagnitude={xy_max_magnitude:.6f}")
+
+    seam_samples = np.linspace(0.0, 1.0, MICRODETAIL_SIZE + 1, dtype=np.float32)
+    zero = np.zeros_like(seam_samples)
+    one = np.ones_like(seam_samples)
+    height_seam_error = max(
+        float(np.max(np.abs(_microdetail_height(zero, seam_samples, phase) - _microdetail_height(one, seam_samples, phase)))),
+        float(np.max(np.abs(_microdetail_height(seam_samples, zero, phase) - _microdetail_height(seam_samples, one, phase)))),
+    )
+    normal_seam_error = max(
+        float(np.max(np.abs(_microdetail_normal_at(zero, seam_samples, phase) - _microdetail_normal_at(one, seam_samples, phase)))),
+        float(np.max(np.abs(_microdetail_normal_at(seam_samples, zero, phase) - _microdetail_normal_at(seam_samples, one, phase)))),
+    )
+    if height_seam_error > MICRODETAIL_SEAM_EPSILON or normal_seam_error > MICRODETAIL_SEAM_EPSILON:
+        raise RuntimeError(
+            f"Microdetail repeat seam failed: height={height_seam_error:.9f}, normal={normal_seam_error:.9f}"
+        )
+    return {
+        "encoding": "tangent-space RGB normal, RG=XY, B=Z, A=255",
+        "normalSlopeGain": MICRODETAIL_NORMAL_SLOPE_GAIN,
+        "unityMaterialNormalScale": 0.20,
+        "channels": channel_audits,
+        "xy": {
+            "ranges": [round(value, 6) for value in xy_ranges],
+            "stddev": [round(value, 6) for value in xy_stddevs],
+            "maxMagnitude": round(xy_max_magnitude, 6),
+        },
+        "seam": {
+            "method": "sample u/v=0 and u/v=1 with centered periodic normal differences",
+            "heightMaxAbsoluteError": height_seam_error,
+            "normalMaxAbsoluteError": normal_seam_error,
+            "threshold": MICRODETAIL_SEAM_EPSILON,
+        },
+        "thresholds": {
+            "minimumChannelRange": MICRODETAIL_MIN_CHANNEL_RANGE,
+            "minimumChannelStddev": MICRODETAIL_MIN_CHANNEL_STDDEV,
+            "minimumXyRange": MICRODETAIL_MIN_XY_RANGE,
+            "minimumXyStddev": MICRODETAIL_MIN_XY_STDDEV,
+            "maximumXyMagnitude": MICRODETAIL_MAX_XY_MAGNITUDE,
+        },
+    }
+
+
 def generate_microdetail_texture(path):
     """Write a deterministic, tileable scratch/dust normal for metal only.
 
@@ -830,30 +946,18 @@ def generate_microdetail_texture(path):
     # Two warped line families provide directional machining scratches.  The
     # low-frequency warp keeps them from reading as a regular grating while
     # retaining exact periodicity at both tile seams.
-    warp_u = np.sin(math.tau * (5.0 * v) + phase)
-    warp_v = np.sin(math.tau * (7.0 * u) - phase * 0.73)
-    scratch_a = np.sin(math.tau * (43.0 * u + 1.7 * warp_u) + phase * 1.13)
-    scratch_b = np.sin(math.tau * (71.0 * u - 1.3 * warp_v) - phase * 0.61)
-    cross_scratch = np.sin(math.tau * (29.0 * v + 0.9 * np.sin(math.tau * 3.0 * u + phase)))
-    dust_coarse = np.sin(math.tau * (11.0 * u + 17.0 * v) + phase * 0.37)
-    dust_fine = np.sin(math.tau * (97.0 * u - 53.0 * v) - phase * 1.41)
-    height = (
-        0.00185 * scratch_a
-        + 0.00115 * scratch_b
-        + 0.00070 * cross_scratch
-        + 0.00075 * dust_coarse
-        + 0.00035 * dust_fine
-    ).astype(np.float32)
-    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
-    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
-    normal = np.stack((-5.0 * dx, -5.0 * dy, np.ones_like(height)), axis=2)
-    normal /= np.maximum(np.linalg.norm(normal, axis=2, keepdims=True), 1.0e-12)
+    height = _microdetail_height(u, v, phase)
+    normal = _microdetail_normal_from_height(height)
     rgba = np.empty((size, size, 4), dtype=np.uint8)
     rgba[:, :, :3] = np.clip(np.rint(normal * 127.5 + 127.5), 0, 255).astype(np.uint8)
     rgba[:, :, 3] = 255
+    audit = _audit_microdetail_normal(rgba, normal, phase)
     write_microdetail_png(path, rgba)
     print(f"OUTPUT microdetail: {path} ({os.path.getsize(path)} bytes, {size}x{size}, tileable=yes, groups=WeaponMetal/WeaponDark)")
-    return _hash_file(path)
+    print(f"AUDIT microdetail: RG={audit['channels']['R']['min']}..{audit['channels']['R']['max']}/"
+          f"{audit['channels']['G']['min']}..{audit['channels']['G']['max']}, "
+          f"xyStddev={audit['xy']['stddev']}, seamNormal={audit['seam']['normalMaxAbsoluteError']:.9f}")
+    return _hash_file(path), audit
 
 
 def _surface_boundary_distance(surface):
@@ -1400,7 +1504,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         write_rgba_png(path, pixels, filename == TEXTURE_NAMES[0])
         output_hashes[filename] = _hash_file(path)
     microdetail_path = os.path.join(stage_texture_dir, MICRODETAIL_NAME)
-    output_hashes[MICRODETAIL_NAME] = generate_microdetail_texture(microdetail_path)
+    output_hashes[MICRODETAIL_NAME], microdetail_audit = generate_microdetail_texture(microdetail_path)
     channel_record = {
         "baseColor": {"format": "RGBA8", "transfer": "sRGB"},
         "normal": {"format": "RGBA8", "transfer": "linear", "centralDifferencePx": 1, "xyScale": 2, "z": 1},
@@ -1410,6 +1514,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "microDetailNormal": {
             "format": "RGBA8", "transfer": "linear", "size": [MICRODETAIL_SIZE, MICRODETAIL_SIZE],
             "tile": "repeat", "intendedGroups": ["WeaponMetal", "WeaponDark"],
+            "audit": microdetail_audit,
         },
     }
     contact_chip_precision = float(np.count_nonzero(chip & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(chip)))
@@ -1711,6 +1816,8 @@ def compare_runs(first, second):
         raise RuntimeError(f"Two-run UV hash mismatch: {first['uv_hash']} != {second['uv_hash']}")
     if first["masks"] != second["masks"]:
         raise RuntimeError("Two-run mask audit mismatch")
+    if first["channels"] != second["channels"]:
+        raise RuntimeError("Two-run channel audit mismatch")
     print(f"PROOF two-run semantic+texture match: textures={len(first['texture_hashes'])}, preview-audits-per-run={len(PREVIEW_NAMES)}")
 
 
@@ -1750,7 +1857,7 @@ def promote_and_write_proof(record, two_run_identical):
     if final_texture_hashes != record["texture_hashes"] or final_preview_hashes != record["preview_hashes"]:
         raise RuntimeError("Atomic promotion hash verification failed")
     proof = {
-        "schemaVersion": 2,
+        "schemaVersion": 3,
         "seed": SEED,
         "versions": {"blender": bpy.app.version_string, "python": sys.version.split()[0], "numpy": np.__version__},
         "geometry": {
