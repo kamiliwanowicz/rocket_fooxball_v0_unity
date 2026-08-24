@@ -50,9 +50,9 @@ CORE_INSET_MAX = 0.004
 GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
 DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
-    # Match the launcher surface palette: dark warm ochre-khaki alloy, with
-    # near black reserved for the explicit recess/dark group.
-    "WeaponMetal": (0.26, 0.22, 0.13, 1.0),
+    # Match the launcher surface palette: desaturated warm olive/khaki alloy,
+    # with near black reserved for the explicit recess/dark group.
+    "WeaponMetal": (0.20, 0.22, 0.15, 1.0),
     "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
@@ -1168,6 +1168,9 @@ def main():
     surface.ATLAS_SIZE = ATLAS_SIZE
     surface.ATLAS_DILATION = ATLAS_DILATION
     surface.MATERIAL_SPECS = MATERIAL_SPECS
+    surface.CHIP_CONTACT_MIN = 0.425
+    surface.CHIP_FBM_MIN = 0.695
+    surface.GRIME_BIAS = -0.250
     _safe_recreate_staging_root()
     proof_two_run = "--proof-two-run" in sys.argv
     first = generate_once(os.path.join(STAGING_ROOT, "run1"))

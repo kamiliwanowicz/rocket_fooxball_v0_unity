@@ -35,18 +35,21 @@ MICRODETAIL_SIZE = 1024
 MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
 REFERENCE_TILE_NAME = "WeaponSurfaceReference.png"
 REFERENCE_TILE_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs", REFERENCE_TILE_NAME)
-REFERENCE_TILE_SIZE = 1024
-REFERENCE_RGBA_SHA256 = "9d10d1b9cf7d6c570e4c7be834a36626911705373cab9d78b784a985cb2e3738"
+REFERENCE_TILE_SIZE = 1254
+REFERENCE_RGBA_SHA256 = "8ae165be644582741cb75ef53b24bfccbb9c0b3faaa0afcb5ef9c32a4b36dd79"
 # The Unity material applies this tile at a restrained 0.24 normal scale.  The
 # encoded tile therefore needs enough source slope to survive that attenuation
 # without becoming a broad, noisy normal at full strength.
-MICRODETAIL_NORMAL_SLOPE_GAIN = 84.0
+MICRODETAIL_NORMAL_SLOPE_GAIN = 108.0
 # The shared detail tile is derived from the irregular photographic reference
 # only.  The source slope is intentionally amplified enough to survive the
 # normal-map encoding and the Unity material's normal scale.
 REFERENCE_NORMAL_HEIGHT_SCALE = 0.00360
 REFERENCE_ATLAS_HEIGHT_SCALE = 0.00220
 REFERENCE_SMOOTHNESS_SCALE = 0.075
+CHIP_CONTACT_MIN = 0.47
+CHIP_FBM_MIN = 0.72
+GRIME_BIAS = -0.258
 MICRODETAIL_MIN_CHANNEL_RANGE = 20
 MICRODETAIL_MIN_CHANNEL_STDDEV = 3.0
 MICRODETAIL_MIN_XY_RANGE = 0.12
@@ -117,9 +120,9 @@ PAIR_RECORDS = (
 )
 
 MATERIAL_SPECS = {
-    # Q2's weapon is a dark, warm ochre-khaki alloy. Dark values stay confined
-    # to the explicitly recessed group below; the shell itself remains metal.
-    "WeaponMetal": (0.26, 0.22, 0.13, 1.0),
+    # Q2's weapon is a desaturated warm olive/khaki alloy. Dark values stay
+    # confined to the explicitly recessed group below; the shell itself remains metal.
+    "WeaponMetal": (0.20, 0.22, 0.15, 1.0),
     "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
@@ -129,8 +132,8 @@ SURFACE_SPECS = {
     # Tuple order: clean/exposed colour, base/chip/grime metallic, then
     # base/chip/grime/polished smoothness. Wear is primarily normal and
     # roughness-driven; exposed albedo stays close to the Q2 shell colour.
-    "WeaponMetal": {"clean": (0.26, 0.22, 0.13), "exposed": (0.305, 0.265, 0.17), "metal": (0.94, 0.985, 0.12), "smooth": (0.42, 0.70, 0.24, 0.58)},
-    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.04, 0.72, 0.03), "smooth": (0.30, 0.58, 0.20, 0.46)},
+    "WeaponMetal": {"clean": (0.20, 0.22, 0.15), "exposed": (0.225, 0.245, 0.175), "metal": (0.96, 0.985, 0.04), "smooth": (0.44, 0.62, 0.20, 0.58)},
+    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.05, 0.12, 0.02), "smooth": (0.30, 0.50, 0.20, 0.46)},
     "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
     "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
 }
@@ -653,15 +656,15 @@ def _load_reference_height():
             width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
                 ">IIBBBBB", data
             )
-            if bit_depth != 8 or color_type != 6 or compression != 0 or filtering != 0 or interlace != 0:
-                raise RuntimeError("Weapon surface reference must be non-interlaced RGBA8 PNG")
-            channels = 4
+            if bit_depth != 8 or color_type not in (2, 6) or compression != 0 or filtering != 0 or interlace != 0:
+                raise RuntimeError("Weapon surface reference must be a non-interlaced RGB8 or RGBA8 PNG")
+            channels = 3 if color_type == 2 else 4
         elif chunk_type == b"IDAT":
             compressed.extend(data)
         elif chunk_type == b"IEND":
             break
         cursor = data_end + 4
-    if width != REFERENCE_TILE_SIZE or height != REFERENCE_TILE_SIZE or channels != 4:
+    if width != REFERENCE_TILE_SIZE or height != REFERENCE_TILE_SIZE or channels not in (3, 4):
         raise RuntimeError(
             f"Weapon surface reference size/format failed: {width}x{height}, channels={channels}"
         )
@@ -708,15 +711,23 @@ def _load_reference_height():
                 else:
                     predictor = upper_left
             reconstructed[byte_index] = (int(filtered[byte_index]) + predictor) & 0xFF
-    rgba = scanlines.reshape(height, width, channels)
+    decoded_channels = scanlines.reshape(height, width, channels)
+    if channels == 3:
+        alpha = np.full((height, width, 1), 255, dtype=np.uint8)
+        rgba = np.concatenate((decoded_channels, alpha), axis=2)
+    else:
+        rgba = decoded_channels
     decoded_hash = hashlib.sha256(rgba.tobytes()).hexdigest()
     if decoded_hash != REFERENCE_RGBA_SHA256:
         raise RuntimeError(
             f"Weapon surface reference decoded RGBA hash mismatch: {decoded_hash} != {REFERENCE_RGBA_SHA256}"
         )
-    # The tile is authored as a signed high-pass carrier around 128. Sampling
-    # wraps at the tile border, so there is no broad concrete/albedo transfer.
-    _REFERENCE_HEIGHT = ((rgba[:, :, 0].astype(np.float32) - 128.0) / 127.0).astype(np.float32)
+    # Recenter the supplied scratch carrier to remove any broad lighting or
+    # paper-tone bias. Sampling wraps at the tile border, so only zero-mean
+    # surface detail reaches atlas normal/smoothness/dust; base albedo never
+    # reads this channel.
+    red = rgba[:, :, 0].astype(np.float32)
+    _REFERENCE_HEIGHT = ((red - float(np.mean(red))) / 127.0).astype(np.float32)
     return _REFERENCE_HEIGHT
 
 
@@ -1232,10 +1243,10 @@ def _metric_scratch_segments(active, positions, normals, tangents, actual_contac
     # Fine directional marks carry most of the readable wear in the normal
     # and smoothness maps.  Keep their metric footprint small enough that they
     # do not become broad pale atlas chips at first-person scale.
-    width_range = (0.00016, 0.00042)
+    width_range = (0.00018, 0.00046)
     length_range = (0.0035, 0.014)
     contact_threshold = 0.08
-    target_coverage = 0.006
+    target_coverage = 0.0065
     candidate_indices = np.flatnonzero(metal & (actual_contact > contact_threshold))
     if candidate_indices.size == 0:
         raise RuntimeError("Scratch segment admission failed: no Metal contact candidates")
@@ -1436,8 +1447,8 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     glass = (group_active == GROUP_NAMES.index("WeaponAccent")) | core
     # Keep edge wear narrow and low contrast.  The muzzle branch is explicit
     # so soot/heat remains localized instead of washing the whole receiver.
-    muzzle_lip = (edge_contact > 0.56) & (fbm > 0.61) & metal & (py < -0.29)
-    chip = (((actual_contact > 0.30) & (fbm > 0.63)) | muzzle_lip) & metal
+    muzzle_lip = (edge_contact > 0.68) & (fbm > 0.72) & metal & (py < -0.40)
+    chip = (((actual_contact > CHIP_CONTACT_MIN) & (fbm > CHIP_FBM_MIN)) | muzzle_lip) & metal
     scratch, scratch_audit = _metric_scratch_segments(
         active,
         position.reshape(-1, 3)[active],
@@ -1446,24 +1457,25 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         actual_contact,
         metal,
     )
-    dark_scuff = (actual_contact > 0.42) & (fbm > 0.66) & dark
+    dark_scuff = (actual_contact > 0.60) & (fbm > 0.76) & dark
     dust_coarse = _trig_noise(px, py, pz, 11.0, 0.193)
     dust_fine = _trig_noise(px, py, pz, 97.0, 1.173)
     reference_dust = np.abs(reference_detail)
     dust = np.clip(
-        0.30 * fbm + 0.22 * dust_coarse + 0.18 * dust_fine + 0.42 * reference_dust - 0.18,
+        0.24 * fbm + 0.16 * dust_coarse + 0.12 * dust_fine + 0.22 * reference_dust - 0.26,
         0.0,
         1.0,
     )
     dust[glass] = 0.0
-    grime = np.clip(0.30 * cavity + 0.22 * downward + 0.20 * fbm + 0.22 * dust - 0.33, 0.0, 1.0)
+    grime = np.clip(0.28 * cavity + 0.20 * downward + 0.19 * fbm + 0.18 * dust + GRIME_BIAS, 0.0, 1.0)
+    grime[_trig_noise(px, py, pz, 37.0, 0.417) < 0.50] = 0.0
     grime[glass] = 0.0
     muzzle_depth = _smoothstep(-0.42, -0.60, py)
     muzzle_radius = np.sqrt(px * px + (pz - 0.015) * (pz - 0.015))
     muzzle_ring = 1.0 - _smoothstep(0.065, 0.155, muzzle_radius)
     soot = np.clip(muzzle_depth * muzzle_ring * (0.66 + 0.34 * fbm), 0.0, 1.0)
     soot[glass] = 0.0
-    heat = np.clip(0.55 * soot + 0.20 * muzzle_lip.astype(np.float32) + 0.12 * dust, 0.0, 1.0)
+    heat = np.clip(0.55 * soot + 0.20 * muzzle_lip.astype(np.float32), 0.0, 1.0)
     heat[glass] = 0.0
     rear = _smoothstep(0.02, 0.16, py) * (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz)))
     grip = (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz))) * (1.0 - _smoothstep(0.18, 0.38, np.abs(py + 0.18)))
@@ -1482,7 +1494,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "polish": float(np.count_nonzero(polish > 0.50)) / surface_count,
     }
     limits = {
-        "chips": (0.005, 0.08), "scratches": (0.002, 0.06), "grime": (0.020, 0.35),
+        "chips": (0.010, 0.018), "scratches": (0.003, 0.007), "grime": (0.015, 0.030),
         "muzzleSoot": (0.10, 0.70), "polish": (0.02, 0.36),
     }
     for name, value in coverages.items():
@@ -1652,8 +1664,9 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "photoDerivedDetail": {
             "source": REFERENCE_TILE_NAME,
             "path": os.path.relpath(REFERENCE_TILE_PATH, REPOSITORY_ROOT).replace(os.sep, "/"),
+            "sourceFormat": "RGB8",
             "decodedRgbaSha256": REFERENCE_RGBA_SHA256,
-            "usage": "irregular high-pass source for model-specific atlas normal/smoothness/dust; shared legacy detail output is not assigned to live Unity weapon materials",
+            "usage": "zero-mean irregular high-pass source for model-specific atlas normal/smoothness/dust; shared legacy detail output is not assigned to live Unity weapon materials",
             "periodicSampling": True,
         },
     }
