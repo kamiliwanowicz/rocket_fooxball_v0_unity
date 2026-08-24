@@ -1,22 +1,22 @@
 # Rocket Lighting And Weapon Wear Coding Plan
 
-Status: accepted
+Status: accepted; VISUAL1 revision active
 Source: direct user request
 Run ID: direct-rocket-lighting-weapon-wear
 Plan ID: rocket-lighting-weapon-wear
 Attempt ID: direct-20260823-01
-Covered Requirements: brighter overall lighting; real UV-aware rocket-launcher wear; cheap approval preview; representative lighting approval; Blender work assigned to `sol_high`; shotgun and arena texture replacement excluded
+Covered Requirements: brighter overall lighting; contact-driven launcher and shotgun PBR wear; Quake-2 khaki-grey/black/red-glass palette; cheap approval preview; representative lighting approval; Blender work assigned to `sol_high`; arena texture replacement excluded
 Baseline: `fba1ec91ce33994d43713817238d6b9d8ff6af2e`
 Dependencies: None
 
 ## Objective
 
-Make the rocket launcher readable under brighter warm-neutral, Quake-inspired lighting and replace the current circles/lines/grid motifs with deterministic model-specific worn-metal PBR. Show a genuine Fast-mode result first, run a representative Development bake only after approval, then run at most one authorized Production bake after the representative result is approved.
+Make launcher and shotgun readable under accepted brighter warm-neutral, Quake-inspired lighting. Replace generic/random wear with deterministic model-specific contact wear and fine metal detail. Show genuine Fast-mode result first, run representative Development bake only after approval, then run at most one authorized Production bake after representative result approval.
 
 ## Scope
 
-- in: launcher UV0; launcher-specific five-map PBR atlas; deterministic wear; importer/material/validator wiring; sun/ambient/post/SSAO; stage/fingerprint/comparator closure; Fast/Persisted capture; Fast, Development, Production proof
-- out: shotgun or arena texture replacement; gameplay, collision, camera, animation, placement, silhouette, fog, bloom, or manual Unity UI edits
+- in: launcher UV0; shotgun FPS/world UV0; launcher and shotgun five-map PBR atlases; contact-driven wear; importer/material/validator wiring; accepted sun/ambient/post/SSAO; stage/fingerprint/comparator closure; Fast/Persisted capture; Fast, Development, Production proof
+- out: arena texture/mesh replacement; gameplay, collision, camera, animation, placement, weapon silhouette, fog, bloom, or manual Unity UI edits
 
 ## Decisions
 
@@ -25,13 +25,14 @@ Make the rocket launcher readable under brighter warm-neutral, Quake-inspired li
 - decision: T1 lands pipeline/capture support first; T2 generates raw art; T3 alone generates its Unity metas. CP2 groups T2+T3 and freezes a source/raw commit followed by a generated-meta commit, preventing a reviewed one-sided asset pair.
 - decision: atlas is `2048²`; zones in pixels are Metal `(32,864)-(2016,2016)`, Dark `(32,352)-(1312,832)`, Accent `(1344,352)-(2016,832)`, AccentCore `(32,32)-(2016,320)`; UV smart-project angle `66°`; island padding and gutter dilation `16 px`.
 - decision: preserve four group names/slot order/shell-core pairs, `1120` vertices, `2156` triangles, Blender bounds `(-.16,-.55,-.1313)..(.16,.20,.11)`, Blender `-Y`/Unity `+Z`, and FBX GUID.
-- decision: wear seed `0x5A17C9E3`; five-octave FBM base frequency `3.5`, lacunarity `2.07`, gain `.51`, warp `.23`; scratches use warped tangent frequencies `41/67/113`, threshold `.945`, breakup `.53`, height depth `.08`; chips require normalized edge `>.62` and FBM `>.54`; grime=`saturate(.45*cavity+.35*downward+.20*fbm-.38)`; soot=`smoothstep(-.38,-.55,y)*saturate(.65+.35*fbm)`; handling polish uses strength `.70` on `y>.05` rear and lower-central grip fields; height normal uses one-texel central differences, XY strength `2`, Z `1`, normalized.
-- decision: raster normals are barycentrically normalized. `hardEdge=max(saturate((6-boundaryDistancePx)/6),saturate((dihedralDegrees-25)/55))`. `cavity=saturate((1-dot(normal,normalize(meanNormalRadius6Px)))*4)`. `downward=saturate((-normal.y-.10)/.90)`. Scratch tangent is normalized projection of launcher local Y onto the triangle plane; when its length `<.05`, use projected local Z; UV derivatives transfer it into atlas space.
-- decision: rear polish=`smoothstep(.02,.16,y)*(1-smoothstep(.06,.14,abs(x)))*(1-smoothstep(.04,.13,abs(z)))`; grip polish uses the same X/Z envelope times `1-smoothstep(.18,.38,abs(y+.18))`; handling mask is `.70*max(rear,grip)*saturate(.65+.35*fbm)`. Channel order is base -> chip exposure -> scratch exposure -> soot darkening -> grime darkening/roughening -> polish smoothness only where `max(soot,grime)<.5`. Height is `clamp(-.12*chip-.08*scratch+.03*grime,-.20,.05)`. Chip takes exposed color/metallic/damaged smoothness; scratch takes a 70/30 exposed/base mix and damaged smoothness; soot multiplies base color by `.25` and caps metallic/smoothness at `.18`; grime multiplies by `lerp(1,.42,grime)`, blends metallic toward the grime value, and blends smoothness toward the grime value; allowed polish raises smoothness toward the handling value by its mask. These precedence rules apply identically in proof and bake.
-- decision: coverage ranges are chips `.5%-8%`, scratches `.2%-6%`, grime `5%-35%`, muzzle soot `10%-55%`, polish `2%-20%`; reject wear component area `>=64 px` with circularity `4*pi*A/P²>.78`, component principal length `>=96 px` with line RMS `<1.75 px`, or 8/16-pixel axis power `>2.5x` local spectral median; zero non-adjacent UV interior overlaps and each zone `>=15%` used coverage.
+- decision: wear uses metric distance to actual mesh edges with dihedral `>=30°` and vertices incident to `>=3` sharp edges. UV-island borders never create wear. Edge contact=`1-smoothstep(.0015,.006,edgeDistanceMeters)`; corner contact=`1-smoothstep(.002,.010,cornerDistanceMeters)`; muzzle wear uses each model profile's forward lip and edge contact.
+- decision: chips occur on Metal contact zones only. Dark receives subtle grey edge scuffs/soot. Accent and AccentCore receive zero chips/scratches and remain clean red glass. Fine directional scratches: width `.25-.8 mm`, length `4-22 mm`, tangent-aligned, contact-biased, height about `-.015`; chips height about `-.035`. Micro-brushed roughness/normal detail remains below silhouette scale. No random interior speckles.
+- decision: handling polish stays restricted to stock/grip/pump/rear handling zones. Channel order: base -> contact chip/scuff -> muzzle soot -> cavity grime -> handling polish -> micro-normal/roughness. Proof and bake share identical masks.
+- decision: proof schema `2`; require chip-contact precision `>=.90`, scratch-contact precision `>=.85`, Metal scratch precision `1`, glass wear pixels `0`, muzzle-soot precision `>=.90`, physical scratch width/length audit, zero non-adjacent UV interior overlaps, each zone `>=15%` utilization, two-run UV/texture hash identity.
 - decision: Base Color is RGBA8 sRGB; Normal/MetallicSmoothness/Occlusion/Emission are linear RGBA8; metallic=R, smoothness=A; AO=`clamp(1-.35*cavity-.15*grime,.45,1)`; exact core emission map value `.85`.
-- decision: Metal base/exposed `(.58,.52,.42)/(.86,.78,.62)`, metallic `.30/.92/.10` clean/exposed/grime, smoothness `.46/.68/.24/.18` clean/handling/damage/grime. Dark base/exposed `(.09,.10,.11)/(.55,.52,.45)`, metallic `.08/.88`, smoothness `.28/.55/.22/.15`. Accent base/exposed `(.68,.03,.015)/(.72,.46,.31)`, metallic `.05/.65`, smoothness `.72/.22/.18`. AccentCore base `(.25,.005,.002)`, metallic `.15`, smoothness `.80`.
-- decision: Unity BaseColor multipliers are white, except Accent alpha `.42`; metallic/smoothness/occlusion/bump multipliers are `1`; core emission is `(1,.08,.015)*2` multiplied by grayscale `.85`. Launcher uses no detail normal; shotgun stays byte-identical on legacy maps.
+- decision: Metal clean/exposed `(.50,.49,.43)/(.66,.67,.65)`; Dark clean/scuff `(.025,.028,.03)/(.15,.16,.17)`; Accent glass `(.55,0,0)`; AccentCore `(.16,0,0)`. Pure-red core emission `(1,0,0)*2`; no orange/yellow component. Existing PBR scalar ranges remain unless atlas owns per-pixel value.
+- decision: Unity BaseColor RGB multipliers are white; Accent alpha `.42`; metallic/smoothness/occlusion/bump multipliers `1`; launcher and shotgun use no legacy detail normal. Atlases own material variation.
+- decision: shotgun shared atlas is `2048²`. FPS zones: Metal `(32,1056)-(1344,2016)`, Dark `(1376,1056)-(2016,1344)`, Accent `(1376,1376)-(2016,1664)`, Core `(1376,1696)-(2016,2016)`. World zones: Metal `(32,32)-(1344,992)`, Dark `(1376,32)-(2016,320)`, Accent `(1376,352)-(2016,640)`, Core `(1376,672)-(2016,992)`. Padding/dilation `16 px`.
 - decision: atlas importer uses Clamp U/V, mipmaps, Trilinear, aniso `8`, max `2048`; Normal uses NormalMap; only Base Color is sRGB.
 - decision: six Blender previews are `640²`; object coverage `15%-85%`, clipped foreground `<.5%`, luminance SD `>.025`, chroma SD `>.015`.
 - decision: sun `(50,330,0)`, intensity `2.4`, shadows `.65`; ambient sky `(.42,.40,.36,1)`, equator `(.28,.25,.22,1)`, ground `(.16,.14,.12,1)`, persisted intensity `.85`, Fast intensity `1.05`; ACES, exposure `+.35 EV`, contrast `+2`, saturation `+2`; SSAO `.90`, direct `.15`; fog/bloom unchanged.
@@ -45,6 +46,13 @@ Make the rocket launcher readable under brighter warm-neutral, Quake-inspired li
 
 - notation: `->` sequential; `+` requires every named predecessor
 - gates: START = pinned snapshot, clean launch HEAD, baseline ancestor, unique branch/worktree/evidence, private Library, no owning Unity; JOIN1 = CP1-3 accepted at clean committed HEAD; VISUAL1 = user accepts Fast wear/readability/direct light; VISUAL2 = user accepts Development lighting and authorizes one Production bake; FINAL = CP6, full EditMode, separate ProductionValidate, clean commit
+
+## VISUAL1 Revision
+
+- trigger: user rejected weapon visuals at `bf1a7eaee10292dcbc02b06b8f92c728da92e9b8`; Fast lighting accepted and frozen
+- precedence: R1-R4 override earlier shotgun exclusion, legacy shotgun-material contract, random/UV-seam wear formulas, warm metal/red palette, and T5 VISUAL1 result
+- graph: `VISUAL1_REJECTED -> (R1 + R2) -> CPR1 -> R3 -> CPR2 -> R4 -> CPR3 -> VISUAL1_REV2 -> T6`
+- arena: no texture, material, mesh, tiling, or composition change in this plan; prior visible change came from lighting only
 
 ## Tasks
 
@@ -148,6 +156,50 @@ Make the rocket launcher readable under brighter warm-neutral, Quake-inspired li
 - review_focus: inactive Fast capture, source drift, out-of-inventory path, missing ledger/comparator/image binding
 - review_checkpoint: `CP4`
 
+### R1: Integrate model-specific shotgun atlas
+
+- objective: replace shotgun legacy tile materials with one five-map FPS/world atlas while preserving model/material GUIDs and gameplay wiring
+- owner: `worker-R1 (luna_max)`
+- dependencies: `VISUAL1_REJECTED`; parallel with R2 through bound disjoint ownership
+- owns: `Assets/_Game/Editor/MovementLab/{MovementLabContract.cs,MovementLabContractCatalog.cs,MovementLabImportPipeline.cs,MovementLabMaterialPipeline.cs,MovementLabPrefabPipeline.cs,MovementLabValidator.cs,MovementLabStageGraph.cs}`; `Assets/_Game/Editor/MovementLabBuilder.cs`; `Tools/Validation/Invoke-MovementLabWorkflow.ps1`; `Tools/Tests/MovementLabHarness.Tests.ps1`; `Tools/Tests/Fixtures/red-workflow.ps1.txt`
+- protected: Blender scripts; FBX/PNG/meta assets; generated outputs; lighting/capture sources
+- implementation: add `Shotgun_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png` contracts; narrow importer entry point covers both weapon FBXs and ten atlas maps; configure/validate Clamp, mipmaps, Trilinear, aniso `8`, max `2048`, BaseColor-only sRGB, NormalMap-only normal; validate eight UV zones across FPS/world FBXs; bind existing four `Shotgun*.mat` GUIDs to shotgun atlas with neutral multipliers and no detail normal; validate pure-red glass/emission; close exact generated inventory; bump invalidated stages
+- checks: harness and hidden Unity compile; no asset load required for compile; red fixture remains red
+- review_checkpoint: `CPR1`; fresh `sol_medium`; Critical/High only
+
+### R2: Reauthor launcher and shotgun contact wear
+
+- objective: generate two deterministic weapon surfaces matching revised wear/palette contract
+- owner: `worker-R2 (sol_high)`
+- dependencies: `VISUAL1_REJECTED`; parallel with R1 through bound disjoint ownership
+- owns: `Tools/Blender/generate_fps_rocket_launcher.py`; `Tools/Blender/generate_fps_shotgun.py`; `Assets/_Game/Models/{FpsRocketLauncher,FpsShotgun,Shotgun}.fbx`; `Assets/_Game/Textures/FpsRocketLauncher_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png`; `Assets/_Game/Textures/Shotgun_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png`; unique R2 proof/previews
+- protected: all metas; Unity/PowerShell source; retro textures; generated Unity outputs; lighting
+- implementation: preserve geometry/groups/slots/bounds/axes; repack shotgun eight zones; raster actual sharp-edge/corner/muzzle/handling fields; generate contact-only chips/scuffs, fine directional scratches, micro-brushed normal/roughness, muzzle soot, cavity grime, handling polish; enforce khaki-grey/black/pure-red-glass palette; preserve glass from wear; stage/audit/two-run compare/atomic promote; launcher six previews plus shotgun FPS/world previews
+- checks: Blender 4.5.10 factory-startup proofs; schema `2`; exact geometry/bounds/groups; UV zones/overlap; contact precision; glass zero-wear; scratch dimensions; five hashes per weapon identical across two runs; unrelated art unchanged
+- review_checkpoint: `CPR2` grouped with R3 because raw/meta pairs are indivisible
+
+### R3: Import revised weapon atlases
+
+- objective: generate only new shotgun PNG metas and validate both weapon atlas import contracts without raw-byte mutation
+- owner: `worker-R3 (luna_max)`
+- dependencies: `CPR1 + R2`
+- owns: `Assets/_Game/Models/{FpsRocketLauncher,FpsShotgun,Shotgun}.fbx.meta`; `Assets/_Game/Textures/FpsRocketLauncher_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png.meta`; `Assets/_Game/Textures/Shotgun_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png.meta`
+- protected: source/raw art/generated Unity outputs
+- implementation: harness; waited hidden narrow weapon import; preserve three FBX GUIDs and five launcher-map GUIDs; create five unique shotgun-map GUIDs; comparator from R2 frozen source/raw commit to WORKTREE; require exact five additions, intact pairs, zero dangling/GUID churn/unsupported
+- review_checkpoint: `CPR2`; fresh `sol_medium`; Critical/High only
+
+### R4: Rebuild and capture revised Fast candidate
+
+- objective: rebuild generated outputs and capture six images with accepted lighting plus revised launcher/shotgun surfaces
+- owner: `worker-R4 (luna_max)`
+- dependencies: `CPR1 + CPR2`
+- owns: Appendix A; unique R4 workflow/comparator/capture evidence
+- protected: source/raw/meta assets; lighting values; prior evidence
+- implementation: harness; Fast workflow; generated comparator; separate generated commit; exact-SHA Fast capture; no bake; no asset write during capture
+- done when: CPR3 accepts and VISUAL1_REV2 shows High launcher and shotgun first
+- checks: schema `1` workflow complete; `bakeCount=0`; comparator full actual coverage/zero failures; six `1920x1080` images; source clean; Unity/lock release
+- review_checkpoint: `CPR3`; fresh `sol_medium`; Critical/High only
+
 ### T6: Bake and capture Development candidate
 
 - objective: representative GI/reflection evidence after Fast approval
@@ -198,8 +250,9 @@ Make the rocket launcher readable under brighter warm-neutral, Quake-inspired li
 
 - exact head: clean committed accepted source/raw, generated launcher metas, and final generated-output commit when comparator selected paths
 - checks: proof: harness immediately before Test Runner -> pass under 90s; proof: waited hidden Unity `-batchmode -nographics -projectPath <project> -runTests -testPlatform EditMode -testResults <root>\<attemptId>\FINAL-editmode-<sha8>-<executionId>\results.xml -logFile <...>\unity.log` with no `-quit` -> exit 0, XML parses total>0/failed=0/inconclusive=0, release; proof: fresh harness immediately before validator -> pass; check_id=movementlab-production-validate; tier=production-final; owner=execution-orchestrator; expected_status=executed; command=`powershell -NoProfile -ExecutionPolicy Bypass -File Tools/Validation/Invoke-MovementLabWorkflow.ps1 -Mode ProductionValidate -ProjectPath <project> -EvidenceRoot <root>\<attemptId> -AttemptId FINAL-production-validate-<sha8>-<executionId>`; mutates_project=false; input_paths=[`Assets/_Game/Scenes/MovementLab.unity`,`Assets/_Game/Generated/MovementLabBuildManifest.json`,`Assets/_Game/Lighting/MovementLabLightingManifest.json`,`Assets/_Game/Lighting/MovementLabVolumeProfile.asset`,`Assets/_Game/Materials/WeaponMetal.mat`,`Assets/_Game/Materials/WeaponDark.mat`,`Assets/_Game/Materials/WeaponAccent.mat`,`Assets/_Game/Materials/WeaponAccentCore.mat`,`Assets/_Game/Models/FpsRocketLauncher.fbx`,`Assets/_Game/Textures/FpsRocketLauncher_BaseColor.png`,`Assets/_Game/Textures/FpsRocketLauncher_Normal.png`,`Assets/_Game/Textures/FpsRocketLauncher_MetallicSmoothness.png`,`Assets/_Game/Textures/FpsRocketLauncher_Occlusion.png`,`Assets/_Game/Textures/FpsRocketLauncher_Emission.png`]; run_point=CP6 plus full EditMode; evidence=schema 1, top complete, internal ledger owner `workflow-orchestrator`, production-validator ledger executed, validated_sha=final SHA, current production probe, persisted launcher/import/material/UV/lighting contracts, manifest digest, lockReleaseProof
-- inspect: `git diff --check`; clean status; Blender proof/hashes; exact meta GUIDs; launcher-only bindings; accepted Fast/Development image hashes; ProductionPrepare probe/manifest/comparator; XML; separate validator evidence
-- invalidation: accepted fix/merge reruns local and all downstream checks; lighting edit invalidates Development/Production; launcher edit invalidates T3 onward; capture-only edit invalidates affected capture/review; proof-tool edit invalidates proofs using it
+- revision-final-inputs: add `Assets/_Game/Models/{FpsShotgun,Shotgun}.fbx`; `Assets/_Game/Textures/Shotgun_{BaseColor,Normal,MetallicSmoothness,Occlusion,Emission}.png`; `Assets/_Game/Materials/Shotgun{Metal,Dark,Accent,AccentCore}.mat` to production validation input surface
+- inspect: `git diff --check`; clean status; Blender proof/hashes; exact meta GUIDs; model-specific launcher/shotgun bindings; accepted Fast/Development image hashes; ProductionPrepare probe/manifest/comparator; XML; separate validator evidence
+- invalidation: accepted fix/merge reruns local and all downstream checks; lighting edit invalidates Development/Production; launcher or shotgun edit invalidates weapon import through final; capture-only edit invalidates affected capture/review; proof-tool edit invalidates proofs using it
 
 ## Handoff
 
@@ -210,7 +263,7 @@ Make the rocket launcher readable under brighter warm-neutral, Quake-inspired li
 
 Definitions are finite literal expansion, not globs: `pair(p)` means exactly `p` and `p.meta`; `items(root,[a,b])` means exactly `pair(root/a)` and `pair(root/b)`.
 
-- importer metas exactly: `Assets/_Game/Models/{LowPolyRocket,ArenaKit,LowPolyCharacter,FpsKickRig,FpsRocketLauncher,FpsShotgun,Shotgun}.fbx.meta`; `Assets/_Game/Textures/{RetroGrass,RetroGrass_Normal,RetroGrass_MetallicSmoothness,RetroGrass_Occlusion,RetroWall,RetroWall_Normal,RetroWall_MetallicSmoothness,RetroWall_Occlusion,RetroTrim,RetroTrim_Normal,RetroTrim_MetallicSmoothness,RetroTrim_Occlusion,RetroHazard,RetroHazard_Normal,RetroHazard_MetallicSmoothness,RetroHazard_Occlusion,RetroDetailNormal,RetroShield,RetroBall,RetroBall_Normal,RetroBall_MetallicSmoothness,RetroBall_Occlusion,RetroWeaponMetal,RetroWeaponMetal_Normal,RetroWeaponMetal_MetallicSmoothness,RetroWeaponMetal_Occlusion,RetroWeaponDark,RetroWeaponDark_Normal,RetroWeaponDark_MetallicSmoothness,RetroWeaponDark_Occlusion,RetroWeaponAccent,RetroWeaponAccent_Normal,RetroWeaponAccent_MetallicSmoothness,RetroWeaponAccent_Occlusion,RetroWeaponAccent_Emission,RetroRocket,RetroRocket_Normal,RetroRocket_MetallicSmoothness,RetroRocket_Occlusion,RetroRocket_Emission,RetroRocketGlow,RetroExplosion,RetroSmoke,RetroSunnySky,FpsRocketLauncher_BaseColor,FpsRocketLauncher_Normal,FpsRocketLauncher_MetallicSmoothness,FpsRocketLauncher_Occlusion,FpsRocketLauncher_Emission}.png.meta`
+- importer metas exactly: `Assets/_Game/Models/{LowPolyRocket,ArenaKit,LowPolyCharacter,FpsKickRig,FpsRocketLauncher,FpsShotgun,Shotgun}.fbx.meta`; `Assets/_Game/Textures/{RetroGrass,RetroGrass_Normal,RetroGrass_MetallicSmoothness,RetroGrass_Occlusion,RetroWall,RetroWall_Normal,RetroWall_MetallicSmoothness,RetroWall_Occlusion,RetroTrim,RetroTrim_Normal,RetroTrim_MetallicSmoothness,RetroTrim_Occlusion,RetroHazard,RetroHazard_Normal,RetroHazard_MetallicSmoothness,RetroHazard_Occlusion,RetroDetailNormal,RetroShield,RetroBall,RetroBall_Normal,RetroBall_MetallicSmoothness,RetroBall_Occlusion,RetroWeaponMetal,RetroWeaponMetal_Normal,RetroWeaponMetal_MetallicSmoothness,RetroWeaponMetal_Occlusion,RetroWeaponDark,RetroWeaponDark_Normal,RetroWeaponDark_MetallicSmoothness,RetroWeaponDark_Occlusion,RetroWeaponAccent,RetroWeaponAccent_Normal,RetroWeaponAccent_MetallicSmoothness,RetroWeaponAccent_Occlusion,RetroWeaponAccent_Emission,RetroRocket,RetroRocket_Normal,RetroRocket_MetallicSmoothness,RetroRocket_Occlusion,RetroRocket_Emission,RetroRocketGlow,RetroExplosion,RetroSmoke,RetroSunnySky,FpsRocketLauncher_BaseColor,FpsRocketLauncher_Normal,FpsRocketLauncher_MetallicSmoothness,FpsRocketLauncher_Occlusion,FpsRocketLauncher_Emission,Shotgun_BaseColor,Shotgun_Normal,Shotgun_MetallicSmoothness,Shotgun_Occlusion,Shotgun_Emission}.png.meta`
 - prefab/controller pairs: `items(Assets/_Game/Prefabs,[Player.prefab,Ball.prefab,Rocket.prefab,ExplosionVfx.prefab,HealthPickup.prefab,ShotgunPickup.prefab,AmmoPickup.prefab])`; `items(Assets/_Game/Animations,[WorldCharacter.controller,FpsKick.controller])`
 - material pairs: `items(Assets/_Game/Materials,[Floor.mat,Wall.mat,Trim.mat,Hazard.mat,Marking.mat,Ball.mat,Rocket.mat,RocketHot.mat,ProjectileGlow.mat,GoalFrame.mat,Shield.mat,ShieldBlue.mat,ShieldRed.mat,ArenaPrimary.mat,ArenaTrim.mat,ArenaHazard.mat,ArenaGlow.mat,BallSurface.physicMaterial,Explosion.mat,ExplosionAdditive.mat,ExplosionSparks.mat,Smoke.mat,ContainmentGridCeiling.mat,ContainmentGridLongWall.mat,ContainmentGridEndWall.mat,RetroSunnySky.mat,CharacterRed.mat,CharacterBlack.mat,CharacterCream.mat,CharacterEye.mat,WeaponMetal.mat,WeaponDark.mat,WeaponAccentCore.mat,WeaponAccent.mat,ShotgunMetal.mat,ShotgunDark.mat,ShotgunAccentCore.mat,ShotgunAccent.mat,TeamBlue.mat,TeamRed.mat,TeamBlueShield.mat,TeamRedShield.mat,TeamBlueTrail.mat,TeamRedTrail.mat,HealthPickup.mat,AmmoShell.mat])`
 - generated pairs: `items(Assets/_Game/Generated,[BlueCircleCueMesh.asset,RedTriangleCueMesh.asset,MovementLabBuildManifest.json])`
