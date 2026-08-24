@@ -1,22 +1,40 @@
 # Rocket Lighting And Weapon Wear Coding Plan
 
-Status: accepted; VISUAL1 revision active
+Status: complete; weapon revision accepted; integration complete
 Source: direct user request
 Run ID: direct-rocket-lighting-weapon-wear
 Plan ID: rocket-lighting-weapon-wear
 Attempt ID: direct-20260823-01
-Covered Requirements: brighter overall lighting; contact-driven launcher and shotgun PBR wear; Quake-2 khaki-grey/black/red-glass palette; cheap approval preview; representative lighting approval; Blender work assigned to `sol_high`; arena texture replacement excluded
+Covered Requirements: accepted brighter lighting; contact-driven launcher and shotgun PBR wear; Quake-2 khaki-grey/black/red-glass palette; no periodic shotgun stripe; deterministic Blender proofs; Unity Fast rebuild; persisted screenshots; arena texture replacement excluded
 Baseline: `fba1ec91ce33994d43713817238d6b9d8ff6af2e`
 Dependencies: None
 
 ## Objective
 
-Make launcher and shotgun readable under accepted brighter warm-neutral, Quake-inspired lighting. Replace generic/random wear with deterministic model-specific contact wear and fine metal detail. Show genuine Fast-mode result first, run representative Development bake only after approval, then run at most one authorized Production bake after representative result approval.
+Make launcher and shotgun readable under accepted brighter warm-neutral, Quake-inspired lighting. Replace generic/random wear with deterministic model-specific contact wear and fine metal detail. Finalize through bake-free Fast rebuild, persisted semantic validation, and visual comparison.
 
 ## Scope
 
-- in: launcher UV0; shotgun FPS/world UV0; launcher and shotgun five-map PBR atlases; contact-driven wear; importer/material/validator wiring; accepted sun/ambient/post/SSAO; stage/fingerprint/comparator closure; Fast/Persisted capture; Fast, Development, Production proof
+- in: launcher UV0; shotgun FPS/world UV0; launcher and shotgun five-map PBR atlases; contact-driven wear; importer/material/validator wiring; accepted sun/ambient/post/SSAO; stage/fingerprint/comparator closure; Fast/Persisted capture; bake-free Fast proof
 - out: arena texture/mesh replacement; gameplay, collision, camera, animation, placement, weapon silhouette, fog, bloom, or manual Unity UI edits
+
+## Completion Record
+
+- precedence: final accepted outcome. Overrides pending Development/Production bake steps below.
+- final generated head: `5b006d5ae8df98e10290c1c528b86870683b36d6`
+- launcher: five-map `2048²` atlas; khaki metal, black structure, red glass; contact-biased edge/corner/muzzle wear; irregular scratches; left-side first-person framing retained.
+- shotgun: shared FPS/world five-map `2048²` atlas; launcher-matched material system; brown legacy surface removed; right-side first-person framing retained.
+- stripe fix: analytic `directional_grain` sine wave removed from smoothness and height/normal. `WeaponSurfaceReference.png` supplies irregular non-periodic scratch carrier. Directional brushing remains subtle and smoothness-only.
+- preserved: colour blocking, geometry, UV zones, material groups, FBX GUIDs, wear placement, weapon positions, launcher silhouette/appearance.
+- arena: no arena texture, material, mesh, tiling, or composition changes. Previously accepted lighting retained.
+- Blender proofs: launcher and shotgun two-run semantic/UV/texture identity passed; exact geometry/bounds/group audits passed; scratch coverage near `1.8%`; zero glass wear.
+- Unity Fast workflow: complete; `bakeCount=0`; changed generated outputs limited to build manifest, player prefab, and MovementLab scene.
+- generated comparator: `3/3` authoritative paths covered; dangling `0`; GUID churn `0`; broken pairs `0`; unsupported `0`.
+- semantic validation: separate Unity process reopened generated scene -> `Rocket Fooxball Movement Lab validation succeeded`.
+- capture: six persisted `1920x1080` High/Low images under `C:\wt\rlwb2987aece\direct-20260823-b2987aec\WMR5-persisted-5b006d5-exec088`.
+- visual comparison: fresh `sol_medium` adjudicator passed all checks. Shotgun periodic stripe absent; launcher not regressed; scratches visible; colours, geometry, wear placement, and positions preserved.
+- bake decision: Development and Production bakes skipped by user direction. No lighting bake run for final weapon revision.
+- final state: weapon work complete. Arena remains out of scope. T6/T7/production-final checks not required.
 
 ## Decisions
 
