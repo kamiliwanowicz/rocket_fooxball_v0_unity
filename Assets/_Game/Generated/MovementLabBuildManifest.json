@@ -1,9 +1,9 @@
 {
     "schemaVersion": 8,
-    "gitSha": "189be53359e91947fb77241fe920c1cb216c94f9",
+    "gitSha": "d9927da3e783b6cc3fcb14505166ceb1ede8391f",
     "manifestStatus": "stale",
-    "sourceSignature": "6581ea3c43d13c6e240623cc58f05d81ee2ec3558f00e9e42fed4d0a7c4f9218",
-    "generatedOutputFingerprint": "20306faf3a38fe3b6ea9e021e1c5553a897b7b670eb098840c6fb409928193cd",
+    "sourceSignature": "80349bd97b9e123ca930eb4a925ff416fc51266fd94053047b74efaa0e260fce",
+    "generatedOutputFingerprint": "760676b1b8d3d3275896f528180fb1ed27ace736feb27b6d368614a09e47c426",
     "unityVersion": "6000.5.6f1",
     "lightingInputDigest": "f753ebaeaa2910921e6a0efc3d36a6a5ab958ac0a707d4a21f708cd3338ad17c",
     "bakedProfile": "Production",
@@ -239,6 +239,7 @@
         "Assets/_Game/Textures/Shotgun_MetallicSmoothness.png.meta",
         "Assets/_Game/Textures/Shotgun_Normal.png.meta",
         "Assets/_Game/Textures/Shotgun_Occlusion.png.meta",
+        "Assets/_Game/Textures/WeaponMicroDetail_Normal.png.meta",
         "ProjectSettings/DynamicsManager.asset",
         "ProjectSettings/EditorBuildSettings.asset",
         "ProjectSettings/ProjectSettings.asset",
@@ -331,13 +332,13 @@
         "599476c8be31fcf469fa8827cac41190",
         "f680bd850ea46ac222451a76fa7ea7a2d47908e67b9ccd2b488ff1b04a49c346",
         "86c38d84feb12604dbd759c3dcb3b785",
-        "ce80fbf53ce13313d631061966fd3f9ce2c34da5d4acbeac2e8626c7b577d759",
+        "e6d80b7913d605f2e20c3474c99332601169689c55558ab91fd3506b80d72434",
         "a54eea506fb998d4683d215d9c9a0e02",
-        "fc868cf21b254166dcec68e73ac6be9a19a00833a830132c9b4abf733451e39a",
+        "b2d46cb9cf0801bdfd31f490f697b86827d1e6c996c55369827795b389c548af",
         "1e04bd978d45c0243b8f8fbcdc0ba73c",
-        "d375f71acfe15cf02216b235df590a74d1c6ba7bdcb4bc94fc674ea3a5688425",
+        "8ff10d1c139b86d2939570299e219dd1598f491714280ebb38c53f8070f03d0d",
         "c6f5e58dec533e24ea6a4dcd8f72b286",
-        "9da4931d432af366a422c4a60264842914e373cba42b727812c27ce905093a43",
+        "2d15b65e830c44dacaef1f59f8b32915a1afd0e2a45e93f27b941d6fce8f03db",
         "817be6b52fdb07c4b8d41c6761dbcb4c",
         "0427cb964fafb830791cd897770b3cd44e345f8faaad5a1c705be0b58522e88f",
         "5d840820311370a4fa91db22124cbe77",
@@ -361,9 +362,9 @@
         "8f518237f01f0174899ae335f094f6bf",
         "a0a04e2f64f422d9f69f809061bb0bf0a10372a4d188b7cceb2577a247fb45dd",
         "206700dba5958614fbc5c1fd3780428e",
-        "e24ab6786e4c8a89364e36f4ca866bba9e207c28997591f9a2c4b49d3b797689",
+        "5dc16a8dc551cc5d77c76487d71be63984405c8f9cfdbbf4b2d568bba3fe9656",
         "d228f595a03728c458f807a169c1e510",
-        "2033850914c8066fee451e009f52706f1d171860cd3ec40ecc8fbb9b8ea79754",
+        "cd0fa897793406382703ece61e6cbfa5ae340d72f84d8ff5fff552c54f2be105",
         "95a08e83329145446913507a91e610ed",
         "5979bda68030bdf4e9475ce7c370ffb4",
         "a5b342686133f6f4b9d5dc96fcbac238",
@@ -380,7 +381,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "41e3c5c4994c549eb9b2a5c428e26263555229fad63df5c9285e72309195cc83",
+        "6d012306af920c2a9591b203a78caf4945f3fac2516be67b3d023f2883ab409d",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -476,6 +477,7 @@
         "f96bd62e5cbab2b479aeaa6aba830da1",
         "58dffba9ebaaf0e48889fb096fea08e9",
         "96e12664d215b56499e5eb4ee7034eec",
+        "06a1b4c556ec8544e807dbe9cac4f3c0",
         "d75fd945eb70d73ae0cff2aa02bbbfaa02325daf64e54816227aa967ace5a11b",
         "9b1a184225163714f429d2d5fd84903c7078e4eeaa653315f1936c8c9ee53506",
         "41ceac85410c51b38aa50c2fce922dc6f9e952cf05eb4f003477e6c917a6d4b5",
@@ -489,10 +491,10 @@
             "schemaVersion": 8,
             "contractVersion": "importer-contract:5",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "31af2c885278fe9a3518b0b0edeb7fb317df34a49137b3c59cf85e2656370369",
-            "repositoryInputDigest": "31af2c885278fe9a3518b0b0edeb7fb317df34a49137b3c59cf85e2656370369",
+            "inputDigest": "b5c3e68af8cf19f96a2612ac9335eed05dc425f5a2a38a5bd6e1911ba7c0ac6f",
+            "repositoryInputDigest": "b5c3e68af8cf19f96a2612ac9335eed05dc425f5a2a38a5bd6e1911ba7c0ac6f",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "aea46f158d01d5736e1e8f65c96b89de2350cd8f2aeeea6bfadbce7a8366adef",
+            "outputDigest": "816dd05d30c9ca2a1cd5989d6ec370bfb48383d14483fa28f6150e564dd7afb8",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -803,6 +805,11 @@
                     "path": "Assets/_Game/Textures/Shotgun_Occlusion.png.meta",
                     "digest": "96e12664d215b56499e5eb4ee7034eec",
                     "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Textures/WeaponMicroDetail_Normal.png.meta",
+                    "digest": "06a1b4c556ec8544e807dbe9cac4f3c0",
+                    "missing": false
                 }
             ]
         },
@@ -811,10 +818,10 @@
             "schemaVersion": 8,
             "contractVersion": "material-prefab-contract:14;serialized:11",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "a189b331e49e7486187f58f003e012b771d5856c523247338efeeb7cbc75aaf4",
-            "repositoryInputDigest": "c5e742825ca20253ada8565a3aee1775586e55a98b3db7db53c6ed52603ec00f",
-            "dependencyDigest": "6b1c996605774822038511b8283413af4d3cd433b526c3de657af5a08182eef2",
-            "outputDigest": "84c0f71c459852d327a85b351a7caaca2747df55d593dd70be41ff870ca5c191",
+            "inputDigest": "850fbd142c4b305ccb8e1643324cf9ff2bffbfe68d691ce036d156709e4020a1",
+            "repositoryInputDigest": "4190bda7a82826669859b91106f3410cc14b7274f5db38b4038a7bc5a9997437",
+            "dependencyDigest": "9f91a0461aebd5248724cf750415f28795b2810b847ddb8128ef85d71627d37e",
+            "outputDigest": "0a760dbfb8db415de8a6b8a883cb20e1df4152b07bef0a7e5d6d288e659c9538",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1153,7 +1160,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShotgunAccent.mat",
-                    "digest": "ce80fbf53ce13313d631061966fd3f9ce2c34da5d4acbeac2e8626c7b577d759",
+                    "digest": "e6d80b7913d605f2e20c3474c99332601169689c55558ab91fd3506b80d72434",
                     "missing": false
                 },
                 {
@@ -1163,7 +1170,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShotgunAccentCore.mat",
-                    "digest": "fc868cf21b254166dcec68e73ac6be9a19a00833a830132c9b4abf733451e39a",
+                    "digest": "b2d46cb9cf0801bdfd31f490f697b86827d1e6c996c55369827795b389c548af",
                     "missing": false
                 },
                 {
@@ -1173,7 +1180,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShotgunDark.mat",
-                    "digest": "d375f71acfe15cf02216b235df590a74d1c6ba7bdcb4bc94fc674ea3a5688425",
+                    "digest": "8ff10d1c139b86d2939570299e219dd1598f491714280ebb38c53f8070f03d0d",
                     "missing": false
                 },
                 {
@@ -1183,7 +1190,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ShotgunMetal.mat",
-                    "digest": "9da4931d432af366a422c4a60264842914e373cba42b727812c27ce905093a43",
+                    "digest": "2d15b65e830c44dacaef1f59f8b32915a1afd0e2a45e93f27b941d6fce8f03db",
                     "missing": false
                 },
                 {
@@ -1303,7 +1310,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponDark.mat",
-                    "digest": "e24ab6786e4c8a89364e36f4ca866bba9e207c28997591f9a2c4b49d3b797689",
+                    "digest": "5dc16a8dc551cc5d77c76487d71be63984405c8f9cfdbbf4b2d568bba3fe9656",
                     "missing": false
                 },
                 {
@@ -1313,7 +1320,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/WeaponMetal.mat",
-                    "digest": "2033850914c8066fee451e009f52706f1d171860cd3ec40ecc8fbb9b8ea79754",
+                    "digest": "cd0fa897793406382703ece61e6cbfa5ae340d72f84d8ff5fff552c54f2be105",
                     "missing": false
                 },
                 {
@@ -1363,7 +1370,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "41e3c5c4994c549eb9b2a5c428e26263555229fad63df5c9285e72309195cc83",
+                    "digest": "6d012306af920c2a9591b203a78caf4945f3fac2516be67b3d023f2883ab409d",
                     "missing": false
                 },
                 {
@@ -1398,10 +1405,10 @@
             "schemaVersion": 8,
             "contractVersion": "gameplay-scene-contract:16;serialized:11",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "1ba6b0f90556863426cbaa7a25a708474e6e02229abe1b6f1502168fbb06303c",
-            "repositoryInputDigest": "dca209209bf2a6a1cfcd6a2dca475e2278337f0811b32e297b5cab76381017ed",
-            "dependencyDigest": "c6fd9a4e2c3785f059605bae1763be3b218f281a200f533a12bd03169d6b799c",
-            "outputDigest": "fbb77b882fb95a7cb5b0e15f0e82310f3a8a6d630a2d9457c1ff14098350dad5",
+            "inputDigest": "891e8599f180956bb6ebb4e552ccb7be300c94053ef362a0e515d6af2a827518",
+            "repositoryInputDigest": "72fc49792901b114aa931bdae7a6ee2620c7f623c87563356f41425bbd9714f8",
+            "dependencyDigest": "74bdae835807c06563220ffb39a9804f8c15c14c2e62623a4454c36085ff7f3c",
+            "outputDigest": "10f0800116552e788323f28578d54ed468a648354ca23d467ee796aa2a8f4ebe",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1410,7 +1417,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "7e25ffbb47403e0ad4a4dff010eac3cc90a5e9ff470bfc928b0c71a34a13887a",
+                    "digest": "b8e57af0a8e8000fc01d530b1f2f6f369f8319da47eed2d9da7c7e716a902787",
                     "missing": false
                 },
                 {
