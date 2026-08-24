@@ -285,8 +285,8 @@ function Test-AssetPairPath {
 
 function Get-PairState {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$AssetPaths,
-        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$MetadataPaths,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$AssetPaths,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MetadataPaths,
         [Parameter(Mandatory = $true)][string]$AssetPath
     )
     $assetPresent = $AssetPaths.Contains($AssetPath)
@@ -791,7 +791,7 @@ $semanticCheckedPathCount = 0
 $notCheckedPathCount = 0
 $unsupportedPathCount = 0
 $guidCounts = [ordered]@{ stable = 0; churn = 0; added = 0; removed = 0; invalid = 0 }
-$pairCounts = [ordered]@{ intact = 0; broken = 0 }
+$pairCounts = [ordered]@{ intact = 0; repaired = 0; broken = 0 }
 
 $basePresentPathSet = Get-PresentRevisionPathSet $Base $basePaths
 $headPresentPathSet = Get-PresentRevisionPathSet $Head $headPaths
@@ -827,7 +827,13 @@ foreach ($relative in $selected) {
         $baseState = Get-PairState $basePresentPathSet $baseMetadataPathSet $assetPath
         $headState = Get-PairState $headPresentPathSet $headMetadataPathSet $assetPath
         $guid = Get-GuidComparison $baseMeta $headMeta
-        $pairStatus = if ($baseState -eq 'one-sided' -or $headState -eq 'one-sided') { 'broken' } else { 'intact' }
+        $pairStatus = if ($headState -eq 'one-sided') {
+            'broken'
+        } elseif ($baseState -eq 'one-sided' -and $headState -in @('both-present', 'both-absent')) {
+            'repaired'
+        } else {
+            'intact'
+        }
         $pairMap.Add($assetPath, [pscustomobject]@{
             AssetPath = $assetPath
             MetadataPath = $metaPath
@@ -977,7 +983,7 @@ Write-Output ('COVERAGE: ' + $reportedPathCount + '/' + $selected.Count + ' auth
 Write-Output ('SEMANTIC: ' + $(if ($anyChanged) { 'changed' } else { 'identical' }))
 Write-Output ('DANGLING: ' + $totalHeadDangling + ' (base ' + $totalBaseDangling + ')')
 Write-Output ('GUID: stable ' + $guidCounts.stable + '; churn ' + $guidCounts.churn + '; added ' + $guidCounts.added + '; removed ' + $guidCounts.removed + '; invalid ' + $guidCounts.invalid)
-Write-Output ('PAIRS: intact ' + $pairCounts.intact + '; broken ' + $pairCounts.broken)
+Write-Output ('PAIRS: intact ' + $pairCounts.intact + '; repaired ' + $pairCounts.repaired + '; broken ' + $pairCounts.broken)
 Write-Output ('UNSUPPORTED: ' + $unsupportedPathCount)
 
 if ($FailOnDangling -and $totalHeadDangling -gt $totalBaseDangling) { exit 1 }

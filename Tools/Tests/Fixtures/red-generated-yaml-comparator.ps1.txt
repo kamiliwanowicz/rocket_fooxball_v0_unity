@@ -5,7 +5,9 @@ if ($explicitPathRequest -or $basePresent -ne $headPresent) {
 }
 
 # Historical red baseline also treated image/light data as one unsupported
-# bucket, with no byte/hash provenance, GUID evidence, or pair coverage.
+# bucket, with no byte/hash provenance, GUID evidence, or pair coverage. It
+# classified every one-sided transition as broken, including repaired pairs.
+$pairStatus = if ($baseState -eq 'one-sided' -or $headState -eq 'one-sided') { 'broken' } else { 'intact' }
 $coverageKind = 'unsupported binary'
 Write-Output '  kind       unsupported metadata'
 Write-Output 'COVERAGE: selected paths only'

@@ -344,9 +344,59 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
             return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
         }
         if ($text -notmatch '(?m)^GUID: stable 6; churn 1; added 0; removed 0; invalid 0$' -or
-            $text -notmatch '(?m)^PAIRS: intact 6; broken 1$' -or
+            $text -notmatch '(?m)^PAIRS: intact 6; repaired 0; broken 1$' -or
             $text -notmatch '(?m)^UNSUPPORTED: 0$') {
             return New-HarnessFail ('GUID/pair/unsupported summaries were incorrect: ' + $text)
+        }
+
+        # A raw asset committed before its .meta is added is a repaired pair once the
+        # working tree contains both files. The existing Wall fixture remains head-broken.
+        $repairedRoot = Join-Path $script:HarnessScratchRoot ('generated-yaml-comparator-repaired-' + [Guid]::NewGuid().ToString('N'))
+        try {
+            $repairedValidationDirectory = Join-Path $repairedRoot 'Tools/Validation'
+            $repairedMaterialsDirectory = Join-Path $repairedRoot 'Assets/_Game/Materials'
+            [IO.Directory]::CreateDirectory($repairedValidationDirectory) | Out-Null
+            [IO.Directory]::CreateDirectory($repairedMaterialsDirectory) | Out-Null
+            Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $repairedValidationDirectory 'Compare-GeneratedYaml.ps1') -Force
+            Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $repairedValidationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
+            # Floor.mat is already in the workflow's exact Appendix-A inventory.
+            $repairedAssetPath = Join-Path $repairedMaterialsDirectory 'Floor.mat'
+            $repairedAssetMetaPath = $repairedAssetPath + '.meta'
+            [IO.File]::WriteAllText($repairedAssetPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Repaired`n", (New-Object Text.UTF8Encoding($false)))
+            & git -C $repairedRoot init --quiet 2>$null
+            if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'repaired-pair fixture Git initialization failed' }
+            & git -C $repairedRoot config core.autocrlf false 2>$null
+            & git -C $repairedRoot config user.email 'harness@example.invalid' 2>$null
+            & git -C $repairedRoot config user.name 'Harness' 2>$null
+            & git -C $repairedRoot add . 2>$null
+            & git -C $repairedRoot commit --quiet -m 'repaired pair baseline' 2>$null
+            if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'repaired-pair fixture Git baseline commit failed' }
+            [IO.File]::WriteAllText($repairedAssetMetaPath, "fileFormatVersion: 2`nguid: 66666666666666666666666666666666`n", (New-Object Text.UTF8Encoding($false)))
+            $repairedComparatorPath = Join-Path $repairedValidationDirectory 'Compare-GeneratedYaml.ps1'
+            $repairedPreviousErrorAction = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $repairedOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $repairedComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/_Game/Materials/Floor.mat.meta' 2>&1)
+                $repairedExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $repairedPreviousErrorAction
+            }
+            if ($repairedExitCode -ne 0) {
+                $repairedDiagnostics = @($repairedOutput | ForEach-Object { '[' + $_.GetType().FullName + '] ' + ($_ | Out-String).Trim() }) -join ' | '
+                return New-HarnessFail ('repaired-pair comparator failed exit=' + $repairedExitCode + ': ' + $repairedDiagnostics)
+            }
+            $repairedText = $repairedOutput -join "`n"
+            if ($repairedText -notmatch '(?m)^  pair\s+repaired \(one-sided -> both-present\)$') {
+                return New-HarnessFail ('base one-sided/head complete pair was not reported as repaired: ' + $repairedText)
+            }
+            if ($repairedText -notmatch '(?m)^PAIRS: intact 0; repaired 1; broken 0$') {
+                return New-HarnessFail ('repaired-pair summary was incorrect: ' + $repairedText)
+            }
+            if ($text -notmatch '(?s)== Assets/_Game/Materials/Wall\.mat\.meta.*?pair\s+broken \(both-present -> one-sided\)') {
+                return New-HarnessFail 'existing head-broken pair was not reported with broken transition'
+            }
+        } finally {
+            Remove-Item -LiteralPath $repairedRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     } finally {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -364,7 +414,7 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
     if ($currentSource -notmatch '(?m)^Write-Output \(''COVERAGE: '' \+ \$reportedPathCount \+ ''/'' \+ \$selected.Count') {
         return New-HarnessFail 'coverage summary does not account for every selected authoritative changed path'
     }
-    return New-HarnessPass 'semantic change exit-0; stable/churn GUIDs; binary provenance; intact/broken pairs; unsupported type; exact summaries; red fixture fail-closed'
+    return New-HarnessPass 'semantic change exit-0; stable/churn GUIDs; binary provenance; intact/repaired/broken pairs; unsupported type; exact summaries; red fixture fail-closed'
 }
 
 function Test-RowFieldSweep {
