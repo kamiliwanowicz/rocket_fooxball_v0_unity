@@ -1086,6 +1086,8 @@ def compare_runs(first, second):
                 raise RuntimeError(f"Two-run semantic mismatch for {first_record['profile']} field {key}")
     if first["texture_hashes"] != second["texture_hashes"] or first["uv_hashes"] != second["uv_hashes"]:
         raise RuntimeError("Two-run UV/texture hash identity failed")
+    if first["masks"] != second["masks"]:
+        raise RuntimeError("Two-run mask audit mismatch")
     if first_records[0]["signature"] == first_records[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
     print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures=5, previews=13")

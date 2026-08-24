@@ -934,6 +934,183 @@ def _dilation_labels(surface):
     return labels
 
 
+def _scratch_hash32(value):
+    value = int(value) & 0xFFFFFFFF
+    value ^= value >> 16
+    value = (value * 0x7FEB352D) & 0xFFFFFFFF
+    value ^= value >> 15
+    value = (value * 0x846CA68B) & 0xFFFFFFFF
+    value ^= value >> 16
+    return value
+
+
+def _scratch_unit(value):
+    return _scratch_hash32(value) / 4294967295.0
+
+
+def _metric_scratch_segments(active, positions, normals, tangents, actual_contact, metal):
+    """Rasterize deterministic finite metric capsules on real Metal contact pixels."""
+    width_range = (0.00025, 0.00080)
+    length_range = (0.004, 0.022)
+    contact_threshold = 0.08
+    target_coverage = 0.003
+    candidate_indices = np.flatnonzero(metal & (actual_contact > contact_threshold))
+    if candidate_indices.size == 0:
+        raise RuntimeError("Scratch segment admission failed: no Metal contact candidates")
+
+    candidate_hashes = np.fromiter(
+        (_scratch_hash32(int(active[index]) ^ SEED) for index in candidate_indices),
+        dtype=np.uint32,
+        count=candidate_indices.size,
+    )
+    candidate_indices = candidate_indices[np.lexsort((candidate_indices, candidate_hashes))]
+
+    cell_size = length_range[1] + width_range[1]
+    grid_origin = np.min(positions, axis=0) - cell_size
+    grid_coordinates = np.floor((positions - grid_origin) / cell_size).astype(np.int64)
+    grid_dimensions = np.max(grid_coordinates, axis=0) + 1
+    grid_keys = (grid_coordinates[:, 0] * grid_dimensions[1] + grid_coordinates[:, 1]) * grid_dimensions[2] + grid_coordinates[:, 2]
+    grid_order = np.argsort(grid_keys, kind="stable")
+    sorted_grid_keys = grid_keys[grid_order]
+
+    def nearby_indices(minimum, maximum):
+        lower = np.maximum(0, np.floor((minimum - grid_origin) / cell_size).astype(np.int64))
+        upper = np.minimum(grid_dimensions - 1, np.floor((maximum - grid_origin) / cell_size).astype(np.int64))
+        buckets = []
+        for gx in range(int(lower[0]), int(upper[0]) + 1):
+            for gy in range(int(lower[1]), int(upper[1]) + 1):
+                for gz in range(int(lower[2]), int(upper[2]) + 1):
+                    key = (gx * int(grid_dimensions[1]) + gy) * int(grid_dimensions[2]) + gz
+                    first = int(np.searchsorted(sorted_grid_keys, key, side="left"))
+                    last = int(np.searchsorted(sorted_grid_keys, key, side="right"))
+                    if first < last:
+                        buckets.append(grid_order[first:last])
+        return np.concatenate(buckets) if buckets else np.empty(0, dtype=np.int64)
+
+    scratch = np.zeros(active.size, dtype=bool)
+    admitted_geometry = np.zeros(active.size, dtype=bool)
+    records = []
+    maximum_candidates = min(candidate_indices.size, max(4096, active.size // 150))
+    for candidate_index in candidate_indices[:maximum_candidates]:
+        atlas_index = int(active[candidate_index])
+        identity = atlas_index ^ SEED ^ (len(records) * 0x9E3779B9)
+        width = width_range[0] + (width_range[1] - width_range[0]) * _scratch_unit(identity ^ 0xA511E9B3)
+        length = length_range[0] + (length_range[1] - length_range[0]) * _scratch_unit(identity ^ 0x63D83595)
+        radius = width * 0.5
+        half_line = max(0.0, (length - width) * 0.5)
+
+        center = positions[candidate_index].astype(np.float64)
+        surface_normal = normals[candidate_index].astype(np.float64)
+        surface_normal /= max(np.linalg.norm(surface_normal), 1.0e-12)
+        tangent_axis = tangents[candidate_index].astype(np.float64)
+        tangent_axis -= surface_normal * float(np.dot(tangent_axis, surface_normal))
+        tangent_axis /= max(np.linalg.norm(tangent_axis), 1.0e-12)
+        bitangent_axis = np.cross(surface_normal, tangent_axis)
+        bitangent_axis /= max(np.linalg.norm(bitangent_axis), 1.0e-12)
+        angle = math.radians(-32.0 + 64.0 * _scratch_unit(identity ^ 0xC2B2AE35))
+        direction = math.cos(angle) * tangent_axis + math.sin(angle) * bitangent_axis
+        direction /= max(np.linalg.norm(direction), 1.0e-12)
+
+        extent = np.abs(direction) * half_line + radius
+        nearby = nearby_indices(center - extent, center + extent)
+        if nearby.size == 0:
+            continue
+        delta = positions[nearby].astype(np.float64) - center
+        longitudinal = delta @ direction
+        clamped_longitudinal = np.clip(longitudinal, -half_line, half_line)
+        closest_delta = delta - clamped_longitudinal[:, None] * direction
+        inside_capsule = np.einsum("ij,ij->i", closest_delta, closest_delta) <= radius * radius + 1.0e-16
+
+        gap_center = (-0.18 + 0.36 * _scratch_unit(identity ^ 0x27D4EB2F)) * length
+        gap_half_width = (0.018 + 0.035 * _scratch_unit(identity ^ 0x165667B1)) * length
+        breakup_keep = np.abs(longitudinal - gap_center) >= gap_half_width
+        normal_alignment = (normals[nearby].astype(np.float64) @ surface_normal) > 0.55
+        admitted_pixels = (
+            inside_capsule
+            & breakup_keep
+            & normal_alignment
+            & metal[nearby]
+            & (actual_contact[nearby] > contact_threshold)
+        )
+        if not np.any(admitted_pixels):
+            continue
+        rendered_indices = nearby[admitted_pixels]
+        new_pixels = rendered_indices[~scratch[rendered_indices]]
+        if new_pixels.size < 2:
+            continue
+
+        capsule_indices = nearby[inside_capsule & normal_alignment]
+        admitted_geometry[capsule_indices] = True
+        scratch[rendered_indices] = True
+        records.append(
+            {
+                "id": len(records),
+                "anchorAtlasIndex": atlas_index,
+                "centerMeters": [round(float(value), 9) for value in center],
+                "tangent": [round(float(value), 9) for value in tangent_axis],
+                "bitangent": [round(float(value), 9) for value in bitangent_axis],
+                "direction": [round(float(value), 9) for value in direction],
+                "angleFromTangentDegrees": round(math.degrees(angle), 6),
+                "widthMeters": round(width, 9),
+                "lengthMeters": round(length, 9),
+                "centerlineHalfLengthMeters": round(half_line, 9),
+                "capRadiusMeters": round(radius, 9),
+                "breakupGapCenterMeters": round(gap_center, 9),
+                "breakupGapHalfWidthMeters": round(gap_half_width, 9),
+                "renderedPixels": int(rendered_indices.size),
+                "newPixels": int(new_pixels.size),
+            }
+        )
+        if len(records) >= 32 and np.count_nonzero(scratch) / active.size >= target_coverage:
+            break
+
+    if not records:
+        raise RuntimeError("Scratch segment admission failed: no finite capsule rendered")
+    observed_widths = [record["widthMeters"] for record in records]
+    observed_lengths = [record["lengthMeters"] for record in records]
+    outside_geometry = int(np.count_nonzero(scratch & ~admitted_geometry))
+    outside_contact = int(np.count_nonzero(scratch & ~(actual_contact > contact_threshold)))
+    outside_metal = int(np.count_nonzero(scratch & ~metal))
+    if outside_geometry or outside_contact or outside_metal:
+        raise RuntimeError(
+            "Scratch pixel geometry contract failed: "
+            f"outsideGeometry={outside_geometry}, outsideContact={outside_contact}, outsideMetal={outside_metal}"
+        )
+    if min(observed_widths) < width_range[0] or max(observed_widths) > width_range[1]:
+        raise RuntimeError(f"Scratch width admission failed: {min(observed_widths)}..{max(observed_widths)}")
+    if min(observed_lengths) < length_range[0] or max(observed_lengths) > length_range[1]:
+        raise RuntimeError(f"Scratch length admission failed: {min(observed_lengths)}..{max(observed_lengths)}")
+
+    audit = {
+        "requiredWidth": list(width_range),
+        "requiredLength": list(length_range),
+        "observedWidth": [min(observed_widths), max(observed_widths)],
+        "observedLength": [min(observed_lengths), max(observed_lengths)],
+        "admittedSegmentCount": len(records),
+        "admittedSegments": records,
+        "raster": "metric finite capsule: signed longitudinal projection clamped to centerline, then Euclidean cap distance <= width/2",
+        "breakup": "deterministic longitudinal gap intersected with the finite capsule",
+        "tangentBitangentOriented": True,
+        "contactThreshold": contact_threshold,
+        "contactBiased": True,
+        "metalOnly": True,
+        "renderedMaskPixels": int(np.count_nonzero(scratch)),
+        "pixelAudit": {
+            "outsideSegmentGeometryPixels": outside_geometry,
+            "outsideContactPixels": outside_contact,
+            "outsideMetalPixels": outside_metal,
+        },
+    }
+    print(
+        "AUDIT scratch segments: "
+        f"count={len(records)}, pixels={audit['renderedMaskPixels']}, "
+        f"width={min(observed_widths):.9f}..{max(observed_widths):.9f}m, "
+        f"length={min(observed_lengths):.9f}..{max(observed_lengths):.9f}m, "
+        "outsideGeometry/contact/Metal=0/0/0"
+    )
+    return scratch, audit
+
+
 def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     raster = rasterize_surface(objects) if raster is None else raster
     surface = raster["surface"]
@@ -964,25 +1141,20 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     cavity = np.clip((1.0 - np.sum(normal_active * mean_normal.reshape(-1, 3)[active], axis=1)) * 4.0, 0.0, 1.0)
     downward = np.clip((-normal_active[:, 1] - 0.10) / 0.90, 0.0, 1.0)
 
-    tangent_active = tangent.reshape(-1, 3)[active]
-    tangent_coordinate = px * tangent_active[:, 0] + py * tangent_active[:, 1] + pz * tangent_active[:, 2]
-    warp_coordinate = tangent_coordinate + 0.23 * (fbm - 0.5)
-    scratch_ridge_count = np.zeros_like(fbm, dtype=np.uint8)
-    for index, frequency in enumerate((41.0, 67.0, 113.0)):
-        phase = ((SEED >> (index * 7)) & 0xFFFF) * (math.tau / 65536.0)
-        ridge = 0.5 + 0.5 * np.sin(math.tau * frequency * warp_coordinate + phase)
-        scratch_ridge_count += (ridge > 0.945).astype(np.uint8)
-    breakup = _trig_noise(px, py, pz, 29.0, (SEED & 0xFFFFFF) * (math.tau / 16777216.0)) > 0.53
-
     group_active = group.ravel()[active]
     core = group_active == GROUP_NAMES.index("WeaponAccentCore")
     metal = group_active == GROUP_NAMES.index("WeaponMetal")
     dark = group_active == GROUP_NAMES.index("WeaponDark")
     glass = (group_active == GROUP_NAMES.index("WeaponAccent")) | core
     chip = (actual_contact > 0.14) & (fbm > 0.52) & metal
-    # Directional scratch ridges are tangent aligned, finite by deterministic
-    # breakup windows, and admitted only in actual-edge contact fields.
-    scratch = (scratch_ridge_count >= 1) & breakup & (actual_contact > 0.08) & metal
+    scratch, scratch_audit = _metric_scratch_segments(
+        active,
+        position.reshape(-1, 3)[active],
+        normal_active,
+        tangent.reshape(-1, 3)[active],
+        actual_contact,
+        metal,
+    )
     dark_scuff = (actual_contact > 0.18) & (fbm > 0.58) & dark
     grime = np.clip(0.45 * cavity + 0.35 * downward + 0.20 * fbm - 0.38, 0.0, 1.0)
     grime[glass] = 0.0
@@ -1157,12 +1329,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "thresholds": {"chipContact": 0.90, "scratchContact": 0.85, "metalScratch": 1.0, "glassWearPixels": 0, "muzzleSoot": 0.90},
         "precision": precisions,
     }
-    mask_record["scratchDimensionsMeters"] = {
-        "requiredWidth": [0.00025, 0.0008], "requiredLength": [0.004, 0.022],
-        "observedWidth": [0.00025, 0.0008], "observedLength": [0.004, 0.022],
-        "audit": "generator segment parameters checked in metric model space before raster admission",
-        "tangentAligned": True, "contactBiased": True,
-    }
+    mask_record["scratchDimensionsMeters"] = scratch_audit
     return raster, output_hashes, mask_record, periodicity, channel_record
 
 
@@ -1410,6 +1577,8 @@ def compare_runs(first, second):
         raise RuntimeError(f"Two-run texture hash mismatch: {first['texture_hashes']} != {second['texture_hashes']}")
     if first["uv_hash"] != second["uv_hash"]:
         raise RuntimeError(f"Two-run UV hash mismatch: {first['uv_hash']} != {second['uv_hash']}")
+    if first["masks"] != second["masks"]:
+        raise RuntimeError("Two-run mask audit mismatch")
     print(f"PROOF two-run semantic+texture match: textures={len(TEXTURE_NAMES)}, preview-audits-per-run={len(PREVIEW_NAMES)}")
 
 
