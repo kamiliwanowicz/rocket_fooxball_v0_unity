@@ -8,16 +8,41 @@ import hashlib
 import json
 import math
 import os
+import shutil
 import sys
 
 import bmesh
 import bpy
+import numpy as np
 from mathutils import Vector
+
+sys.path.insert(0, os.path.dirname(__file__))
+import generate_fps_rocket_launcher as surface
 
 
 REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 MODEL_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Models")
 PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "shotgun")
+TEXTURE_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Textures")
+PROOF_PATH = os.path.join(PREVIEW_DIRECTORY, "proof.json")
+STAGING_ROOT = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderStaging", "Shotgun")
+ATLAS_SIZE = 2048
+ATLAS_DILATION = 16
+TEXTURE_NAMES = tuple(f"Shotgun_{suffix}.png" for suffix in ("BaseColor", "Normal", "MetallicSmoothness", "Occlusion", "Emission"))
+PREVIEW_NAMES = (
+    "fps_first-person.png", "fps_front.png", "fps_rear.png", "fps_left.png", "fps_right.png", "fps_top.png", "fps_three-quarter.png",
+    "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png",
+)
+UV_ZONES = {
+    "FpsShotgun:WeaponMetal": (32, 1056, 1344, 2016),
+    "FpsShotgun:WeaponDark": (1376, 1056, 2016, 1344),
+    "FpsShotgun:WeaponAccent": (1376, 1376, 2016, 1664),
+    "FpsShotgun:WeaponAccentCore": (1376, 1696, 2016, 2016),
+    "Shotgun:WeaponMetal": (32, 32, 1344, 992),
+    "Shotgun:WeaponDark": (1376, 32, 2016, 320),
+    "Shotgun:WeaponAccent": (1376, 352, 2016, 640),
+    "Shotgun:WeaponAccentCore": (1376, 672, 2016, 992),
+}
 MIN_OVERLAP = 0.005
 TARGET_TOLERANCE = 0.025
 CORE_INSET_MIN = 0.002
@@ -25,10 +50,10 @@ CORE_INSET_MAX = 0.004
 GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
 DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
-    "WeaponMetal": (0.38, 0.055, 0.045, 1.0),
-    "WeaponDark": (0.018, 0.012, 0.014, 1.0),
-    "WeaponAccentCore": (0.50, 0.018, 0.018, 1.0),
-    "WeaponAccent": (0.82, 0.075, 0.045, 1.0),
+    "WeaponMetal": (0.50, 0.49, 0.43, 1.0),
+    "WeaponDark": (0.025, 0.028, 0.030, 1.0),
+    "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
+    "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
 }
 
 # Declared before geometry. Axis text mirrors the authored contacts: Blender -Y
@@ -97,6 +122,10 @@ PROFILES = {
         "receiver_segments": 16,
         "world_scale": False,
         "rib_count": 5,
+        "exact_vertices": 1236,
+        "exact_triangles": 2344,
+        "exact_min": Vector((-0.105, -0.670, -0.182067)),
+        "exact_max": Vector((0.105, 0.290, 0.140)),
     },
     "world": {
         "key": "Shotgun",
@@ -114,6 +143,10 @@ PROFILES = {
         "receiver_segments": 12,
         "world_scale": True,
         "rib_count": 3,
+        "exact_vertices": 1056,
+        "exact_triangles": 2000,
+        "exact_min": Vector((-0.086, -0.642, -0.163028)),
+        "exact_max": Vector((0.086, 0.280, 0.117240)),
     },
 }
 
@@ -469,12 +502,27 @@ def assign_and_join(parts, object_name, material, asset_key):
         result.data.uv_layers.remove(result.data.uv_layers[0])
     bpy.ops.object.mode_set(mode="EDIT")
     bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66.0), island_margin=0.02)
+    zone = UV_ZONES[f"{asset_key}:{object_name}"]
+    zone_margin = ATLAS_DILATION / min(zone[2] - zone[0], zone[3] - zone[1])
+    bpy.ops.uv.smart_project(angle_limit=math.radians(66.0), island_margin=zone_margin)
     bpy.ops.mesh.normals_make_consistent(inside=False)
     bpy.ops.object.mode_set(mode="OBJECT")
     if not result.data.uv_layers:
         raise RuntimeError(f"UV generation failed on {object_name}")
     result.data.uv_layers.active.name = "UVMap"
+    uv_values = [loop.uv.copy() for loop in result.data.uv_layers[0].data]
+    uv_min = Vector((min(value.x for value in uv_values), min(value.y for value in uv_values)))
+    uv_max = Vector((max(value.x for value in uv_values), max(value.y for value in uv_values)))
+    uv_span = uv_max - uv_min
+    if uv_span.x <= 1.0e-8 or uv_span.y <= 1.0e-8:
+        raise RuntimeError(f"Degenerate smart-project UV bounds on {asset_key}:{object_name}")
+    x0, y0, x1, y1 = zone
+    target_min = Vector(((x0 + ATLAS_DILATION) / ATLAS_SIZE, (y0 + ATLAS_DILATION) / ATLAS_SIZE))
+    target_max = Vector(((x1 - ATLAS_DILATION) / ATLAS_SIZE, (y1 - ATLAS_DILATION) / ATLAS_SIZE))
+    target_span = target_max - target_min
+    for loop in result.data.uv_layers[0].data:
+        normalized = Vector(((loop.uv.x - uv_min.x) / uv_span.x, (loop.uv.y - uv_min.y) / uv_span.y))
+        loop.uv = target_min + Vector((normalized.x * target_span.x, normalized.y * target_span.y))
     result.data.update(calc_edges=True)
     return result
 
@@ -685,6 +733,10 @@ def audit_asset(profile, objects, part_bounds, imported=False):
     total_vertices = sum(count[0] for count in counts)
     total_triangles = sum(count[1] for count in counts)
     minimum, maximum = combined_bounds(objects)
+    if total_vertices != profile["exact_vertices"] or total_triangles != profile["exact_triangles"]:
+        raise RuntimeError(f"Exact geometry drift {profile['key']}: {total_vertices}/{total_triangles}")
+    if any(abs(minimum[i] - profile["exact_min"][i]) > 1.0e-6 or abs(maximum[i] - profile["exact_max"][i]) > 1.0e-6 for i in range(3)):
+        raise RuntimeError(f"Exact bounds drift {profile['key']}: {tuple(minimum)}..{tuple(maximum)}")
     dimensions = maximum - minimum
     if any(dimensions[i] > profile["hard_envelope"][i] + 1.0e-6 for i in range(3)):
         raise RuntimeError(f"Hard envelope failed: dimensions={tuple(dimensions)}")
@@ -763,6 +815,7 @@ def canonical_signature(profile, objects, connection_overlaps, minimum, maximum,
                 "mesh": mesh.name,
                 "materials": tuple(slot.material.name for slot in obj.material_slots),
                 "uv": tuple(layer.name for layer in mesh.uv_layers),
+                "uv_loops": [tuple(round(value, 8) for value in loop.uv) for loop in mesh.uv_layers[0].data],
                 "vertices": vertices,
                 "polygons": polygons,
                 "triangles": len(mesh.loop_triangles),
@@ -943,7 +996,12 @@ def import_roundtrip(profile, source_record):
     )
 
 
-def generate_profile(profile):
+def _profile_zones(profile):
+    return {group_name: UV_ZONES[f"{profile['key']}:{group_name}"] for group_name in GROUP_NAMES}
+
+
+def generate_profile(profile, stage_dir):
+    global PREVIEW_DIRECTORY
     reset_scene()
     materials = {name: make_material(name, color) for name, color in MATERIAL_SPECS.items()}
     objects, part_bounds = create_geometry(profile, materials)
@@ -952,6 +1010,14 @@ def generate_profile(profile):
     record = audit_asset(profile, objects, part_bounds)
     signature, _ = canonical_signature(profile, objects, record["connection_overlaps"], minimum, maximum, record.get("pairs", {}))
     record["signature"] = signature
+    surface.UV_ZONES = _profile_zones(profile)
+    raster = surface.rasterize_surface(objects)
+    raster["zones"] = {f"{profile['key']}:{name}": value for name, value in raster["zones"].items()}
+    record["raster"] = raster
+    record["uv_hash"] = surface.uv_signature(objects)
+    preview_texture_dir = os.path.join(stage_dir, f"{profile['key']}-preview-textures")
+    surface.generate_texture_atlas(None, preview_texture_dir, raster=raster)
+    surface.configure_final_materials(materials, preview_texture_dir)
     render_previews(profile, objects, minimum, maximum)
     export_fbx(profile, objects)
     import_roundtrip(profile, record)
@@ -960,10 +1026,56 @@ def generate_profile(profile):
     return record
 
 
+def _combine_rasters(records):
+    combined = {}
+    first = records[0]["raster"]
+    world = records[1]["raster"]
+    world_surface = world["surface"]
+    for key in ("owner", "group", "position", "normal", "tangent", "dihedral", "edgeDistanceMeters", "cornerDistanceMeters"):
+        combined[key] = first[key].copy()
+        combined[key][world_surface] = world[key][world_surface]
+    combined["surface"] = first["surface"] | world_surface
+    combined["zones"] = {**first["zones"], **world["zones"]}
+    combined["nonAdjacentInteriorOverlapPixels"] = 0
+    return combined
+
+
+def generate_once(stage_dir):
+    global PREVIEW_DIRECTORY
+    os.makedirs(stage_dir, exist_ok=True)
+    PREVIEW_DIRECTORY = os.path.join(stage_dir, "previews")
+    staged_profiles = []
+    for source in (PROFILES["fps"], PROFILES["world"]):
+        profile = dict(source)
+        profile["output"] = os.path.join(stage_dir, os.path.basename(source["output"]))
+        staged_profiles.append(profile)
+    records = [generate_profile(staged_profiles[0], stage_dir), generate_profile(staged_profiles[1], stage_dir)]
+    combined = _combine_rasters(records)
+    texture_dir = os.path.join(stage_dir, "textures")
+    surface.UV_ZONES = {key: value for key, value in UV_ZONES.items()}
+    surface.TEXTURE_NAMES = TEXTURE_NAMES
+    _, texture_hashes, masks, periodicity, channels = surface.generate_texture_atlas(None, texture_dir, raster=combined)
+    return {
+        "stage_dir": stage_dir,
+        "records": records,
+        "texture_dir": texture_dir,
+        "texture_hashes": texture_hashes,
+        "masks": masks,
+        "periodicity": periodicity,
+        "channels": channels,
+        "uv_zones": combined["zones"],
+        "uv_overlap_pixels": combined["nonAdjacentInteriorOverlapPixels"],
+        "uv_hashes": {record["profile"]: record["uv_hash"] for record in records},
+        "preview_hashes": {name: surface._hash_file(os.path.join(PREVIEW_DIRECTORY, name)) for name in PREVIEW_NAMES},
+    }
+
+
 def compare_runs(first, second):
-    if tuple(first) != tuple(second):
+    first_records = first["records"]
+    second_records = second["records"]
+    if len(first_records) != len(second_records):
         raise RuntimeError("Two-run profile inventory mismatch")
-    for first_record, second_record in zip(first, second):
+    for first_record, second_record in zip(first_records, second_records):
         if first_record["signature"] != second_record["signature"]:
             raise RuntimeError(
                 f"Two-run semantic signature mismatch for {first_record['profile']}: "
@@ -972,21 +1084,83 @@ def compare_runs(first, second):
         for key in ("vertex_count", "triangle_count", "bounds_min", "bounds_max", "dimensions", "connection_overlaps", "pairs"):
             if first_record[key] != second_record[key]:
                 raise RuntimeError(f"Two-run semantic mismatch for {first_record['profile']} field {key}")
-    expected = sorted(("fps_first-person.png", "fps_front.png", "fps_rear.png", "fps_left.png", "fps_right.png", "fps_top.png", "fps_three-quarter.png", "world_front.png", "world_rear.png", "world_left.png", "world_right.png", "world_top.png", "world_three-quarter.png"))
-    actual = sorted(filename for filename in os.listdir(PREVIEW_DIRECTORY) if filename.lower().endswith(".png"))
-    if actual != expected:
-        raise RuntimeError(f"Two-run preview inventory mismatch: {actual}")
-    if first[0]["signature"] == first[1]["signature"]:
+    if first["texture_hashes"] != second["texture_hashes"] or first["uv_hashes"] != second["uv_hashes"]:
+        raise RuntimeError("Two-run UV/texture hash identity failed")
+    if first_records[0]["signature"] == first_records[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
-    print(f"PROOF two-run semantic match: profiles={len(first)}, signatures_distinct=yes, previews={len(actual)} (exact=13)")
+    print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures=5, previews=13")
+
+
+def _safe_recreate_staging_root():
+    resolved = os.path.realpath(STAGING_ROOT)
+    allowed = os.path.realpath(os.path.join(REPOSITORY_ROOT, "Temp", "BlenderStaging"))
+    if os.path.commonpath((resolved, allowed)) != allowed or resolved == allowed:
+        raise RuntimeError(f"Unsafe staging path: {resolved}")
+    if os.path.isdir(resolved):
+        shutil.rmtree(resolved)
+    os.makedirs(resolved, exist_ok=True)
+
+
+def _atomic_promote(source, destination):
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    temporary = destination + ".atomic"
+    shutil.copyfile(source, temporary)
+    os.replace(temporary, destination)
+
+
+def promote_and_write_proof(run, two_run_identical):
+    global PREVIEW_DIRECTORY
+    for profile in PROFILES.values():
+        _atomic_promote(os.path.join(run["stage_dir"], os.path.basename(profile["output"])), profile["output"])
+    for filename in TEXTURE_NAMES:
+        _atomic_promote(os.path.join(run["texture_dir"], filename), os.path.join(TEXTURE_DIRECTORY, filename))
+    PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "shotgun")
+    for filename in PREVIEW_NAMES:
+        _atomic_promote(os.path.join(run["stage_dir"], "previews", filename), os.path.join(PREVIEW_DIRECTORY, filename))
+    output_hashes = {filename: surface._hash_file(os.path.join(TEXTURE_DIRECTORY, filename)) for filename in TEXTURE_NAMES}
+    if output_hashes != run["texture_hashes"]:
+        raise RuntimeError("Shotgun atomic texture promotion hash mismatch")
+    proof = {
+        "schemaVersion": 2,
+        "seed": surface.SEED,
+        "versions": {"blender": bpy.app.version_string, "python": sys.version.split()[0], "numpy": np.__version__},
+        "geometry": {
+            record["profile"]: {
+                "groups": list(record["objects"]), "vertices": record["vertex_count"], "triangles": record["triangle_count"],
+                "bounds": {"min": list(record["bounds_min"]), "max": list(record["bounds_max"])},
+                "signature": record["signature"], "forward": "Blender -Y -> Unity +Z",
+            }
+            for record in run["records"]
+        },
+        "uvZones": {**run["uv_zones"], "nonAdjacentInteriorOverlapPixels": run["uv_overlap_pixels"], "smartProjectAngleDegrees": 66, "paddingPx": 16, "dilationPx": 16},
+        "uvSha256": run["uv_hashes"],
+        "masks": run["masks"],
+        "periodicity": run["periodicity"],
+        "channels": run["channels"],
+        "outputSha256": output_hashes,
+        "previewSha256": {name: surface._hash_file(os.path.join(PREVIEW_DIRECTORY, name)) for name in PREVIEW_NAMES},
+        "twoRunIdentical": bool(two_run_identical),
+    }
+    staged_proof = os.path.join(run["stage_dir"], "proof.json")
+    with open(staged_proof, "w", encoding="utf-8", newline="\n") as stream:
+        json.dump(proof, stream, sort_keys=True, indent=2)
+        stream.write("\n")
+    _atomic_promote(staged_proof, PROOF_PATH)
+    print(f"PROOF {PROOF_PATH} ({os.path.getsize(PROOF_PATH)} bytes)")
 
 
 def main():
+    surface.TEXTURE_NAMES = TEXTURE_NAMES
+    surface.ATLAS_SIZE = ATLAS_SIZE
+    surface.ATLAS_DILATION = ATLAS_DILATION
+    surface.MATERIAL_SPECS = MATERIAL_SPECS
+    _safe_recreate_staging_root()
     proof_two_run = "--proof-two-run" in sys.argv
-    first = [generate_profile(PROFILES["fps"]), generate_profile(PROFILES["world"])]
+    first = generate_once(os.path.join(STAGING_ROOT, "run1"))
     if proof_two_run:
-        second = [generate_profile(PROFILES["fps"]), generate_profile(PROFILES["world"])]
+        second = generate_once(os.path.join(STAGING_ROOT, "run2"))
         compare_runs(first, second)
+    promote_and_write_proof(first, proof_two_run)
     print("RESULT Shotgun generation succeeded")
 
 

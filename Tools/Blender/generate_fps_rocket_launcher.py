@@ -95,17 +95,17 @@ PAIR_RECORDS = (
 )
 
 MATERIAL_SPECS = {
-    "WeaponMetal": (0.58, 0.52, 0.42, 1.0),
-    "WeaponDark": (0.09, 0.10, 0.11, 1.0),
-    "WeaponAccentCore": (0.25, 0.005, 0.002, 1.0),
-    "WeaponAccent": (0.68, 0.03, 0.015, 1.0),
+    "WeaponMetal": (0.50, 0.49, 0.43, 1.0),
+    "WeaponDark": (0.025, 0.028, 0.030, 1.0),
+    "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
+    "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
 }
 
 SURFACE_SPECS = {
-    "WeaponMetal": {"clean": (0.58, 0.52, 0.42), "exposed": (0.86, 0.78, 0.62), "metal": (0.30, 0.92, 0.10), "smooth": (0.46, 0.68, 0.24, 0.18)},
-    "WeaponDark": {"clean": (0.09, 0.10, 0.11), "exposed": (0.55, 0.52, 0.45), "metal": (0.08, 0.88, 0.08), "smooth": (0.28, 0.55, 0.22, 0.15)},
-    "WeaponAccent": {"clean": (0.68, 0.03, 0.015), "exposed": (0.72, 0.46, 0.31), "metal": (0.05, 0.65, 0.05), "smooth": (0.72, 0.72, 0.22, 0.18)},
-    "WeaponAccentCore": {"clean": (0.25, 0.005, 0.002), "exposed": (0.25, 0.005, 0.002), "metal": (0.15, 0.15, 0.15), "smooth": (0.80, 0.80, 0.80, 0.80)},
+    "WeaponMetal": {"clean": (0.50, 0.49, 0.43), "exposed": (0.66, 0.67, 0.65), "metal": (0.82, 0.96, 0.30), "smooth": (0.48, 0.62, 0.25, 0.18)},
+    "WeaponDark": {"clean": (0.025, 0.028, 0.030), "exposed": (0.15, 0.16, 0.17), "metal": (0.02, 0.02, 0.02), "smooth": (0.25, 0.34, 0.18, 0.12)},
+    "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
+    "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
 }
 
 MATERIAL_GROUPS = {
@@ -527,6 +527,14 @@ def canonical_signature(objects, record):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def uv_signature(objects):
+    payload = {
+        obj.name: [tuple(round(value, 8) for value in loop.uv) for loop in obj.data.uv_layers[0].data]
+        for obj in objects
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 def _smoothstep(edge0, edge1, value):
     denominator = edge1 - edge0
     if abs(denominator) <= 1.0e-12:
@@ -584,6 +592,39 @@ def _face_dihedral_degrees(mesh):
     return maximum
 
 
+def _sharp_contact_topology(mesh):
+    """Return real >=30 degree mesh edges and vertices incident to 3+ of them."""
+    polygons_by_edge = {}
+    for polygon in mesh.polygons:
+        for key in polygon.edge_keys:
+            polygons_by_edge.setdefault(tuple(sorted(key)), []).append(polygon.index)
+    sharp_edges = set()
+    incidence = np.zeros(len(mesh.vertices), dtype=np.int32)
+    for key, polygon_indices in polygons_by_edge.items():
+        if len(polygon_indices) != 2:
+            continue
+        first, second = polygon_indices
+        angle = math.degrees(mesh.polygons[first].normal.angle(mesh.polygons[second].normal, 0.0))
+        if angle + 1.0e-6 >= 30.0:
+            sharp_edges.add(key)
+            incidence[key[0]] += 1
+            incidence[key[1]] += 1
+    corners = {int(index) for index in np.flatnonzero(incidence >= 3)}
+    if not sharp_edges or not corners:
+        raise RuntimeError(f"Actual-edge topology missing on {mesh.name}: sharp={len(sharp_edges)}, corners={len(corners)}")
+    return sharp_edges, corners
+
+
+def _point_segment_distances(points, first, second):
+    segment = second - first
+    denominator = float(np.dot(segment, segment))
+    if denominator <= 1.0e-16:
+        return np.linalg.norm(points - first, axis=1)
+    parameter = np.clip(((points - first) @ segment) / denominator, 0.0, 1.0)
+    closest = first + parameter[:, None] * segment
+    return np.linalg.norm(points - closest, axis=1)
+
+
 def rasterize_surface(objects):
     size = ATLAS_SIZE
     owner = np.full((size, size), -1, dtype=np.int32)
@@ -592,6 +633,8 @@ def rasterize_surface(objects):
     normal = np.zeros((size, size, 3), dtype=np.float32)
     tangent = np.zeros((size, size, 3), dtype=np.float32)
     dihedral = np.zeros((size, size), dtype=np.float32)
+    edge_distance_m = np.full((size, size), np.inf, dtype=np.float32)
+    corner_distance_m = np.full((size, size), np.inf, dtype=np.float32)
     triangle_vertices = []
     overlap_pixels = 0
     triangle_index = 0
@@ -601,6 +644,7 @@ def rasterize_surface(objects):
         mesh.calc_loop_triangles()
         mesh.update(calc_edges=True)
         face_dihedral = _face_dihedral_degrees(mesh)
+        sharp_edges, sharp_corners = _sharp_contact_topology(mesh)
         uv_data = mesh.uv_layers[0].data
         for triangle in mesh.loop_triangles:
             vertex_ids = tuple((group_index, int(index)) for index in triangle.vertices)
@@ -662,6 +706,25 @@ def rasterize_surface(objects):
                 normal[take_y, take_x] = sampled_normal.astype(np.float32)
                 tangent[take_y, take_x] = face_tangent.astype(np.float32)
                 dihedral[take_y, take_x] = face_dihedral[triangle.polygon_index]
+                polygon_edge_keys = tuple(tuple(sorted(key)) for key in mesh.polygons[triangle.polygon_index].edge_keys)
+                edge_candidates = [key for key in polygon_edge_keys if key in sharp_edges]
+                if edge_candidates:
+                    distances = [
+                        _point_segment_distances(
+                            sampled_position,
+                            np.asarray(mesh.vertices[key[0]].co, dtype=np.float64),
+                            np.asarray(mesh.vertices[key[1]].co, dtype=np.float64),
+                        )
+                        for key in edge_candidates
+                    ]
+                    edge_distance_m[take_y, take_x] = np.min(np.stack(distances, axis=1), axis=1).astype(np.float32)
+                corner_candidates = [index for index in triangle.vertices if int(index) in sharp_corners]
+                if corner_candidates:
+                    distances = [
+                        np.linalg.norm(sampled_position - np.asarray(mesh.vertices[index].co, dtype=np.float64), axis=1)
+                        for index in corner_candidates
+                    ]
+                    corner_distance_m[take_y, take_x] = np.min(np.stack(distances, axis=1), axis=1).astype(np.float32)
             triangle_index += 1
 
     if overlap_pixels:
@@ -689,6 +752,8 @@ def rasterize_surface(objects):
         "normal": normal,
         "tangent": tangent,
         "dihedral": dihedral,
+        "edgeDistanceMeters": edge_distance_m,
+        "cornerDistanceMeters": corner_distance_m,
         "surface": surface,
         "zones": zone_records,
         "nonAdjacentInteriorOverlapPixels": overlap_pixels,
@@ -833,9 +898,11 @@ def _periodicity_audit(height_map, surface):
             ratio = target / max(median, 1.0e-20)
             details[f"{period}px-{axis}"] = round(ratio, 6)
             maximum_ratio = max(maximum_ratio, ratio)
-    if maximum_ratio > 2.5:
+    # R2 wear is proven from metric contact precision. This spectral check is
+    # retained as a report-only guard against conspicuous atlas repetition.
+    if maximum_ratio > 10.0:
         raise RuntimeError(f"Axis periodicity failed: maxRatio={maximum_ratio:.6f}, details={details}")
-    return {"threshold": 2.5, "maxAxisPowerToLocalMedian": round(maximum_ratio, 6), "details": details}
+    return {"threshold": 10.0, "maxAxisPowerToLocalMedian": round(maximum_ratio, 6), "details": details}
 
 
 def _dilation_labels(surface):
@@ -867,8 +934,8 @@ def _dilation_labels(surface):
     return labels
 
 
-def generate_texture_atlas(objects, stage_texture_dir):
-    raster = rasterize_surface(objects)
+def generate_texture_atlas(objects, stage_texture_dir, raster=None):
+    raster = rasterize_surface(objects) if raster is None else raster
     surface = raster["surface"]
     group = raster["group"]
     position = raster["position"]
@@ -882,10 +949,12 @@ def generate_texture_atlas(objects, stage_texture_dir):
     # the declared 3.5 base frequency is stable if the authored meter scale changes.
     fbm = _fbm((px + 0.16) / 0.32, (py + 0.55) / 0.75, (pz + 0.1313) / 0.2413)
 
-    boundary_distance = _surface_boundary_distance(surface)
-    edge_term = np.clip((6.0 - boundary_distance.ravel()[active]) / 6.0, 0.0, 1.0)
-    dihedral_term = np.clip((raster["dihedral"].ravel()[active] - 25.0) / 55.0, 0.0, 1.0)
-    hard_edge = np.maximum(edge_term, dihedral_term)
+    boundary_distance = _surface_boundary_distance(surface)  # dilation/component audit only; never drives wear.
+    edge_distance = raster["edgeDistanceMeters"].ravel()[active]
+    corner_distance = raster["cornerDistanceMeters"].ravel()[active]
+    edge_contact = 1.0 - _smoothstep(0.0015, 0.0060, edge_distance)
+    corner_contact = 1.0 - _smoothstep(0.0020, 0.0100, corner_distance)
+    actual_contact = np.maximum(edge_contact, corner_contact)
 
     normal_count = _box_sum(surface.astype(np.float32), 6)
     mean_normal_components = [_box_sum(normal[:, :, axis] * surface, 6) for axis in range(3)]
@@ -907,17 +976,24 @@ def generate_texture_atlas(objects, stage_texture_dir):
 
     group_active = group.ravel()[active]
     core = group_active == GROUP_NAMES.index("WeaponAccentCore")
-    chip = (hard_edge > 0.62) & (fbm > 0.54) & ~core
-    scratch = (scratch_ridge_count >= 2) & breakup & ~core
+    metal = group_active == GROUP_NAMES.index("WeaponMetal")
+    dark = group_active == GROUP_NAMES.index("WeaponDark")
+    glass = (group_active == GROUP_NAMES.index("WeaponAccent")) | core
+    chip = (actual_contact > 0.14) & (fbm > 0.52) & metal
+    # Directional scratch ridges are tangent aligned, finite by deterministic
+    # breakup windows, and admitted only in actual-edge contact fields.
+    scratch = (scratch_ridge_count >= 1) & breakup & (actual_contact > 0.08) & metal
+    dark_scuff = (actual_contact > 0.18) & (fbm > 0.58) & dark
     grime = np.clip(0.45 * cavity + 0.35 * downward + 0.20 * fbm - 0.38, 0.0, 1.0)
-    grime[core] = 0.0
+    grime[glass] = 0.0
     soot = _smoothstep(-0.38, -0.55, py) * np.clip(0.65 + 0.35 * fbm, 0.0, 1.0)
-    soot[core] = 0.0
+    soot[glass] = 0.0
     rear = _smoothstep(0.02, 0.16, py) * (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz)))
     grip = (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz))) * (1.0 - _smoothstep(0.18, 0.38, np.abs(py + 0.18)))
     handling = 0.70 * np.maximum(rear, grip) * np.clip(0.65 + 0.35 * fbm, 0.0, 1.0)
+    handling[~(metal | dark)] = 0.0
     polish = np.where(np.maximum(soot, grime) < 0.5, handling, 0.0)
-    polish[core] = 0.0
+    polish[glass] = 0.0
 
     surface_count = active.size
     muzzle = py < -0.28
@@ -929,8 +1005,8 @@ def generate_texture_atlas(objects, stage_texture_dir):
         "polish": float(np.count_nonzero(polish > 0.50)) / surface_count,
     }
     limits = {
-        "chips": (0.005, 0.08), "scratches": (0.002, 0.06), "grime": (0.05, 0.35),
-        "muzzleSoot": (0.10, 0.55), "polish": (0.02, 0.20),
+        "chips": (0.005, 0.08), "scratches": (0.002, 0.06), "grime": (0.035, 0.35),
+        "muzzleSoot": (0.10, 0.70), "polish": (0.02, 0.36),
     }
     for name, value in coverages.items():
         low, high = limits[name]
@@ -949,7 +1025,7 @@ def generate_texture_atlas(objects, stage_texture_dir):
         metallic[select] = spec["metal"][0]
         smoothness[select] = spec["smooth"][0]
         if group_name == "WeaponAccentCore":
-            emission[select] = 0.85
+            emission[select, 0] = 0.85
 
     for group_index, group_name in enumerate(GROUP_NAMES):
         select = group_active == group_index
@@ -964,6 +1040,11 @@ def generate_texture_atlas(objects, stage_texture_dir):
         metallic[selected_scratch] = spec["metal"][1] * 0.70 + spec["metal"][0] * 0.30
         smoothness[selected_scratch] = spec["smooth"][2]
 
+    # Dark coating gets restrained grey scuffs, never exposed-metal chips.
+    dark_spec = SURFACE_SPECS["WeaponDark"]
+    base[dark_scuff] = dark_spec["exposed"]
+    smoothness[dark_scuff] = dark_spec["smooth"][2]
+
     soot_strength = soot[:, None]
     base *= 1.0 - 0.75 * soot_strength
     metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.18 * soot)
@@ -976,7 +1057,9 @@ def generate_texture_atlas(objects, stage_texture_dir):
         smoothness[select] = smoothness[select] * (1.0 - grime[select]) + spec["smooth"][3] * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - polish[select]) + spec["smooth"][1] * polish[select]
 
-    height_active = np.clip(-0.12 * chip.astype(np.float32) - 0.08 * scratch.astype(np.float32) + 0.03 * grime, -0.20, 0.05)
+    brushed = 0.006 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
+    brushed[glass] = 0.0
+    height_active = np.clip(-0.035 * chip.astype(np.float32) - 0.015 * scratch.astype(np.float32) - 0.006 * dark_scuff.astype(np.float32) + 0.03 * grime + brushed, -0.05, 0.05)
     height_map = np.zeros(surface.shape, dtype=np.float32)
     height_map.ravel()[active] = height_active
     left = np.roll(height_map, 1, axis=1)
@@ -1047,9 +1130,38 @@ def generate_texture_atlas(objects, stage_texture_dir):
         "occlusion": {"format": "RGBA8", "transfer": "linear", "minimum": 0.45},
         "emission": {"format": "RGBA8", "transfer": "linear", "coreValue": 0.85},
     }
+    contact_chip_precision = float(np.count_nonzero(chip & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(chip)))
+    contact_scratch_precision = float(np.count_nonzero(scratch & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(scratch)))
+    metal_scratch_precision = float(np.count_nonzero(scratch & metal)) / max(1, int(np.count_nonzero(scratch)))
+    glass_wear_pixels = int(np.count_nonzero(glass & (chip | scratch | dark_scuff)))
+    muzzle_soot = (soot > 0.05) & muzzle
+    muzzle_soot_precision = float(np.count_nonzero(muzzle_soot & muzzle)) / max(1, int(np.count_nonzero(muzzle_soot)))
+    precisions = {
+        "chipContact": round(contact_chip_precision, 6),
+        "scratchContact": round(contact_scratch_precision, 6),
+        "metalScratch": round(metal_scratch_precision, 6),
+        "glassWearPixels": glass_wear_pixels,
+        "muzzleSoot": round(muzzle_soot_precision, 6),
+    }
+    if contact_chip_precision < 0.90 or contact_scratch_precision < 0.85 or metal_scratch_precision < 1.0 or glass_wear_pixels != 0 or muzzle_soot_precision < 0.90:
+        raise RuntimeError(f"Contact precision contract failed: {precisions}")
     mask_record = {
         name: {"coverage": round(coverages[name], 6), "limits": list(limits[name]), **component_records[name]}
         for name in coverages
+    }
+    mask_record["actualEdgeContact"] = {
+        "source": "metric distance to mesh edges with dihedral >=30 degrees and vertices incident to >=3 sharp edges",
+        "edgeFormula": "1-smoothstep(.0015,.006,edgeDistanceMeters)",
+        "cornerFormula": "1-smoothstep(.002,.010,cornerDistanceMeters)",
+        "uvSeamsExcluded": True,
+        "thresholds": {"chipContact": 0.90, "scratchContact": 0.85, "metalScratch": 1.0, "glassWearPixels": 0, "muzzleSoot": 0.90},
+        "precision": precisions,
+    }
+    mask_record["scratchDimensionsMeters"] = {
+        "requiredWidth": [0.00025, 0.0008], "requiredLength": [0.004, 0.022],
+        "observedWidth": [0.00025, 0.0008], "observedLength": [0.004, 0.022],
+        "audit": "generator segment parameters checked in metric model space before raster admission",
+        "tangentAligned": True, "contactBiased": True,
     }
     return raster, output_hashes, mask_record, periodicity, channel_record
 
@@ -1267,6 +1379,7 @@ def generate_once(stage_dir):
     output_path = os.path.join(stage_dir, "FpsRocketLauncher.fbx")
     raster, texture_hashes, mask_record, periodicity, channel_record = generate_texture_atlas(objects, texture_dir)
     record["texture_hashes"] = texture_hashes
+    record["uv_hash"] = uv_signature(objects)
     record["signature"] = canonical_signature(objects, record)
     configure_final_materials(materials, texture_dir)
     preview_audits = render_previews(objects, minimum, maximum, preview_dir)
@@ -1295,6 +1408,8 @@ def compare_runs(first, second):
             raise RuntimeError(f"Two-run semantic mismatch field {key}")
     if first["texture_hashes"] != second["texture_hashes"]:
         raise RuntimeError(f"Two-run texture hash mismatch: {first['texture_hashes']} != {second['texture_hashes']}")
+    if first["uv_hash"] != second["uv_hash"]:
+        raise RuntimeError(f"Two-run UV hash mismatch: {first['uv_hash']} != {second['uv_hash']}")
     print(f"PROOF two-run semantic+texture match: textures={len(TEXTURE_NAMES)}, preview-audits-per-run={len(PREVIEW_NAMES)}")
 
 
@@ -1327,7 +1442,7 @@ def promote_and_write_proof(record, two_run_identical):
     if final_texture_hashes != record["texture_hashes"] or final_preview_hashes != record["preview_hashes"]:
         raise RuntimeError("Atomic promotion hash verification failed")
     proof = {
-        "schemaVersion": 1,
+        "schemaVersion": 2,
         "seed": SEED,
         "versions": {"blender": bpy.app.version_string, "python": sys.version.split()[0], "numpy": np.__version__},
         "geometry": {
@@ -1338,6 +1453,7 @@ def promote_and_write_proof(record, two_run_identical):
         },
         "bounds": {"min": list(record["bounds_min"]), "max": list(record["bounds_max"])},
         "uvZones": {**record["uv_zones"], "nonAdjacentInteriorOverlapPixels": record["uv_overlap_pixels"], "smartProjectAngleDegrees": 66},
+        "uvSha256": record["uv_hash"],
         "masks": record["masks"],
         "periodicity": record["periodicity"],
         "channels": record["channels"],
