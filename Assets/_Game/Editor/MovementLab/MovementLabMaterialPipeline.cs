@@ -111,7 +111,8 @@ namespace RocketFooxball.Editor
                     material.SetTexture("_OcclusionMap", specification.OcclusionMap);
                     material.SetTexture("_EmissionMap", specification.EmissionMap);
                     material.SetTexture("_DetailNormalMap", specification.DetailNormalMap);
-                    material.SetFloat("_DetailNormalMapScale", 1f);
+                    material.SetTextureScale("_DetailNormalMap", specification.DetailNormalTiling);
+                    material.SetFloat("_DetailNormalMapScale", specification.DetailNormalScale);
                     material.SetTextureScale("_BaseMap", specification.TextureScale);
                     var hasEmission = specification.EmissionMap != null || specification.EmissionStrength > 0.001f;
                     material.globalIlluminationFlags = hasEmission
@@ -174,7 +175,7 @@ namespace RocketFooxball.Editor
                     var material = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         name, LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
                         LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
-                        null, LoadTexture(DetailNormalTexturePath), Vector2.one, WeaponAccentShellBaseColor,
+                        null, null, Vector2.one, WeaponAccentShellBaseColor,
                         Color.clear, 0f, WeaponAccentShellMetallic, WeaponAccentShellSmoothness,
                         WeaponAccentShellOcclusion, WeaponAccentShellBumpScale));
                     SetTransparentWeaponShellState(material);
@@ -191,7 +192,7 @@ namespace RocketFooxball.Editor
                     var material = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         name, LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
                         LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
-                        LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one,
+                        LoadTexture(WeaponAccentEmissionTexturePath), null, Vector2.one,
                         WeaponAccentCoreBaseColor, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
                         WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness, WeaponAccentCoreOcclusion,
                         WeaponAccentCoreBumpScale));
@@ -384,12 +385,19 @@ namespace RocketFooxball.Editor
                     ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, null, scale, label);
                 }
 
-                internal static void ValidatePbrMaterial(Material material, Texture2D baseMap, Texture2D normalMap, Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, Texture2D detailNormalMap, Vector2 scale, string label)
+                internal static void ValidatePbrMaterial(Material material, Texture2D baseMap, Texture2D normalMap, Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, Texture2D detailNormalMap, Vector2 scale, string label,
+                    Vector2? detailNormalTiling = null, float detailNormalScale = 1f)
                 {
                     if (material == null || material.shader == null || material.shader.name != LitShaderName) throw new InvalidOperationException(label + " must use URP Lit.");
                     if (material.GetTexture("_BaseMap") != (baseMap != null ? baseMap : Texture2D.whiteTexture)) throw new InvalidOperationException(label + " base texture mismatch.");
                     if (material.GetTexture("_BumpMap") != normalMap || material.GetTexture("_MetallicGlossMap") != metallicMap || material.GetTexture("_OcclusionMap") != occlusionMap || material.GetTexture("_EmissionMap") != emissionMap) throw new InvalidOperationException(label + " PBR map routing mismatch.");
                     if (material.GetTexture("_DetailNormalMap") != detailNormalMap) throw new InvalidOperationException(label + " detail normal map mismatch.");
+                    var expectedDetailNormalTiling = detailNormalTiling ?? Vector2.one;
+                    if (material.GetTextureScale("_DetailNormalMap") != expectedDetailNormalTiling ||
+                        Mathf.Abs(material.GetFloat("_DetailNormalMapScale") - detailNormalScale) > 0.001f)
+                    {
+                        throw new InvalidOperationException(label + " detail normal tiling or scale mismatch.");
+                    }
                     var detailEnabled = detailNormalMap != null;
                     if (HasSerializedKeyword(material, "_DETAIL") || HasSerializedKeyword(material, "_DETAIL_SCALED") || HasSerializedKeyword(material, "_DETAIL_MULX2") != detailEnabled)
                     {
@@ -476,9 +484,10 @@ namespace RocketFooxball.Editor
                     var metallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var occlusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var emissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, LauncherMetalBaseColor, "WeaponMetal");
-                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, LauncherDarkBaseColor, "WeaponDark");
-                    ValidateLauncherMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, LauncherAccentBaseColor, "WeaponAccent");
+                    var microDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
+                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, LauncherMetalBaseColor, "WeaponMetal");
+                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, LauncherDarkBaseColor, "WeaponDark");
+                    ValidateLauncherMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherAccentBaseColor, "WeaponAccent");
                     ValidateLauncherCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "WeaponAccentCore");
 
                     var seenMetal = false;
@@ -524,9 +533,10 @@ namespace RocketFooxball.Editor
                 }
 
                 internal static void ValidateLauncherMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
-                    Texture2D metallicMap, Texture2D occlusionMap, Color baseColor, string label)
+                    Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
-                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label);
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
+                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale);
                     ValidatePbrScalars(material, LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "WeaponAccent") ValidateTransparentWeaponShellState(material, label);
@@ -559,9 +569,10 @@ namespace RocketFooxball.Editor
                     var metallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var occlusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var emissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, ShotgunMetalBaseColor, "ShotgunMetal");
-                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, ShotgunDarkBaseColor, "ShotgunDark");
-                    ValidateShotgunMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, ShotgunAccentBaseColor, "ShotgunAccent");
+                    var microDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
+                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, ShotgunMetalBaseColor, "ShotgunMetal");
+                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, ShotgunDarkBaseColor, "ShotgunDark");
+                    ValidateShotgunMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunAccentBaseColor, "ShotgunAccent");
                     ValidateShotgunCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "ShotgunAccentCore");
 
                     var renderers = visual.GetComponentsInChildren<Renderer>(true);
@@ -607,9 +618,10 @@ namespace RocketFooxball.Editor
                 }
 
                 internal static void ValidateShotgunMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
-                    Texture2D metallicMap, Texture2D occlusionMap, Color baseColor, string label)
+                    Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
-                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label);
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
+                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale);
                     ValidatePbrScalars(material, 1f, 1f, 1f, 1f, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "ShotgunAccent") ValidateTransparentWeaponShellState(material, label); else ValidateOpaqueSurfaceState(material, label);

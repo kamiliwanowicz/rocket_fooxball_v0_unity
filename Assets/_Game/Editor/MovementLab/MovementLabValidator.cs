@@ -287,6 +287,7 @@ namespace RocketFooxball.Editor
                 PrefabPath, BallPrefabPath, RocketPrefabPath, RocketModelPath, ArenaKitModelPath, CharacterModelPath,
                 FpsKickModelPath, WeaponModelPath, FpsShotgunModelPath, ShotgunModelPath, GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
                 LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath, LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
+                WeaponMicroDetailNormalTexturePath,
                 ShotgunBaseColorTexturePath, ShotgunNormalTexturePath, ShotgunMetallicTexturePath, ShotgunOcclusionTexturePath, ShotgunEmissionTexturePath,
                 GrassOcclusionTexturePath, BallTexturePath, BallNormalTexturePath, BallMetallicTexturePath,
                 BallOcclusionTexturePath, WeaponMetalTexturePath, WeaponMetalNormalTexturePath, WeaponMetalMetallicTexturePath,
@@ -1421,6 +1422,7 @@ namespace RocketFooxball.Editor
                      ValidateReference(participant.Kick, "aimCamera", participantCamera, expected.DisplayName + ".kick.aimCamera");
                      ValidateReference(participant.Presentation, "gameplayCamera", participantCamera, expected.DisplayName + ".presentation.gameplayCamera");
                      ValidateReference(participant.CameraFeedback, "targetCamera", participantCamera, expected.DisplayName + ".cameraFeedback.targetCamera");
+                     var participantLauncherVisual = participant.transform.Find("Head/Camera/Viewmodels/WeaponVisual");
                      var participantFpsShotgun = participant.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual");
                      var participantWorldVisual = participant.transform.Find("WorldVisual");
                      var participantWorldMount = MovementLabPrefabPipeline.FindNamedTransform(participantWorldVisual, "WorldShotgunMount");
@@ -1429,6 +1431,8 @@ namespace RocketFooxball.Editor
                       ValidateReference(participant.Presentation, "worldShotgunVisual", participantWorldShotgun, expected.DisplayName + ".presentation.worldShotgunVisual");
                       ValidateReference(participant.Presentation, "shotgun", participant.Shotgun, expected.DisplayName + ".presentation.shotgun");
                       ValidateSceneParticipantComposition(participant, localParticipant, sceneMatch, localCamera, expected.DisplayName);
+                     MovementLabPrefabPipeline.ValidateViewmodelVisualTransform(participantLauncherVisual, participant.transform.Find("Head/Camera/Viewmodels"), participantCamera,
+                         LauncherViewmodelPosition, expected.DisplayName + ".WeaponVisual");
                       MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
                      MovementLabPrefabPipeline.ValidateImportedVisual(participantWorldShotgun.gameObject, ShotgunModelPath, expected.DisplayName + ".WorldShotgunVisual");
                      MovementLabMaterialPipeline.ValidateShotgunMaterials(participantFpsShotgun.gameObject);
@@ -1669,6 +1673,8 @@ namespace RocketFooxball.Editor
                 if (availableAssets != null && availableAssets.Contains(WeaponModelPath))
                     accumulator.Capture("visual/imported", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateImportedVisual(context.WeaponVisual.gameObject, WeaponModelPath, "WeaponVisual"));
                 accumulator.Capture("visual/material", "WeaponMaterials", () => MovementLabMaterialPipeline.ValidateWeaponMaterials(context.WeaponVisual.gameObject));
+                accumulator.Capture("visual/presentation", "WeaponViewmodel", () => MovementLabPrefabPipeline.ValidateViewmodelVisualTransform(
+                    context.WeaponVisual, context.Viewmodels, context.Camera, LauncherViewmodelPosition, "Scene Player WeaponVisual"));
                 accumulator.Capture("visual/geometry", "WeaponBoundsAndIslands", () => MovementLabPrefabPipeline.ValidateWeaponVisualContract(context.WeaponVisual.gameObject, "WeaponVisual", LauncherWeaponBoundsMin, LauncherWeaponBoundsMax));
                 accumulator.Capture("visual/physics", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateNoPhysics(context.WeaponVisual.gameObject, "WeaponVisual"));
                 accumulator.Capture("visual/animator", "WeaponVisual", () => MovementLabPrefabPipeline.ValidateNoAnimators(context.WeaponVisual.gameObject, "WeaponVisual"));

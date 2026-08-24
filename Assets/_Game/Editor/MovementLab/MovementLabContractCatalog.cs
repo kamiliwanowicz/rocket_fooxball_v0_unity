@@ -25,6 +25,7 @@ namespace RocketFooxball.Editor
         internal const string LauncherMetallicTexturePath = MovementLabContract.LauncherMetallicTexturePath;
         internal const string LauncherOcclusionTexturePath = MovementLabContract.LauncherOcclusionTexturePath;
         internal const string LauncherEmissionTexturePath = MovementLabContract.LauncherEmissionTexturePath;
+        internal const string WeaponMicroDetailNormalTexturePath = MovementLabContract.WeaponMicroDetailNormalTexturePath;
         internal const string ShotgunBaseColorTexturePath = MovementLabContract.ShotgunBaseColorTexturePath;
         internal const string ShotgunNormalTexturePath = MovementLabContract.ShotgunNormalTexturePath;
         internal const string ShotgunMetallicTexturePath = MovementLabContract.ShotgunMetallicTexturePath;
@@ -332,6 +333,11 @@ namespace RocketFooxball.Editor
         internal static readonly Vector3 FpsShotgunBoundsMax = MovementLabContract.FpsShotgunBoundsMax;
         internal static readonly Vector3 WorldShotgunBoundsMin = MovementLabContract.WorldShotgunBoundsMin;
         internal static readonly Vector3 WorldShotgunBoundsMax = MovementLabContract.WorldShotgunBoundsMax;
+        internal const int WeaponMicroDetailNormalMaxTextureSize = MovementLabContract.WeaponMicroDetailNormalMaxTextureSize;
+        internal static readonly Vector2 WeaponMicroDetailNormalTiling = MovementLabContract.WeaponMicroDetailNormalTiling;
+        internal const float WeaponMicroDetailNormalScale = MovementLabContract.WeaponMicroDetailNormalScale;
+        internal static readonly Vector3 LauncherViewmodelPosition = MovementLabContract.LauncherViewmodelPosition;
+        internal static readonly Vector3 ShotgunViewmodelPosition = MovementLabContract.ShotgunViewmodelPosition;
         internal const float ArenaNorthWallPylonZ = MovementLabContract.ArenaNorthWallPylonZ;
         internal const float ArenaSouthWallPylonZ = MovementLabContract.ArenaSouthWallPylonZ;
         internal static readonly Quaternion ArenaNorthWallPylonRotation = MovementLabContract.ArenaNorthWallPylonRotation;
@@ -377,7 +383,7 @@ namespace RocketFooxball.Editor
             WeaponAccentTexturePath + ".meta", WeaponAccentNormalTexturePath + ".meta", WeaponAccentMetallicTexturePath + ".meta", WeaponAccentOcclusionTexturePath + ".meta",
             WeaponAccentEmissionTexturePath + ".meta",
             LauncherBaseColorTexturePath + ".meta", LauncherNormalTexturePath + ".meta", LauncherMetallicTexturePath + ".meta",
-            LauncherOcclusionTexturePath + ".meta", LauncherEmissionTexturePath + ".meta",
+            LauncherOcclusionTexturePath + ".meta", LauncherEmissionTexturePath + ".meta", WeaponMicroDetailNormalTexturePath + ".meta",
             ShotgunBaseColorTexturePath + ".meta", ShotgunNormalTexturePath + ".meta", ShotgunMetallicTexturePath + ".meta",
             ShotgunOcclusionTexturePath + ".meta", ShotgunEmissionTexturePath + ".meta",
             RocketTexturePath + ".meta", RocketNormalTexturePath + ".meta", RocketMetallicTexturePath + ".meta", RocketOcclusionTexturePath + ".meta", RocketEmissionTexturePath + ".meta", RocketGlowTexturePath + ".meta",

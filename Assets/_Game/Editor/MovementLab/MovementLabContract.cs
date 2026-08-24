@@ -58,6 +58,7 @@ namespace RocketFooxball.Editor
         internal const string LauncherMetallicTexturePath = TexturesPath + "/FpsRocketLauncher_MetallicSmoothness.png";
         internal const string LauncherOcclusionTexturePath = TexturesPath + "/FpsRocketLauncher_Occlusion.png";
         internal const string LauncherEmissionTexturePath = TexturesPath + "/FpsRocketLauncher_Emission.png";
+        internal const string WeaponMicroDetailNormalTexturePath = TexturesPath + "/WeaponMicroDetail_Normal.png";
         internal const int LauncherAtlasSize = 2048;
         internal static readonly RectInt LauncherMetalUvZone = new RectInt(32, 864, 1984, 1152);
         internal static readonly RectInt LauncherDarkUvZone = new RectInt(32, 352, 1280, 480);
@@ -183,6 +184,11 @@ namespace RocketFooxball.Editor
         internal const float WeaponBoundsTolerance = 0.025f;
         internal const float WeaponShellCoreInset = 0.002f;
         internal const float WeaponMeshIslandPositionTolerance = 0.0001f;
+        internal const int WeaponMicroDetailNormalMaxTextureSize = 1024;
+        internal static readonly Vector2 WeaponMicroDetailNormalTiling = new Vector2(12f, 12f);
+        internal const float WeaponMicroDetailNormalScale = 0.20f;
+        internal static readonly Vector3 LauncherViewmodelPosition = new Vector3(0.28f, -0.30f, 0.31f);
+        internal static readonly Vector3 ShotgunViewmodelPosition = new Vector3(0.30f, -0.34f, 0.42f);
         internal static readonly Vector3 LauncherWeaponBoundsMin = new Vector3(-0.16f, -0.14f, -0.20f);
         internal static readonly Vector3 LauncherWeaponBoundsMax = new Vector3(0.16f, 0.11f, 0.55f);
         internal static readonly Vector3 FpsShotgunBoundsMin = new Vector3(-0.11f, -0.18f, -0.29f);
@@ -221,7 +227,7 @@ namespace RocketFooxball.Editor
             FpsShotgunModelPath,
             ShotgunModelPath,
             LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath,
-            LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
+            LauncherOcclusionTexturePath, LauncherEmissionTexturePath, WeaponMicroDetailNormalTexturePath,
             ShotgunBaseColorTexturePath, ShotgunNormalTexturePath, ShotgunMetallicTexturePath,
             ShotgunOcclusionTexturePath, ShotgunEmissionTexturePath,
             TexturesPath + "/RetroGrass.png", TexturesPath + "/RetroGrass_Normal.png", TexturesPath + "/RetroGrass_MetallicSmoothness.png", TexturesPath + "/RetroGrass_Occlusion.png",
@@ -433,6 +439,7 @@ namespace RocketFooxball.Editor
             internal readonly Texture2D EmissionMap;
             internal readonly Texture2D DetailNormalMap;
             internal readonly Vector2 TextureScale;
+            internal readonly Vector2 DetailNormalTiling;
             internal readonly Color BaseColor;
             internal readonly Color EmissionColor;
             internal readonly float EmissionStrength;
@@ -440,17 +447,19 @@ namespace RocketFooxball.Editor
             internal readonly float Smoothness;
             internal readonly float OcclusionStrength;
             internal readonly float BumpScale;
+            internal readonly float DetailNormalScale;
 
             internal PbrMaterialSpecification(string name, Texture2D baseMap, Texture2D normalMap,
                 Texture2D metallicGlossMap, Texture2D occlusionMap, Texture2D emissionMap,
                 Texture2D detailNormalMap, Vector2 textureScale, Color baseColor, Color emissionColor,
-                float emissionStrength, float metallic, float smoothness, float occlusionStrength, float bumpScale)
+                float emissionStrength, float metallic, float smoothness, float occlusionStrength, float bumpScale,
+                Vector2? detailNormalTiling = null, float detailNormalScale = 1f)
             {
                 Name = name; BaseMap = baseMap; NormalMap = normalMap; MetallicGlossMap = metallicGlossMap;
                 OcclusionMap = occlusionMap; EmissionMap = emissionMap; DetailNormalMap = detailNormalMap;
-                TextureScale = textureScale; BaseColor = baseColor; EmissionColor = emissionColor;
+                TextureScale = textureScale; DetailNormalTiling = detailNormalTiling ?? Vector2.one; BaseColor = baseColor; EmissionColor = emissionColor;
                 EmissionStrength = emissionStrength; Metallic = metallic; Smoothness = smoothness;
-                OcclusionStrength = occlusionStrength; BumpScale = bumpScale;
+                OcclusionStrength = occlusionStrength; BumpScale = bumpScale; DetailNormalScale = detailNormalScale;
             }
         }
 

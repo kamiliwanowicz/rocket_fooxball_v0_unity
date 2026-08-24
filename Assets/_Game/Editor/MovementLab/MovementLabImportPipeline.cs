@@ -119,6 +119,8 @@ namespace RocketFooxball.Editor
                     ConfigureShotgunTextureImporter(ShotgunMetallicTexturePath, false, TextureImporterType.Default);
                     ConfigureShotgunTextureImporter(ShotgunOcclusionTexturePath, false, TextureImporterType.Default);
                     ConfigureShotgunTextureImporter(ShotgunEmissionTexturePath, false, TextureImporterType.Default);
+                    ConfigureTextureImporter(WeaponMicroDetailNormalTexturePath, WeaponMicroDetailNormalMaxTextureSize, false, TextureImporterType.NormalMap,
+                        TextureWrapMode.Repeat, TextureWrapMode.Repeat, FilterMode.Trilinear, 8);
                     ConfigureTextureImporter(RocketTexturePath, 1024, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
                     ConfigureTextureImporter(RocketNormalTexturePath, 1024, false, TextureImporterType.NormalMap, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
                     ConfigureTextureImporter(RocketMetallicTexturePath, 1024, false, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Trilinear, 8);
@@ -435,6 +437,8 @@ namespace RocketFooxball.Editor
                     ValidateTextureImporter(ShieldTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ValidateTextureImporter(ExplosionTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
                     ValidateTextureImporter(SmokeTexturePath, 128, true, TextureImporterType.Default, TextureWrapMode.Clamp, TextureWrapMode.Clamp, FilterMode.Bilinear, 0);
+                    ValidateTextureImporter(WeaponMicroDetailNormalTexturePath, WeaponMicroDetailNormalMaxTextureSize, false, TextureImporterType.NormalMap,
+                        TextureWrapMode.Repeat, TextureWrapMode.Repeat, FilterMode.Trilinear, 8);
                     ValidateLauncherTextureImporterContracts();
                     ValidateShotgunTextureImporterContracts();
                 }

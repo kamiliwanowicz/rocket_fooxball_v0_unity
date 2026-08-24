@@ -212,21 +212,23 @@ namespace RocketFooxball.Editor
                     viewmodels.SetParent(camera.transform, false);
                     viewmodels.localPosition = Vector3.zero;
                     viewmodels.localRotation = Quaternion.identity;
-                    // Keep the launcher close enough that the camera crops its rear like a classic FPS viewmodel.
-                    var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, new Vector3(-0.28f, -0.22f, 0.34f), Quaternion.identity, Vector3.one);
+                    var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, LauncherViewmodelPosition, Quaternion.identity, Vector3.one);
                     var launcherBaseMap = LoadTexture(LauncherBaseColorTexturePath);
                     var launcherNormalMap = LoadTexture(LauncherNormalTexturePath);
                     var launcherMetallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var launcherOcclusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var launcherEmissionMap = LoadTexture(LauncherEmissionTexturePath);
+                    var weaponMicroDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
                     var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponMetal", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, null, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
+                        null, weaponMicroDetailNormal, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale,
+                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
                     var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponDark", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, null, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
+                        null, weaponMicroDetailNormal, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale,
+                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
                     var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponAccent", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
                         null, null, Vector2.one, LauncherAccentBaseColor, Color.clear, 0f,
@@ -251,14 +253,15 @@ namespace RocketFooxball.Editor
                     var shotgunMetallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var shotgunOcclusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var shotgunEmissionMap = LoadTexture(ShotgunEmissionTexturePath);
+                    var shotgunMicroDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
                     var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunMetal", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        null, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f));
+                        shotgunMicroDetailNormal, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f, WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
                     var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunDark", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        null, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f));
+                        shotgunMicroDetailNormal, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f, WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
                     var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunAccent", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
                         null, Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
@@ -276,7 +279,7 @@ namespace RocketFooxball.Editor
                         1f, 1f, 1f, 1f));
                     SetOpaqueLitState(shotgunAccentCore);
                     EditorUtility.SetDirty(shotgunAccentCore);
-                    var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
+                    var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, ShotgunViewmodelPosition, Quaternion.identity, Vector3.one);
                     AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
                     RemovePhysicsAndAnimators(fpsShotgunVisual);
                     var worldShotgunVisual = InstantiateImportedVisual(shotgunModel, "WorldShotgunVisual", worldShotgunMount, Vector3.zero, Quaternion.identity, Vector3.one);
@@ -1374,6 +1377,8 @@ namespace RocketFooxball.Editor
                              ValidateImportedVisual(prefabWeaponVisual.gameObject, WeaponModelPath, "Player prefab WeaponVisual");
                              ValidateWeaponVisualContract(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual",
                                  LauncherWeaponBoundsMin, LauncherWeaponBoundsMax);
+                             ValidateViewmodelVisualTransform(prefabWeaponVisual, root.transform.Find("Head/Camera/Viewmodels"), prefabCamera,
+                                 LauncherViewmodelPosition, "Player prefab WeaponVisual");
                              ValidateNoPhysics(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual");
                              ValidateNoAnimators(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual");
                              var prefabFpsShotgunVisual = Require(root.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual"), "Player prefab FpsShotgunVisual");
@@ -1381,6 +1386,8 @@ namespace RocketFooxball.Editor
                              ValidateImportedVisual(prefabFpsShotgunVisual.gameObject, FpsShotgunModelPath, "Player prefab FpsShotgunVisual");
                              ValidateWeaponVisualContract(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual",
                                  FpsShotgunBoundsMin, FpsShotgunBoundsMax);
+                             ValidateViewmodelVisualTransform(prefabFpsShotgunVisual, root.transform.Find("Head/Camera/Viewmodels"), prefabCamera,
+                                 ShotgunViewmodelPosition, "Player prefab FpsShotgunVisual");
                              ValidateNoPhysics(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
                              ValidateNoAnimators(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
                              ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual").gameObject, "Player prefab FpsKickVisual");
@@ -2131,14 +2138,8 @@ namespace RocketFooxball.Editor
                     if (player == null || camera == null || fpsVisual == null || worldVisual == null || worldMount == null || worldShotgunVisual == null)
                         throw new InvalidOperationException(label + " shotgun presentation references are incomplete.");
 
-                    var expectedFpsPosition = new Vector3(0.30f, -0.28f, 0.45f);
                     var viewmodels = camera.transform.Find("Viewmodels");
-                    if (viewmodels == null || fpsVisual.parent != viewmodels || Vector3.Distance(fpsVisual.localPosition, expectedFpsPosition) > 0.001f ||
-                        Quaternion.Angle(fpsVisual.localRotation, Quaternion.identity) > 0.001f || Vector3.Distance(fpsVisual.localScale, Vector3.one) > 0.001f ||
-                        Vector3.Dot(fpsVisual.forward, camera.transform.forward) < 0.999f)
-                    {
-                        throw new InvalidOperationException(label + " FPS shotgun must be identity-mounted at camera +Z.");
-                    }
+                    ValidateViewmodelVisualTransform(fpsVisual, viewmodels, camera, ShotgunViewmodelPosition, label + " FpsShotgunVisual");
 
                     var handR = FindNamedTransform(worldVisual, "Hand.R");
                     if (handR == null || worldMount.parent != handR || worldShotgunVisual.parent != worldMount ||
@@ -2155,6 +2156,18 @@ namespace RocketFooxball.Editor
                     ValidateImportedVisualForward(worldShotgunVisual, label + " WorldShotgunVisual");
                     ValidateDynamicHierarchy(fpsVisual.gameObject, label + " FpsShotgunVisual");
                     ValidateDynamicHierarchy(worldMount.gameObject, label + " WorldShotgunMount");
+                }
+
+                internal static void ValidateViewmodelVisualTransform(Transform visual, Transform viewmodels, Camera camera, Vector3 expectedPosition, string label)
+                {
+                    if (visual == null || viewmodels == null || camera == null || visual.parent != viewmodels ||
+                        Vector3.Distance(visual.localPosition, expectedPosition) > 0.001f ||
+                        Quaternion.Angle(visual.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(visual.localScale, Vector3.one) > 0.001f ||
+                        Vector3.Dot(visual.forward, camera.transform.forward) < 0.999f)
+                    {
+                        throw new InvalidOperationException(label + " must be identity-mounted at its authored camera viewmodel position.");
+                    }
                 }
 
                 internal static void ValidateDynamicHierarchy(GameObject root, string label)
