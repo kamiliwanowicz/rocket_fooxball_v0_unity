@@ -1044,6 +1044,7 @@ def _combine_rasters(records):
 
 def generate_once(stage_dir):
     global PREVIEW_DIRECTORY
+    surface.clear_reference_height_cache()
     os.makedirs(stage_dir, exist_ok=True)
     PREVIEW_DIRECTORY = os.path.join(stage_dir, "previews")
     staged_profiles = []

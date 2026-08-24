@@ -484,9 +484,8 @@ namespace RocketFooxball.Editor
                     var metallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var occlusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var emissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    var microDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
-                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, LauncherMetalBaseColor, "WeaponMetal");
-                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, LauncherDarkBaseColor, "WeaponDark");
+                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherMetalBaseColor, "WeaponMetal");
+                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherDarkBaseColor, "WeaponDark");
                     ValidateLauncherMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherAccentBaseColor, "WeaponAccent");
                     ValidateLauncherCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "WeaponAccentCore");
 
@@ -535,10 +534,9 @@ namespace RocketFooxball.Editor
                 internal static void ValidateLauncherMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
                     Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
-                    var detailTiling = microDetailNormal != null ? WeaponMicroDetailNormalTiling : Vector2.one;
-                    var detailScale = microDetailNormal != null ? WeaponMicroDetailNormalScale : 1f;
-                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
-                        detailTiling, detailScale);
+                    if (microDetailNormal != null) throw new InvalidOperationException(label + " must not use the shared weapon detail normal.");
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label,
+                        Vector2.one, 1f);
                     ValidatePbrScalars(material, LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "WeaponAccent") ValidateTransparentWeaponShellState(material, label);
@@ -571,9 +569,8 @@ namespace RocketFooxball.Editor
                     var metallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var occlusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var emissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    var microDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
-                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, ShotgunMetalBaseColor, "ShotgunMetal");
-                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, microDetailNormal, ShotgunDarkBaseColor, "ShotgunDark");
+                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunMetalBaseColor, "ShotgunMetal");
+                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunDarkBaseColor, "ShotgunDark");
                     ValidateShotgunMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunAccentBaseColor, "ShotgunAccent");
                     ValidateShotgunCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "ShotgunAccentCore");
 
@@ -622,10 +619,9 @@ namespace RocketFooxball.Editor
                 internal static void ValidateShotgunMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
                     Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
-                    var detailTiling = microDetailNormal != null ? WeaponMicroDetailNormalTiling : Vector2.one;
-                    var detailScale = microDetailNormal != null ? WeaponMicroDetailNormalScale : 1f;
-                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
-                        detailTiling, detailScale);
+                    if (microDetailNormal != null) throw new InvalidOperationException(label + " must not use the shared weapon detail normal.");
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label,
+                        Vector2.one, 1f);
                     ValidatePbrScalars(material, 1f, 1f, 1f, 1f, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "ShotgunAccent") ValidateTransparentWeaponShellState(material, label); else ValidateOpaqueSurfaceState(material, label);

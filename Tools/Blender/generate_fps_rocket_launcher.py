@@ -36,12 +36,15 @@ MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
 REFERENCE_TILE_NAME = "WeaponSurfaceReference.png"
 REFERENCE_TILE_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs", REFERENCE_TILE_NAME)
 REFERENCE_TILE_SIZE = 1024
-MICRODETAIL_TILE_SCALE = 16.0
+REFERENCE_RGBA_SHA256 = "9d10d1b9cf7d6c570e4c7be834a36626911705373cab9d78b784a985cb2e3738"
 # The Unity material applies this tile at a restrained 0.24 normal scale.  The
 # encoded tile therefore needs enough source slope to survive that attenuation
 # without becoming a broad, noisy normal at full strength.
 MICRODETAIL_NORMAL_SLOPE_GAIN = 84.0
-REFERENCE_NORMAL_HEIGHT_SCALE = 0.00115
+# The shared detail tile is derived from the irregular photographic reference
+# only.  The source slope is intentionally amplified enough to survive the
+# normal-map encoding and the Unity material's normal scale.
+REFERENCE_NORMAL_HEIGHT_SCALE = 0.00360
 REFERENCE_ATLAS_HEIGHT_SCALE = 0.00220
 REFERENCE_SMOOTHNESS_SCALE = 0.075
 MICRODETAIL_MIN_CHANNEL_RANGE = 20
@@ -126,8 +129,8 @@ SURFACE_SPECS = {
     # Tuple order: clean/exposed colour, base/chip/grime metallic, then
     # base/chip/grime/polished smoothness. Wear is primarily normal and
     # roughness-driven; exposed albedo stays close to the Q2 shell colour.
-    "WeaponMetal": {"clean": (0.26, 0.22, 0.13), "exposed": (0.305, 0.265, 0.17), "metal": (0.94, 0.985, 0.82), "smooth": (0.42, 0.70, 0.24, 0.58)},
-    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.72, 0.84, 0.30), "smooth": (0.30, 0.58, 0.20, 0.46)},
+    "WeaponMetal": {"clean": (0.26, 0.22, 0.13), "exposed": (0.305, 0.265, 0.17), "metal": (0.94, 0.985, 0.12), "smooth": (0.42, 0.70, 0.24, 0.58)},
+    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.04, 0.72, 0.03), "smooth": (0.30, 0.58, 0.20, 0.46)},
     "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
     "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
 }
@@ -616,6 +619,12 @@ def write_microdetail_png(path, pixels):
 _REFERENCE_HEIGHT = None
 
 
+def clear_reference_height_cache():
+    """Drop decoded reference state before each deterministic proof run."""
+    global _REFERENCE_HEIGHT
+    _REFERENCE_HEIGHT = None
+
+
 def _load_reference_height():
     """Read the repo-contained high-pass metal reference without machine paths."""
     global _REFERENCE_HEIGHT
@@ -667,36 +676,44 @@ def _load_reference_height():
     scanlines = np.empty((height, scanline_bytes), dtype=np.uint8)
     for row_index in range(height):
         filter_type = int(rows[row_index, 0])
-        filtered = rows[row_index, 1:].astype(np.int32)
-        prior = scanlines[row_index - 1].astype(np.int32) if row_index else np.zeros(scanline_bytes, dtype=np.int32)
-        left = np.zeros(scanline_bytes, dtype=np.int32)
-        left[channels:] = scanlines[row_index, :-channels]
-        upper_left = np.zeros(scanline_bytes, dtype=np.int32)
-        if row_index:
-            upper_left[channels:] = scanlines[row_index - 1, :-channels]
-        if filter_type == 0:
-            reconstructed = filtered
-        elif filter_type == 1:
-            reconstructed = filtered + left
-        elif filter_type == 2:
-            reconstructed = filtered + prior
-        elif filter_type == 3:
-            reconstructed = filtered + ((left + prior) // 2)
-        elif filter_type == 4:
-            predictor = left + prior - upper_left
-            distance_left = np.abs(predictor - left)
-            distance_up = np.abs(predictor - prior)
-            distance_upper_left = np.abs(predictor - upper_left)
-            paeth = np.where(
-                (distance_left <= distance_up) & (distance_left <= distance_upper_left),
-                left,
-                np.where(distance_up <= distance_upper_left, prior, upper_left),
-            )
-            reconstructed = filtered + paeth
-        else:
+        if filter_type not in (0, 1, 2, 3, 4):
             raise RuntimeError(f"Weapon surface reference has unsupported PNG filter: {filter_type}")
-        scanlines[row_index] = np.mod(reconstructed, 256).astype(np.uint8)
+        filtered = rows[row_index, 1:]
+        prior = scanlines[row_index - 1] if row_index else None
+        reconstructed = scanlines[row_index]
+        # PNG filters are bytewise predictors.  Reconstruct the current row
+        # in order so Sub/Average/Paeth read bytes already unfiltered in this
+        # row, never uninitialized storage.
+        for byte_index in range(scanline_bytes):
+            left = int(reconstructed[byte_index - channels]) if byte_index >= channels else 0
+            up = int(prior[byte_index]) if prior is not None else 0
+            upper_left = int(prior[byte_index - channels]) if prior is not None and byte_index >= channels else 0
+            if filter_type == 0:
+                predictor = 0
+            elif filter_type == 1:
+                predictor = left
+            elif filter_type == 2:
+                predictor = up
+            elif filter_type == 3:
+                predictor = (left + up) // 2
+            else:
+                estimate = left + up - upper_left
+                distance_left = abs(estimate - left)
+                distance_up = abs(estimate - up)
+                distance_upper_left = abs(estimate - upper_left)
+                if distance_left <= distance_up and distance_left <= distance_upper_left:
+                    predictor = left
+                elif distance_up <= distance_upper_left:
+                    predictor = up
+                else:
+                    predictor = upper_left
+            reconstructed[byte_index] = (int(filtered[byte_index]) + predictor) & 0xFF
     rgba = scanlines.reshape(height, width, channels)
+    decoded_hash = hashlib.sha256(rgba.tobytes()).hexdigest()
+    if decoded_hash != REFERENCE_RGBA_SHA256:
+        raise RuntimeError(
+            f"Weapon surface reference decoded RGBA hash mismatch: {decoded_hash} != {REFERENCE_RGBA_SHA256}"
+        )
     # The tile is authored as a signed high-pass carrier around 128. Sampling
     # wraps at the tile border, so there is no broad concrete/albedo transfer.
     _REFERENCE_HEIGHT = ((rgba[:, :, 0].astype(np.float32) - 128.0) / 127.0).astype(np.float32)
@@ -939,23 +956,9 @@ def _fbm(x, y, z):
 
 
 def _microdetail_height(u, v, phase):
-    """Return the periodic scratch/dust height field at normalized UVs."""
-    reference = _reference_height_at(u, v)
-    warp_u = np.sin(math.tau * (5.0 * v) + phase)
-    warp_v = np.sin(math.tau * (7.0 * u) - phase * 0.73)
-    scratch_a = np.sin(math.tau * (43.0 * u + 1.7 * warp_u) + phase * 1.13)
-    scratch_b = np.sin(math.tau * (71.0 * u - 1.3 * warp_v) - phase * 0.61)
-    cross_scratch = np.sin(math.tau * (29.0 * v + 0.9 * np.sin(math.tau * 3.0 * u + phase)))
-    dust_coarse = np.sin(math.tau * (11.0 * u + 17.0 * v) + phase * 0.37)
-    dust_fine = np.sin(math.tau * (97.0 * u - 53.0 * v) - phase * 1.41)
-    return (
-        0.00155 * scratch_a
-        + 0.00115 * scratch_b
-        + 0.00070 * cross_scratch
-        + 0.00075 * dust_coarse
-        + 0.00035 * dust_fine
-        + REFERENCE_NORMAL_HEIGHT_SCALE * reference
-    ).astype(np.float32)
+    """Return the irregular, photo-derived height field at normalized UVs."""
+    del phase
+    return (REFERENCE_NORMAL_HEIGHT_SCALE * _reference_height_at(u, v)).astype(np.float32)
 
 
 def _microdetail_normal_from_height(height):
@@ -1022,9 +1025,10 @@ def _audit_microdetail_normal(rgba, normal, phase):
         )
     return {
         "encoding": "tangent-space RGB normal, RG=XY, B=Z, A=255",
+        "carrier": "photo-derived irregular reference only; no analytic sine families",
         "normalSlopeGain": MICRODETAIL_NORMAL_SLOPE_GAIN,
         "referenceTile": REFERENCE_TILE_NAME,
-        "unityMaterialNormalScale": 0.24,
+        "legacyMaterialNormalScale": 0.24,
         "channels": channel_audits,
         "xy": {
             "ranges": [round(value, 6) for value in xy_ranges],
@@ -1048,21 +1052,12 @@ def _audit_microdetail_normal(rgba, normal, phase):
 
 
 def generate_microdetail_texture(path):
-    """Write a deterministic, tileable scratch/dust normal for metal only.
-
-    Every carrier frequency is an integer number of cycles over the tile, so
-    opposite borders meet exactly when the texture sampler repeats.  The
-    broad atlas carries authored wear; this tile supplies the small highlight
-    breakup that would otherwise disappear at first-person viewing distance.
-    """
+    """Write a deterministic, tileable normal from the irregular photo reference."""
     size = MICRODETAIL_SIZE
     rows, columns = np.mgrid[0:size, 0:size].astype(np.float32)
     u = columns / float(size)
     v = rows / float(size)
     phase = (SEED & 0xFFFF) * (math.tau / 65536.0)
-    # Two warped line families provide directional machining scratches.  The
-    # low-frequency warp keeps them from reading as a regular grating while
-    # retaining exact periodicity at both tile seams.
     height = _microdetail_height(u, v, phase)
     normal = _microdetail_normal_from_height(height)
     rgba = np.empty((size, size, 4), dtype=np.uint8)
@@ -1070,7 +1065,7 @@ def generate_microdetail_texture(path):
     rgba[:, :, 3] = 255
     audit = _audit_microdetail_normal(rgba, normal, phase)
     write_microdetail_png(path, rgba)
-    print(f"OUTPUT microdetail: {path} ({os.path.getsize(path)} bytes, {size}x{size}, tileable=yes, reference={REFERENCE_TILE_NAME}, groups=WeaponMetal/WeaponDark)")
+    print(f"OUTPUT microdetail: {path} ({os.path.getsize(path)} bytes, {size}x{size}, tileable=yes, reference={REFERENCE_TILE_NAME}, liveUnityAssignment=none)")
     print(f"AUDIT microdetail: RG={audit['channels']['R']['min']}..{audit['channels']['R']['max']}/"
           f"{audit['channels']['G']['min']}..{audit['channels']['G']['max']}, "
           f"xyStddev={audit['xy']['stddev']}, seamNormal={audit['seam']['normalMaxAbsoluteError']:.9f}")
@@ -1461,7 +1456,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         1.0,
     )
     dust[glass] = 0.0
-    grime = np.clip(0.30 * cavity + 0.22 * downward + 0.20 * fbm + 0.22 * dust - 0.34, 0.0, 1.0)
+    grime = np.clip(0.30 * cavity + 0.22 * downward + 0.20 * fbm + 0.22 * dust - 0.33, 0.0, 1.0)
     grime[glass] = 0.0
     muzzle_depth = _smoothstep(-0.42, -0.60, py)
     muzzle_radius = np.sqrt(px * px + (pz - 0.015) * (pz - 0.015))
@@ -1487,7 +1482,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "polish": float(np.count_nonzero(polish > 0.50)) / surface_count,
     }
     limits = {
-        "chips": (0.005, 0.08), "scratches": (0.002, 0.06), "grime": (0.035, 0.35),
+        "chips": (0.005, 0.08), "scratches": (0.002, 0.06), "grime": (0.020, 0.35),
         "muzzleSoot": (0.10, 0.70), "polish": (0.02, 0.36),
     }
     for name, value in coverages.items():
@@ -1529,13 +1524,8 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     base[dark_scuff] = np.array(dark_spec["clean"]) * 0.55 + np.array(dark_spec["exposed"]) * 0.45
     smoothness[dark_scuff] = dark_spec["smooth"][1]
 
-    soot_strength = soot[:, None]
-    base *= 1.0 - 0.48 * soot_strength
-    # Heat deposits are warmer at the muzzle lip while soot lowers highlight
-    # response.  The mask is zero on the red glass groups by construction.
-    base += heat[:, None] * np.array((0.020, 0.012, 0.003), dtype=np.float32)
-    metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.12 * soot)
-    smoothness = np.minimum(smoothness, smoothness * (1.0 - soot) + 0.13 * soot)
+    # Grime is a dielectric deposit.  Apply it before soot so the final muzzle
+    # deposit pass cannot re-metalize an already soot-darkened surface.
     base *= 1.0 - 0.10 * grime[:, None]
     base *= 1.0 - 0.025 * dust[:, None]
     for group_index, group_name in enumerate(GROUP_NAMES):
@@ -1544,6 +1534,14 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         metallic[select] = metallic[select] * (1.0 - grime[select]) + spec["metal"][2] * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - grime[select]) + spec["smooth"][2] * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - polish[select]) + spec["smooth"][3] * polish[select]
+
+    soot_strength = soot[:, None]
+    base *= 1.0 - 0.48 * soot_strength
+    # Heat deposits are warmer at the muzzle lip while soot lowers highlight
+    # response.  The mask is zero on the red glass groups by construction.
+    base += heat[:, None] * np.array((0.020, 0.012, 0.003), dtype=np.float32)
+    metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.12 * soot)
+    smoothness = np.minimum(smoothness, smoothness * (1.0 - soot) + 0.13 * soot)
 
     metal_or_dark = metal | dark
     smoothness += REFERENCE_SMOOTHNESS_SCALE * reference_detail * metal_or_dark.astype(np.float32)
@@ -1648,13 +1646,14 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "emission": {"format": "RGBA8", "transfer": "linear", "coreValue": 0.85},
         "microDetailNormal": {
             "format": "RGBA8", "transfer": "linear", "size": [MICRODETAIL_SIZE, MICRODETAIL_SIZE],
-            "tile": "repeat", "intendedGroups": ["WeaponMetal", "WeaponDark"],
+            "tile": "repeat", "intendedGroups": [],
             "audit": microdetail_audit,
         },
         "photoDerivedDetail": {
             "source": REFERENCE_TILE_NAME,
             "path": os.path.relpath(REFERENCE_TILE_PATH, REPOSITORY_ROOT).replace(os.sep, "/"),
-            "usage": "high-pass only for metal/dark normal, smoothness, and dust breakup; never baseColor",
+            "decodedRgbaSha256": REFERENCE_RGBA_SHA256,
+            "usage": "irregular high-pass source for model-specific atlas normal/smoothness/dust; shared legacy detail output is not assigned to live Unity weapon materials",
             "periodicSampling": True,
         },
     }
@@ -1694,7 +1693,7 @@ def point_camera(camera, target):
 
 
 def configure_final_materials(materials, stage_texture_dir):
-    image_names = TEXTURE_NAMES + (MICRODETAIL_NAME,)
+    image_names = TEXTURE_NAMES
     image_paths = {filename: os.path.join(stage_texture_dir, filename) for filename in image_names}
     images = {filename: bpy.data.images.load(path, check_existing=False) for filename, path in image_paths.items()}
     for filename, image in images.items():
@@ -1717,26 +1716,6 @@ def configure_final_materials(materials, stage_texture_dir):
         normal_texture.image = images[TEXTURE_NAMES[1]]
         normal_node = nodes.new("ShaderNodeNormalMap")
         normal_output = normal_node.outputs["Normal"]
-        if material.name in ("WeaponMetal", "WeaponDark"):
-            # The micro normal is deliberately restricted to metal and dark
-            # groups; red glass remains a clean, unperturbed accent.
-            texcoord = nodes.new("ShaderNodeTexCoord")
-            mapping = nodes.new("ShaderNodeMapping")
-            mapping.vector_type = "POINT"
-            mapping.inputs["Scale"].default_value = (MICRODETAIL_TILE_SCALE, MICRODETAIL_TILE_SCALE, MICRODETAIL_TILE_SCALE)
-            micro_texture = nodes.new("ShaderNodeTexImage")
-            micro_texture.image = images[MICRODETAIL_NAME]
-            micro_texture.extension = "REPEAT"
-            micro_normal = nodes.new("ShaderNodeNormalMap")
-            micro_normal.inputs["Strength"].default_value = 0.28
-            normal_add = nodes.new("ShaderNodeVectorMath")
-            normal_add.operation = "ADD"
-            links.new(texcoord.outputs["UV"], mapping.inputs["Vector"])
-            links.new(mapping.outputs["Vector"], micro_texture.inputs["Vector"])
-            links.new(micro_texture.outputs["Color"], micro_normal.inputs["Color"])
-            links.new(normal_node.outputs["Normal"], normal_add.inputs[0])
-            links.new(micro_normal.outputs["Normal"], normal_add.inputs[1])
-            normal_output = normal_add.outputs["Vector"]
         metallic_texture = nodes.new("ShaderNodeTexImage")
         metallic_texture.image = images[TEXTURE_NAMES[2]]
         separate_metallic = nodes.new("ShaderNodeSeparateColor")
@@ -1911,6 +1890,7 @@ def import_roundtrip(source_record, output_path):
 
 
 def generate_once(stage_dir):
+    clear_reference_height_cache()
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.context.scene.unit_settings.system = "METRIC"
     bpy.context.scene.unit_settings.scale_length = 1.0

@@ -218,17 +218,14 @@ namespace RocketFooxball.Editor
                     var launcherMetallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var launcherOcclusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var launcherEmissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    var weaponMicroDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
                     var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponMetal", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, weaponMicroDetailNormal, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale,
-                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
+                        null, null, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
                     var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponDark", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, weaponMicroDetailNormal, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale,
-                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
+                        null, null, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
+                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
                     var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponAccent", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
                         null, null, Vector2.one, LauncherAccentBaseColor, Color.clear, 0f,
@@ -253,15 +250,14 @@ namespace RocketFooxball.Editor
                     var shotgunMetallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var shotgunOcclusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var shotgunEmissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    var shotgunMicroDetailNormal = LoadTexture(WeaponMicroDetailNormalTexturePath);
                     var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunMetal", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        shotgunMicroDetailNormal, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f, WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
+                        null, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f));
                     var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunDark", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        shotgunMicroDetailNormal, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f, WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale));
+                        null, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f));
                     var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunAccent", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
                         null, Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
