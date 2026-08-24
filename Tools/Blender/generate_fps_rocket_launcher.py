@@ -33,10 +33,10 @@ ATLAS_SIZE = 2048
 ATLAS_DILATION = 16
 MICRODETAIL_SIZE = 1024
 MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
-REFERENCE_TILE_NAME = "WeaponSurfaceReference.png"
+REFERENCE_TILE_NAME = "WeaponSurfaceReferenceV2.png"
 REFERENCE_TILE_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs", REFERENCE_TILE_NAME)
 REFERENCE_TILE_SIZE = 1254
-REFERENCE_RGBA_SHA256 = "8ae165be644582741cb75ef53b24bfccbb9c0b3faaa0afcb5ef9c32a4b36dd79"
+REFERENCE_RGBA_SHA256 = "c6c90d8fba02870461971d163eeb80baaccb32880d3eea3388e953c64d222179"
 # The Unity material applies this tile at a restrained 0.24 normal scale.  The
 # encoded tile therefore needs enough source slope to survive that attenuation
 # without becoming a broad, noisy normal at full strength.
@@ -45,21 +45,21 @@ MICRODETAIL_NORMAL_SLOPE_GAIN = 108.0
 # only.  The source slope is intentionally amplified enough to survive the
 # normal-map encoding and the Unity material's normal scale.
 REFERENCE_NORMAL_HEIGHT_SCALE = 0.00360
-REFERENCE_ATLAS_HEIGHT_SCALE = 0.00220
-REFERENCE_SMOOTHNESS_SCALE = 0.075
+REFERENCE_ATLAS_HEIGHT_SCALE = 0.00260
+REFERENCE_SMOOTHNESS_SCALE = 0.100
 DEPOSIT_MASK_THRESHOLD = 0.05
 DIELECTRIC_DEPOSIT_METALLIC = 0.0
 SOOT_METALLIC_TARGET = 0.0
 # Removing reference-driven dust must not change the declared wear coverage.
 # This offset is procedural and therefore remains carrier-invariant.
 PROCEDURAL_GRIME_BIAS_COMPENSATION = 0.004
-CHIP_CONTACT_MIN = 0.47
-CHIP_FBM_MIN = 0.72
+CHIP_CONTACT_MIN = 0.62
+CHIP_FBM_MIN = 0.82
 GRIME_BIAS = -0.258
 MICRODETAIL_MIN_CHANNEL_RANGE = 20
-MICRODETAIL_MIN_CHANNEL_STDDEV = 3.0
+MICRODETAIL_MIN_CHANNEL_STDDEV = 2.0
 MICRODETAIL_MIN_XY_RANGE = 0.12
-MICRODETAIL_MIN_XY_STDDEV = 0.025
+MICRODETAIL_MIN_XY_STDDEV = 0.015
 MICRODETAIL_MAX_XY_MAGNITUDE = 0.30
 MICRODETAIL_SEAM_EPSILON = 1.0e-5
 TEXTURE_NAMES = (
@@ -128,7 +128,7 @@ PAIR_RECORDS = (
 MATERIAL_SPECS = {
     # Q2's weapon is a desaturated warm olive/khaki alloy. Dark values stay
     # confined to the explicitly recessed group below; the shell itself remains metal.
-    "WeaponMetal": (0.20, 0.22, 0.15, 1.0),
+    "WeaponMetal": (0.32, 0.30, 0.22, 1.0),
     "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
@@ -136,9 +136,10 @@ MATERIAL_SPECS = {
 
 SURFACE_SPECS = {
     # Tuple order: clean/exposed colour, base/chip/grime metallic, then
-    # base/chip/grime/polished smoothness. Wear is primarily normal and
-    # roughness-driven; exposed albedo stays close to the Q2 shell colour.
-    "WeaponMetal": {"clean": (0.20, 0.22, 0.15), "exposed": (0.225, 0.245, 0.175), "metal": (0.96, 0.985, DIELECTRIC_DEPOSIT_METALLIC), "smooth": (0.44, 0.62, 0.20, 0.58)},
+    # base/chip/grime/polished smoothness. The shell is coated metal: enough
+    # diffuse response to remain readable in shadow, with bright metallic
+    # exposure only in deliberate scratches and edge chips.
+    "WeaponMetal": {"clean": (0.32, 0.30, 0.22), "exposed": (0.52, 0.48, 0.34), "metal": (0.72, 1.0, DIELECTRIC_DEPOSIT_METALLIC), "smooth": (0.48, 0.78, 0.18, 0.68)},
     "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.05, 0.12, DIELECTRIC_DEPOSIT_METALLIC), "smooth": (0.30, 0.50, 0.20, 0.46)},
     "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
     "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
@@ -159,8 +160,8 @@ def make_material(name, color):
     bsdf = material.node_tree.nodes.get("Principled BSDF")
     if bsdf is not None:
         bsdf.inputs["Base Color"].default_value = color
-        bsdf.inputs["Roughness"].default_value = 0.72
-        bsdf.inputs["Metallic"].default_value = 0.12 if name == "WeaponMetal" else 0.0
+        bsdf.inputs["Roughness"].default_value = 0.52
+        bsdf.inputs["Metallic"].default_value = 0.72 if name == "WeaponMetal" else 0.0
     return material
 
 
@@ -1246,13 +1247,12 @@ def _scratch_unit(value):
 
 def _metric_scratch_segments(active, positions, normals, tangents, actual_contact, metal):
     """Rasterize deterministic finite metric capsules on real Metal contact pixels."""
-    # Fine directional marks carry most of the readable wear in the normal
-    # and smoothness maps.  Keep their metric footprint small enough that they
-    # do not become broad pale atlas chips at first-person scale.
-    width_range = (0.00018, 0.00046)
-    length_range = (0.0035, 0.014)
+    # Marks must survive 2048px atlas mipmapping and remain 1-3 pixels wide in
+    # a 1080p first-person view. They stay metric, linear and contact-biased.
+    width_range = (0.00045, 0.00110)
+    length_range = (0.0060, 0.0300)
     contact_threshold = 0.08
-    target_coverage = 0.0065
+    target_coverage = 0.0180
     candidate_indices = np.flatnonzero(metal & (actual_contact > contact_threshold))
     if candidate_indices.size == 0:
         raise RuntimeError("Scratch segment admission failed: no Metal contact candidates")
@@ -1306,7 +1306,7 @@ def _metric_scratch_segments(active, positions, normals, tangents, actual_contac
         tangent_axis /= max(np.linalg.norm(tangent_axis), 1.0e-12)
         bitangent_axis = np.cross(surface_normal, tangent_axis)
         bitangent_axis /= max(np.linalg.norm(bitangent_axis), 1.0e-12)
-        angle = math.radians(-32.0 + 64.0 * _scratch_unit(identity ^ 0xC2B2AE35))
+        angle = math.radians(-70.0 + 140.0 * _scratch_unit(identity ^ 0xC2B2AE35))
         direction = math.cos(angle) * tangent_axis + math.sin(angle) * bitangent_axis
         direction /= max(np.linalg.norm(direction), 1.0e-12)
 
@@ -1507,7 +1507,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         "polish": float(np.count_nonzero(polish > 0.50)) / surface_count,
     }
     limits = {
-        "chips": (0.010, 0.018), "scratches": (0.003, 0.007), "grime": (0.015, 0.030),
+        "chips": (0.003, 0.015), "scratches": (0.012, 0.025), "grime": (0.015, 0.030),
         "muzzleSoot": (0.10, 0.70), "polish": (0.02, 0.36),
     }
     for name, value in coverages.items():
@@ -1528,11 +1528,11 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
             select = group_active == group_index
             spec = SURFACE_SPECS[group_name]
             selected_chip = select & chip
-            # Contact wear stays almost invisible in albedo. Detail belongs in
-            # the photo-derived normal/roughness carriers, not pale chip islands.
-            base[selected_chip] = np.array(spec["clean"]) * 0.97 + np.array(spec["exposed"]) * 0.03
+            # Chips and scratches are explicit metric/contact masks, so their
+            # albedo contrast reads as physical exposed metal rather than noise.
+            base[selected_chip] = np.array(spec["clean"]) * 0.82 + np.array(spec["exposed"]) * 0.18
             selected_scratch = select & scratch
-            scratch_color = np.array(spec["exposed"]) * 0.10 + np.array(spec["clean"]) * 0.90
+            scratch_color = np.array(spec["exposed"]) * 0.65 + np.array(spec["clean"]) * 0.35
             base[selected_scratch] = scratch_color
 
         # Dark coating gets restrained grey scuffs, never exposed-metal chips.
@@ -1570,7 +1570,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         smoothness[selected_chip] = spec["smooth"][1]
         selected_scratch = select & scratch
         metallic[selected_scratch] = spec["metal"][0]
-        smoothness[selected_scratch] = min(1.0, spec["smooth"][0] + 0.10)
+        smoothness[selected_scratch] = min(1.0, spec["smooth"][0] + 0.28)
 
     # Dark coating gets restrained grey scuffs, never exposed-metal chips.
     dark_spec = SURFACE_SPECS["WeaponDark"]
@@ -1624,8 +1624,8 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     brushed = 0.0035 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
     brushed[glass] = 0.0
     height_active = np.clip(
-        -0.022 * chip.astype(np.float32)
-        - 0.021 * scratch.astype(np.float32)
+        -0.030 * chip.astype(np.float32)
+        - 0.038 * scratch.astype(np.float32)
         - 0.007 * dark_scuff.astype(np.float32)
         + 0.022 * grime
         + 0.010 * dust
@@ -1651,7 +1651,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     up = np.where(up_valid, up, height_map)
     dx = right - left
     dy = up - down
-    normal_map = np.stack((-2.0 * dx, -2.0 * dy, np.ones_like(height_map)), axis=2)
+    normal_map = np.stack((-4.5 * dx, -4.5 * dy, np.ones_like(height_map)), axis=2)
     normal_map /= np.maximum(np.linalg.norm(normal_map, axis=2, keepdims=True), 1.0e-12)
     ao = np.clip(1.0 - 0.35 * cavity - 0.15 * grime, 0.45, 1.0)
 

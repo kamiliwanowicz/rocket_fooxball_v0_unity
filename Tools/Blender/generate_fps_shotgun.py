@@ -52,7 +52,7 @@ DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
     # Match the launcher surface palette: desaturated warm olive/khaki alloy,
     # with near black reserved for the explicit recess/dark group.
-    "WeaponMetal": (0.20, 0.22, 0.15, 1.0),
+    "WeaponMetal": (0.32, 0.30, 0.22, 1.0),
     "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
@@ -169,8 +169,8 @@ def make_material(name, color):
     bsdf = material.node_tree.nodes.get("Principled BSDF")
     if bsdf is not None:
         bsdf.inputs["Base Color"].default_value = color
-        bsdf.inputs["Roughness"].default_value = 0.72
-        bsdf.inputs["Metallic"].default_value = 0.12 if name == "WeaponMetal" else 0.0
+        bsdf.inputs["Roughness"].default_value = 0.52
+        bsdf.inputs["Metallic"].default_value = 0.72 if name == "WeaponMetal" else 0.0
     return material
 
 
