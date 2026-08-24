@@ -33,10 +33,10 @@ ATLAS_SIZE = 2048
 ATLAS_DILATION = 16
 MICRODETAIL_SIZE = 1024
 MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
-REFERENCE_TILE_NAME = "WeaponSurfaceReferenceV2.png"
+REFERENCE_TILE_NAME = "WeaponSurfaceReference.png"
 REFERENCE_TILE_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs", REFERENCE_TILE_NAME)
 REFERENCE_TILE_SIZE = 1254
-REFERENCE_RGBA_SHA256 = "c6c90d8fba02870461971d163eeb80baaccb32880d3eea3388e953c64d222179"
+REFERENCE_RGBA_SHA256 = "8ae165be644582741cb75ef53b24bfccbb9c0b3faaa0afcb5ef9c32a4b36dd79"
 # The Unity material applies this tile at a restrained 0.24 normal scale.  The
 # encoded tile therefore needs enough source slope to survive that attenuation
 # without becoming a broad, noisy normal at full strength.
@@ -57,9 +57,9 @@ CHIP_CONTACT_MIN = 0.62
 CHIP_FBM_MIN = 0.82
 GRIME_BIAS = -0.258
 MICRODETAIL_MIN_CHANNEL_RANGE = 20
-MICRODETAIL_MIN_CHANNEL_STDDEV = 2.0
+MICRODETAIL_MIN_CHANNEL_STDDEV = 3.0
 MICRODETAIL_MIN_XY_RANGE = 0.12
-MICRODETAIL_MIN_XY_STDDEV = 0.015
+MICRODETAIL_MIN_XY_STDDEV = 0.025
 MICRODETAIL_MAX_XY_MAGNITUDE = 0.30
 MICRODETAIL_SEAM_EPSILON = 1.0e-5
 TEXTURE_NAMES = (
@@ -1603,35 +1603,25 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     smoothness += 0.10 * muzzle_lip.astype(np.float32)
     smoothness = np.clip(smoothness, 0.0, 1.0)
 
-    # Tangent-oriented fine grain gives the eye a directional highlight break
-    # without painting another pale albedo layer across the weapon.
-    position_active = position.reshape(-1, 3)[active]
-    tangent_active = tangent.reshape(-1, 3)[active]
-    tangent_coordinate = np.sum(position_active * tangent_active, axis=1)
-    grain_phase = (SEED >> 9) * (math.tau / 4294967296.0)
-    directional_grain = 0.5 + 0.5 * np.sin(tangent_coordinate * math.tau * 130.0 + grain_phase)
-    directional_grain *= (metal | dark).astype(np.float32)
-    directional_grain[glass] = 0.0
+    # The real reference owns subtle brush breakup. It is irregular and only
+    # modulates smoothness; no analytic wave is allowed into height/normal.
+    irregular_brush = reference_detail * metal_or_dark.astype(np.float32)
+    irregular_brush[glass] = 0.0
     smoothness = np.clip(
         smoothness
         + 0.04 * scratch.astype(np.float32)
         - 0.08 * dust
-        - 0.018 * np.abs(reference_detail)
-        - 0.025 * directional_grain,
+        - 0.030 * np.abs(irregular_brush),
         0.0,
         1.0,
     )
-    brushed = 0.0035 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
-    brushed[glass] = 0.0
     height_active = np.clip(
         -0.030 * chip.astype(np.float32)
         - 0.038 * scratch.astype(np.float32)
         - 0.007 * dark_scuff.astype(np.float32)
         + 0.022 * grime
         + 0.010 * dust
-        + 0.006 * (directional_grain - 0.5)
-        + REFERENCE_ATLAS_HEIGHT_SCALE * reference_detail * metal_or_dark.astype(np.float32)
-        + brushed,
+        + REFERENCE_ATLAS_HEIGHT_SCALE * reference_detail * metal_or_dark.astype(np.float32),
         -0.05,
         0.05,
     )
