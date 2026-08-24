@@ -50,9 +50,9 @@ CORE_INSET_MAX = 0.004
 GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
 DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
-    # Match the launcher surface palette: warm dirty olive alloy, with near
-    # black reserved for the explicit recess/dark group.
-    "WeaponMetal": (0.34, 0.35, 0.28, 1.0),
+    # Match the launcher surface palette: dark warm ochre-khaki alloy, with
+    # near black reserved for the explicit recess/dark group.
+    "WeaponMetal": (0.26, 0.22, 0.13, 1.0),
     "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),

@@ -185,9 +185,9 @@ namespace RocketFooxball.Editor
         internal const float WeaponShellCoreInset = 0.002f;
         internal const float WeaponMeshIslandPositionTolerance = 0.0001f;
         internal const int WeaponMicroDetailNormalMaxTextureSize = 1024;
-        internal static readonly Vector2 WeaponMicroDetailNormalTiling = new Vector2(12f, 12f);
-        internal const float WeaponMicroDetailNormalScale = 0.20f;
-        internal static readonly Vector3 LauncherViewmodelPosition = new Vector3(0.28f, -0.30f, 0.31f);
+        internal static readonly Vector2 WeaponMicroDetailNormalTiling = new Vector2(16f, 16f);
+        internal const float WeaponMicroDetailNormalScale = 0.24f;
+        internal static readonly Vector3 LauncherViewmodelPosition = new Vector3(-0.28f, -0.30f, 0.31f);
         internal static readonly Vector3 ShotgunViewmodelPosition = new Vector3(0.30f, -0.34f, 0.42f);
         internal static readonly Vector3 LauncherWeaponBoundsMin = new Vector3(-0.16f, -0.14f, -0.20f);
         internal static readonly Vector3 LauncherWeaponBoundsMax = new Vector3(0.16f, 0.11f, 0.55f);
