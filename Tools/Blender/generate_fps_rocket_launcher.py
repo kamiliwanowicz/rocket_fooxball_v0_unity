@@ -31,6 +31,9 @@ STAGING_ROOT = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderStaging", "FpsRocke
 SEED = 0x5A17C9E3
 ATLAS_SIZE = 2048
 ATLAS_DILATION = 16
+MICRODETAIL_SIZE = 1024
+MICRODETAIL_NAME = "WeaponMicroDetail_Normal.png"
+MICRODETAIL_TILE_SCALE = 12.0
 TEXTURE_NAMES = (
     "FpsRocketLauncher_BaseColor.png",
     "FpsRocketLauncher_Normal.png",
@@ -95,15 +98,20 @@ PAIR_RECORDS = (
 )
 
 MATERIAL_SPECS = {
-    "WeaponMetal": (0.50, 0.49, 0.43, 1.0),
-    "WeaponDark": (0.025, 0.028, 0.030, 1.0),
+    # The weapon is predominantly a warm, dirty olive/khaki-grey alloy.  Dark
+    # values stay confined to the explicitly recessed group below.
+    "WeaponMetal": (0.34, 0.35, 0.28, 1.0),
+    "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
 }
 
 SURFACE_SPECS = {
-    "WeaponMetal": {"clean": (0.50, 0.49, 0.43), "exposed": (0.66, 0.67, 0.65), "metal": (0.82, 0.96, 0.30), "smooth": (0.48, 0.62, 0.25, 0.18)},
-    "WeaponDark": {"clean": (0.025, 0.028, 0.030), "exposed": (0.15, 0.16, 0.17), "metal": (0.02, 0.02, 0.02), "smooth": (0.25, 0.34, 0.18, 0.12)},
+    # Tuple order: clean/exposed colour, base/chip/grime metallic, then
+    # base/chip/grime/polished smoothness.  Chips are deliberately close to
+    # clean values; detail should read in normals and highlights instead.
+    "WeaponMetal": {"clean": (0.34, 0.35, 0.28), "exposed": (0.405, 0.415, 0.345), "metal": (0.86, 0.90, 0.26), "smooth": (0.43, 0.53, 0.18, 0.62)},
+    "WeaponDark": {"clean": (0.012, 0.014, 0.014), "exposed": (0.060, 0.064, 0.058), "metal": (0.06, 0.08, 0.015), "smooth": (0.30, 0.38, 0.16, 0.48)},
     "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
     "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
 }
@@ -555,13 +563,14 @@ def _png_chunk(chunk_type, data):
     return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", zlib.crc32(chunk_type + data) & 0xFFFFFFFF)
 
 
-def write_rgba_png(path, pixels, srgb):
-    if pixels.shape != (ATLAS_SIZE, ATLAS_SIZE, 4) or pixels.dtype != np.uint8:
-        raise RuntimeError(f"Invalid RGBA8 atlas payload for {path}: {pixels.shape}/{pixels.dtype}")
+def _write_rgba_png(path, pixels, srgb):
+    if pixels.ndim != 3 or pixels.shape[2] != 4 or pixels.dtype != np.uint8:
+        raise RuntimeError(f"Invalid RGBA8 payload for {path}: {pixels.shape}/{pixels.dtype}")
+    height, width, _ = pixels.shape
     os.makedirs(os.path.dirname(path), exist_ok=True)
     # Texture arrays use Blender's bottom-left UV origin; PNG scanlines are top-first.
     scanlines = b"".join(b"\x00" + row.tobytes() for row in pixels[::-1])
-    chunks = [_png_chunk(b"IHDR", struct.pack(">IIBBBBB", ATLAS_SIZE, ATLAS_SIZE, 8, 6, 0, 0, 0))]
+    chunks = [_png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))]
     if srgb:
         chunks.extend((_png_chunk(b"sRGB", b"\x00"), _png_chunk(b"gAMA", struct.pack(">I", 45455))))
     else:
@@ -574,6 +583,18 @@ def write_rgba_png(path, pixels, srgb):
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, path)
+
+
+def write_rgba_png(path, pixels, srgb):
+    if pixels.shape != (ATLAS_SIZE, ATLAS_SIZE, 4) or pixels.dtype != np.uint8:
+        raise RuntimeError(f"Invalid RGBA8 atlas payload for {path}: {pixels.shape}/{pixels.dtype}")
+    _write_rgba_png(path, pixels, srgb)
+
+
+def write_microdetail_png(path, pixels):
+    if pixels.shape != (MICRODETAIL_SIZE, MICRODETAIL_SIZE, 4) or pixels.dtype != np.uint8:
+        raise RuntimeError(f"Invalid RGBA8 microdetail payload for {path}: {pixels.shape}/{pixels.dtype}")
+    _write_rgba_png(path, pixels, False)
 
 
 def _face_dihedral_degrees(mesh):
@@ -793,6 +814,48 @@ def _fbm(x, y, z):
     return total / normalization
 
 
+def generate_microdetail_texture(path):
+    """Write a deterministic, tileable scratch/dust normal for metal only.
+
+    Every carrier frequency is an integer number of cycles over the tile, so
+    opposite borders meet exactly when the texture sampler repeats.  The
+    broad atlas carries authored wear; this tile supplies the small highlight
+    breakup that would otherwise disappear at first-person viewing distance.
+    """
+    size = MICRODETAIL_SIZE
+    rows, columns = np.mgrid[0:size, 0:size].astype(np.float32)
+    u = columns / float(size)
+    v = rows / float(size)
+    phase = (SEED & 0xFFFF) * (math.tau / 65536.0)
+    # Two warped line families provide directional machining scratches.  The
+    # low-frequency warp keeps them from reading as a regular grating while
+    # retaining exact periodicity at both tile seams.
+    warp_u = np.sin(math.tau * (5.0 * v) + phase)
+    warp_v = np.sin(math.tau * (7.0 * u) - phase * 0.73)
+    scratch_a = np.sin(math.tau * (43.0 * u + 1.7 * warp_u) + phase * 1.13)
+    scratch_b = np.sin(math.tau * (71.0 * u - 1.3 * warp_v) - phase * 0.61)
+    cross_scratch = np.sin(math.tau * (29.0 * v + 0.9 * np.sin(math.tau * 3.0 * u + phase)))
+    dust_coarse = np.sin(math.tau * (11.0 * u + 17.0 * v) + phase * 0.37)
+    dust_fine = np.sin(math.tau * (97.0 * u - 53.0 * v) - phase * 1.41)
+    height = (
+        0.00185 * scratch_a
+        + 0.00115 * scratch_b
+        + 0.00070 * cross_scratch
+        + 0.00075 * dust_coarse
+        + 0.00035 * dust_fine
+    ).astype(np.float32)
+    dx = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) * 0.5
+    dy = (np.roll(height, -1, axis=0) - np.roll(height, 1, axis=0)) * 0.5
+    normal = np.stack((-5.0 * dx, -5.0 * dy, np.ones_like(height)), axis=2)
+    normal /= np.maximum(np.linalg.norm(normal, axis=2, keepdims=True), 1.0e-12)
+    rgba = np.empty((size, size, 4), dtype=np.uint8)
+    rgba[:, :, :3] = np.clip(np.rint(normal * 127.5 + 127.5), 0, 255).astype(np.uint8)
+    rgba[:, :, 3] = 255
+    write_microdetail_png(path, rgba)
+    print(f"OUTPUT microdetail: {path} ({os.path.getsize(path)} bytes, {size}x{size}, tileable=yes, groups=WeaponMetal/WeaponDark)")
+    return _hash_file(path)
+
+
 def _surface_boundary_distance(surface):
     distance = np.zeros(surface.shape, dtype=np.float32)
     current = surface.copy()
@@ -950,10 +1013,13 @@ def _scratch_unit(value):
 
 def _metric_scratch_segments(active, positions, normals, tangents, actual_contact, metal):
     """Rasterize deterministic finite metric capsules on real Metal contact pixels."""
-    width_range = (0.00025, 0.00080)
-    length_range = (0.004, 0.022)
+    # Fine directional marks carry most of the readable wear in the normal
+    # and smoothness maps.  Keep their metric footprint small enough that they
+    # do not become broad pale atlas chips at first-person scale.
+    width_range = (0.00016, 0.00042)
+    length_range = (0.0035, 0.014)
     contact_threshold = 0.08
-    target_coverage = 0.003
+    target_coverage = 0.006
     candidate_indices = np.flatnonzero(metal & (actual_contact > contact_threshold))
     if candidate_indices.size == 0:
         raise RuntimeError("Scratch segment admission failed: no Metal contact candidates")
@@ -990,7 +1056,7 @@ def _metric_scratch_segments(active, positions, normals, tangents, actual_contac
     scratch = np.zeros(active.size, dtype=bool)
     admitted_geometry = np.zeros(active.size, dtype=bool)
     records = []
-    maximum_candidates = min(candidate_indices.size, max(4096, active.size // 150))
+    maximum_candidates = min(candidate_indices.size, max(8192, active.size // 100))
     for candidate_index in candidate_indices[:maximum_candidates]:
         atlas_index = int(active[candidate_index])
         identity = atlas_index ^ SEED ^ (len(records) * 0x9E3779B9)
@@ -1061,7 +1127,7 @@ def _metric_scratch_segments(active, positions, normals, tangents, actual_contac
                 "newPixels": int(new_pixels.size),
             }
         )
-        if len(records) >= 32 and np.count_nonzero(scratch) / active.size >= target_coverage:
+        if len(records) >= 48 and np.count_nonzero(scratch) / active.size >= target_coverage:
             break
 
     if not records:
@@ -1146,7 +1212,10 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     metal = group_active == GROUP_NAMES.index("WeaponMetal")
     dark = group_active == GROUP_NAMES.index("WeaponDark")
     glass = (group_active == GROUP_NAMES.index("WeaponAccent")) | core
-    chip = (actual_contact > 0.14) & (fbm > 0.52) & metal
+    # Keep edge wear narrow and low contrast.  The muzzle branch is explicit
+    # so soot/heat remains localized instead of washing the whole receiver.
+    muzzle_lip = (edge_contact > 0.56) & (fbm > 0.61) & metal & (py < -0.29)
+    chip = (((actual_contact > 0.30) & (fbm > 0.63)) | muzzle_lip) & metal
     scratch, scratch_audit = _metric_scratch_segments(
         active,
         position.reshape(-1, 3)[active],
@@ -1155,11 +1224,20 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         actual_contact,
         metal,
     )
-    dark_scuff = (actual_contact > 0.18) & (fbm > 0.58) & dark
-    grime = np.clip(0.45 * cavity + 0.35 * downward + 0.20 * fbm - 0.38, 0.0, 1.0)
+    dark_scuff = (actual_contact > 0.42) & (fbm > 0.66) & dark
+    dust_coarse = _trig_noise(px, py, pz, 11.0, 0.193)
+    dust_fine = _trig_noise(px, py, pz, 97.0, 1.173)
+    dust = np.clip(0.55 * fbm + 0.30 * dust_coarse + 0.15 * dust_fine - 0.45, 0.0, 1.0)
+    dust[glass] = 0.0
+    grime = np.clip(0.50 * cavity + 0.35 * downward + 0.24 * fbm + 0.26 * dust - 0.34, 0.0, 1.0)
     grime[glass] = 0.0
-    soot = _smoothstep(-0.38, -0.55, py) * np.clip(0.65 + 0.35 * fbm, 0.0, 1.0)
+    muzzle_depth = _smoothstep(-0.42, -0.60, py)
+    muzzle_radius = np.sqrt(px * px + (pz - 0.015) * (pz - 0.015))
+    muzzle_ring = 1.0 - _smoothstep(0.065, 0.155, muzzle_radius)
+    soot = np.clip(muzzle_depth * muzzle_ring * (0.66 + 0.34 * fbm), 0.0, 1.0)
     soot[glass] = 0.0
+    heat = np.clip(0.55 * soot + 0.20 * muzzle_lip.astype(np.float32) + 0.12 * dust, 0.0, 1.0)
+    heat[glass] = 0.0
     rear = _smoothstep(0.02, 0.16, py) * (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz)))
     grip = (1.0 - _smoothstep(0.06, 0.14, np.abs(px))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz))) * (1.0 - _smoothstep(0.18, 0.38, np.abs(py + 0.18)))
     handling = 0.70 * np.maximum(rear, grip) * np.clip(0.65 + 0.35 * fbm, 0.0, 1.0)
@@ -1203,25 +1281,31 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         select = group_active == group_index
         spec = SURFACE_SPECS[group_name]
         selected_chip = select & chip
-        base[selected_chip] = spec["exposed"]
+        # Edge chips are a restrained khaki lift, not the broad pale flakes
+        # from the old pass.  Detail remains primarily in normal/smoothness.
+        base[selected_chip] = np.array(spec["clean"]) * 0.16 + np.array(spec["exposed"]) * 0.84
         metallic[selected_chip] = spec["metal"][1]
-        smoothness[selected_chip] = spec["smooth"][2]
+        smoothness[selected_chip] = spec["smooth"][1]
         selected_scratch = select & scratch
-        scratch_color = np.array(spec["exposed"]) * 0.70 + np.array(spec["clean"]) * 0.30
+        scratch_color = np.array(spec["exposed"]) * 0.10 + np.array(spec["clean"]) * 0.90
         base[selected_scratch] = scratch_color
-        metallic[selected_scratch] = spec["metal"][1] * 0.70 + spec["metal"][0] * 0.30
-        smoothness[selected_scratch] = spec["smooth"][2]
+        metallic[selected_scratch] = spec["metal"][0]
+        smoothness[selected_scratch] = min(1.0, spec["smooth"][0] + 0.10)
 
     # Dark coating gets restrained grey scuffs, never exposed-metal chips.
     dark_spec = SURFACE_SPECS["WeaponDark"]
-    base[dark_scuff] = dark_spec["exposed"]
-    smoothness[dark_scuff] = dark_spec["smooth"][2]
+    base[dark_scuff] = np.array(dark_spec["clean"]) * 0.55 + np.array(dark_spec["exposed"]) * 0.45
+    smoothness[dark_scuff] = dark_spec["smooth"][1]
 
     soot_strength = soot[:, None]
-    base *= 1.0 - 0.75 * soot_strength
-    metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.18 * soot)
-    smoothness = np.minimum(smoothness, smoothness * (1.0 - soot) + 0.18 * soot)
-    base *= 1.0 - 0.58 * grime[:, None]
+    base *= 1.0 - 0.48 * soot_strength
+    # Heat deposits are warmer at the muzzle lip while soot lowers highlight
+    # response.  The mask is zero on the red glass groups by construction.
+    base += heat[:, None] * np.array((0.020, 0.012, 0.003), dtype=np.float32)
+    metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.12 * soot)
+    smoothness = np.minimum(smoothness, smoothness * (1.0 - soot) + 0.13 * soot)
+    base *= 1.0 - 0.42 * grime[:, None]
+    base *= 1.0 - 0.10 * dust[:, None]
     for group_index, group_name in enumerate(GROUP_NAMES):
         select = group_active == group_index
         spec = SURFACE_SPECS[group_name]
@@ -1229,9 +1313,29 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         smoothness[select] = smoothness[select] * (1.0 - grime[select]) + spec["smooth"][3] * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - polish[select]) + spec["smooth"][1] * polish[select]
 
-    brushed = 0.006 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
+    # Tangent-oriented fine grain gives the eye a directional highlight break
+    # without painting another pale albedo layer across the weapon.
+    position_active = position.reshape(-1, 3)[active]
+    tangent_active = tangent.reshape(-1, 3)[active]
+    tangent_coordinate = np.sum(position_active * tangent_active, axis=1)
+    grain_phase = (SEED >> 9) * (math.tau / 4294967296.0)
+    directional_grain = 0.5 + 0.5 * np.sin(tangent_coordinate * math.tau * 130.0 + grain_phase)
+    directional_grain *= (metal | dark).astype(np.float32)
+    directional_grain[glass] = 0.0
+    smoothness = np.clip(smoothness + 0.04 * scratch.astype(np.float32) - 0.08 * dust - 0.025 * directional_grain, 0.0, 1.0)
+    brushed = 0.0035 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
     brushed[glass] = 0.0
-    height_active = np.clip(-0.035 * chip.astype(np.float32) - 0.015 * scratch.astype(np.float32) - 0.006 * dark_scuff.astype(np.float32) + 0.03 * grime + brushed, -0.05, 0.05)
+    height_active = np.clip(
+        -0.022 * chip.astype(np.float32)
+        - 0.021 * scratch.astype(np.float32)
+        - 0.007 * dark_scuff.astype(np.float32)
+        + 0.022 * grime
+        + 0.010 * dust
+        + 0.006 * (directional_grain - 0.5)
+        + brushed,
+        -0.05,
+        0.05,
+    )
     height_map = np.zeros(surface.shape, dtype=np.float32)
     height_map.ravel()[active] = height_active
     left = np.roll(height_map, 1, axis=1)
@@ -1295,12 +1399,18 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         path = os.path.join(stage_texture_dir, filename)
         write_rgba_png(path, pixels, filename == TEXTURE_NAMES[0])
         output_hashes[filename] = _hash_file(path)
+    microdetail_path = os.path.join(stage_texture_dir, MICRODETAIL_NAME)
+    output_hashes[MICRODETAIL_NAME] = generate_microdetail_texture(microdetail_path)
     channel_record = {
         "baseColor": {"format": "RGBA8", "transfer": "sRGB"},
         "normal": {"format": "RGBA8", "transfer": "linear", "centralDifferencePx": 1, "xyScale": 2, "z": 1},
         "metallicSmoothness": {"format": "RGBA8", "transfer": "linear", "metallicChannel": "R", "smoothnessChannel": "A"},
         "occlusion": {"format": "RGBA8", "transfer": "linear", "minimum": 0.45},
         "emission": {"format": "RGBA8", "transfer": "linear", "coreValue": 0.85},
+        "microDetailNormal": {
+            "format": "RGBA8", "transfer": "linear", "size": [MICRODETAIL_SIZE, MICRODETAIL_SIZE],
+            "tile": "repeat", "intendedGroups": ["WeaponMetal", "WeaponDark"],
+        },
     }
     contact_chip_precision = float(np.count_nonzero(chip & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(chip)))
     contact_scratch_precision = float(np.count_nonzero(scratch & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(scratch)))
@@ -1338,7 +1448,8 @@ def point_camera(camera, target):
 
 
 def configure_final_materials(materials, stage_texture_dir):
-    image_paths = {filename: os.path.join(stage_texture_dir, filename) for filename in TEXTURE_NAMES}
+    image_names = TEXTURE_NAMES + (MICRODETAIL_NAME,)
+    image_paths = {filename: os.path.join(stage_texture_dir, filename) for filename in image_names}
     images = {filename: bpy.data.images.load(path, check_existing=False) for filename, path in image_paths.items()}
     for filename, image in images.items():
         image.colorspace_settings.name = "sRGB" if filename == TEXTURE_NAMES[0] else "Non-Color"
@@ -1359,6 +1470,27 @@ def configure_final_materials(materials, stage_texture_dir):
         normal_texture = nodes.new("ShaderNodeTexImage")
         normal_texture.image = images[TEXTURE_NAMES[1]]
         normal_node = nodes.new("ShaderNodeNormalMap")
+        normal_output = normal_node.outputs["Normal"]
+        if material.name in ("WeaponMetal", "WeaponDark"):
+            # The micro normal is deliberately restricted to metal and dark
+            # groups; red glass remains a clean, unperturbed accent.
+            texcoord = nodes.new("ShaderNodeTexCoord")
+            mapping = nodes.new("ShaderNodeMapping")
+            mapping.vector_type = "POINT"
+            mapping.inputs["Scale"].default_value = (MICRODETAIL_TILE_SCALE, MICRODETAIL_TILE_SCALE, MICRODETAIL_TILE_SCALE)
+            micro_texture = nodes.new("ShaderNodeTexImage")
+            micro_texture.image = images[MICRODETAIL_NAME]
+            micro_texture.extension = "REPEAT"
+            micro_normal = nodes.new("ShaderNodeNormalMap")
+            micro_normal.inputs["Strength"].default_value = 0.35
+            normal_add = nodes.new("ShaderNodeVectorMath")
+            normal_add.operation = "ADD"
+            links.new(texcoord.outputs["UV"], mapping.inputs["Vector"])
+            links.new(mapping.outputs["Vector"], micro_texture.inputs["Vector"])
+            links.new(micro_texture.outputs["Color"], micro_normal.inputs["Color"])
+            links.new(normal_node.outputs["Normal"], normal_add.inputs[0])
+            links.new(micro_normal.outputs["Normal"], normal_add.inputs[1])
+            normal_output = normal_add.outputs["Vector"]
         metallic_texture = nodes.new("ShaderNodeTexImage")
         metallic_texture.image = images[TEXTURE_NAMES[2]]
         separate_metallic = nodes.new("ShaderNodeSeparateColor")
@@ -1371,7 +1503,7 @@ def configure_final_materials(materials, stage_texture_dir):
         links.new(ao_texture.outputs["Color"], base_ao.inputs[2])
         links.new(base_ao.outputs["Color"], shader.inputs["Base Color"])
         links.new(normal_texture.outputs["Color"], normal_node.inputs["Color"])
-        links.new(normal_node.outputs["Normal"], shader.inputs["Normal"])
+        links.new(normal_output, shader.inputs["Normal"])
         links.new(metallic_texture.outputs["Color"], separate_metallic.inputs["Color"])
         links.new(separate_metallic.outputs["Red"], shader.inputs["Metallic"])
         links.new(metallic_texture.outputs["Alpha"], invert_smoothness.inputs[1])
@@ -1579,7 +1711,7 @@ def compare_runs(first, second):
         raise RuntimeError(f"Two-run UV hash mismatch: {first['uv_hash']} != {second['uv_hash']}")
     if first["masks"] != second["masks"]:
         raise RuntimeError("Two-run mask audit mismatch")
-    print(f"PROOF two-run semantic+texture match: textures={len(TEXTURE_NAMES)}, preview-audits-per-run={len(PREVIEW_NAMES)}")
+    print(f"PROOF two-run semantic+texture match: textures={len(first['texture_hashes'])}, preview-audits-per-run={len(PREVIEW_NAMES)}")
 
 
 def _safe_recreate_staging_root():
@@ -1602,11 +1734,18 @@ def _atomic_promote(source, destination):
 def promote_and_write_proof(record, two_run_identical):
     for filename in TEXTURE_NAMES:
         _atomic_promote(os.path.join(record["stage_dir"], "textures", filename), os.path.join(TEXTURE_DIR, filename))
+    _atomic_promote(
+        os.path.join(record["stage_dir"], "textures", MICRODETAIL_NAME),
+        os.path.join(TEXTURE_DIR, MICRODETAIL_NAME),
+    )
     _atomic_promote(record["fbx_path"], OUTPUT_PATH)
     os.makedirs(PREVIEW_DIR, exist_ok=True)
     for filename in PREVIEW_NAMES:
         _atomic_promote(os.path.join(record["preview_dir"], filename), os.path.join(PREVIEW_DIR, filename))
-    final_texture_hashes = {filename: _hash_file(os.path.join(TEXTURE_DIR, filename)) for filename in TEXTURE_NAMES}
+    final_texture_hashes = {
+        filename: _hash_file(os.path.join(TEXTURE_DIR, filename))
+        for filename in TEXTURE_NAMES + (MICRODETAIL_NAME,)
+    }
     final_preview_hashes = {filename: _hash_file(os.path.join(PREVIEW_DIR, filename)) for filename in PREVIEW_NAMES}
     if final_texture_hashes != record["texture_hashes"] or final_preview_hashes != record["preview_hashes"]:
         raise RuntimeError("Atomic promotion hash verification failed")

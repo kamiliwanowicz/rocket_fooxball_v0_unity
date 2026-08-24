@@ -50,8 +50,10 @@ CORE_INSET_MAX = 0.004
 GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
 DECLARED_OPEN_PARTS = ()
 MATERIAL_SPECS = {
-    "WeaponMetal": (0.50, 0.49, 0.43, 1.0),
-    "WeaponDark": (0.025, 0.028, 0.030, 1.0),
+    # Match the launcher surface palette: warm dirty olive alloy, with near
+    # black reserved for the explicit recess/dark group.
+    "WeaponMetal": (0.34, 0.35, 0.28, 1.0),
+    "WeaponDark": (0.012, 0.014, 0.014, 1.0),
     "WeaponAccentCore": (0.16, 0.0, 0.0, 1.0),
     "WeaponAccent": (0.55, 0.0, 0.0, 1.0),
 }
@@ -1090,7 +1092,7 @@ def compare_runs(first, second):
         raise RuntimeError("Two-run mask audit mismatch")
     if first_records[0]["signature"] == first_records[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
-    print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures=5, previews=13")
+    print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures={len(first['texture_hashes'])}, previews=13")
 
 
 def _safe_recreate_staging_root():
@@ -1116,10 +1118,17 @@ def promote_and_write_proof(run, two_run_identical):
         _atomic_promote(os.path.join(run["stage_dir"], os.path.basename(profile["output"])), profile["output"])
     for filename in TEXTURE_NAMES:
         _atomic_promote(os.path.join(run["texture_dir"], filename), os.path.join(TEXTURE_DIRECTORY, filename))
+    _atomic_promote(
+        os.path.join(run["texture_dir"], surface.MICRODETAIL_NAME),
+        os.path.join(TEXTURE_DIRECTORY, surface.MICRODETAIL_NAME),
+    )
     PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "shotgun")
     for filename in PREVIEW_NAMES:
         _atomic_promote(os.path.join(run["stage_dir"], "previews", filename), os.path.join(PREVIEW_DIRECTORY, filename))
-    output_hashes = {filename: surface._hash_file(os.path.join(TEXTURE_DIRECTORY, filename)) for filename in TEXTURE_NAMES}
+    output_hashes = {
+        filename: surface._hash_file(os.path.join(TEXTURE_DIRECTORY, filename))
+        for filename in TEXTURE_NAMES + (surface.MICRODETAIL_NAME,)
+    }
     if output_hashes != run["texture_hashes"]:
         raise RuntimeError("Shotgun atomic texture promotion hash mismatch")
     proof = {
