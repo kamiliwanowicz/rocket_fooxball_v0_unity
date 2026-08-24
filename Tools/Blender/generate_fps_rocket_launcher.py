@@ -47,6 +47,12 @@ MICRODETAIL_NORMAL_SLOPE_GAIN = 108.0
 REFERENCE_NORMAL_HEIGHT_SCALE = 0.00360
 REFERENCE_ATLAS_HEIGHT_SCALE = 0.00220
 REFERENCE_SMOOTHNESS_SCALE = 0.075
+DEPOSIT_MASK_THRESHOLD = 0.05
+DIELECTRIC_DEPOSIT_METALLIC = 0.0
+SOOT_METALLIC_TARGET = 0.0
+# Removing reference-driven dust must not change the declared wear coverage.
+# This offset is procedural and therefore remains carrier-invariant.
+PROCEDURAL_GRIME_BIAS_COMPENSATION = 0.004
 CHIP_CONTACT_MIN = 0.47
 CHIP_FBM_MIN = 0.72
 GRIME_BIAS = -0.258
@@ -132,8 +138,8 @@ SURFACE_SPECS = {
     # Tuple order: clean/exposed colour, base/chip/grime metallic, then
     # base/chip/grime/polished smoothness. Wear is primarily normal and
     # roughness-driven; exposed albedo stays close to the Q2 shell colour.
-    "WeaponMetal": {"clean": (0.20, 0.22, 0.15), "exposed": (0.225, 0.245, 0.175), "metal": (0.96, 0.985, 0.04), "smooth": (0.44, 0.62, 0.20, 0.58)},
-    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.05, 0.12, 0.02), "smooth": (0.30, 0.50, 0.20, 0.46)},
+    "WeaponMetal": {"clean": (0.20, 0.22, 0.15), "exposed": (0.225, 0.245, 0.175), "metal": (0.96, 0.985, DIELECTRIC_DEPOSIT_METALLIC), "smooth": (0.44, 0.62, 0.20, 0.58)},
+    "WeaponDark": {"clean": (0.008, 0.010, 0.011), "exposed": (0.035, 0.038, 0.034), "metal": (0.05, 0.12, DIELECTRIC_DEPOSIT_METALLIC), "smooth": (0.30, 0.50, 0.20, 0.46)},
     "WeaponAccent": {"clean": (0.55, 0.0, 0.0), "exposed": (0.55, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.72, 0.72, 0.72, 0.72)},
     "WeaponAccentCore": {"clean": (0.16, 0.0, 0.0), "exposed": (0.16, 0.0, 0.0), "metal": (0.0, 0.0, 0.0), "smooth": (0.80, 0.80, 0.80, 0.80)},
 }
@@ -724,8 +730,8 @@ def _load_reference_height():
         )
     # Recenter the supplied scratch carrier to remove any broad lighting or
     # paper-tone bias. Sampling wraps at the tile border, so only zero-mean
-    # surface detail reaches atlas normal/smoothness/dust; base albedo never
-    # reads this channel.
+    # surface detail reaches atlas normal/smoothness; base albedo never reads
+    # this channel.
     red = rgba[:, :, 0].astype(np.float32)
     _REFERENCE_HEIGHT = ((red - float(np.mean(red))) / 127.0).astype(np.float32)
     return _REFERENCE_HEIGHT
@@ -1460,14 +1466,21 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     dark_scuff = (actual_contact > 0.60) & (fbm > 0.76) & dark
     dust_coarse = _trig_noise(px, py, pz, 11.0, 0.193)
     dust_fine = _trig_noise(px, py, pz, 97.0, 1.173)
-    reference_dust = np.abs(reference_detail)
+    # Procedural deposits own albedo. The decoded reference is a micro-surface
+    # carrier and is intentionally kept out of dust/grime so changing it cannot
+    # darken BaseColor.
     dust = np.clip(
-        0.24 * fbm + 0.16 * dust_coarse + 0.12 * dust_fine + 0.22 * reference_dust - 0.26,
+        0.24 * fbm + 0.16 * dust_coarse + 0.12 * dust_fine - 0.26,
         0.0,
         1.0,
     )
     dust[glass] = 0.0
-    grime = np.clip(0.28 * cavity + 0.20 * downward + 0.19 * fbm + 0.18 * dust + GRIME_BIAS, 0.0, 1.0)
+    grime = np.clip(
+        0.28 * cavity + 0.20 * downward + 0.19 * fbm + 0.18 * dust
+        + GRIME_BIAS + PROCEDURAL_GRIME_BIAS_COMPENSATION,
+        0.0,
+        1.0,
+    )
     grime[_trig_noise(px, py, pz, 37.0, 0.417) < 0.50] = 0.0
     grime[glass] = 0.0
     muzzle_depth = _smoothstep(-0.42, -0.60, py)
@@ -1503,14 +1516,47 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         if value < low or value > high:
             raise RuntimeError(f"Wear coverage failed {name}: {value:.6f} outside {low:.3f}..{high:.3f}")
 
-    base = np.zeros((surface_count, 3), dtype=np.float32)
+    def compose_base_albedo(_carrier_probe):
+        """Compose BaseColor from procedural wear only; carrier is never read."""
+        base = np.zeros((surface_count, 3), dtype=np.float32)
+        for group_index, group_name in enumerate(GROUP_NAMES):
+            select = group_active == group_index
+            spec = SURFACE_SPECS[group_name]
+            base[select] = spec["clean"]
+
+        for group_index, group_name in enumerate(GROUP_NAMES):
+            select = group_active == group_index
+            spec = SURFACE_SPECS[group_name]
+            selected_chip = select & chip
+            # Contact wear stays almost invisible in albedo. Detail belongs in
+            # the photo-derived normal/roughness carriers, not pale chip islands.
+            base[selected_chip] = np.array(spec["clean"]) * 0.97 + np.array(spec["exposed"]) * 0.03
+            selected_scratch = select & scratch
+            scratch_color = np.array(spec["exposed"]) * 0.10 + np.array(spec["clean"]) * 0.90
+            base[selected_scratch] = scratch_color
+
+        # Dark coating gets restrained grey scuffs, never exposed-metal chips.
+        dark_spec = SURFACE_SPECS["WeaponDark"]
+        base[dark_scuff] = np.array(dark_spec["clean"]) * 0.55 + np.array(dark_spec["exposed"]) * 0.45
+        base *= 1.0 - 0.10 * grime[:, None]
+        base *= 1.0 - 0.025 * dust[:, None]
+        base *= 1.0 - 0.48 * soot[:, None]
+        base += heat[:, None] * np.array((0.020, 0.012, 0.003), dtype=np.float32)
+        return base
+
+    base = compose_base_albedo(reference_detail)
+    carrier_probe = np.roll(reference_detail, 17)
+    carrier_probe_base = compose_base_albedo(carrier_probe)
+    carrier_delta = float(np.max(np.abs(base - carrier_probe_base))) if base.size else 0.0
+    if carrier_delta != 0.0:
+        raise RuntimeError(f"BaseColor carrier invariance failed: maxAbsDelta={carrier_delta}")
+
     metallic = np.zeros(surface_count, dtype=np.float32)
     smoothness = np.zeros(surface_count, dtype=np.float32)
     emission = np.zeros((surface_count, 3), dtype=np.float32)
     for group_index, group_name in enumerate(GROUP_NAMES):
         select = group_active == group_index
         spec = SURFACE_SPECS[group_name]
-        base[select] = spec["clean"]
         metallic[select] = spec["metal"][0]
         smoothness[select] = spec["smooth"][0]
         if group_name == "WeaponAccentCore":
@@ -1520,40 +1566,36 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
         select = group_active == group_index
         spec = SURFACE_SPECS[group_name]
         selected_chip = select & chip
-        # Contact wear stays almost invisible in albedo. Detail belongs in
-        # the photo-derived normal/roughness carriers, not pale chip islands.
-        base[selected_chip] = np.array(spec["clean"]) * 0.97 + np.array(spec["exposed"]) * 0.03
         metallic[selected_chip] = spec["metal"][1]
         smoothness[selected_chip] = spec["smooth"][1]
         selected_scratch = select & scratch
-        scratch_color = np.array(spec["exposed"]) * 0.10 + np.array(spec["clean"]) * 0.90
-        base[selected_scratch] = scratch_color
         metallic[selected_scratch] = spec["metal"][0]
         smoothness[selected_scratch] = min(1.0, spec["smooth"][0] + 0.10)
 
     # Dark coating gets restrained grey scuffs, never exposed-metal chips.
     dark_spec = SURFACE_SPECS["WeaponDark"]
-    base[dark_scuff] = np.array(dark_spec["clean"]) * 0.55 + np.array(dark_spec["exposed"]) * 0.45
     smoothness[dark_scuff] = dark_spec["smooth"][1]
 
-    # Grime is a dielectric deposit.  Apply it before soot so the final muzzle
+    # Grime is a dielectric deposit. Apply it before soot so the final muzzle
     # deposit pass cannot re-metalize an already soot-darkened surface.
-    base *= 1.0 - 0.10 * grime[:, None]
-    base *= 1.0 - 0.025 * dust[:, None]
     for group_index, group_name in enumerate(GROUP_NAMES):
         select = group_active == group_index
         spec = SURFACE_SPECS[group_name]
-        metallic[select] = metallic[select] * (1.0 - grime[select]) + spec["metal"][2] * grime[select]
+        metallic[select] = metallic[select] * (1.0 - grime[select]) + DIELECTRIC_DEPOSIT_METALLIC * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - grime[select]) + spec["smooth"][2] * grime[select]
         smoothness[select] = smoothness[select] * (1.0 - polish[select]) + spec["smooth"][3] * polish[select]
 
-    soot_strength = soot[:, None]
-    base *= 1.0 - 0.48 * soot_strength
     # Heat deposits are warmer at the muzzle lip while soot lowers highlight
     # response.  The mask is zero on the red glass groups by construction.
-    base += heat[:, None] * np.array((0.020, 0.012, 0.003), dtype=np.float32)
-    metallic = np.minimum(metallic, metallic * (1.0 - soot) + 0.12 * soot)
+    metallic = np.minimum(metallic, metallic * (1.0 - soot) + SOOT_METALLIC_TARGET * soot)
     smoothness = np.minimum(smoothness, smoothness * (1.0 - soot) + 0.13 * soot)
+    deposited_grime = grime > DEPOSIT_MASK_THRESHOLD
+    deposited_soot = soot > DEPOSIT_MASK_THRESHOLD
+    dielectric_deposit = deposited_grime | deposited_soot
+    metallic[dielectric_deposit] = DIELECTRIC_DEPOSIT_METALLIC
+    deposit_metallic_pixels = int(np.count_nonzero(metallic[dielectric_deposit] != DIELECTRIC_DEPOSIT_METALLIC))
+    if deposit_metallic_pixels != 0:
+        raise RuntimeError(f"Deposited metallic audit failed: nonDielectricPixels={deposit_metallic_pixels}")
 
     metal_or_dark = metal | dark
     smoothness += REFERENCE_SMOOTHNESS_SCALE * reference_detail * metal_or_dark.astype(np.float32)
@@ -1570,7 +1612,15 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
     directional_grain = 0.5 + 0.5 * np.sin(tangent_coordinate * math.tau * 130.0 + grain_phase)
     directional_grain *= (metal | dark).astype(np.float32)
     directional_grain[glass] = 0.0
-    smoothness = np.clip(smoothness + 0.04 * scratch.astype(np.float32) - 0.08 * dust - 0.025 * directional_grain, 0.0, 1.0)
+    smoothness = np.clip(
+        smoothness
+        + 0.04 * scratch.astype(np.float32)
+        - 0.08 * dust
+        - 0.018 * np.abs(reference_detail)
+        - 0.025 * directional_grain,
+        0.0,
+        1.0,
+    )
     brushed = 0.0035 * (_trig_noise(px, py, pz, 733.0, 0.731) - 0.5)
     brushed[glass] = 0.0
     height_active = np.clip(
@@ -1666,8 +1716,23 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None):
             "path": os.path.relpath(REFERENCE_TILE_PATH, REPOSITORY_ROOT).replace(os.sep, "/"),
             "sourceFormat": "RGB8",
             "decodedRgbaSha256": REFERENCE_RGBA_SHA256,
-            "usage": "zero-mean irregular high-pass source for model-specific atlas normal/smoothness/dust; shared legacy detail output is not assigned to live Unity weapon materials",
+            "usage": "zero-mean irregular high-pass source for model-specific atlas normal/smoothness only; procedural dust/grime owns albedo; shared legacy detail output is not assigned to live Unity weapon materials",
             "periodicSampling": True,
+        },
+        "albedoCarrierInvariant": {
+            "carrierProbe": "periodic reference-height roll by 17 active samples",
+            "maxAbsFloatDelta": round(carrier_delta, 9),
+            "baseColorFloatSha256": hashlib.sha256(np.ascontiguousarray(base).tobytes()).hexdigest(),
+            "carrierProbeBaseColorFloatSha256": hashlib.sha256(np.ascontiguousarray(carrier_probe_base).tobytes()).hexdigest(),
+            "referenceAffects": ["normal", "smoothness"],
+            "referenceDoesNotAffect": ["baseColor", "metallic", "occlusion", "emission"],
+        },
+        "deposits": {
+            "maskThreshold": DEPOSIT_MASK_THRESHOLD,
+            "grimeMetallicTarget": DIELECTRIC_DEPOSIT_METALLIC,
+            "sootMetallicTarget": SOOT_METALLIC_TARGET,
+            "dielectricPixels": int(np.count_nonzero(dielectric_deposit)),
+            "nonDielectricPixels": deposit_metallic_pixels,
         },
     }
     contact_chip_precision = float(np.count_nonzero(chip & (actual_contact > 0.0))) / max(1, int(np.count_nonzero(chip)))
