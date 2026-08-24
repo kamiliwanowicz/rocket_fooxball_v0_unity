@@ -246,22 +246,23 @@ namespace RocketFooxball.Editor
                     EditorUtility.SetDirty(weaponAccentCore);
                     AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent, weaponAccentCore);
                     RemovePhysicsComponents(weaponVisual);
+                    var shotgunBaseMap = LoadTexture(ShotgunBaseColorTexturePath);
+                    var shotgunNormalMap = LoadTexture(ShotgunNormalTexturePath);
+                    var shotgunMetallicMap = LoadTexture(ShotgunMetallicTexturePath);
+                    var shotgunOcclusionMap = LoadTexture(ShotgunOcclusionTexturePath);
+                    var shotgunEmissionMap = LoadTexture(ShotgunEmissionTexturePath);
                     var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunMetal", LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath),
-                        LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath), null,
-                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
-                        1f, 1f, 0.70f, 1f));
+                        "ShotgunMetal", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
+                        null, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f));
                     var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunDark", LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath),
-                        LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath), null,
-                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
-                        1f, 1f, 0.70f, 1f));
+                        "ShotgunDark", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
+                        null, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f));
                     var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunAccent", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
-                        LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath), null,
-                        LoadTexture(DetailNormalTexturePath), Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
-                        WeaponAccentShellMetallic, WeaponAccentShellSmoothness, WeaponAccentShellOcclusion,
-                        WeaponAccentShellBumpScale));
+                        "ShotgunAccent", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
+                        null, Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
+                        1f, 1f, 1f, 1f));
                     SetTransparentWeaponShellState(shotgunAccent);
                     shotgunAccent.SetColor("_EmissionColor", Color.clear);
                     shotgunAccent.SetTexture("_EmissionMap", null);
@@ -269,12 +270,10 @@ namespace RocketFooxball.Editor
                     shotgunAccent.DisableKeyword("_EMISSION");
                     EditorUtility.SetDirty(shotgunAccent);
                     var shotgunAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunAccentCore", LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
-                        LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
-                        LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one,
-                        WeaponAccentCoreBaseColor, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
-                        WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness, WeaponAccentCoreOcclusion,
-                        WeaponAccentCoreBumpScale));
+                        "ShotgunAccentCore", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap,
+                        shotgunEmissionMap, null, Vector2.one, ShotgunAccentCoreBaseColor,
+                        ShotgunAccentCoreEmissionColor, ShotgunAccentCoreEmissionStrength,
+                        1f, 1f, 1f, 1f));
                     SetOpaqueLitState(shotgunAccentCore);
                     EditorUtility.SetDirty(shotgunAccentCore);
                     var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, new Vector3(0.30f, -0.28f, 0.45f), Quaternion.identity, Vector3.one);
@@ -1796,13 +1795,20 @@ namespace RocketFooxball.Editor
                         if (filter == null || filter.sharedMesh == null)
                             throw new InvalidOperationException(label + " renderer mesh is missing: " + renderer.name);
                         ValidateMeshPbrChannels(filter.sharedMesh, false, label + "/" + group);
-                        if (label.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) < 0)
-                        {
-                            var launcherZone = group == "WeaponMetal" ? LauncherMetalUvZone :
-                                group == "WeaponDark" ? LauncherDarkUvZone :
-                                group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
-                            ValidateMeshUvZone(filter.sharedMesh, launcherZone, label + "/" + group);
-                        }
+                        var fpsShotgun = label.IndexOf("FpsShotgun", StringComparison.OrdinalIgnoreCase) >= 0;
+                        var worldShotgun = !fpsShotgun && label.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0;
+                        var uvZone = fpsShotgun
+                            ? group == "WeaponMetal" ? FpsShotgunMetalUvZone :
+                              group == "WeaponDark" ? FpsShotgunDarkUvZone :
+                              group == "WeaponAccentCore" ? FpsShotgunAccentCoreUvZone : FpsShotgunAccentUvZone
+                            : worldShotgun
+                                ? group == "WeaponMetal" ? WorldShotgunMetalUvZone :
+                                  group == "WeaponDark" ? WorldShotgunDarkUvZone :
+                                  group == "WeaponAccentCore" ? WorldShotgunAccentCoreUvZone : WorldShotgunAccentUvZone
+                                : group == "WeaponMetal" ? LauncherMetalUvZone :
+                                  group == "WeaponDark" ? LauncherDarkUvZone :
+                                  group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
+                        ValidateMeshUvZone(filter.sharedMesh, uvZone, label + "/" + group);
                         if (group == "WeaponAccent") shell = renderer;
                         if (group == "WeaponAccentCore") core = renderer;
 

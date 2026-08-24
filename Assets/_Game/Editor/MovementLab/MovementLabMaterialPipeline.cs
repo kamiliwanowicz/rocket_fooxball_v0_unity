@@ -554,10 +554,15 @@ namespace RocketFooxball.Editor
                     var dark = AssetDatabase.LoadAssetAtPath<Material>(ShotgunDarkMaterialPath);
                     var accent = AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentMaterialPath);
                     var core = AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentCoreMaterialPath);
-                    ValidateWeaponMaterial(metal, LoadTexture(WeaponMetalTexturePath), ShotgunMetalBaseColor, "WeaponMetal");
-                    ValidateWeaponMaterial(dark, LoadTexture(WeaponDarkTexturePath), ShotgunDarkBaseColor, "WeaponDark");
-                    ValidateWeaponMaterial(accent, LoadTexture(WeaponAccentTexturePath), ShotgunAccentBaseColor, "ShotgunAccent");
-                    ValidateWeaponCoreMaterial(core, "ShotgunAccentCore");
+                    var baseMap = LoadTexture(ShotgunBaseColorTexturePath);
+                    var normalMap = LoadTexture(ShotgunNormalTexturePath);
+                    var metallicMap = LoadTexture(ShotgunMetallicTexturePath);
+                    var occlusionMap = LoadTexture(ShotgunOcclusionTexturePath);
+                    var emissionMap = LoadTexture(ShotgunEmissionTexturePath);
+                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, ShotgunMetalBaseColor, "ShotgunMetal");
+                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, ShotgunDarkBaseColor, "ShotgunDark");
+                    ValidateShotgunMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, ShotgunAccentBaseColor, "ShotgunAccent");
+                    ValidateShotgunCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "ShotgunAccentCore");
 
                     var renderers = visual.GetComponentsInChildren<Renderer>(true);
                     if (renderers.Length != 4) throw new InvalidOperationException("Shotgun visual must contain exactly four renderers.");
@@ -601,39 +606,29 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Shotgun material slots must contain exactly Metal, Dark, Accent, and AccentCore parts.");
                 }
 
-                internal static void ValidateWeaponMaterial(Material material, Texture2D texture, Color baseColor, string label)
+                internal static void ValidateShotgunMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
+                    Texture2D metallicMap, Texture2D occlusionMap, Color baseColor, string label)
                 {
-                    var normal = label == "WeaponMetal" ? LoadTexture(WeaponMetalNormalTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkNormalTexturePath) : LoadTexture(WeaponAccentNormalTexturePath);
-                    var metallic = label == "WeaponMetal" ? LoadTexture(WeaponMetalMetallicTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkMetallicTexturePath) : LoadTexture(WeaponAccentMetallicTexturePath);
-                    var occlusion = label == "WeaponMetal" ? LoadTexture(WeaponMetalOcclusionTexturePath) : label == "WeaponDark" ? LoadTexture(WeaponDarkOcclusionTexturePath) : LoadTexture(WeaponAccentOcclusionTexturePath);
-                    var isAccentShell = label == "WeaponAccent" || label == "ShotgunAccent";
-                    Texture2D emission = null;
-                    ValidatePbrMaterial(material, texture, normal, metallic, occlusion, emission, LoadTexture(DetailNormalTexturePath), Vector2.one, label);
-                    var occlusionStrength = isAccentShell ? WeaponAccentShellOcclusion : 0.70f;
-                    var metallicValue = isAccentShell ? WeaponAccentShellMetallic : 1f;
-                    var smoothnessValue = isAccentShell ? WeaponAccentShellSmoothness : 1f;
-                    var bumpValue = isAccentShell ? WeaponAccentShellBumpScale : 1f;
-                    ValidatePbrScalars(material, metallicValue, smoothnessValue, occlusionStrength, bumpValue, 0f, label);
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, null, Vector2.one, label);
+                    ValidatePbrScalars(material, 1f, 1f, 1f, 1f, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
-                    if (isAccentShell) ValidateTransparentWeaponShellState(material, label); else ValidateOpaqueSurfaceState(material, label);
+                    if (label == "ShotgunAccent") ValidateTransparentWeaponShellState(material, label); else ValidateOpaqueSurfaceState(material, label);
                     var actual = material.GetColor("_BaseColor");
                     if (Vector4.Distance(actual, baseColor) > 0.001f)
                     {
-                        throw new InvalidOperationException(label + " base color contract mismatch.");
+                        throw new InvalidOperationException(label + " shotgun atlas base color multiplier mismatch.");
                     }
                 }
 
-                internal static void ValidateWeaponCoreMaterial(Material material, string label)
+                internal static void ValidateShotgunCoreMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
+                    Texture2D metallicMap, Texture2D occlusionMap, Texture2D emissionMap, string label)
                 {
-                    ValidatePbrMaterial(material, LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
-                        LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
-                        LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one, label);
-                    ValidatePbrScalars(material, WeaponAccentCoreMetallic, WeaponAccentCoreSmoothness,
-                        WeaponAccentCoreOcclusion, WeaponAccentCoreBumpScale, WeaponAccentCoreEmissionStrength, label);
-                    ValidateEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength, label);
+                    ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, null, Vector2.one, label);
+                    ValidatePbrScalars(material, 1f, 1f, 1f, 1f, ShotgunAccentCoreEmissionStrength, label);
+                    ValidateEmission(material, ShotgunAccentCoreEmissionColor, ShotgunAccentCoreEmissionStrength, label);
                     ValidateOpaqueSurfaceState(material, label);
-                    if (Vector4.Distance(material.GetColor("_BaseColor"), WeaponAccentCoreBaseColor) > 0.001f)
-                        throw new InvalidOperationException(label + " base color contract mismatch.");
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), ShotgunAccentCoreBaseColor) > 0.001f)
+                        throw new InvalidOperationException(label + " shotgun atlas base color multiplier mismatch.");
                 }
 
                 internal static void ValidateRocketMaterial(Material material, string rendererName)

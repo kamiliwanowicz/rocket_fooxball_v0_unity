@@ -13,7 +13,7 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 10;
+        internal const int SerializedContractVersion = 11;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -63,6 +63,20 @@ namespace RocketFooxball.Editor
         internal static readonly RectInt LauncherDarkUvZone = new RectInt(32, 352, 1280, 480);
         internal static readonly RectInt LauncherAccentUvZone = new RectInt(1344, 352, 672, 480);
         internal static readonly RectInt LauncherAccentCoreUvZone = new RectInt(32, 32, 1984, 288);
+        internal const string ShotgunBaseColorTexturePath = TexturesPath + "/Shotgun_BaseColor.png";
+        internal const string ShotgunNormalTexturePath = TexturesPath + "/Shotgun_Normal.png";
+        internal const string ShotgunMetallicTexturePath = TexturesPath + "/Shotgun_MetallicSmoothness.png";
+        internal const string ShotgunOcclusionTexturePath = TexturesPath + "/Shotgun_Occlusion.png";
+        internal const string ShotgunEmissionTexturePath = TexturesPath + "/Shotgun_Emission.png";
+        internal const int ShotgunAtlasSize = 2048;
+        internal static readonly RectInt FpsShotgunMetalUvZone = new RectInt(32, 1056, 1312, 960);
+        internal static readonly RectInt FpsShotgunDarkUvZone = new RectInt(1376, 1056, 640, 288);
+        internal static readonly RectInt FpsShotgunAccentUvZone = new RectInt(1376, 1376, 640, 288);
+        internal static readonly RectInt FpsShotgunAccentCoreUvZone = new RectInt(1376, 1696, 640, 320);
+        internal static readonly RectInt WorldShotgunMetalUvZone = new RectInt(32, 32, 1312, 960);
+        internal static readonly RectInt WorldShotgunDarkUvZone = new RectInt(1376, 32, 640, 288);
+        internal static readonly RectInt WorldShotgunAccentUvZone = new RectInt(1376, 352, 640, 288);
+        internal static readonly RectInt WorldShotgunAccentCoreUvZone = new RectInt(1376, 672, 640, 320);
 
         internal const string HealthPickupsRootName = "HealthPickups";
         internal const string HealthPickupWestNorthName = "HealthPickup_WestNorth";
@@ -158,8 +172,14 @@ namespace RocketFooxball.Editor
         internal const float WeaponAccentCoreSmoothness = 0.80f;
         internal const float WeaponAccentCoreOcclusion = 0.90f;
         internal const float WeaponAccentCoreBumpScale = 0.50f;
-        internal static readonly Color WeaponAccentCoreEmissionColor = new Color(1f, 0.08f, 0.015f, 1f);
+        internal static readonly Color WeaponAccentCoreEmissionColor = new Color(1f, 0f, 0f, 1f);
         internal const float WeaponAccentCoreEmissionStrength = 2f;
+        internal static readonly Color ShotgunMetalBaseColor = Color.white;
+        internal static readonly Color ShotgunDarkBaseColor = Color.white;
+        internal static readonly Color ShotgunAccentBaseColor = new Color(1f, 1f, 1f, 0.42f);
+        internal static readonly Color ShotgunAccentCoreBaseColor = Color.white;
+        internal static readonly Color ShotgunAccentCoreEmissionColor = new Color(1f, 0f, 0f, 1f);
+        internal const float ShotgunAccentCoreEmissionStrength = 2f;
         internal const float WeaponBoundsTolerance = 0.025f;
         internal const float WeaponShellCoreInset = 0.002f;
         internal const float WeaponMeshIslandPositionTolerance = 0.0001f;
@@ -177,9 +197,8 @@ namespace RocketFooxball.Editor
         internal static readonly Color WeaponMetalBaseColor = new Color(0.95f, 0.86f, 0.70f, 1f);
         internal static readonly Color WeaponDarkBaseColor = new Color(0.88f, 0.90f, 0.92f, 1f);
         internal static readonly Color WeaponAccentBaseColor = new Color(0.68f, 0.03f, 0.015f, 0.42f);
-        // Launcher maps are a single atlas. These are intentionally neutral
-        // multipliers so authored wear colours remain visible; shotgun
-        // materials continue to use the legacy weapon colour constants above.
+        // Launcher and shotgun maps are single atlases. These are intentionally
+        // neutral multipliers so authored wear colours remain visible.
         internal static readonly Color LauncherMetalBaseColor = Color.white;
         internal static readonly Color LauncherDarkBaseColor = Color.white;
         internal static readonly Color LauncherAccentBaseColor = new Color(1f, 1f, 1f, 0.42f);
@@ -203,6 +222,8 @@ namespace RocketFooxball.Editor
             ShotgunModelPath,
             LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath,
             LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
+            ShotgunBaseColorTexturePath, ShotgunNormalTexturePath, ShotgunMetallicTexturePath,
+            ShotgunOcclusionTexturePath, ShotgunEmissionTexturePath,
             TexturesPath + "/RetroGrass.png", TexturesPath + "/RetroGrass_Normal.png", TexturesPath + "/RetroGrass_MetallicSmoothness.png", TexturesPath + "/RetroGrass_Occlusion.png",
             TexturesPath + "/RetroWall.png", TexturesPath + "/RetroWall_Normal.png", TexturesPath + "/RetroWall_MetallicSmoothness.png", TexturesPath + "/RetroWall_Occlusion.png",
             TexturesPath + "/RetroTrim.png", TexturesPath + "/RetroTrim_Normal.png", TexturesPath + "/RetroTrim_MetallicSmoothness.png", TexturesPath + "/RetroTrim_Occlusion.png",

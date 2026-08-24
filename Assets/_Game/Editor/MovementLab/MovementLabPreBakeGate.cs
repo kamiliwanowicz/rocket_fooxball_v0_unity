@@ -341,10 +341,12 @@ namespace RocketFooxball.Editor
                     else if (string.Equals(path, WeaponAccentMaterialPath, StringComparison.Ordinal) ||
                              string.Equals(path, ShotgunAccentMaterialPath, StringComparison.Ordinal))
                         ValidateReloadedEmissionOff(material, path);
-                    else if (string.Equals(path, WeaponAccentCoreMaterialPath, StringComparison.Ordinal) ||
-                             string.Equals(path, ShotgunAccentCoreMaterialPath, StringComparison.Ordinal))
+                    else if (string.Equals(path, WeaponAccentCoreMaterialPath, StringComparison.Ordinal))
                         ValidateReloadedEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
                             WeaponAccentEmissionTexturePath, path);
+                    else if (string.Equals(path, ShotgunAccentCoreMaterialPath, StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, ShotgunAccentCoreEmissionColor, ShotgunAccentCoreEmissionStrength,
+                            ShotgunEmissionTexturePath, path);
                 }
             }
         }

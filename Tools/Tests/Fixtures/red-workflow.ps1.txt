@@ -17,6 +17,8 @@ $script:BuilderOutputContract = @(
 )
 # Deliberately omits the accepted Appendix-A TeamRedTrail material pair:
 # Assets/_Game/Materials/TeamRedTrail.mat and .meta.
+# Deliberately omits the five-shotgun-atlas importer metadata closure as well;
+# the green workflow must add each exact .png.meta path once.
 $legacyRow = [ordered]@{ requested_inventory = @() }
 
 function Assert-ShortWorkspacePath {

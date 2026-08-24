@@ -25,6 +25,11 @@ namespace RocketFooxball.Editor
         internal const string LauncherMetallicTexturePath = MovementLabContract.LauncherMetallicTexturePath;
         internal const string LauncherOcclusionTexturePath = MovementLabContract.LauncherOcclusionTexturePath;
         internal const string LauncherEmissionTexturePath = MovementLabContract.LauncherEmissionTexturePath;
+        internal const string ShotgunBaseColorTexturePath = MovementLabContract.ShotgunBaseColorTexturePath;
+        internal const string ShotgunNormalTexturePath = MovementLabContract.ShotgunNormalTexturePath;
+        internal const string ShotgunMetallicTexturePath = MovementLabContract.ShotgunMetallicTexturePath;
+        internal const string ShotgunOcclusionTexturePath = MovementLabContract.ShotgunOcclusionTexturePath;
+        internal const string ShotgunEmissionTexturePath = MovementLabContract.ShotgunEmissionTexturePath;
         internal const string ScenePath = MovementLabContract.ScenePath;
         internal const string InputActionsPath = MovementLabContract.InputActionsPath;
         internal const string MaterialsPath = MovementLabContract.MaterialsPath;
@@ -265,9 +270,12 @@ namespace RocketFooxball.Editor
         internal static readonly Color WeaponMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
         internal static readonly Color WeaponDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
         internal static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
-        internal static readonly Color ShotgunMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
-        internal static readonly Color ShotgunDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
-        internal static readonly Color ShotgunAccentBaseColor = MovementLabContract.WeaponAccentShellBaseColor;
+        internal static readonly Color ShotgunMetalBaseColor = MovementLabContract.ShotgunMetalBaseColor;
+        internal static readonly Color ShotgunDarkBaseColor = MovementLabContract.ShotgunDarkBaseColor;
+        internal static readonly Color ShotgunAccentBaseColor = MovementLabContract.ShotgunAccentBaseColor;
+        internal static readonly Color ShotgunAccentCoreBaseColor = MovementLabContract.ShotgunAccentCoreBaseColor;
+        internal static readonly Color ShotgunAccentCoreEmissionColor = MovementLabContract.ShotgunAccentCoreEmissionColor;
+        internal const float ShotgunAccentCoreEmissionStrength = MovementLabContract.ShotgunAccentCoreEmissionStrength;
         internal static readonly Color AmmoShellBaseColor = MovementLabContract.AmmoShellBaseColor;
         internal static readonly Color AmmoShellEmissionColor = MovementLabContract.AmmoShellEmissionColor;
         internal const float AmmoShellEmissionStrength = MovementLabContract.AmmoShellEmissionStrength;
@@ -306,6 +314,15 @@ namespace RocketFooxball.Editor
         internal static readonly RectInt LauncherDarkUvZone = MovementLabContract.LauncherDarkUvZone;
         internal static readonly RectInt LauncherAccentUvZone = MovementLabContract.LauncherAccentUvZone;
         internal static readonly RectInt LauncherAccentCoreUvZone = MovementLabContract.LauncherAccentCoreUvZone;
+        internal const int ShotgunAtlasSize = MovementLabContract.ShotgunAtlasSize;
+        internal static readonly RectInt FpsShotgunMetalUvZone = MovementLabContract.FpsShotgunMetalUvZone;
+        internal static readonly RectInt FpsShotgunDarkUvZone = MovementLabContract.FpsShotgunDarkUvZone;
+        internal static readonly RectInt FpsShotgunAccentUvZone = MovementLabContract.FpsShotgunAccentUvZone;
+        internal static readonly RectInt FpsShotgunAccentCoreUvZone = MovementLabContract.FpsShotgunAccentCoreUvZone;
+        internal static readonly RectInt WorldShotgunMetalUvZone = MovementLabContract.WorldShotgunMetalUvZone;
+        internal static readonly RectInt WorldShotgunDarkUvZone = MovementLabContract.WorldShotgunDarkUvZone;
+        internal static readonly RectInt WorldShotgunAccentUvZone = MovementLabContract.WorldShotgunAccentUvZone;
+        internal static readonly RectInt WorldShotgunAccentCoreUvZone = MovementLabContract.WorldShotgunAccentCoreUvZone;
         internal const float WeaponBoundsTolerance = MovementLabContract.WeaponBoundsTolerance;
         internal const float WeaponShellCoreInset = MovementLabContract.WeaponShellCoreInset;
         internal const float WeaponMeshIslandPositionTolerance = MovementLabContract.WeaponMeshIslandPositionTolerance;
@@ -361,6 +378,8 @@ namespace RocketFooxball.Editor
             WeaponAccentEmissionTexturePath + ".meta",
             LauncherBaseColorTexturePath + ".meta", LauncherNormalTexturePath + ".meta", LauncherMetallicTexturePath + ".meta",
             LauncherOcclusionTexturePath + ".meta", LauncherEmissionTexturePath + ".meta",
+            ShotgunBaseColorTexturePath + ".meta", ShotgunNormalTexturePath + ".meta", ShotgunMetallicTexturePath + ".meta",
+            ShotgunOcclusionTexturePath + ".meta", ShotgunEmissionTexturePath + ".meta",
             RocketTexturePath + ".meta", RocketNormalTexturePath + ".meta", RocketMetallicTexturePath + ".meta", RocketOcclusionTexturePath + ".meta", RocketEmissionTexturePath + ".meta", RocketGlowTexturePath + ".meta",
             ExplosionTexturePath + ".meta", SmokeTexturePath + ".meta", SkyTexturePath + ".meta"
         };

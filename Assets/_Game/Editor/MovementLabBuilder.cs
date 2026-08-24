@@ -63,14 +63,17 @@ namespace RocketFooxball.Editor
                 : "Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
         }
 
-        // Narrow T3 import command. This is intentionally separate from the
-        // full assembly pipeline so importing launcher source art cannot
-        // touch unrelated importer metas or generated outputs.
-        public static void ImportLauncherVisualAssets()
+        // Narrow weapon import command. This is intentionally separate from
+        // the full assembly pipeline so weapon source art cannot touch
+        // unrelated importer metas or generated outputs.
+        public static void ImportWeaponVisualAssets()
         {
-            MovementLabImportPipeline.ImportLauncherVisualAssets();
-            Debug.Log("Rocket Fooxball launcher visual assets imported: " + MovementLabContractCatalog.WeaponModelPath);
+            MovementLabImportPipeline.ImportWeaponVisualAssets();
+            Debug.Log("Rocket Fooxball weapon visual assets imported: " + MovementLabContractCatalog.WeaponModelPath);
         }
+
+        // Compatibility entry point retained for existing T3 automation.
+        public static void ImportLauncherVisualAssets() => ImportWeaponVisualAssets();
 
         [MenuItem("Rocket Fooxball/Authorize Movement Lab Manifest Migration")]
         public static void AuthorizeMovementLabManifestMigration()

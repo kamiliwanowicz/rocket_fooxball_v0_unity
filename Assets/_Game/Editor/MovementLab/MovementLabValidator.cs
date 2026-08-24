@@ -287,6 +287,7 @@ namespace RocketFooxball.Editor
                 PrefabPath, BallPrefabPath, RocketPrefabPath, RocketModelPath, ArenaKitModelPath, CharacterModelPath,
                 FpsKickModelPath, WeaponModelPath, FpsShotgunModelPath, ShotgunModelPath, GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
                 LauncherBaseColorTexturePath, LauncherNormalTexturePath, LauncherMetallicTexturePath, LauncherOcclusionTexturePath, LauncherEmissionTexturePath,
+                ShotgunBaseColorTexturePath, ShotgunNormalTexturePath, ShotgunMetallicTexturePath, ShotgunOcclusionTexturePath, ShotgunEmissionTexturePath,
                 GrassOcclusionTexturePath, BallTexturePath, BallNormalTexturePath, BallMetallicTexturePath,
                 BallOcclusionTexturePath, WeaponMetalTexturePath, WeaponMetalNormalTexturePath, WeaponMetalMetallicTexturePath,
                 WeaponMetalOcclusionTexturePath, WeaponDarkTexturePath, WeaponDarkNormalTexturePath, WeaponDarkMetallicTexturePath,

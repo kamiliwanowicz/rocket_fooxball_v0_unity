@@ -65,8 +65,8 @@ namespace RocketFooxball.Editor
 
     internal static class MovementLabStageGraph
     {
-        private const string ImporterContract = "importer-contract:4";
-        private const string MaterialContract = "material-prefab-contract:13";
+        private const string ImporterContract = "importer-contract:5";
+        private const string MaterialContract = "material-prefab-contract:14";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
         private const string GameplayContract = "gameplay-scene-contract:16";

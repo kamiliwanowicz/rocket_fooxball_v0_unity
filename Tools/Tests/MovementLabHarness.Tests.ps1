@@ -141,6 +141,13 @@ function Test-GeneratedPathSurfaceRemoved {
         'Assets/_Game/Materials/TeamRedTrail.mat',
         'Assets/_Game/Materials/TeamRedTrail.mat.meta'
     )
+    $shotgunAtlasMetaPaths = @(
+        'Assets/_Game/Textures/Shotgun_BaseColor.png.meta',
+        'Assets/_Game/Textures/Shotgun_Normal.png.meta',
+        'Assets/_Game/Textures/Shotgun_MetallicSmoothness.png.meta',
+        'Assets/_Game/Textures/Shotgun_Occlusion.png.meta',
+        'Assets/_Game/Textures/Shotgun_Emission.png.meta'
+    )
     $currentAppendixValues = @(Get-HarnessStringAssignment $State.CurrentSource 'script:AppendixAPaths')
     $currentAst = Get-HarnessAst $State.CurrentSource
     $currentSourceValues = @($currentAst.FindAll({
@@ -163,7 +170,15 @@ function Test-GeneratedPathSurfaceRemoved {
         $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
         if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing TeamRedTrail entry: ' + $path) }
     }
-    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail pair is closed and red baseline omits it')
+    foreach ($path in $shotgunAtlasMetaPaths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one shotgun atlas metadata entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('Shotgun atlas metadata entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing shotgun atlas metadata entry: ' + $path) }
+    }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail and five shotgun atlas metadata entries are closed')
 }
 
 function Test-GeneratedYamlComparatorCoverage {
