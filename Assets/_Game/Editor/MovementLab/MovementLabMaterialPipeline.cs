@@ -535,8 +535,10 @@ namespace RocketFooxball.Editor
                 internal static void ValidateLauncherMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
                     Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
+                    var detailTiling = microDetailNormal != null ? WeaponMicroDetailNormalTiling : Vector2.one;
+                    var detailScale = microDetailNormal != null ? WeaponMicroDetailNormalScale : 1f;
                     ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
-                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale);
+                        detailTiling, detailScale);
                     ValidatePbrScalars(material, LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "WeaponAccent") ValidateTransparentWeaponShellState(material, label);
@@ -620,8 +622,10 @@ namespace RocketFooxball.Editor
                 internal static void ValidateShotgunMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
                     Texture2D metallicMap, Texture2D occlusionMap, Texture2D microDetailNormal, Color baseColor, string label)
                 {
+                    var detailTiling = microDetailNormal != null ? WeaponMicroDetailNormalTiling : Vector2.one;
+                    var detailScale = microDetailNormal != null ? WeaponMicroDetailNormalScale : 1f;
                     ValidatePbrMaterial(material, baseMap, normalMap, metallicMap, occlusionMap, null, microDetailNormal, Vector2.one, label,
-                        WeaponMicroDetailNormalTiling, WeaponMicroDetailNormalScale);
+                        detailTiling, detailScale);
                     ValidatePbrScalars(material, 1f, 1f, 1f, 1f, 0f, label);
                     ValidateEmission(material, Color.clear, 0f, label);
                     if (label == "ShotgunAccent") ValidateTransparentWeaponShellState(material, label); else ValidateOpaqueSurfaceState(material, label);
