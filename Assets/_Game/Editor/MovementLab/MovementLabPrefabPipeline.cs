@@ -99,6 +99,7 @@ namespace RocketFooxball.Editor
                     }
 
                     var root = new GameObject("Player") { tag = "Player" };
+                    root.SetActive(false);
                     var controller = root.AddComponent<CharacterController>();
                     controller.radius = PlayerControllerRadius;
                     controller.height = PlayerControllerHeight;
@@ -118,6 +119,9 @@ namespace RocketFooxball.Editor
                     var shotgun = root.AddComponent<ShotgunWeapon>();
                     var participantLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
                     var projectileLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
+                    var viewmodelsLayer = EnsureGameplayLayer(MovementLabContract.ViewmodelsLayerName);
+                    if (viewmodelsLayer != MovementLabContractCatalog.ViewmodelsLayer)
+                        throw new InvalidOperationException("Viewmodels layer must be reserved at index " + MovementLabContractCatalog.ViewmodelsLayer + ".");
                     root.layer = participantLayer;
                     var head = new GameObject("Head").transform;
                     head.SetParent(root.transform, false);
@@ -143,6 +147,7 @@ namespace RocketFooxball.Editor
 
                     var hiddenLayer = EnsureLocalPlayerHiddenLayer();
                     camera.cullingMask &= ~(1 << hiddenLayer);
+                    camera.cullingMask |= MovementLabContractCatalog.ViewmodelLightCullingMask;
 
                     var characterRed = GetOrCreateRetroMaterial("CharacterRed", new Color(0.56f, 0.025f, 0.035f), null, Vector2.one);
                     var characterBlack = GetOrCreateRetroMaterial("CharacterBlack", new Color(0.018f, 0.014f, 0.018f), null, Vector2.one);
@@ -208,7 +213,7 @@ namespace RocketFooxball.Editor
                     nameplateText.fontSize = 32;
                     nameplateText.color = Color.white;
 
-                    var viewmodels = new GameObject("Viewmodels").transform;
+                    var viewmodels = new GameObject(MovementLabContractCatalog.ViewmodelsRootName).transform;
                     viewmodels.SetParent(camera.transform, false);
                     viewmodels.localPosition = Vector3.zero;
                     viewmodels.localRotation = Quaternion.identity;
@@ -295,6 +300,20 @@ namespace RocketFooxball.Editor
                     fpsAnimator.avatar = FindImportedAvatar(FpsKickModelPath);
                     fpsAnimator.applyRootMotion = false;
 
+                    var viewmodelLightObject = new GameObject(MovementLabContractCatalog.ViewmodelLightName);
+                    viewmodelLightObject.transform.SetParent(viewmodels, false);
+                    viewmodelLightObject.transform.localEulerAngles = MovementLabContractCatalog.ViewmodelLightLocalEuler;
+                    var viewmodelLight = viewmodelLightObject.AddComponent<Light>();
+                    viewmodelLight.type = MovementLabContractCatalog.ViewmodelLightType;
+                    viewmodelLight.lightmapBakeType = MovementLabContractCatalog.ViewmodelLightBakeType;
+                    viewmodelLight.color = MovementLabContractCatalog.SunColor;
+                    viewmodelLight.intensity = MovementLabContractCatalog.ViewmodelLightIntensity;
+                    viewmodelLight.shadows = MovementLabContractCatalog.ViewmodelLightShadows;
+                    viewmodelLight.cullingMask = MovementLabContractCatalog.ViewmodelLightCullingMask;
+                    viewmodelLight.cookie = null;
+                    viewmodelLight.enabled = false;
+                    SetLayerRecursively(viewmodels.gameObject, MovementLabContractCatalog.ViewmodelsLayer);
+
                     BuildCrosshair(camera);
 
                     SetObjectReference(input, "actions", actions);
@@ -372,6 +391,7 @@ namespace RocketFooxball.Editor
                     SetObjectReference(presentation, "fpsShotgunVisual", fpsShotgunVisual.transform);
                     SetObjectReference(presentation, "worldShotgunVisual", worldShotgunVisual.transform);
                     SetObjectReference(presentation, "gameplayCamera", camera);
+                    SetObjectReference(presentation, "viewmodelLight", viewmodelLight);
                     SetObjectReference(presentation, "audioListener", camera.GetComponent<AudioListener>());
                     SetObjectReference(presentation, "participant", participant);
                     SetObjectArray(presentation, "teamTintRenderers", worldVisual.GetComponentsInChildren<Renderer>(true)
@@ -422,6 +442,7 @@ namespace RocketFooxball.Editor
                     SetObjectReference(participant, "botController", botController);
                     SetObjectReference(botController, "participant", participant);
                     root.SetActive(true);
+                    viewmodelLight.enabled = false;
 
                     // Keep collider root explicit while camera/viewmodel children remain default.
                     root.layer = participantLayer;
@@ -1289,6 +1310,9 @@ namespace RocketFooxball.Editor
                             ValidateReference(prefabPresentation, "cameraFeedback", prefabFeedback, "Player prefab PlayerPresentation.cameraFeedback");
                              ValidateReference(prefabPresentation, "participant", prefabParticipant, "Player prefab PlayerPresentation.participant");
                              ValidateReference(prefabPresentation, "gameplayCamera", root.transform.Find("Head/Camera").GetComponent<Camera>(), "Player prefab PlayerPresentation.gameplayCamera");
+                             var prefabViewmodels = Require(root.transform.Find("Head/Camera/Viewmodels"), "Player prefab Viewmodels");
+                              var prefabViewmodelLight = Require(prefabViewmodels.Find(MovementLabContractCatalog.ViewmodelLightName), "Player prefab ViewmodelLight").GetComponent<Light>();
+                             ValidateReference(prefabPresentation, "viewmodelLight", Require(prefabViewmodelLight, "Player prefab ViewmodelLight Light"), "Player prefab PlayerPresentation.viewmodelLight");
                              ValidateReference(prefabPresentation, "audioListener", root.transform.Find("Head/Camera").GetComponent<AudioListener>(), "Player prefab PlayerPresentation.audioListener");
                              ValidateReference(prefabPresentation, "fpsShotgunVisual", root.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual"), "Player prefab PlayerPresentation.fpsShotgunVisual");
                              var prefabWorldVisual = Require(root.transform.Find("WorldVisual"), "Player prefab WorldVisual");
@@ -1367,8 +1391,20 @@ namespace RocketFooxball.Editor
                             ValidateSerializedFloat(prefabFeedback, "dashKickImpulse", PlayerCameraFeedback.DefaultDashKickImpulse, "Player prefab PlayerCameraFeedback.dashKickImpulse");
                             ValidateSerializedFloat(prefabFeedback, "dashKickImpulseDuration", PlayerCameraFeedback.DefaultDashKickImpulseDuration, "Player prefab PlayerCameraFeedback.dashKickImpulseDuration");
                             var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
-                             ValidateCrosshair(prefabCamera);
-                             var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
+                            ValidateCrosshair(prefabCamera);
+                            ValidateLayerRecursively(prefabViewmodels.gameObject, MovementLabContractCatalog.ViewmodelsLayer, "Player prefab Viewmodels");
+                            if (prefabViewmodelLight.type != MovementLabContractCatalog.ViewmodelLightType ||
+                                prefabViewmodelLight.lightmapBakeType != MovementLabContractCatalog.ViewmodelLightBakeType ||
+                                Quaternion.Angle(prefabViewmodelLight.transform.localRotation, Quaternion.Euler(MovementLabContractCatalog.ViewmodelLightLocalEuler)) > 0.001f ||
+                                prefabViewmodelLight.color != MovementLabContractCatalog.SunColor ||
+                                Mathf.Abs(prefabViewmodelLight.intensity - MovementLabContractCatalog.ViewmodelLightIntensity) > 0.001f ||
+                                prefabViewmodelLight.shadows != MovementLabContractCatalog.ViewmodelLightShadows ||
+                                prefabViewmodelLight.cullingMask != MovementLabContractCatalog.ViewmodelLightCullingMask ||
+                                prefabViewmodelLight.cookie != null || prefabViewmodelLight.enabled)
+                                throw new InvalidOperationException("Player prefab ViewmodelLight contract invalid.");
+                            if ((prefabCamera.cullingMask & MovementLabContractCatalog.ViewmodelLightCullingMask) != MovementLabContractCatalog.ViewmodelLightCullingMask)
+                                throw new InvalidOperationException("Player prefab Camera must include Viewmodels layer.");
+                            var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
                              ValidateWeaponMaterials(prefabWeaponVisual.gameObject);
                              ValidateImportedVisual(prefabWeaponVisual.gameObject, WeaponModelPath, "Player prefab WeaponVisual");
                              ValidateWeaponVisualContract(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual",

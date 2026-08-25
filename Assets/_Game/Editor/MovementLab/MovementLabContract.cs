@@ -13,7 +13,12 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 11;
+        internal const int SerializedContractVersion = 12;
+        internal const int MaterialPrefabStageContractVersion = 15;
+        internal const int GameplaySceneStageContractVersion = 17;
+        internal const int QualityStageContractVersion = 5;
+        internal const int LightingStageContractVersion = 7;
+        internal const int BakedOutputStageContractVersion = 7;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -120,12 +125,25 @@ namespace RocketFooxball.Editor
         internal static readonly Vector3 HealthCrossVerticalScale = new Vector3(0.30f, 1.40f, 0.30f);
         internal static readonly Vector3 HealthCrossCoreScale = new Vector3(0.45f, 0.45f, 0.45f);
 
-        // GameplayScene owns these project-level physics names and collision
-        // settings. MaterialPrefab may bootstrap names needed by prefab roots;
-        // GameplayScene always reasserts and persists the contract.
+        // MaterialPrefab owns these project-level layer names. GameplayScene
+        // resolves the persisted table for prefab and collision composition.
+        internal const int LocalPlayerHiddenLayer = 8;
+        internal const int ProjectilesLayer = 9;
+        internal const int ParticipantsLayer = 10;
+        internal const int ViewmodelsLayer = 11;
         internal const string ParticipantsLayerName = "Participants";
         internal const string ProjectilesLayerName = "Projectiles";
         internal const string LocalPlayerHiddenLayerName = "LocalPlayerHidden";
+        internal const string ViewmodelsLayerName = "Viewmodels";
+
+        internal const string ViewmodelsRootName = "Viewmodels";
+        internal const string ViewmodelLightName = "ViewmodelLight";
+        internal static readonly Vector3 ViewmodelLightLocalEuler = new Vector3(35f, -30f, 0f);
+        internal const float ViewmodelLightIntensity = 1.25f;
+        internal const int ViewmodelLightCullingMask = 1 << ViewmodelsLayer;
+        internal const LightType ViewmodelLightType = LightType.Directional;
+        internal const LightmapBakeType ViewmodelLightBakeType = LightmapBakeType.Realtime;
+        internal const LightShadows ViewmodelLightShadows = LightShadows.None;
 
         internal const float BallPrefabScale = 4.32f;
         internal const float BallRadius = 2.16f;
@@ -266,7 +284,8 @@ namespace RocketFooxball.Editor
             MaterialsPath + "/TeamBlueTrail.mat", MaterialsPath + "/TeamRedTrail.mat",
             HealthPickupMaterialPath,
             AmmoShellMaterialPath,
-            BlueCircleCueMeshPath, RedTriangleCueMeshPath
+            BlueCircleCueMeshPath, RedTriangleCueMeshPath,
+            TagManagerPath
         };
 
         internal static readonly string[] GameplaySceneOutputs =
@@ -274,8 +293,7 @@ namespace RocketFooxball.Editor
             ScenePath,
             EditorBuildSettingsPath,
             DynamicsManagerPath,
-            TimeManagerPath,
-            TagManagerPath
+            TimeManagerPath
         };
 
         internal static readonly string[] QualityOutputs =

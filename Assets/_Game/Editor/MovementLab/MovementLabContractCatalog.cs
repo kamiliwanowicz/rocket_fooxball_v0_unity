@@ -236,6 +236,28 @@ namespace RocketFooxball.Editor
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
         internal const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
 
+        internal const int MaterialPrefabStageContractVersion = MovementLabContract.MaterialPrefabStageContractVersion;
+        internal const int GameplaySceneStageContractVersion = MovementLabContract.GameplaySceneStageContractVersion;
+        internal const int QualityStageContractVersion = MovementLabContract.QualityStageContractVersion;
+        internal const int LightingStageContractVersion = MovementLabContract.LightingStageContractVersion;
+        internal const int BakedOutputStageContractVersion = MovementLabContract.BakedOutputStageContractVersion;
+        internal const int LocalPlayerHiddenLayer = MovementLabContract.LocalPlayerHiddenLayer;
+        internal const int ProjectilesLayer = MovementLabContract.ProjectilesLayer;
+        internal const int ParticipantsLayer = MovementLabContract.ParticipantsLayer;
+        internal const int ViewmodelsLayer = MovementLabContract.ViewmodelsLayer;
+        internal const string LocalPlayerHiddenLayerName = MovementLabContract.LocalPlayerHiddenLayerName;
+        internal const string ProjectilesLayerName = MovementLabContract.ProjectilesLayerName;
+        internal const string ParticipantsLayerName = MovementLabContract.ParticipantsLayerName;
+        internal const string ViewmodelsLayerName = MovementLabContract.ViewmodelsLayerName;
+        internal const string ViewmodelsRootName = MovementLabContract.ViewmodelsRootName;
+        internal const string ViewmodelLightName = MovementLabContract.ViewmodelLightName;
+        internal static readonly Vector3 ViewmodelLightLocalEuler = MovementLabContract.ViewmodelLightLocalEuler;
+        internal const float ViewmodelLightIntensity = MovementLabContract.ViewmodelLightIntensity;
+        internal const int ViewmodelLightCullingMask = MovementLabContract.ViewmodelLightCullingMask;
+        internal const LightType ViewmodelLightType = MovementLabContract.ViewmodelLightType;
+        internal const LightmapBakeType ViewmodelLightBakeType = MovementLabContract.ViewmodelLightBakeType;
+        internal const LightShadows ViewmodelLightShadows = MovementLabContract.ViewmodelLightShadows;
+
         internal const float BallPrefabScale = MovementLabContract.BallPrefabScale;
         internal const float BallRadius = MovementLabContract.BallRadius;
         internal const float BallSpawnHeight = MovementLabContract.BallSpawnHeight;
