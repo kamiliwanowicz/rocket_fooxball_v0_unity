@@ -40,7 +40,7 @@ namespace RocketFooxball.Editor
                 internal const float ProductionAmbientIntensity = 0.85f;
                 internal const float FastAmbientIntensity = 1.05f;
                 internal const float ProductionSunIntensity = 2.4f;
-                internal const float ProductionSunShadowStrength = 0.65f;
+                internal const float ProductionSunShadowStrength = 0.25f;
                 internal const float TonemappingPostExposure = 0.35f;
                 internal const float ColorAdjustmentsContrast = 2f;
                 internal const float ColorAdjustmentsSaturation = 2f;
@@ -49,22 +49,6 @@ namespace RocketFooxball.Editor
                 internal const float BloomScatter = 0.60f;
                 internal const float BloomClamp = 10f;
                 internal const bool BloomHighQualityFiltering = false;
-                private const float GoalAccentIntensity = 350f;
-                private const float GoalAccentRange = 24f;
-                private static readonly Color WallFillColor = new Color(1.0f, 0.82f, 0.64f, 1f);
-                private const float WallFillIntensity = 900f;
-                private const float WallFillRange = 32f;
-                private const float WallFillOuterAngle = 120f;
-                private const float WallFillInnerAngle = 105f;
-                private static readonly (string name, Vector3 position, Vector3 target)[] WallFillLightContract =
-                {
-                    ("WallFill_North_West", new Vector3(-43f, 10f, -24f), new Vector3(-43f, 4f, -44.5f)),
-                    ("WallFill_North_Center", new Vector3(0f, 10f, -24f), new Vector3(0f, 4f, -44.5f)),
-                    ("WallFill_North_East", new Vector3(43f, 10f, -24f), new Vector3(43f, 4f, -44.5f)),
-                    ("WallFill_South_West", new Vector3(-43f, 10f, 24f), new Vector3(-43f, 4f, 44.5f)),
-                    ("WallFill_South_Center", new Vector3(0f, 10f, 24f), new Vector3(0f, 4f, 44.5f)),
-                    ("WallFill_South_East", new Vector3(43f, 10f, 24f), new Vector3(43f, 4f, 44.5f))
-                };
 
                 // Gameplay assembly owns scene objects and bindings only. The
                 // sky material, VolumeProfile subassets, and LightingSettings
@@ -74,15 +58,11 @@ namespace RocketFooxball.Editor
                 {
                     AuthorPersistedVolumeProfile();
                     var environment = new GameObject("Environment");
-                    var sun = UnityEngine.Object.FindFirstObjectByType<Light>();
-                    if (sun == null)
-                    {
-                        sun = new GameObject("Sun").AddComponent<Light>();
-                    }
+                    var sunObject = new GameObject("Sun");
+                    sunObject.transform.SetParent(environment.transform, false);
+                    var sun = sunObject.AddComponent<Light>();
                     sun.GetUniversalAdditionalLightData();
 
-                    sun.gameObject.name = "Sun";
-                    sun.transform.SetParent(environment.transform, false);
                     sun.type = LightType.Directional;
                     sun.color = SunColor;
                     sun.intensity = ProductionSunIntensity;
@@ -92,7 +72,7 @@ namespace RocketFooxball.Editor
                     sun.shadowStrength = ProductionSunShadowStrength;
                     sun.shadowBias = 0.05f;
                     sun.shadowNormalBias = 0.4f;
-                    sun.cullingMask = -1;
+                    sun.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
 
                     var skyMaterial = AuthorSkyMaterial(-sun.transform.forward);
 
@@ -113,8 +93,6 @@ namespace RocketFooxball.Editor
                     RenderSettings.reflectionBounces = 2;
                     RenderSettings.reflectionIntensity = 1f;
 
-                    ConfigureAccentLights(environment.transform);
-                    ConfigureWallFillLights(environment.transform);
                     BindExistingGlobalVolume(environment.transform);
                     ConfigureLightProbes(environment.transform);
                     ConfigureReflectionProbes(environment.transform);
@@ -163,46 +141,6 @@ namespace RocketFooxball.Editor
                     // This updates the scene-owned LightmapSettings binding;
                     // it never mutates or dirties the LightingSettings asset.
                     Lightmapping.SetLightingSettingsForScene(scene, settings);
-                }
-
-                internal static void ConfigureAccentLights(Transform parent)
-                {
-                    for (var i = 0; i < AccentLightContract.Length; i++)
-                    {
-                        var contract = AccentLightContract[i];
-                        var light = new GameObject(contract.name).AddComponent<Light>();
-                        light.GetUniversalAdditionalLightData();
-                        light.transform.SetParent(parent, false);
-                        light.transform.localPosition = contract.position;
-                        light.type = LightType.Point;
-                        light.color = contract.color;
-                        light.intensity = GoalAccentIntensity;
-                        light.range = GoalAccentRange;
-                        light.shadows = LightShadows.None;
-                        light.lightmapBakeType = LightmapBakeType.Realtime;
-                    }
-                }
-
-                private static void ConfigureWallFillLights(Transform parent)
-                {
-                    for (var i = 0; i < WallFillLightContract.Length; i++)
-                    {
-                        var contract = WallFillLightContract[i];
-                        var light = new GameObject(contract.name).AddComponent<Light>();
-                        light.GetUniversalAdditionalLightData();
-                        light.transform.SetParent(parent, false);
-                        light.transform.localPosition = contract.position;
-                        light.transform.rotation = Quaternion.LookRotation(contract.target - contract.position);
-                        light.type = LightType.Spot;
-                        light.color = WallFillColor;
-                        light.intensity = WallFillIntensity;
-                        light.range = WallFillRange;
-                        light.spotAngle = WallFillOuterAngle;
-                        light.innerSpotAngle = WallFillInnerAngle;
-                        light.shadows = LightShadows.Soft;
-                        light.shadowStrength = 0.85f;
-                        light.lightmapBakeType = LightmapBakeType.Baked;
-                    }
                 }
 
                 [Serializable]
@@ -599,6 +537,7 @@ namespace RocketFooxball.Editor
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - ProductionSunIntensity) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, ProductionSunEuler) > 0.1f ||
                         sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
+                        sun.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask ||
                         Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
                     {
                         throw new InvalidOperationException("MovementLab mixed sun contract invalid.");
@@ -628,52 +567,12 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Sunny sky material contract invalid.");
                     }
 
-                    var accents = GameObject.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
-                    var accentCount = 0;
-                    var wallFillCount = 0;
-                    for (var i = 0; i < accents.Length; i++)
-                    {
-                        var accent = accents[i];
-                        if (accent == null || accent == sun) continue;
-                        var contractIndex = -1;
-                        for (var j = 0; j < AccentLightContract.Length; j++)
-                            if (accent.name == AccentLightContract[j].name) contractIndex = j;
-                        if (contractIndex >= 0)
-                        {
-                            var contract = AccentLightContract[contractIndex];
-                            var accentData = accent.GetComponent<UniversalAdditionalLightData>();
-                            if (accentData == null || accent.type != LightType.Point || accent.shadows != LightShadows.None || accent.lightmapBakeType != LightmapBakeType.Realtime ||
-                                Vector3.Distance(accent.transform.position, contract.position) > 0.001f || accent.color != contract.color ||
-                                Mathf.Abs(accent.intensity - GoalAccentIntensity) > 0.01f || Mathf.Abs(accent.range - GoalAccentRange) > 0.001f)
-                            {
-                                throw new InvalidOperationException("Goal accent light contract invalid: " + accent.name);
-                            }
-                            MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + accent.name);
-                            MovementLabSerializedProperties.ValidatePersistentIdentity(accentData, "Environment/" + accent.name + " UniversalAdditionalLightData");
-                            accentCount++;
-                            continue;
-                        }
-
-                        for (var j = 0; j < WallFillLightContract.Length; j++)
-                            if (accent.name == WallFillLightContract[j].name) contractIndex = j;
-                        if (contractIndex < 0) throw new InvalidOperationException("Unexpected shadow/light source: " + accent.name);
-                        var wallContract = WallFillLightContract[contractIndex];
-                        var wallData = accent.GetComponent<UniversalAdditionalLightData>();
-                        var expectedRotation = Quaternion.LookRotation(wallContract.target - wallContract.position);
-                        if (wallData == null || accent.type != LightType.Spot || accent.shadows != LightShadows.Soft || accent.lightmapBakeType != LightmapBakeType.Baked ||
-                            Vector3.Distance(accent.transform.position, wallContract.position) > 0.001f || Quaternion.Angle(accent.transform.rotation, expectedRotation) > 0.1f ||
-                            accent.color != WallFillColor || Mathf.Abs(accent.intensity - WallFillIntensity) > 0.01f || Mathf.Abs(accent.range - WallFillRange) > 0.001f ||
-                            Mathf.Abs(accent.spotAngle - WallFillOuterAngle) > 0.001f || Mathf.Abs(accent.innerSpotAngle - WallFillInnerAngle) > 0.001f ||
-                            Mathf.Abs(accent.shadowStrength - 0.85f) > 0.001f)
-                        {
-                            throw new InvalidOperationException("Wall fill light contract invalid: " + accent.name);
-                        }
-                        MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + accent.name);
-                        MovementLabSerializedProperties.ValidatePersistentIdentity(wallData, "Environment/" + accent.name + " UniversalAdditionalLightData");
-                        wallFillCount++;
-                    }
-                    if (accentCount != AccentLightContract.Length) throw new InvalidOperationException("Goal accent light count invalid.");
-                    if (wallFillCount != WallFillLightContract.Length) throw new InvalidOperationException("Wall fill light count invalid.");
+                    var environment = GameObject.Find("Environment");
+                    var environmentLights = environment != null
+                        ? environment.GetComponentsInChildren<Light>(true)
+                        : Array.Empty<Light>();
+                    if (environmentLights.Length != 1 || environmentLights[0] != sun)
+                        throw new InvalidOperationException("Environment must contain exactly one Light: Environment/Sun.");
 
                     var volume = GameObject.Find("Environment/GlobalVolume")?.GetComponent<Volume>();
                     var expectedProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);

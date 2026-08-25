@@ -157,8 +157,8 @@ namespace RocketFooxball.Editor
             SetInt(serialized, "m_MainLightRenderingMode", (int)LightRenderingMode.PerPixel);
             SetBool(serialized, "m_MainLightShadowsSupported", fullQuality);
             SetInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
-            SetInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? (int)LightRenderingMode.PerPixel : (int)LightRenderingMode.Disabled);
-            SetInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 0);
+            SetInt(serialized, "m_AdditionalLightsRenderingMode", (int)LightRenderingMode.PerPixel);
+            SetInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 1);
             SetBool(serialized, "m_AdditionalLightShadowsSupported", false);
             SetInt(serialized, "m_AdditionalLightsShadowmapResolution", LowShadowResolution);
             SetFloat(serialized, "m_ShadowDistance", fullQuality ? HighShadowDistance : 0f);
@@ -324,8 +324,8 @@ namespace RocketFooxball.Editor
             ExpectInt(serialized, "m_MainLightRenderingMode", (int)LightRenderingMode.PerPixel);
             ExpectBool(serialized, "m_MainLightShadowsSupported", fullQuality);
             ExpectInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
-            ExpectInt(serialized, "m_AdditionalLightsRenderingMode", (high || iteration) ? 1 : 0);
-            ExpectInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 0);
+            ExpectInt(serialized, "m_AdditionalLightsRenderingMode", (int)LightRenderingMode.PerPixel);
+            ExpectInt(serialized, "m_AdditionalLightsPerObjectLimit", (high || iteration) ? 16 : 1);
             ExpectBool(serialized, "m_AdditionalLightShadowsSupported", false);
             ExpectInt(serialized, "m_AdditionalLightsShadowmapResolution", LowShadowResolution);
             ExpectFloat(serialized, "m_ShadowDistance", fullQuality ? HighShadowDistance : 0f);
