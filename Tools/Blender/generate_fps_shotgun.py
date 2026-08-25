@@ -1002,7 +1002,7 @@ def _profile_zones(profile):
     return {group_name: UV_ZONES[f"{profile['key']}:{group_name}"] for group_name in GROUP_NAMES}
 
 
-def generate_profile(profile, stage_dir):
+def generate_profile(profile, stage_dir, profile_id, surface_only=False):
     global PREVIEW_DIRECTORY
     reset_scene()
     materials = {name: make_material(name, color) for name, color in MATERIAL_SPECS.items()}
@@ -1013,16 +1013,27 @@ def generate_profile(profile, stage_dir):
     signature, _ = canonical_signature(profile, objects, record["connection_overlaps"], minimum, maximum, record.get("pairs", {}))
     record["signature"] = signature
     surface.UV_ZONES = _profile_zones(profile)
-    raster = surface.rasterize_surface(objects)
+    raster = surface.rasterize_surface(
+        objects,
+        profile_id=profile_id,
+        profile_name=profile["key"],
+        profile_parameters={
+            "kind": "shotgun",
+            "barrelMinY": profile["barrel"][0],
+            "receiverMinY": profile["receiver"][0],
+            "receiverMaxY": profile["receiver"][1],
+        },
+    )
     raster["zones"] = {f"{profile['key']}:{name}": value for name, value in raster["zones"].items()}
     record["raster"] = raster
     record["uv_hash"] = surface.uv_signature(objects)
     preview_texture_dir = os.path.join(stage_dir, f"{profile['key']}-preview-textures")
-    surface.generate_texture_atlas(None, preview_texture_dir, raster=raster)
+    surface.generate_texture_atlas(None, preview_texture_dir, raster=raster, include_microdetail=not surface_only)
     surface.configure_final_materials(materials, preview_texture_dir)
     render_previews(profile, objects, minimum, maximum)
-    export_fbx(profile, objects)
-    import_roundtrip(profile, record)
+    if not surface_only:
+        export_fbx(profile, objects)
+        import_roundtrip(profile, record)
     print(f"SIGNATURE {profile['key']}: {signature}")
     print(f"RESULT {profile['key']} generation succeeded")
     return record
@@ -1033,16 +1044,17 @@ def _combine_rasters(records):
     first = records[0]["raster"]
     world = records[1]["raster"]
     world_surface = world["surface"]
-    for key in ("owner", "group", "position", "normal", "tangent", "dihedral", "edgeDistanceMeters", "cornerDistanceMeters"):
+    for key in ("owner", "group", "position", "normal", "tangent", "dihedral", "edgeDistanceMeters", "cornerDistanceMeters", "profileId", "uvIslandId"):
         combined[key] = first[key].copy()
         combined[key][world_surface] = world[key][world_surface]
     combined["surface"] = first["surface"] | world_surface
     combined["zones"] = {**first["zones"], **world["zones"]}
+    combined["profiles"] = {**first["profiles"], **world["profiles"]}
     combined["nonAdjacentInteriorOverlapPixels"] = 0
     return combined
 
 
-def generate_once(stage_dir):
+def generate_once(stage_dir, surface_only=False):
     global PREVIEW_DIRECTORY
     surface.clear_reference_height_cache()
     os.makedirs(stage_dir, exist_ok=True)
@@ -1052,12 +1064,17 @@ def generate_once(stage_dir):
         profile = dict(source)
         profile["output"] = os.path.join(stage_dir, os.path.basename(source["output"]))
         staged_profiles.append(profile)
-    records = [generate_profile(staged_profiles[0], stage_dir), generate_profile(staged_profiles[1], stage_dir)]
+    records = [
+        generate_profile(staged_profiles[0], stage_dir, 0, surface_only=surface_only),
+        generate_profile(staged_profiles[1], stage_dir, 1, surface_only=surface_only),
+    ]
     combined = _combine_rasters(records)
     texture_dir = os.path.join(stage_dir, "textures")
     surface.UV_ZONES = {key: value for key, value in UV_ZONES.items()}
     surface.TEXTURE_NAMES = TEXTURE_NAMES
-    _, texture_hashes, masks, periodicity, channels = surface.generate_texture_atlas(None, texture_dir, raster=combined)
+    _, texture_hashes, masks, periodicity, channels = surface.generate_texture_atlas(
+        None, texture_dir, raster=combined, include_microdetail=not surface_only
+    )
     return {
         "stage_dir": stage_dir,
         "records": records,
@@ -1070,6 +1087,7 @@ def generate_once(stage_dir):
         "uv_overlap_pixels": combined["nonAdjacentInteriorOverlapPixels"],
         "uv_hashes": {record["profile"]: record["uv_hash"] for record in records},
         "preview_hashes": {name: surface._hash_file(os.path.join(PREVIEW_DIRECTORY, name)) for name in PREVIEW_NAMES},
+        "surface_only": bool(surface_only),
     }
 
 
@@ -1093,6 +1111,8 @@ def compare_runs(first, second):
         raise RuntimeError("Two-run mask audit mismatch")
     if first["channels"] != second["channels"]:
         raise RuntimeError("Two-run channel audit mismatch")
+    if first["periodicity"] != second["periodicity"]:
+        raise RuntimeError("Two-run periodicity identity failed")
     if first_records[0]["signature"] == first_records[1]["signature"]:
         raise RuntimeError("FPS/world signatures unexpectedly identical")
     print(f"PROOF two-run semantic+UV+texture match: profiles=2, textures={len(first['texture_hashes'])}, previews=13")
@@ -1115,27 +1135,35 @@ def _atomic_promote(source, destination):
     os.replace(temporary, destination)
 
 
-def promote_and_write_proof(run, two_run_identical):
+def promote_and_write_proof(run, two_run_identical, protected_before=None):
     global PREVIEW_DIRECTORY
-    for profile in PROFILES.values():
-        _atomic_promote(os.path.join(run["stage_dir"], os.path.basename(profile["output"])), profile["output"])
+    surface_only = run["surface_only"]
+    if surface_only:
+        surface.assert_surface_protected(protected_before, "shotgun texture promotion")
+    else:
+        for profile in PROFILES.values():
+            _atomic_promote(os.path.join(run["stage_dir"], os.path.basename(profile["output"])), profile["output"])
     for filename in TEXTURE_NAMES:
         _atomic_promote(os.path.join(run["texture_dir"], filename), os.path.join(TEXTURE_DIRECTORY, filename))
-    _atomic_promote(
-        os.path.join(run["texture_dir"], surface.MICRODETAIL_NAME),
-        os.path.join(TEXTURE_DIRECTORY, surface.MICRODETAIL_NAME),
-    )
+    if not surface_only:
+        _atomic_promote(os.path.join(run["texture_dir"], surface.MICRODETAIL_NAME), os.path.join(TEXTURE_DIRECTORY, surface.MICRODETAIL_NAME))
     PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "shotgun")
     for filename in PREVIEW_NAMES:
         _atomic_promote(os.path.join(run["stage_dir"], "previews", filename), os.path.join(PREVIEW_DIRECTORY, filename))
+    promoted_names = TEXTURE_NAMES if surface_only else TEXTURE_NAMES + (surface.MICRODETAIL_NAME,)
     output_hashes = {
         filename: surface._hash_file(os.path.join(TEXTURE_DIRECTORY, filename))
-        for filename in TEXTURE_NAMES + (surface.MICRODETAIL_NAME,)
+        for filename in promoted_names
     }
     if output_hashes != run["texture_hashes"]:
         raise RuntimeError("Shotgun atomic texture promotion hash mismatch")
+    protected_after = surface.assert_surface_protected(protected_before, "shotgun proof write") if surface_only else None
+    fbx_before = {key: value for key, value in (protected_before or {}).items() if key.endswith(".fbx")}
+    fbx_after = {key: value for key, value in (protected_after or {}).items() if key.endswith(".fbx")}
     proof = {
         "schemaVersion": 3,
+        "surfaceRevision": surface.SURFACE_REVISION,
+        "surfaceOnly": surface_only,
         "seed": surface.SEED,
         "versions": {"blender": bpy.app.version_string, "python": sys.version.split()[0], "numpy": np.__version__},
         "geometry": {
@@ -1151,9 +1179,12 @@ def promote_and_write_proof(run, two_run_identical):
         "masks": run["masks"],
         "periodicity": run["periodicity"],
         "channels": run["channels"],
+        "surfaceContract": surface.surface_contract_record(),
+        "protected": {"fbxBeforeSha256": fbx_before, "fbxAfterSha256": fbx_after, "beforeSha256": protected_before, "afterSha256": protected_after, "stable": protected_before == protected_after if surface_only else None},
         "outputSha256": output_hashes,
         "previewSha256": {name: surface._hash_file(os.path.join(PREVIEW_DIRECTORY, name)) for name in PREVIEW_NAMES},
         "twoRunIdentical": bool(two_run_identical),
+        "twoRunIdentity": {"exact": bool(two_run_identical), "promotedTextures": len(output_hashes), "geometryUvMasksChannelsPeriodicity": bool(two_run_identical), "previewInventoryPreserved": len(run["preview_hashes"])},
     }
     staged_proof = os.path.join(run["stage_dir"], "proof.json")
     with open(staged_proof, "w", encoding="utf-8", newline="\n") as stream:
@@ -1171,13 +1202,15 @@ def main():
     surface.CHIP_CONTACT_MIN = 0.425
     surface.CHIP_FBM_MIN = 0.695
     surface.GRIME_BIAS = -0.250
+    surface_only = "--surface-only" in sys.argv
+    protected_before = surface.snapshot_surface_protected() if surface_only else None
     _safe_recreate_staging_root()
     proof_two_run = "--proof-two-run" in sys.argv
-    first = generate_once(os.path.join(STAGING_ROOT, "run1"))
+    first = generate_once(os.path.join(STAGING_ROOT, "run1"), surface_only=surface_only)
     if proof_two_run:
-        second = generate_once(os.path.join(STAGING_ROOT, "run2"))
+        second = generate_once(os.path.join(STAGING_ROOT, "run2"), surface_only=surface_only)
         compare_runs(first, second)
-    promote_and_write_proof(first, proof_two_run)
+    promote_and_write_proof(first, proof_two_run, protected_before=protected_before)
     print("RESULT Shotgun generation succeeded")
 
 
