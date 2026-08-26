@@ -253,6 +253,8 @@ namespace RocketFooxball.Editor
             GameObject rocketVisual = null;
             GameObject shotgunVisual = null;
             Light viewmodelLight = null;
+            UniversalAdditionalLightData viewmodelLightAdditionalData = null;
+            var captureAddedViewmodelLightAdditionalData = false;
             Camera gameplayCamera = null;
             GraphicsQualityRuntime qualityRuntime = null;
             CameraState cameraState = default;
@@ -313,6 +315,7 @@ namespace RocketFooxball.Editor
                 rocketVisual = Require(viewmodels.transform.Find("WeaponVisual")?.gameObject, "local player rocket FPS visual");
                 shotgunVisual = Require(viewmodels.transform.Find("FpsShotgunVisual")?.gameObject, "local player shotgun FPS visual");
                 viewmodelLight = Require(viewmodels.transform.Find(MovementLabContract.ViewmodelLightName)?.GetComponent<Light>(), "local player ViewmodelLight");
+                viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);
 
                 cameraState = SaveCameraState(gameplayCamera);
                 objectStates = player.GetComponentsInChildren<Transform>(true)
@@ -410,6 +413,7 @@ namespace RocketFooxball.Editor
             {
                 var cleanupErrors = new List<CaptureCleanupError>();
                 var fastRestoreFailed = false;
+                var additionalDataRemovalFailed = false;
                 if (MovementLabFastModeSession.IsActive)
                 {
                     try
@@ -457,17 +461,32 @@ namespace RocketFooxball.Editor
                     UnityEngine.Object.DestroyImmediate(renderTarget);
                 });
 
+                if (!fastRestoreFailed && !MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)
+                {
+                    var removalErrorCount = cleanupErrors.Count;
+                    TryRestoreCaptureState(cleanupErrors, "viewmodel-light-additional-data", () =>
+                        RemoveCaptureAddedViewmodelLightAdditionalData(viewmodelLight, viewmodelLightAdditionalData, captureAddedViewmodelLightAdditionalData));
+                    additionalDataRemovalFailed = cleanupErrors.Count != removalErrorCount;
+                }
+
                 if (!MovementLabFastModeSession.IsActive)
                 {
-                    try
+                    if (!fastRestoreFailed && !additionalDataRemovalFailed)
                     {
-                        // Reopen without saving so transient presentation, quality, and
-                        // runtime-created state cannot leak into the next invocation.
-                        EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                        try
+                        {
+                            // Reopen without saving so transient presentation, quality, and
+                            // runtime-created state cannot leak into the next invocation.
+                            EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                        }
+                        catch (Exception exception)
+                        {
+                            RecordCaptureCleanupFailure(cleanupErrors, "scene-reopen", exception);
+                        }
                     }
-                    catch (Exception exception)
+                    else if (additionalDataRemovalFailed)
                     {
-                        RecordCaptureCleanupFailure(cleanupErrors, "scene-reopen", exception);
+                        UnityEngine.Debug.LogError("Rocket Fooxball weapon capture skipped scene reopen after viewmodel-light additional-data restore failure.");
                     }
                 }
                 else if (fastRestoreFailed)
@@ -516,6 +535,43 @@ namespace RocketFooxball.Editor
             if (cleanupErrors.Count == 0) return;
             LogCaptureCleanupFailures(cleanupErrors, 1);
             cleanupErrors[0].DispatchInfo.Throw();
+        }
+
+        private static UniversalAdditionalLightData EnsureViewmodelLightAdditionalData(Light viewmodelLight, out bool captureAdded)
+        {
+            if (viewmodelLight == null || viewmodelLight.gameObject == null)
+                throw new InvalidOperationException("Weapon capture ViewmodelLight is missing its owning GameObject.");
+
+            var existingAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (existingAdditionalData.Length > 1)
+                throw new InvalidOperationException("Weapon capture ViewmodelLight has multiple UniversalAdditionalLightData components.");
+
+            captureAdded = existingAdditionalData.Length == 0;
+            var additionalData = viewmodelLight.GetUniversalAdditionalLightData();
+            if (additionalData == null || additionalData.gameObject != viewmodelLight.gameObject)
+                throw new InvalidOperationException("Weapon capture ViewmodelLight UniversalAdditionalLightData belongs to a different GameObject.");
+
+            var currentAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData)
+                throw new InvalidOperationException("Weapon capture ViewmodelLight must have exactly one UniversalAdditionalLightData component.");
+            return additionalData;
+        }
+
+        private static void RemoveCaptureAddedViewmodelLightAdditionalData(Light viewmodelLight, UniversalAdditionalLightData additionalData, bool captureAdded)
+        {
+            if (!captureAdded) return;
+            if (viewmodelLight == null || viewmodelLight.gameObject == null)
+                throw new InvalidOperationException("Weapon capture cannot remove ViewmodelLight UniversalAdditionalLightData after its Light was destroyed.");
+            if (additionalData == null || additionalData.gameObject != viewmodelLight.gameObject)
+                throw new InvalidOperationException("Weapon capture will only remove ViewmodelLight-owned UniversalAdditionalLightData.");
+
+            var currentAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData)
+                throw new InvalidOperationException("Weapon capture will only remove the exact capture-added UniversalAdditionalLightData component.");
+
+            UnityEngine.Object.DestroyImmediate(additionalData);
+            if (viewmodelLight.GetComponents<UniversalAdditionalLightData>().Length != 0)
+                throw new InvalidOperationException("Weapon capture could not remove its exact ViewmodelLight UniversalAdditionalLightData component.");
         }
 
         private static CaptureOptions ReadCaptureOptions()

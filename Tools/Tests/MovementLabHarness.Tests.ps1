@@ -945,6 +945,56 @@ function Test-FastRestoreHierarchyContract {
         foreach ($marker in @('fastRestoreFailed = true;', 'RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);', 'TryRestoreCaptureState(cleanupErrors,', 'scene reopen skipped', 'ThrowCaptureError(primaryError, cleanupErrors);')) {
             if ($finally.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'restore-failure cleanup omitted ' + $marker }
         }
+
+        $initializeCall = $CaptureSource.IndexOf('viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);', $captureStart, [StringComparison]::Ordinal)
+        $captureImageCall = $CaptureSource.IndexOf('var image = CaptureImage(', $captureStart, [StringComparison]::Ordinal)
+        $enterForCapture = $CaptureSource.IndexOf('MovementLabFastModeSession.EnterForCapture(qualityIndex);', $captureStart, [StringComparison]::Ordinal)
+        $cameraRender = $CaptureSource.IndexOf('camera.Render();', $enterForCapture, [StringComparison]::Ordinal)
+        $viewmodelLightRequire = $CaptureSource.IndexOf('viewmodelLight = Require(', $captureStart, [StringComparison]::Ordinal)
+        $cameraSnapshot = $CaptureSource.IndexOf('cameraState = SaveCameraState(gameplayCamera);', $captureStart, [StringComparison]::Ordinal)
+        if ($initializeCall -le $viewmodelLightRequire -or $initializeCall -ge $cameraSnapshot -or
+            $initializeCall -ge $captureImageCall -or $initializeCall -ge $enterForCapture -or $initializeCall -ge $cameraRender) {
+            return 'ViewmodelLight URP additional data is not initialized before capture snapshots and first Fast render'
+        }
+
+        $ensureStart = $CaptureSource.IndexOf('private static UniversalAdditionalLightData EnsureViewmodelLightAdditionalData(', [StringComparison]::Ordinal)
+        $removeStart = $CaptureSource.IndexOf('private static void RemoveCaptureAddedViewmodelLightAdditionalData(', [StringComparison]::Ordinal)
+        $optionsStart = $CaptureSource.IndexOf('private static CaptureOptions ReadCaptureOptions', $removeStart + 1, [StringComparison]::Ordinal)
+        if ($ensureStart -lt 0 -or $removeStart -le $ensureStart -or $optionsStart -le $removeStart) {
+            return 'ViewmodelLight URP additional-data helper boundaries are missing or out of order'
+        }
+        $ensure = $CaptureSource.Substring($ensureStart, $removeStart - $ensureStart)
+        $remove = $CaptureSource.Substring($removeStart, $optionsStart - $removeStart)
+        foreach ($marker in @(
+            'viewmodelLight.GetComponents<UniversalAdditionalLightData>()',
+            'existingAdditionalData.Length > 1',
+            'captureAdded = existingAdditionalData.Length == 0;',
+            'viewmodelLight.GetUniversalAdditionalLightData()',
+            'additionalData.gameObject != viewmodelLight.gameObject',
+            'currentAdditionalData.Length != 1'
+        )) {
+            if ($ensure.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'URP additional-data initialization omitted ' + $marker }
+        }
+        foreach ($marker in @(
+            'if (!captureAdded) return;',
+            'additionalData.gameObject != viewmodelLight.gameObject',
+            'currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData',
+            'UnityEngine.Object.DestroyImmediate(additionalData);',
+            'GetComponents<UniversalAdditionalLightData>().Length != 0'
+        )) {
+            if ($remove.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'capture-owned URP additional-data cleanup omitted ' + $marker }
+        }
+
+        $restoreIndex = $finally.IndexOf('MovementLabFastModeSession.RestoreIfActive();', [StringComparison]::Ordinal)
+        $removeGate = $finally.IndexOf('if (!fastRestoreFailed && !MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)', [StringComparison]::Ordinal)
+        $removeCall = $finally.IndexOf('RemoveCaptureAddedViewmodelLightAdditionalData(viewmodelLight, viewmodelLightAdditionalData, captureAddedViewmodelLightAdditionalData)', [StringComparison]::Ordinal)
+        $additionalRemovalFailure = $finally.IndexOf('additionalDataRemovalFailed = cleanupErrors.Count != removalErrorCount;', [StringComparison]::Ordinal)
+        if ($restoreIndex -lt 0 -or $removeGate -le $restoreIndex -or $removeCall -le $removeGate -or $additionalRemovalFailure -le $removeCall -or $removeCall -ge $openIndex) {
+            return 'capture-owned URP additional-data removal is not conditional and ordered after successful Fast restore before scene reopen'
+        }
+        if ($finally.IndexOf('if (!fastRestoreFailed && !additionalDataRemovalFailed)', $removeCall, [StringComparison]::Ordinal) -lt 0) {
+            return 'scene reopen is not blocked after capture-owned URP additional-data cleanup failure'
+        }
         return $null
     }
 
@@ -962,7 +1012,23 @@ function Test-FastRestoreHierarchyContract {
     $reopenScratch = $capture.Replace('if (!MovementLabFastModeSession.IsActive)', 'if (true)')
     $scratchFailure = & $assertContract $fast $reopenScratch
     if ($null -eq $scratchFailure) { return New-HarnessFail 'restore-failure reopen scratch unexpectedly passed' }
-    return New-HarnessPass 'persistable scene filtering, bounded deterministic hierarchy deltas, and fail-closed reopen guard are structurally covered'
+
+    $initializationScratch = $capture.Replace('viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);', 'viewmodelLightAdditionalData = null;')
+    $scratchFailure = & $assertContract $fast $initializationScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'pre-render URP initialization scratch unexpectedly passed' }
+
+    $ownershipScratch = $capture.Replace('if (!captureAdded) return;', 'if (captureAdded) return;')
+    $scratchFailure = & $assertContract $fast $ownershipScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'preexisting URP additional-data ownership scratch unexpectedly passed' }
+
+    $restoreGateScratch = $capture.Replace('if (!fastRestoreFailed && !MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)', 'if (captureAddedViewmodelLightAdditionalData)')
+    $scratchFailure = & $assertContract $fast $restoreGateScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'Fast restore URP cleanup gate scratch unexpectedly passed' }
+
+    $reopenCleanupScratch = $capture.Replace('if (!fastRestoreFailed && !additionalDataRemovalFailed)', 'if (!fastRestoreFailed)')
+    $scratchFailure = & $assertContract $fast $reopenCleanupScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'URP cleanup failure reopen scratch unexpectedly passed' }
+    return New-HarnessPass 'persistable scene filtering, bounded hierarchy deltas, pre-render URP warmup, ownership-safe cleanup, and fail-closed reopen guard are structurally covered'
 }
 
 function Test-WeaponCaptureExceptionPreservation {
