@@ -599,7 +599,9 @@ function Test-WeaponCaptureContract {
     $red = [IO.File]::ReadAllText($redPath)
     $required = @(
         '-weaponCaptureEvidenceRoot', '-weaponCaptureAttemptId', '-weaponCaptureWeapon', '-weaponCaptureMode', '-weaponCaptureReferenceManifest',
-        'Start-Process', '-WindowStyle Hidden', '-Wait', '-PassThru', 'Wait-ProjectRelease',
+        'Start-Process', '-WindowStyle Hidden', '-Wait', '-PassThru', 'Wait-ProjectRelease', 'Acquire-ProjectLease', 'Release-ProjectLease',
+        'New-ExclusiveWrapperDirectory', 'Get-CaptureSourceSnapshot', 'Get-IndexDigest', 'Get-ProductFileSnapshot', 'Get-ReferenceSnapshot',
+        'wrapperDirectory', 'ExpectedSourceSha', 'sourceShaIsCleanHead', 'afterProductContentSha256', 'afterReferenceContentSha256', 'afterGeneratedManifestSha256',
         'WeaponVisualManifest.json', 'WEAPON_VISUAL_CAPTURE_PASS', 'Assert-WeaponManifest',
         'SetLocalMode(true)', 'SetAlive(true)', 'SetShotgunOwned', 'MovementLabFastModeSession.EnterForCapture', 'MovementLabFastModeSession.RestoreIfActive',
         'RenderSettings.sun', 'Vector3.SignedAngle', 'Mathf.DeltaAngle', 'maskRowOrigin', 'differencePixelCount', 'differenceMeanAbsRgb',
@@ -612,6 +614,93 @@ function Test-WeaponCaptureContract {
     if ($missing.Count -eq 0) { return New-HarnessFail 'weapon capture red fixture unexpectedly contains every guarded contract marker' }
     if ($combined.IndexOf('BrightArenaVisualCapture', [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'weapon capture must remain independent of BrightArena capture' }
     return New-HarnessPass ('weapon CLI/render/pose/control/hash contract guarded; red fixture fails at ' + $missing[0])
+}
+
+function Write-HarnessJson {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Value)
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Force -Path $directory | Out-Null }
+    [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth 32) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+}
+
+function New-HarnessPngHeader {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][int]$Marker)
+    $bytes = New-Object byte[] 24
+    $bytes[0] = [byte]137; $bytes[1] = [byte]80; $bytes[2] = [byte]78; $bytes[3] = [byte]71
+    $bytes[16] = [byte]0; $bytes[17] = [byte]0; $bytes[18] = [byte]7; $bytes[19] = [byte]128
+    $bytes[20] = [byte]0; $bytes[21] = [byte]0; $bytes[22] = [byte]4; $bytes[23] = [byte]56
+    $bytes[4] = [byte]($Marker -band 0xff)
+    [IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+function Test-WeaponCaptureBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('weapon-capture-behavior-' + [Guid]::NewGuid().ToString('N'))
+    $module = $null
+    try {
+        $captureDirectory = Join-Path $root 'capture'
+        New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null
+        $sourceSha = 'a' * 40
+        $generatedSha = 'b' * 64
+        $referencePath = Join-Path $root 'reference.json'
+        $referenceEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($id in @('game-bright', 'game-dark', 'quake-hires')) {
+            $originalPath = Join-Path $root ($id + '-original.bin')
+            $evidencePath = Join-Path $root ($id + '-evidence.bin')
+            [IO.File]::WriteAllBytes($originalPath, [byte[]](1, 2, 3, 4))
+            [IO.File]::WriteAllBytes($evidencePath, [byte[]](1, 2, 3, 4))
+            $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $referenceEntries.Add([ordered]@{ id = $id; originalPath = $originalPath; evidencePath = $evidencePath; bytes = 4; sha256 = $hash }) | Out-Null
+        }
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; entries = @($referenceEntries.ToArray()) })
+        $referenceHash = (Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $reference = [pscustomobject]@{ path = [IO.Path]::GetFullPath($referencePath); sha256 = $referenceHash; entries = @($referenceEntries.ToArray()) }
+
+        $names = @('rocket-sunward-high.png', 'rocket-sunward-low.png', 'rocket-crosslight-high.png', 'rocket-crosslight-low.png', 'rocket-awaylight-high.png', 'rocket-awaylight-low.png')
+        $images = New-Object System.Collections.Generic.List[object]
+        for ($index = 0; $index -lt $names.Count; $index++) {
+            $imagePath = Join-Path $captureDirectory $names[$index]
+            New-HarnessPngHeader $imagePath ($index + 1)
+            $quality = if (($index % 2) -eq 0) { 'High' } else { 'Low' }
+            $angle = if ($index -lt 2) { 0 } elseif ($index -lt 4) { 90 } else { 180 }
+            $imageHash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $images.Add([ordered]@{
+                    filename = $names[$index]; path = $imagePath; sha256 = $imageHash; width = 1920; height = 1080; visualMode = 'Fast'; qualityLevel = $quality; fastSessionApplied = $true
+                    targetAngle = $angle; angleDelta = 0; fieldOfView = 75; playerPosition = [ordered]@{ x = 0; y = 0; z = 0 }; cameraLocalEulerAngles = [ordered]@{ x = 8; y = 0; z = 0 }
+                    maskOrigin = 'top-left'; maskRowOrigin = 'bottom-left'; maskXMin = 64; maskXMax = 1855; maskYMin = 540; maskYMax = 1079; maskRowMin = 0; maskRowMax = 539
+                    differencePixelCount = 10001; differenceMeanAbsRgb = 0.02; differencePixelThreshold = 10000; differenceChannelThreshold = 8; controlRendered = $true; pass = $true
+                }) | Out-Null
+        }
+        $manifestPath = Join-Path $captureDirectory 'WeaponVisualManifest.json'
+        $manifest = [ordered]@{
+            schemaVersion = 1; attemptId = 'behavior-attempt'; weaponCaptureAttemptId = 'behavior-attempt'; weapon = 'Rocket'; weaponCaptureWeapon = 'Rocket'; weaponCaptureMode = 'Fast'
+            sourceSha = $sourceSha; generatedManifestSha256 = $generatedSha; referenceManifestPath = $reference.path; referenceManifestSha256 = $reference.sha256
+            referenceHashes = @($reference.entries | ForEach-Object { [ordered]@{ id = $_.id; sha256 = $_.sha256 } }); images = @($images.ToArray()); pass = $true
+        }
+        Write-HarnessJson $manifestPath $manifest
+
+        $module = & $State.ShimCommand $State.CapturePath @('Assert-WeaponManifest', 'Read-PngDimensions', 'Assert-NumericClose', 'Assert-Vector', 'Get-Property', 'Get-Hash') @()
+        & $module {
+            param($attempt, $weapon, $mode, $directory)
+            $script:AttemptId = $attempt; $script:Weapon = $weapon; $script:Mode = $mode; $script:EvidenceDirectory = $directory
+        } 'behavior-attempt' 'Rocket' 'Fast' $captureDirectory | Out-Null
+        $records = Invoke-HarnessModuleFunction $module 'Assert-WeaponManifest' @{ Path = $manifestPath; Reference = $reference; ExpectedSha = $sourceSha; ExpectedGeneratedManifestSha = $generatedSha }
+        if ($records.Count -ne 6) { return New-HarnessFail ('green capture validator returned ' + $records.Count + ' records') }
+
+        $invalid = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+        $invalid.images[0].differencePixelCount = 0
+        $invalidPath = Join-Path $captureDirectory 'WeaponVisualManifest.invalid.json'
+        Write-HarnessJson $invalidPath $invalid
+        $rejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Assert-WeaponManifest' @{ Path = $invalidPath; Reference = $reference; ExpectedSha = $sourceSha; ExpectedGeneratedManifestSha = $generatedSha } | Out-Null } catch { $rejected = $true }
+        if (-not $rejected) { return New-HarnessFail 'invalid capture manifest unexpectedly passed behavioral validator' }
+        return New-HarnessPass 'green capture manifest accepted; invalid visibility threshold rejected'
+    } catch {
+        return New-HarnessFail ('capture behavioral validation failed: ' + $_.Exception.Message)
+    } finally {
+        if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-WeaponVisualVerdictContract {
@@ -634,6 +723,133 @@ function Test-WeaponVisualVerdictContract {
     $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
     if ($missing.Count -eq 0) { return New-HarnessFail 'weapon verdict red fixture unexpectedly contains every guarded contract marker' }
     return New-HarnessPass ('weapon verdict hash/predicate/reduction contract guarded; red fixture fails at ' + $missing[0])
+}
+
+function Invoke-HarnessPowerShell {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previous }
+    return [pscustomobject]@{ exitCode = $exitCode; output = @($output) }
+}
+
+function Invoke-HarnessFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$FixturePath,
+        [Parameter(Mandatory = $true)][string]$ScratchRoot,
+        [string[]]$Arguments = @()
+    )
+    if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) { throw ('Fixture missing: ' + $FixturePath) }
+    $temporaryPath = Join-Path $ScratchRoot ('fixture-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+    try {
+        # Checked-in red fixtures use .ps1.txt so they cannot be mistaken for
+        # runnable product scripts. Execute an exact copied source with a
+        # temporary .ps1 extension so PowerShell runs the fixture body.
+        Copy-Item -LiteralPath $FixturePath -Destination $temporaryPath -Force
+        return Invoke-HarnessPowerShell (@('-File', $temporaryPath) + @($Arguments))
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-WeaponVisualVerdictBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('weapon-verdict-behavior-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $sourceSha = 'a' * 40
+        $referenceEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($id in @('game-bright', 'game-dark', 'quake-hires')) {
+            $originalPath = Join-Path $root ($id + '-original.bin')
+            $evidencePath = Join-Path $root ($id + '-evidence.bin')
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            [IO.File]::WriteAllBytes($originalPath, [byte[]](5, 6, 7, 8))
+            [IO.File]::WriteAllBytes($evidencePath, [byte[]](5, 6, 7, 8))
+            $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $referenceEntries.Add([ordered]@{ id = $id; originalPath = $originalPath; evidencePath = $evidencePath; bytes = 4; sha256 = $hash }) | Out-Null
+        }
+        $referencePath = Join-Path $root 'ReferenceManifest.json'
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; entries = @($referenceEntries.ToArray()) })
+        $captureManifestPaths = New-Object System.Collections.Generic.List[string]
+        $captureManifestHashes = [ordered]@{}
+        $captureImageRecords = [ordered]@{}
+        foreach ($weapon in @('Rocket', 'Shotgun')) {
+            $captureDirectory = Join-Path $root $weapon
+            New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null
+            $items = New-Object System.Collections.Generic.List[object]
+            for ($index = 0; $index -lt 6; $index++) {
+                $filename = $weapon.ToLowerInvariant() + '-' + $index + '.png'
+                $imagePath = Join-Path $captureDirectory $filename
+                [IO.File]::WriteAllBytes($imagePath, [byte[]]([int](10 + $index), [int](20 + $index), [int](30 + $index)))
+                $hash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $items.Add([ordered]@{ filename = $filename; path = $imagePath; sha256 = $hash }) | Out-Null
+                if (-not $captureImageRecords.Contains($weapon)) { $captureImageRecords[$weapon] = $imagePath }
+            }
+            $manifestPath = Join-Path $captureDirectory 'WeaponVisualManifest.json'
+            Write-HarnessJson $manifestPath ([ordered]@{ schemaVersion = 1; weaponCaptureWeapon = $weapon; sourceSha = $sourceSha; images = @($items.ToArray()) })
+            $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $captureManifestPaths.Add($manifestPath) | Out-Null
+            $captureManifestHashes[$weapon] = $manifestHash
+        }
+        $predicates = New-Object System.Collections.Generic.List[object]
+        foreach ($weapon in @('Rocket', 'Shotgun')) {
+            foreach ($id in @('high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed', 'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy')) {
+                $imagePath = $captureImageRecords[$weapon]
+                $imageHash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $predicates.Add([ordered]@{ weapon = $weapon; id = $id; pass = $true; evidenceImages = @([ordered]@{ path = $imagePath; sha256 = $imageHash }) }) | Out-Null
+            }
+        }
+        $referenceHashRecords = @($referenceEntries.ToArray() | ForEach-Object { [ordered]@{ id = $_.id; sha256 = $_.sha256 } })
+        $verdictPath = Join-Path $root 'WeaponVisualVerdict.json'
+        $verdict = [ordered]@{
+            schemaVersion = 1; agentId = 'behavior-agent'; profile = 'sol_high'; role = 'weapon-visual-verifier'; sourceSha = $sourceSha
+            referenceHashes = $referenceHashRecords; captureManifestHashes = @([ordered]@{ weapon = 'Rocket'; sha256 = $captureManifestHashes['Rocket'] }, [ordered]@{ weapon = 'Shotgun'; sha256 = $captureManifestHashes['Shotgun'] })
+            acceptedPriorVerdictHash = ''; predicates = @($predicates.ToArray()); failures = @(); overallPass = $true
+        }
+        Write-HarnessJson $verdictPath $verdict
+        $validator = Join-Path $State.ProjectRoot 'Tools/Validation/Test-WeaponVisualVerdict.ps1'
+        $greenResultPath = Join-Path $root 'green-result.json'
+        $green = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', $greenResultPath)
+        if ($green.exitCode -ne 0) { return New-HarnessFail ('green verdict validator exited ' + $green.exitCode + ': ' + (($green.output | ForEach-Object { [string]$_ }) -join ' | ')) }
+        if (-not (Test-Path -LiteralPath $greenResultPath -PathType Leaf)) { return New-HarnessFail 'green verdict validator did not write result evidence' }
+
+        $invalidVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $invalidVerdict.overallPass = $false
+        $invalidPath = Join-Path $root 'WeaponVisualVerdict.invalid.json'
+        Write-HarnessJson $invalidPath $invalidVerdict
+        $red = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $invalidPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'invalid-result.json'))
+        if ($red.exitCode -eq 0) { return New-HarnessFail 'invalid verdict unexpectedly passed behavioral validator' }
+        return New-HarnessPass 'green verdict accepted and invalid overallPass was rejected'
+    } catch {
+        return New-HarnessFail ('verdict behavioral validation failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-RedFixturesBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('red-fixture-behavior-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        $workflow = Invoke-HarnessFixture $State.RedSource $root
+        if ($workflow.exitCode -eq 0) { return New-HarnessFail 'red workflow fixture unexpectedly succeeded when executed' }
+        $capturePath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-capture.ps1.txt'
+        $capture = Invoke-HarnessFixture $capturePath $root @('-EvidenceRoot', $root, '-AttemptId', 'red')
+        if ($capture.exitCode -eq 0) { return New-HarnessFail 'red capture fixture unexpectedly succeeded when executed' }
+        $invalidVerdictPath = Join-Path $root 'invalid-verdict.json'
+        Write-HarnessJson $invalidVerdictPath ([ordered]@{ overallPass = $false })
+        $verdictPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-verdict.ps1.txt'
+        $verdict = Invoke-HarnessFixture $verdictPath $root @('-VerdictPath', $invalidVerdictPath)
+        if ($verdict.exitCode -eq 0) { return New-HarnessFail 'red verdict fixture unexpectedly succeeded when executed' }
+        return New-HarnessPass 'workflow, capture, and verdict red fixtures all fail when executed'
+    } catch {
+        return New-HarnessFail ('red fixture behavioral check failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-ProductionBakeOutcomePreserved {

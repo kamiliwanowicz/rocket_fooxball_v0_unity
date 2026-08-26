@@ -3,4 +3,6 @@
 # the exact sixteen-predicate reduction.
 param([string]$VerdictPath)
 $verdict = Get-Content -Raw -LiteralPath $VerdictPath | ConvertFrom-Json
-if ($verdict.overallPass) { Write-Output 'accepted' }
+if (-not $verdict.overallPass) { throw 'Historical red weapon verdict fixture intentionally rejects invalid overallPass.' }
+Write-Error 'Historical red weapon verdict fixture does not validate the required evidence contract.'
+exit 1

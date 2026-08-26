@@ -47,3 +47,7 @@ function Test-RowReuseProof {
     if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
     return @{ valid = $true; reason = $null }
 }
+
+# Executable red baseline: the historical workflow is intentionally not a
+# runnable green workflow and must fail when the behavioral harness executes it.
+throw 'Historical red workflow fixture intentionally fails behavioral execution.'

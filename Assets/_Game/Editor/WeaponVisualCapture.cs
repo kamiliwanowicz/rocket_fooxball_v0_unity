@@ -216,12 +216,14 @@ namespace RocketFooxball.Editor
         {
             var options = ReadCaptureOptions();
             var projectRoot = Directory.GetParent(Application.dataPath).FullName;
-            var evidenceDirectory = CreateEvidenceDirectory(options.EvidenceRoot, options.AttemptId, projectRoot);
-            var manifestPath = Path.Combine(evidenceDirectory, "WeaponVisualManifest.json");
             var reference = ReadAndValidateReferenceManifest(options.ReferenceManifest, projectRoot);
             var generatedManifestPath = ResolveProjectPath(projectRoot, BuildManifestPath);
             var generatedManifestSha = HashFile(generatedManifestPath);
             var sourceSha = ReadGitSha(projectRoot);
+            // The wrapper owns the evidence root and runner directories. The
+            // capture facade alone reserves and creates this absent leaf.
+            var evidenceDirectory = CreateEvidenceDirectory(options.EvidenceRoot, options.AttemptId, projectRoot);
+            var manifestPath = Path.Combine(evidenceDirectory, "WeaponVisualManifest.json");
             var initialQuality = QualitySettings.GetQualityLevel();
             var initialFastSession = MovementLabFastModeSession.IsActive;
             if (initialFastSession)
@@ -482,13 +484,45 @@ namespace RocketFooxball.Editor
         {
             var root = Path.GetFullPath(evidenceRoot).TrimEnd('\\');
             var project = Path.GetFullPath(projectRoot).TrimEnd('\\');
+            if (!Directory.Exists(root))
+                throw new InvalidOperationException("Weapon evidence root must already exist: " + root);
+            var rootInfo = new DirectoryInfo(root);
+            if ((rootInfo.Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new InvalidOperationException("Weapon evidence root may not be a junction or alias: " + root);
             var directory = Path.GetFullPath(Path.Combine(root, attemptId));
             if (directory.Equals(project, StringComparison.OrdinalIgnoreCase) || directory.StartsWith(project + "\\", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Weapon evidence must be outside the Unity project.");
+            if (directory.Length >= 260 || Path.Combine(directory, "shotgun-awaylight-low.png").Length >= 260)
+                throw new InvalidOperationException("Weapon evidence path exceeds the Windows 260-character limit: " + directory);
             if (Directory.Exists(directory) || File.Exists(directory))
                 throw new InvalidOperationException("Weapon evidence attempt already exists: " + directory);
-            Directory.CreateDirectory(directory);
-            return directory;
+            // Directory.CreateDirectory is idempotent and therefore cannot by
+            // itself reserve a unique attempt. Hold an atomic sibling marker
+            // while creating the leaf so concurrent Rocket/Shotgun attempts
+            // with the same id cannot both publish into one directory.
+            var reservation = Path.Combine(root, ".weapon-capture-" + attemptId + ".reservation");
+            var reservationCreated = false;
+            try
+            {
+                using (var stream = new FileStream(reservation, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    reservationCreated = true;
+                    var bytes = Encoding.UTF8.GetBytes("weapon-capture-reservation\n");
+                    stream.Write(bytes, 0, bytes.Length);
+                    stream.Flush(true);
+                }
+                if (Directory.Exists(directory) || File.Exists(directory))
+                    throw new InvalidOperationException("Weapon evidence attempt already exists: " + directory);
+                Directory.CreateDirectory(directory);
+                if (!Directory.Exists(directory))
+                    throw new InvalidOperationException("Weapon evidence attempt directory was not created: " + directory);
+                return directory;
+            }
+            finally
+            {
+                // Never delete a contender's reservation when CreateNew fails.
+                if (reservationCreated && File.Exists(reservation)) File.Delete(reservation);
+            }
         }
 
         private static ReferenceEvidence ReadAndValidateReferenceManifest(string path, string projectRoot)
