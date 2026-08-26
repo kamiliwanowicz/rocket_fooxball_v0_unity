@@ -101,12 +101,19 @@ WEAR_COVERAGE_LIMITS = {
     "grime": (0.0120, 0.0250),
     "muzzleSoot": (0.10, 0.45),
 }
+SCRATCH_POOL_RATIOS = {"sharp": 0.60, "handling": 0.25, "muzzle": 0.15}
+SCRATCH_POOL_TIE_ORDER = ("sharp", "handling", "muzzle")
+SCRATCH_ORIENTATION_RATIOS = {"tangent": 0.70, "cross": 0.30}
+SCRATCH_ORIENTATION_TIE_ORDER = ("tangent", "cross")
 SCRATCH_PROFILE_CONTRACTS = {
-    "launcher": {"counts": {"sharp": 38, "muzzle": 16, "handling": 10}, "orientations": {"tangent": 45, "cross": 19}},
-    "FpsShotgun": {"counts": {"sharp": 38, "muzzle": 16, "handling": 10}, "orientations": {"tangent": 45, "cross": 19}},
-    "Shotgun": {"counts": {"sharp": 34, "muzzle": 14, "handling": 8}, "orientations": {"tangent": 39, "cross": 17}},
+    profile: {
+        "poolRatios": dict(SCRATCH_POOL_RATIOS),
+        "poolTieOrder": list(SCRATCH_POOL_TIE_ORDER),
+        "orientationRatios": dict(SCRATCH_ORIENTATION_RATIOS),
+        "orientationTieOrder": list(SCRATCH_ORIENTATION_TIE_ORDER),
+    }
+    for profile in ("launcher", "FpsShotgun", "Shotgun")
 }
-SCRATCH_COVERAGE_SAMPLES_PER_SEGMENT = {"launcher": 800, "FpsShotgun": 700, "Shotgun": 950}
 PREVIEW_NAMES = ("front.png", "rear.png", "left.png", "right.png", "top.png", "three-quarter.png")
 UV_ZONES = {
     "WeaponMetal": (32, 864, 2016, 2016),
@@ -909,6 +916,7 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
     dihedral = np.zeros((size, size), dtype=np.float32)
     edge_distance_m = np.full((size, size), np.inf, dtype=np.float32)
     corner_distance_m = np.full((size, size), np.inf, dtype=np.float32)
+    texel_area_m2 = np.zeros((size, size), dtype=np.float32)
     profile_ids = np.full((size, size), -1, dtype=np.int16)
     uv_island_ids = np.full((size, size), -1, dtype=np.int32)
     triangle_vertices = []
@@ -1003,6 +1011,8 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
                         for index in corner_candidates
                     ]
                     corner_distance_m[take_y, take_x] = np.min(np.stack(distances, axis=1), axis=1).astype(np.float32)
+                physical_twice_area = np.linalg.norm(np.cross(xy[1] - xy[0], xy[2] - xy[0]))
+                texel_area_m2[take_y, take_x] = float(physical_twice_area / abs(denominator))
                 profile_ids[take_y, take_x] = profile_id
                 uv_island_ids[take_y, take_x] = island_offset + triangle_islands[object_triangle_index]
             triangle_index += 1
@@ -1035,6 +1045,7 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
         "dihedral": dihedral,
         "edgeDistanceMeters": edge_distance_m,
         "cornerDistanceMeters": corner_distance_m,
+        "texelAreaMetersSquared": texel_area_m2,
         "profileId": profile_ids,
         "uvIslandId": uv_island_ids,
         "profiles": {
@@ -1355,11 +1366,40 @@ def _scratch_unit(value):
     return _scratch_hash32(value) / 4294967295.0
 
 
+def _largest_remainder_allocation(total, ratios, tie_order):
+    if total < 0 or set(ratios) != set(tie_order):
+        raise RuntimeError(f"Invalid largest-remainder contract: total={total}, ratios={ratios}, tieOrder={tie_order}")
+    if not math.isclose(sum(ratios.values()), 1.0, rel_tol=0.0, abs_tol=1.0e-12):
+        raise RuntimeError(f"Largest-remainder ratios must sum to one: {ratios}")
+    ideals = {name: total * ratios[name] for name in tie_order}
+    allocation = {name: int(math.floor(ideals[name])) for name in tie_order}
+    remaining = total - sum(allocation.values())
+    tie_index = {name: index for index, name in enumerate(tie_order)}
+    remainder_order = sorted(
+        tie_order,
+        key=lambda name: (-(ideals[name] - allocation[name]), tie_index[name]),
+    )
+    for name in remainder_order[:remaining]:
+        allocation[name] += 1
+    if sum(allocation.values()) != total:
+        raise RuntimeError(f"Largest-remainder allocation failed: total={total}, allocation={allocation}")
+    return allocation
+
+
+def _next_apportioned_label(total, ratios, tie_order):
+    before = _largest_remainder_allocation(total - 1, ratios, tie_order)
+    after = _largest_remainder_allocation(total, ratios, tie_order)
+    changed = [name for name in tie_order if after[name] - before[name] == 1]
+    if len(changed) != 1 or any(after[name] < before[name] for name in tie_order):
+        raise RuntimeError(f"Non-monotonic largest-remainder step at total={total}: before={before}, after={after}")
+    return changed[0]
+
+
 def _metric_scratch_segments(
     active, positions, normals, tangents, actual_contact, metal, muzzle, handling,
-    profile_ids, group_ids, island_ids, profiles,
+    profile_ids, group_ids, island_ids, profiles, texel_areas,
 ):
-    """Rasterize exact-count warm-wear groove/shoulder segments."""
+    """Grow deterministic single-capsule scratches to honest physical-area coverage."""
     width_range = (0.00025, 0.00065)
     length_range = (0.005, 0.022)
     shoulder_range = (0.00020, 0.00045)
@@ -1388,7 +1428,7 @@ def _metric_scratch_segments(
 
     groove = np.zeros(active.size, dtype=bool)
     shoulder = np.zeros(active.size, dtype=bool)
-    carrier_domain = np.zeros(active.size, dtype=bool)
+    coverage_eligible = np.zeros(active.size, dtype=bool)
     records = []
     profile_records = {}
     for profile_id in sorted(profiles):
@@ -1402,33 +1442,45 @@ def _metric_scratch_segments(
             "sharp": metal & (actual_contact > 0.55) & ~muzzle & profile_mask,
             "handling": metal & (handling > 0.35) & (actual_contact <= 0.55) & ~muzzle & profile_mask,
         }
+        profile_eligible = pools["sharp"] | pools["handling"] | pools["muzzle"]
+        coverage_eligible |= profile_eligible
         if np.any((pools["muzzle"] & pools["sharp"]) | (pools["muzzle"] & pools["handling"]) | (pools["sharp"] & pools["handling"])):
             raise RuntimeError(f"Scratch precedence pools overlap for {profile_name}")
-        total_required = sum(contract["counts"].values())
-        orientations = ["tangent"] * contract["orientations"]["tangent"] + ["cross"] * contract["orientations"]["cross"]
-        orientation_sequence = [
-            name for _, name in sorted(
-                (_scratch_hash32(SEED ^ len(name) ^ (index * 0x9E3779B9)), name)
-                for index, name in enumerate(orientations)
-            )
-        ]
-        orientation_cursor = 0
-        admitted_by_pool = {}
-        profile_segment_records = []
-        for pool_name in ("sharp", "muzzle", "handling"):
-            required = contract["counts"][pool_name]
+        eligible_pixels = int(np.count_nonzero(profile_eligible))
+        eligible_area = float(np.sum(texel_areas[profile_eligible], dtype=np.float64))
+        if eligible_pixels == 0 or eligible_area <= 0.0:
+            raise RuntimeError(f"Scratch eligible metal surface is empty for {profile_name}")
+
+        candidate_lists = {}
+        candidate_cursors = {name: 0 for name in SCRATCH_POOL_TIE_ORDER}
+        for pool_name in SCRATCH_POOL_TIE_ORDER:
             candidates = np.flatnonzero(pools[pool_name])
+            pool_salt = _scratch_hash32(sum((index + 1) * ord(ch) for index, ch in enumerate(pool_name)))
             candidate_hashes = np.fromiter(
-                (_scratch_hash32(int(active[index]) ^ SEED ^ _scratch_hash32(sum(ord(ch) for ch in pool_name))) for index in candidates),
+                (_scratch_hash32(int(active[index]) ^ SEED ^ pool_salt ^ ((int(profile_id) + 1) * 0x9E3779B9)) for index in candidates),
                 dtype=np.uint32,
                 count=candidates.size,
             )
-            candidates = candidates[np.lexsort((candidates, candidate_hashes))]
-            admitted = 0
-            for candidate_index in candidates:
-                segment_index = len(profile_segment_records)
+            candidate_lists[pool_name] = candidates[np.lexsort((candidates, candidate_hashes))]
+
+        covered_area = 0.0
+        profile_segment_records = []
+        while covered_area / eligible_area < WEAR_COVERAGE_LIMITS["scratchCore"][0]:
+            next_total = len(profile_segment_records) + 1
+            pool_name = _next_apportioned_label(next_total, SCRATCH_POOL_RATIOS, SCRATCH_POOL_TIE_ORDER)
+            orientation = _next_apportioned_label(
+                next_total, SCRATCH_ORIENTATION_RATIOS, SCRATCH_ORIENTATION_TIE_ORDER
+            )
+            candidates = candidate_lists[pool_name]
+            admitted = False
+            while candidate_cursors[pool_name] < candidates.size:
+                candidate_index = int(candidates[candidate_cursors[pool_name]])
+                candidate_cursors[pool_name] += 1
                 atlas_index = int(active[candidate_index])
-                identity = atlas_index ^ SEED ^ (segment_index * 0x9E3779B9)
+                pool_salt = _scratch_hash32(sum((index + 1) * ord(ch) for index, ch in enumerate(pool_name)))
+                identity = _scratch_hash32(
+                    atlas_index ^ SEED ^ pool_salt ^ ((int(profile_id) + 1) * 0x9E3779B9)
+                )
                 width = width_range[0] + (width_range[1] - width_range[0]) * _scratch_unit(identity ^ 0xA511E9B3)
                 length = length_range[0] + (length_range[1] - length_range[0]) * _scratch_unit(identity ^ 0x63D83595)
                 shoulder_width = shoulder_range[0] + (shoulder_range[1] - shoulder_range[0]) * _scratch_unit(identity ^ 0xD1B54A35)
@@ -1443,7 +1495,6 @@ def _metric_scratch_segments(
                 tangent_axis /= max(np.linalg.norm(tangent_axis), 1.0e-12)
                 bitangent_axis = np.cross(surface_normal, tangent_axis)
                 bitangent_axis /= max(np.linalg.norm(bitangent_axis), 1.0e-12)
-                orientation = orientation_sequence[orientation_cursor]
                 if orientation == "tangent":
                     offset_degrees = -25.0 + 50.0 * _scratch_unit(identity ^ 0xC2B2AE35)
                     base_axis = tangent_axis
@@ -1457,30 +1508,25 @@ def _metric_scratch_segments(
                 direction /= max(np.linalg.norm(direction), 1.0e-12)
                 cross_axis = np.cross(surface_normal, direction)
                 cross_axis /= max(np.linalg.norm(cross_axis), 1.0e-12)
-                carrier_strands = 9
-                strand_pitch = width + 2.0 * shoulder_width
-                strand_offsets = (np.arange(carrier_strands, dtype=np.float64) - (carrier_strands - 1) * 0.5) * strand_pitch
-                maximum_strand_offset = float(np.max(np.abs(strand_offsets)))
-                extent = np.abs(direction) * half_line + np.abs(cross_axis) * maximum_strand_offset + outer_radius
+                # Each accepted seed owns exactly one metric capsule. Seeded
+                # carrier holes break up that capsule without cloning it into
+                # periodic parallel strands.
+                extent = np.abs(direction) * half_line + outer_radius
                 nearby = nearby_indices(center - extent, center + extent)
                 if nearby.size == 0:
                     continue
                 delta = positions[nearby].astype(np.float64) - center
-                strand_distances = []
-                for strand_offset in strand_offsets:
-                    strand_delta = delta - strand_offset * cross_axis
-                    longitudinal = strand_delta @ direction
-                    clamped = np.clip(longitudinal, -half_line, half_line)
-                    closest_delta = strand_delta - clamped[:, None] * direction
-                    strand_distances.append(np.sqrt(np.einsum("ij,ij->i", closest_delta, closest_delta)))
-                distance = np.min(np.stack(strand_distances, axis=1), axis=1)
+                longitudinal = delta @ direction
+                clamped = np.clip(longitudinal, -half_line, half_line)
+                closest_delta = delta - clamped[:, None] * direction
+                distance = np.sqrt(np.einsum("ij,ij->i", closest_delta, closest_delta))
                 same_surface = (
                     (profile_ids[nearby] == profile_ids[candidate_index])
                     & (group_ids[nearby] == group_ids[candidate_index])
                     & (island_ids[nearby] == island_ids[candidate_index])
                     & ((normals[nearby].astype(np.float64) @ surface_normal) >= normal_dot_minimum)
+                    & profile_eligible[nearby]
                 )
-                carrier_domain[nearby[same_surface]] = True
                 carrier = np.fromiter(
                     (_scratch_unit(int(active[index]) ^ identity ^ 0x94D049BB) for index in nearby),
                     dtype=np.float64,
@@ -1488,14 +1534,25 @@ def _metric_scratch_segments(
                 ) >= 0.14
                 core_pixels = nearby[(distance <= core_radius + 1.0e-12) & same_surface & carrier]
                 shoulder_pixels = nearby[(distance > core_radius) & (distance <= outer_radius + 1.0e-12) & same_surface & carrier]
-                new_core = core_pixels[~groove[core_pixels]]
-                if new_core.size < 2 or shoulder_pixels.size < 1:
+                if core_pixels.size < 1 or shoulder_pixels.size < 1 or np.any(groove[core_pixels]):
                     continue
+                new_core_area = float(np.sum(texel_areas[core_pixels], dtype=np.float64))
+                if new_core_area <= 0.0:
+                    continue
+                next_coverage = (covered_area + new_core_area) / eligible_area
+                if next_coverage > WEAR_COVERAGE_LIMITS["scratchCore"][1]:
+                    raise RuntimeError(
+                        f"Scratch coverage overshot upper bound on first threshold crossing for {profile_name}: "
+                        f"coverage={next_coverage:.9f}, nextTotal={next_total}"
+                    )
                 groove[core_pixels] = True
+                shoulder[core_pixels] = False
+                shoulder_pixels = shoulder_pixels[~groove[shoulder_pixels]]
                 shoulder[shoulder_pixels] = True
-                shoulder[groove] = False
+                covered_area += new_core_area
                 record = {
                     "id": len(records),
+                    "profileSequence": next_total - 1,
                     "profileId": int(profile_id),
                     "profile": profile_name,
                     "pool": pool_name,
@@ -1508,36 +1565,80 @@ def _metric_scratch_segments(
                     "lengthMeters": round(length, 9),
                     "shoulderWidthMeters": round(shoulder_width, 9),
                     "normalDotMinimum": normal_dot_minimum,
-                    "carrierStrands": carrier_strands,
-                    "carrierStrandPitchMeters": round(strand_pitch, 9),
+                    "physicalCapsules": 1,
                     "corePixels": int(core_pixels.size),
                     "shoulderPixels": int(shoulder_pixels.size),
-                    "newCorePixels": int(new_core.size),
+                    "newCorePixels": int(core_pixels.size),
+                    "newCoreMetersSquared": new_core_area,
+                    "coverageAfterSeed": round(next_coverage, 9),
                 }
                 records.append(record)
                 profile_segment_records.append(record)
-                admitted += 1
-                orientation_cursor += 1
-                if admitted == required:
-                    break
-            if admitted != required:
-                raise RuntimeError(f"Scratch pool admission failed {profile_name}/{pool_name}: {admitted} != {required}")
-            admitted_by_pool[pool_name] = admitted
+                admitted = True
+                break
+            if not admitted:
+                raise RuntimeError(
+                    f"Scratch candidate pool exhausted before coverage target for {profile_name}/{pool_name}: "
+                    f"admitted={len(profile_segment_records)}, coverage={covered_area / eligible_area:.9f}"
+                )
+
+        actual_total = len(profile_segment_records)
+        admitted_by_pool = {
+            name: sum(record["pool"] == name for record in profile_segment_records)
+            for name in SCRATCH_POOL_TIE_ORDER
+        }
         orientation_counts = {
             name: sum(record["orientation"] == name for record in profile_segment_records)
-            for name in ("tangent", "cross")
+            for name in SCRATCH_ORIENTATION_TIE_ORDER
         }
-        if admitted_by_pool != contract["counts"] or orientation_counts != contract["orientations"] or len(profile_segment_records) != total_required:
-            raise RuntimeError(f"Scratch count contract failed {profile_name}: pools={admitted_by_pool}, orientations={orientation_counts}")
+        expected_pools = _largest_remainder_allocation(actual_total, SCRATCH_POOL_RATIOS, SCRATCH_POOL_TIE_ORDER)
+        expected_orientations = _largest_remainder_allocation(
+            actual_total, SCRATCH_ORIENTATION_RATIOS, SCRATCH_ORIENTATION_TIE_ORDER
+        )
+        profile_coverage = covered_area / eligible_area
+        if admitted_by_pool != expected_pools or orientation_counts != expected_orientations:
+            raise RuntimeError(
+                f"Scratch ratio allocation failed {profile_name}: pools={admitted_by_pool}/{expected_pools}, "
+                f"orientations={orientation_counts}/{expected_orientations}"
+            )
         profile_records[profile_name] = {
-            "segmentCount": len(profile_segment_records),
+            "segmentCount": actual_total,
+            "actualTotal": actual_total,
             "poolCounts": admitted_by_pool,
+            "poolAllocations": admitted_by_pool,
+            "poolRatios": dict(SCRATCH_POOL_RATIOS),
+            "poolTieOrder": list(SCRATCH_POOL_TIE_ORDER),
             "orientationCounts": orientation_counts,
+            "orientationAllocations": orientation_counts,
+            "orientationRatios": dict(SCRATCH_ORIENTATION_RATIOS),
+            "orientationTieOrder": list(SCRATCH_ORIENTATION_TIE_ORDER),
+            "eligibleMetalAtlasPixels": eligible_pixels,
+            "coverageNumeratorPixels": int(sum(record["newCorePixels"] for record in profile_segment_records)),
+            "coverageDenominatorPixels": eligible_pixels,
+            "coverageNumeratorMetersSquared": covered_area,
+            "coverageDenominatorMetersSquared": eligible_area,
+            "coverage": round(profile_coverage, 9),
+            "thresholdReachedByFinalSeed": True,
+            "coverageBeforeFinalSeed": round(profile_coverage - profile_segment_records[-1]["newCoreMetersSquared"] / eligible_area, 9),
         }
 
     observed_widths = [record["widthMeters"] for record in records]
     observed_lengths = [record["lengthMeters"] for record in records]
     observed_shoulders = [record["shoulderWidthMeters"] for record in records]
+    coverage_numerator = int(np.count_nonzero(groove))
+    coverage_denominator = int(np.count_nonzero(coverage_eligible))
+    coverage_numerator_area = float(np.sum(texel_areas[groove], dtype=np.float64))
+    coverage_denominator_area = float(np.sum(texel_areas[coverage_eligible], dtype=np.float64))
+    coverage = coverage_numerator_area / max(1.0e-20, coverage_denominator_area)
+    low, high = WEAR_COVERAGE_LIMITS["scratchCore"]
+    if not low <= coverage <= high:
+        raise RuntimeError(f"Aggregate scratch coverage failed: {coverage:.9f} outside {low:.4f}..{high:.4f}")
+    aggregate_pool_allocations = {
+        name: sum(record["pool"] == name for record in records) for name in SCRATCH_POOL_TIE_ORDER
+    }
+    aggregate_orientation_allocations = {
+        name: sum(record["orientation"] == name for record in records) for name in SCRATCH_ORIENTATION_TIE_ORDER
+    }
     audit = {
         "requiredWidthMeters": list(width_range),
         "requiredLengthMeters": list(length_range),
@@ -1546,21 +1647,33 @@ def _metric_scratch_segments(
         "observedLengthMeters": [min(observed_lengths), max(observed_lengths)],
         "observedShoulderWidthMeters": [min(observed_shoulders), max(observed_shoulders)],
         "normalDotMinimum": normal_dot_minimum,
-        "carrierBreakup": "per-pixel seeded hash keep >=0.14",
+        "capsuleContract": "exactly one physical metric capsule per admitted seed; no replicated strands",
+        "carrierBreakup": "per-pixel seeded hash keep >=0.14 inside the single capsule",
         "surfaceIdentity": "profileId, groupId, uvIslandId identical to anchor",
         "profiles": profile_records,
         "admittedSegmentCount": len(records),
+        "actualTotal": len(records),
+        "aggregatePoolAllocations": aggregate_pool_allocations,
+        "aggregateOrientationAllocations": aggregate_orientation_allocations,
         "admittedSegments": records,
-        "renderedCorePixels": int(np.count_nonzero(groove)),
+        "renderedCorePixels": coverage_numerator,
         "renderedShoulderPixels": int(np.count_nonzero(shoulder)),
-        "coverageDenominatorPixels": sum(
-            record["segmentCount"] * SCRATCH_COVERAGE_SAMPLES_PER_SEGMENT[name]
-            for name, record in profile_records.items()
-        ),
-        "coverageBasis": f"profile-normalized carrier sample budget per admitted segment: {SCRATCH_COVERAGE_SAMPLES_PER_SEGMENT}",
-        "visitedCarrierPixels": int(np.count_nonzero(carrier_domain)),
+        "coverageNumeratorPixels": coverage_numerator,
+        "coverageDenominatorPixels": coverage_denominator,
+        "coverageNumeratorMetersSquared": coverage_numerator_area,
+        "coverageDenominatorMetersSquared": coverage_denominator_area,
+        "coverage": round(coverage, 9),
+        "coverageMask": "union per profile of disjoint actual atlas masks: metal & (muzzle | (actualContact>.55 & !muzzle) | (handling>.35 & actualContact<=.55 & !muzzle))",
+        "coverageBasis": "physical area of rendered scratch-core texels / physical area of actual declared eligible metal atlas texels; pixel counts also recorded",
+        "adaptiveStop": "each profile stops at first admitted unique capsule reaching coverage >= 0.0075; aggregate is the physical-area weighted result",
+        "coreOverlapPixels": 0,
     }
-    print(f"AUDIT scratch segments: count={len(records)}, corePixels={audit['renderedCorePixels']}, shoulderPixels={audit['renderedShoulderPixels']}")
+    print(
+        f"AUDIT scratch segments: count={len(records)}, corePixels={coverage_numerator}, "
+        f"eligibleMetalPixels={coverage_denominator}, coreAreaM2={coverage_numerator_area:.9f}, "
+        f"eligibleAreaM2={coverage_denominator_area:.9f}, coverage={coverage:.6f}, "
+        f"shoulderPixels={audit['renderedShoulderPixels']}"
+    )
     return groove, shoulder, audit
 
 
@@ -1968,6 +2081,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     scratch_core, scratch_shoulder, scratch_audit = _metric_scratch_segments(
         active, positions, normal_active, raster["tangent"].reshape(-1, 3)[active], actual_contact,
         metal, muzzle, handling, profile_ids, group_active, island_ids, raster["profiles"],
+        raster["texelAreaMetersSquared"].ravel()[active],
     )
 
     def ranked_mask(candidates, scores, count, salt):
@@ -1994,7 +2108,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     polish = (handling > 0.35) & ~grime_mask & ~soot_mask & ~glass
 
     coverages = {
-        "scratchCore": float(np.count_nonzero(scratch_core)) / max(1, scratch_audit["coverageDenominatorPixels"]),
+        "scratchCore": scratch_audit["coverage"],
         "chips": float(np.count_nonzero(chip)) / surface_count,
         "grime": float(np.count_nonzero(grime_mask)) / surface_count,
         "muzzleSoot": float(np.count_nonzero(soot_mask)) / max(1, int(np.count_nonzero(muzzle_eligible))),
@@ -2400,16 +2514,36 @@ def _atomic_promote(source, destination):
 
 
 def protected_surface_paths():
-    model_paths = [
-        os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Models", name)
-        for name in ("FpsRocketLauncher.fbx", "FpsShotgun.fbx", "Shotgun.fbx")
-    ]
-    texture_names = tuple(f"FpsRocketLauncher_{suffix}.png" for suffix in ("BaseColor", "Normal", "MetallicSmoothness", "Occlusion", "Emission")) + tuple(
-        f"Shotgun_{suffix}.png" for suffix in ("BaseColor", "Normal", "MetallicSmoothness", "Occlusion", "Emission")
-    )
-    texture_paths = [os.path.join(TEXTURE_DIR, name) for name in texture_names]
-    microdetail = os.path.join(TEXTURE_DIR, MICRODETAIL_NAME)
-    return tuple(model_paths + [path + ".meta" for path in model_paths] + [path + ".meta" for path in texture_paths] + [microdetail, microdetail + ".meta", REFERENCE_TILE_PATH])
+    """Return the complete deterministic T1 protected-file inventory."""
+    paths = set()
+
+    def add_tree(root):
+        if not os.path.isdir(root):
+            raise RuntimeError(f"Protected inventory root missing: {root}")
+        for directory, names, filenames in os.walk(root):
+            names.sort()
+            for filename in sorted(filenames):
+                paths.add(os.path.realpath(os.path.join(directory, filename)))
+
+    add_tree(os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Models"))
+    add_tree(os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs"))
+    add_tree(os.path.join(REPOSITORY_ROOT, "graphics references"))
+
+    # Repository source metas are protected. Generated/cache roots are not
+    # repository source and can contain thousands of transient package metas.
+    excluded_roots = {".git", "Library", "Logs", "Temp", "obj"}
+    for directory, names, filenames in os.walk(REPOSITORY_ROOT):
+        relative = os.path.relpath(directory, REPOSITORY_ROOT)
+        if relative == ".":
+            names[:] = sorted(name for name in names if name not in excluded_roots)
+        else:
+            names.sort()
+        for filename in sorted(filenames):
+            if filename.endswith(".meta"):
+                paths.add(os.path.realpath(os.path.join(directory, filename)))
+
+    paths.add(os.path.realpath(os.path.join(TEXTURE_DIR, MICRODETAIL_NAME)))
+    return tuple(sorted(paths, key=lambda path: os.path.relpath(path, REPOSITORY_ROOT).replace(os.sep, "/")))
 
 
 def snapshot_surface_protected():
@@ -2431,6 +2565,19 @@ def assert_surface_protected(snapshot, phase):
 
 
 def surface_contract_record():
+    expected_profile_contracts = {
+        profile: {
+            "poolRatios": {"sharp": 0.60, "handling": 0.25, "muzzle": 0.15},
+            "poolTieOrder": ["sharp", "handling", "muzzle"],
+            "orientationRatios": {"tangent": 0.70, "cross": 0.30},
+            "orientationTieOrder": ["tangent", "cross"],
+        }
+        for profile in ("launcher", "FpsShotgun", "Shotgun")
+    }
+    if SCRATCH_PROFILE_CONTRACTS != expected_profile_contracts:
+        raise RuntimeError(
+            f"Scratch profile contract audit failed: expected={expected_profile_contracts}, actual={SCRATCH_PROFILE_CONTRACTS}"
+        )
     return {
         "revision": SURFACE_REVISION,
         "seed": SEED,
@@ -2439,7 +2586,18 @@ def surface_contract_record():
         "reference": {"decodedRgbaSha256": REFERENCE_RGBA_SHA256, "luminance": "(54R+183G+19B)/256", "periodicBlur": [65, 65], "normalization": "clip(delta/.18,-1,1)", "affects": ["normal", "smoothness"]},
         "order": ["clean", "warm3dFbm", "scratchChipGrooveShoulder", "grime", "muzzleSoot", "handlingPolish", "microdetail"],
         "coverageLimits": WEAR_COVERAGE_LIMITS,
-        "scratch": {"profileContracts": SCRATCH_PROFILE_CONTRACTS, "widthMeters": [0.00025, 0.00065], "lengthMeters": [0.005, 0.022], "shoulderWidthMeters": [0.00020, 0.00045], "normalDotMinimum": 0.9063078, "coverageSamplesPerSegmentByProfile": SCRATCH_COVERAGE_SAMPLES_PER_SEGMENT},
+        "scratch": {
+            "profileContracts": SCRATCH_PROFILE_CONTRACTS,
+            "profileContractAudit": {
+                "expected": expected_profile_contracts,
+                "exactLabelsAndValues": True,
+                "allocation": "largest remainder with declared tie order for final adaptive seed count",
+            },
+            "widthMeters": [0.00025, 0.00065], "lengthMeters": [0.005, 0.022],
+            "shoulderWidthMeters": [0.00020, 0.00045], "normalDotMinimum": 0.9063078,
+            "capsulesPerSeed": 1,
+            "coverage": {"limits": list(WEAR_COVERAGE_LIMITS["scratchCore"]), "basis": "actual declared eligible metal atlas pixels"},
+        },
         "pbr": SURFACE_PBR,
         "heights": {"chip": -0.025, "groove": -0.018, "shoulder": 0.006, "darkScuff": -0.004, "grime": 0.010, "carrier": 0.002, "normalGain": 5.0},
         "occlusion": "clamp(1-.28*cavity-.12*grime-.10*scratchCore,.55,1)",
@@ -2449,8 +2607,7 @@ def surface_contract_record():
 
 def promote_and_write_proof(record, two_run_identical, protected_before=None):
     surface_only = record["surface_only"]
-    if surface_only:
-        assert_surface_protected(protected_before, "texture promotion")
+    protected_before_promotion = assert_surface_protected(protected_before, "any output promotion")
     for filename in TEXTURE_NAMES:
         _atomic_promote(os.path.join(record["stage_dir"], "textures", filename), os.path.join(TEXTURE_DIR, filename))
     if not surface_only:
@@ -2467,7 +2624,11 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
     final_preview_hashes = {filename: _hash_file(os.path.join(PREVIEW_DIR, filename)) for filename in PREVIEW_NAMES}
     if final_texture_hashes != record["texture_hashes"] or final_preview_hashes != record["preview_hashes"]:
         raise RuntimeError("Atomic promotion hash verification failed")
-    protected_after = assert_surface_protected(protected_before, "proof write") if surface_only else None
+    protected_after = snapshot_surface_protected()
+    if surface_only and protected_after != protected_before:
+        assert_surface_protected(protected_before, "proof write")
+    else:
+        assert_surface_protected(protected_after, "proof write")
     fbx_before = {key: value for key, value in (protected_before or {}).items() if key.endswith(".fbx")}
     fbx_after = {key: value for key, value in (protected_after or {}).items() if key.endswith(".fbx")}
     proof = {
@@ -2489,7 +2650,24 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
         "periodicity": record["periodicity"],
         "channels": record["channels"],
         "surfaceContract": surface_contract_record(),
-        "protected": {"fbxBeforeSha256": fbx_before, "fbxAfterSha256": fbx_after, "beforeSha256": protected_before, "afterSha256": protected_after, "stable": protected_before == protected_after if surface_only else None},
+        "protected": {
+            "inventoryContract": {
+                "models": "Assets/_Game/Models/**",
+                "repositoryMetas": "all .meta outside generated/cache roots .git, Library, Logs, Temp, obj",
+                "referenceInputs": "Tools/Blender/ReferenceInputs/**",
+                "graphicsReferences": "graphics references/**",
+                "microdetail": "Assets/_Game/Textures/WeaponMicroDetail_Normal.png",
+                "taskOwnedTextureContentExcluded": True,
+            },
+            "beforeCount": len(protected_before),
+            "beforePromotionCount": len(protected_before_promotion),
+            "afterCount": len(protected_after),
+            "fbxBeforeSha256": fbx_before, "fbxAfterSha256": fbx_after,
+            "beforeSha256": protected_before,
+            "beforePromotionSha256": protected_before_promotion,
+            "afterSha256": protected_after,
+            "stable": protected_before == protected_after if surface_only else None,
+        },
         "outputSha256": final_texture_hashes,
         "previewSha256": final_preview_hashes,
         "twoRunIdentical": bool(two_run_identical),
@@ -2506,13 +2684,29 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
     return proof
 
 
+def parse_cli_args():
+    args = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    supported = {"--proof-two-run", "--surface-only"}
+    unknown = [arg for arg in args if arg not in supported]
+    duplicates = sorted(arg for arg in supported if args.count(arg) > 1)
+    if unknown or duplicates:
+        print(f"ERROR unsupported generator arguments: unknown={unknown}, duplicates={duplicates}", file=sys.stderr, flush=True)
+        os._exit(2)
+    options = {"proof_two_run": "--proof-two-run" in args, "surface_only": "--surface-only" in args}
+    if options["surface_only"] and not options["proof_two_run"]:
+        print("ERROR --surface-only requires --proof-two-run before any output can be promoted", file=sys.stderr, flush=True)
+        os._exit(2)
+    return options
+
+
 def main():
-    surface_only = "--surface-only" in sys.argv
-    protected_before = snapshot_surface_protected() if surface_only else None
+    options = parse_cli_args()
+    surface_only = options["surface_only"]
+    protected_before = snapshot_surface_protected()
     _safe_recreate_staging_root()
     first = generate_once(os.path.join(STAGING_ROOT, "run1"), surface_only=surface_only)
     identical = False
-    if "--proof-two-run" in sys.argv:
+    if options["proof_two_run"]:
         second = generate_once(os.path.join(STAGING_ROOT, "run2"), surface_only=surface_only)
         compare_runs(first, second)
         identical = True

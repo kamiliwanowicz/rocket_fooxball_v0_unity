@@ -1044,7 +1044,7 @@ def _combine_rasters(records):
     first = records[0]["raster"]
     world = records[1]["raster"]
     world_surface = world["surface"]
-    for key in ("owner", "group", "position", "normal", "tangent", "dihedral", "edgeDistanceMeters", "cornerDistanceMeters", "profileId", "uvIslandId"):
+    for key in ("owner", "group", "position", "normal", "tangent", "dihedral", "edgeDistanceMeters", "cornerDistanceMeters", "texelAreaMetersSquared", "profileId", "uvIslandId"):
         combined[key] = first[key].copy()
         combined[key][world_surface] = world[key][world_surface]
     combined["surface"] = first["surface"] | world_surface
@@ -1138,9 +1138,10 @@ def _atomic_promote(source, destination):
 def promote_and_write_proof(run, two_run_identical, protected_before=None):
     global PREVIEW_DIRECTORY
     surface_only = run["surface_only"]
-    if surface_only:
-        surface.assert_surface_protected(protected_before, "shotgun texture promotion")
-    else:
+    protected_before_promotion = surface.assert_surface_protected(
+        protected_before, "shotgun any output promotion"
+    )
+    if not surface_only:
         for profile in PROFILES.values():
             _atomic_promote(os.path.join(run["stage_dir"], os.path.basename(profile["output"])), profile["output"])
     for filename in TEXTURE_NAMES:
@@ -1157,7 +1158,11 @@ def promote_and_write_proof(run, two_run_identical, protected_before=None):
     }
     if output_hashes != run["texture_hashes"]:
         raise RuntimeError("Shotgun atomic texture promotion hash mismatch")
-    protected_after = surface.assert_surface_protected(protected_before, "shotgun proof write") if surface_only else None
+    protected_after = surface.snapshot_surface_protected()
+    if surface_only and protected_after != protected_before:
+        surface.assert_surface_protected(protected_before, "shotgun proof write")
+    else:
+        surface.assert_surface_protected(protected_after, "shotgun proof write")
     fbx_before = {key: value for key, value in (protected_before or {}).items() if key.endswith(".fbx")}
     fbx_after = {key: value for key, value in (protected_after or {}).items() if key.endswith(".fbx")}
     proof = {
@@ -1180,7 +1185,24 @@ def promote_and_write_proof(run, two_run_identical, protected_before=None):
         "periodicity": run["periodicity"],
         "channels": run["channels"],
         "surfaceContract": surface.surface_contract_record(),
-        "protected": {"fbxBeforeSha256": fbx_before, "fbxAfterSha256": fbx_after, "beforeSha256": protected_before, "afterSha256": protected_after, "stable": protected_before == protected_after if surface_only else None},
+        "protected": {
+            "inventoryContract": {
+                "models": "Assets/_Game/Models/**",
+                "repositoryMetas": "all .meta outside generated/cache roots .git, Library, Logs, Temp, obj",
+                "referenceInputs": "Tools/Blender/ReferenceInputs/**",
+                "graphicsReferences": "graphics references/**",
+                "microdetail": "Assets/_Game/Textures/WeaponMicroDetail_Normal.png",
+                "taskOwnedTextureContentExcluded": True,
+            },
+            "beforeCount": len(protected_before),
+            "beforePromotionCount": len(protected_before_promotion),
+            "afterCount": len(protected_after),
+            "fbxBeforeSha256": fbx_before, "fbxAfterSha256": fbx_after,
+            "beforeSha256": protected_before,
+            "beforePromotionSha256": protected_before_promotion,
+            "afterSha256": protected_after,
+            "stable": protected_before == protected_after if surface_only else None,
+        },
         "outputSha256": output_hashes,
         "previewSha256": {name: surface._hash_file(os.path.join(PREVIEW_DIRECTORY, name)) for name in PREVIEW_NAMES},
         "twoRunIdentical": bool(two_run_identical),
@@ -1195,6 +1217,7 @@ def promote_and_write_proof(run, two_run_identical, protected_before=None):
 
 
 def main():
+    options = surface.parse_cli_args()
     surface.TEXTURE_NAMES = TEXTURE_NAMES
     surface.ATLAS_SIZE = ATLAS_SIZE
     surface.ATLAS_DILATION = ATLAS_DILATION
@@ -1202,10 +1225,10 @@ def main():
     surface.CHIP_CONTACT_MIN = 0.425
     surface.CHIP_FBM_MIN = 0.695
     surface.GRIME_BIAS = -0.250
-    surface_only = "--surface-only" in sys.argv
-    protected_before = surface.snapshot_surface_protected() if surface_only else None
+    surface_only = options["surface_only"]
+    protected_before = surface.snapshot_surface_protected()
     _safe_recreate_staging_root()
-    proof_two_run = "--proof-two-run" in sys.argv
+    proof_two_run = options["proof_two_run"]
     first = generate_once(os.path.join(STAGING_ROOT, "run1"), surface_only=surface_only)
     if proof_two_run:
         second = generate_once(os.path.join(STAGING_ROOT, "run2"), surface_only=surface_only)
