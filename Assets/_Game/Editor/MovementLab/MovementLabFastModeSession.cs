@@ -23,6 +23,7 @@ namespace RocketFooxball.Editor
     {
         private const int FastQualityIndex = GraphicsQualityConfigurator.IterationQualityIndex;
         private const int FastReflectionBounces = 1;
+        private const int MaxHierarchyDeltaIdentities = 16;
         private static readonly Color FastAmbientSky = MovementLabLightingPipeline.ProductionAmbientSkyColor;
         private static readonly Color FastAmbientEquator = MovementLabLightingPipeline.ProductionAmbientEquatorColor;
         private static readonly Color FastAmbientGround = MovementLabLightingPipeline.ProductionAmbientGroundColor;
@@ -347,12 +348,14 @@ namespace RocketFooxball.Editor
                 var children = root.GetComponentsInChildren<Transform>(true);
                 for (var j = 0; j < children.Length; j++) if (children[j] != null) AddSceneObjectSnapshot(result, children[j].gameObject);
             }
-            return result.OrderBy(item => item.identity, StringComparer.Ordinal).ToArray();
+            return result.OrderBy(item => item.identity, StringComparer.Ordinal)
+                .ThenBy(item => GetTargetEntityId(item.target))
+                .ToArray();
         }
 
         private static void AddSceneObjectSnapshot(List<SceneObjectSnapshot> result, UnityEngine.Object target)
         {
-            if (target == null) return;
+            if (!IsPersistableSceneTarget(target)) return;
             var identity = target is Component component ? Identity(component.transform) + ":" + target.GetType().FullName :
                 target is GameObject gameObject ? Identity(gameObject.transform) + ":GameObject" : target.GetType().FullName;
             if (result.Any(item => item.target == target)) return;
@@ -366,6 +369,23 @@ namespace RocketFooxball.Editor
                 dirty = EditorUtility.IsDirty(target),
                 digest = digest
             });
+        }
+
+        private static bool IsPersistableSceneTarget(UnityEngine.Object target)
+        {
+            if (target == null) return false;
+            var gameObject = target as GameObject;
+            if (gameObject == null && target is Component component)
+                gameObject = component.gameObject;
+
+            const HideFlags dontSaveFlags = HideFlags.DontSave | HideFlags.DontSaveInBuild | HideFlags.DontSaveInEditor;
+            return (target.hideFlags & dontSaveFlags) == 0 &&
+                (gameObject == null || (gameObject.hideFlags & dontSaveFlags) == 0);
+        }
+
+        private static ulong GetTargetEntityId(UnityEngine.Object target)
+        {
+            return target == null ? 0UL : EntityId.ToULong(target.GetEntityId());
         }
 
         private static string SerializedDigest(UnityEngine.Object target)
@@ -564,8 +584,34 @@ namespace RocketFooxball.Editor
             if (state == null || !state.scene.IsValid() || !string.Equals(state.scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
                 throw new InvalidOperationException("Fast preview restoration refused: MovementLab scene is no longer loaded.");
             var currentObjects = CaptureSceneObjects(state.scene);
-            if (currentObjects.Length != state.sceneObjects.Length || currentObjects.Any(item => state.sceneObjects.All(old => old.target != item.target)))
-                throw new InvalidOperationException("Fast preview restoration refused: scene hierarchy changed during preview.");
+            var matchedExpected = new bool[state.sceneObjects.Length];
+            var added = new List<SceneObjectSnapshot>();
+            for (var currentIndex = 0; currentIndex < currentObjects.Length; currentIndex++)
+            {
+                var currentObject = currentObjects[currentIndex];
+                var matched = false;
+                for (var expectedIndex = 0; expectedIndex < state.sceneObjects.Length; expectedIndex++)
+                {
+                    if (matchedExpected[expectedIndex] || !SceneObjectMatches(state.sceneObjects[expectedIndex], currentObject)) continue;
+                    matchedExpected[expectedIndex] = true;
+                    matched = true;
+                    break;
+                }
+                if (!matched) added.Add(currentObject);
+            }
+
+            var removed = new List<SceneObjectSnapshot>();
+            for (var expectedIndex = 0; expectedIndex < state.sceneObjects.Length; expectedIndex++)
+                if (!matchedExpected[expectedIndex]) removed.Add(state.sceneObjects[expectedIndex]);
+
+            if (added.Count != 0 || removed.Count != 0)
+            {
+                throw new InvalidOperationException(
+                    "Fast preview restoration refused: scene hierarchy changed during preview. " +
+                    "expectedCount=" + state.sceneObjects.Length + "; currentCount=" + currentObjects.Length +
+                    "; added identities=" + FormatHierarchyDelta(added) +
+                    "; removed identities=" + FormatHierarchyDelta(removed) + ".");
+            }
             if (QualitySettings.GetQualityLevel() != state.appliedQualityIndex)
                 throw new InvalidOperationException("Fast preview restoration refused: quality changed while preview was active.");
             if (state.renderers.Any(item => item.renderer != null &&
@@ -608,6 +654,25 @@ namespace RocketFooxball.Editor
                 !Mathf.Approximately(RenderSettings.haloStrength, state.haloStrength) || !Mathf.Approximately(RenderSettings.flareStrength, state.flareStrength) ||
                 !Mathf.Approximately(RenderSettings.flareFadeSpeed, state.flareFadeSpeed))
                 throw new InvalidOperationException("Fast preview restoration refused: unrelated RenderSettings changed during preview.");
+        }
+
+        private static bool SceneObjectMatches(SceneObjectSnapshot expected, SceneObjectSnapshot current)
+        {
+            return expected != null && current != null && expected.target == current.target &&
+                string.Equals(expected.identity, current.identity, StringComparison.Ordinal);
+        }
+
+        private static string FormatHierarchyDelta(IEnumerable<SceneObjectSnapshot> objects)
+        {
+            var identities = objects
+                .Where(item => item != null)
+                .OrderBy(item => item.identity, StringComparer.Ordinal)
+                .ThenBy(item => GetTargetEntityId(item.target))
+                .Select(item => item.identity)
+                .ToArray();
+            var shown = identities.Take(MaxHierarchyDeltaIdentities).ToArray();
+            var suffix = identities.Length > shown.Length ? ", ... +" + (identities.Length - shown.Length) + " more" : string.Empty;
+            return "[" + string.Join(", ", shown) + suffix + "]";
         }
 
         private static void AssertApplied(Snapshot state)

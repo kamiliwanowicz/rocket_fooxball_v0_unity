@@ -555,6 +555,10 @@ function Test-PlanOnlyPendingOnly {
     if (-not [bool](Get-HarnessField $captureResult 'pass')) {
         return New-HarnessFail ('weapon capture contract failed: ' + [string](Get-HarnessField $captureResult 'message'))
     }
+    $fastRestoreResult = Test-FastRestoreHierarchyContract $State
+    if (-not [bool](Get-HarnessField $fastRestoreResult 'pass')) {
+        return New-HarnessFail ('fast restore hierarchy contract failed: ' + [string](Get-HarnessField $fastRestoreResult 'message'))
+    }
     $verdictResult = Test-WeaponVisualVerdictContract $State
     if (-not [bool](Get-HarnessField $verdictResult 'pass')) {
         return New-HarnessFail ('weapon verdict contract failed: ' + [string](Get-HarnessField $verdictResult 'message'))
@@ -883,6 +887,78 @@ exit [int](& $module { return $script:ProbeExitCode })
     } finally {
         Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Test-FastRestoreHierarchyContract {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $fastPath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/MovementLab/MovementLabFastModeSession.cs'
+    $capturePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    if (-not (Test-Path -LiteralPath $fastPath -PathType Leaf) -or -not (Test-Path -LiteralPath $capturePath -PathType Leaf)) {
+        return New-HarnessFail 'Fast restore source missing'
+    }
+    $fast = [IO.File]::ReadAllText($fastPath)
+    $capture = [IO.File]::ReadAllText($capturePath)
+
+    $assertContract = {
+        param([string]$FastSource, [string]$CaptureSource)
+
+        $persistableStart = $FastSource.IndexOf('private static bool IsPersistableSceneTarget', [StringComparison]::Ordinal)
+        $persistableEnd = $FastSource.IndexOf('private static ulong GetTargetEntityId', $persistableStart + 1, [StringComparison]::Ordinal)
+        if ($persistableStart -lt 0 -or $persistableEnd -le $persistableStart) { return 'persistable scene-target helper boundary missing' }
+        $persistable = $FastSource.Substring($persistableStart, $persistableEnd - $persistableStart)
+        foreach ($flag in @('HideFlags.DontSave', 'HideFlags.DontSaveInBuild', 'HideFlags.DontSaveInEditor', 'target.hideFlags', 'gameObject.hideFlags')) {
+            if ($persistable.IndexOf($flag, [StringComparison]::Ordinal) -lt 0) { return 'persistable helper omitted ' + $flag }
+        }
+        if ($persistable.IndexOf('HideFlags.HideInHierarchy', [StringComparison]::Ordinal) -ge 0 -or
+            $persistable.IndexOf('EditorUtility.IsPersistent', [StringComparison]::Ordinal) -ge 0) {
+            return 'persistable helper excludes a non-DontSave target'
+        }
+        if (@([regex]::Matches($FastSource, 'IsPersistableSceneTarget')).Count -lt 2) {
+            return 'persistable helper is not used by scene snapshot/restore capture'
+        }
+
+        foreach ($marker in @(
+            'MaxHierarchyDeltaIdentities', 'GetTargetEntityId(item.target)', 'SceneObjectMatches',
+            'expectedCount=', 'currentCount=', 'added identities=', 'removed identities=',
+            'FormatHierarchyDelta(added)', 'FormatHierarchyDelta(removed)', 'Take(MaxHierarchyDeltaIdentities)'
+        )) {
+            if ($FastSource.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'hierarchy delta diagnostic omitted ' + $marker }
+        }
+
+        $captureStart = $CaptureSource.IndexOf('public static void Capture()', [StringComparison]::Ordinal)
+        $captureFinally = $CaptureSource.IndexOf('finally', $captureStart + 1, [StringComparison]::Ordinal)
+        $restoreHelper = $CaptureSource.IndexOf('private static void TryRestoreCaptureState', $captureFinally + 1, [StringComparison]::Ordinal)
+        if ($captureStart -lt 0 -or $captureFinally -le $captureStart -or $restoreHelper -le $captureFinally) {
+            return 'weapon capture outer finally boundary missing'
+        }
+        $finally = $CaptureSource.Substring($captureFinally, $restoreHelper - $captureFinally)
+        $openIndex = $finally.IndexOf('EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)', [StringComparison]::Ordinal)
+        $guardIndex = $finally.IndexOf('if (!MovementLabFastModeSession.IsActive)', [StringComparison]::Ordinal)
+        if ($openIndex -lt 0 -or $guardIndex -lt 0 -or $guardIndex -gt $openIndex) {
+            return 'clean scene reopen is not guarded by inactive Fast snapshot'
+        }
+        foreach ($marker in @('fastRestoreFailed = true;', 'restoreError = exception;', 'TryRestoreCaptureState(ref restoreError', 'scene reopen skipped')) {
+            if ($finally.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'restore-failure cleanup omitted ' + $marker }
+        }
+        return $null
+    }
+
+    $failure = & $assertContract $fast $capture
+    if ($null -ne $failure) { return New-HarnessFail $failure }
+
+    $filterScratch = $fast.Replace('if (!IsPersistableSceneTarget(target)) return;', 'if (target == null) return;')
+    $scratchFailure = & $assertContract $filterScratch $capture
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'persistable-filter scratch unexpectedly passed' }
+
+    $deltaScratch = $fast.Replace('expectedCount=', 'expected=')
+    $scratchFailure = & $assertContract $deltaScratch $capture
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'hierarchy-delta scratch unexpectedly passed' }
+
+    $reopenScratch = $capture.Replace('if (!MovementLabFastModeSession.IsActive)', 'if (true)')
+    $scratchFailure = & $assertContract $fast $reopenScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'restore-failure reopen scratch unexpectedly passed' }
+    return New-HarnessPass 'persistable scene filtering, bounded deterministic hierarchy deltas, and fail-closed reopen guard are structurally covered'
 }
 
 function Test-WeaponCaptureBehavior {

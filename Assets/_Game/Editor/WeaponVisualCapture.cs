@@ -13,6 +13,7 @@ using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace RocketFooxball.Editor
@@ -292,6 +293,7 @@ namespace RocketFooxball.Editor
                 presentation = presentations[0];
                 player = presentation.gameObject;
                 gameplayCamera = Require(player.transform.Find("Head/Camera")?.GetComponent<Camera>(), "local player camera");
+                Require(gameplayCamera.GetComponent<UniversalAdditionalCameraData>(), "local player UniversalAdditionalCameraData");
                 qualityRuntime = Require(gameplayCamera.GetComponent<GraphicsQualityRuntime>(), "local player GraphicsQualityRuntime");
                 viewmodels = Require(gameplayCamera.transform.Find("Viewmodels")?.gameObject, "local player Viewmodels");
                 rocketVisual = Require(viewmodels.transform.Find("WeaponVisual")?.gameObject, "local player rocket FPS visual");
@@ -393,50 +395,86 @@ namespace RocketFooxball.Editor
             finally
             {
                 Exception restoreError = null;
-                try
+                var fastRestoreFailed = false;
+                if (MovementLabFastModeSession.IsActive)
                 {
-                    if (MovementLabFastModeSession.IsActive)
-                        MovementLabFastModeSession.RestoreIfActive();
-                    RestoreBehaviourStates(behaviourStates);
-                    RestoreObjectStates(objectStates);
-                    if (player != null)
+                    try
                     {
-                        player.transform.position = playerPosition;
-                        player.transform.rotation = playerRotation;
-                        player.transform.localPosition = playerLocalPosition;
-                        player.transform.localRotation = playerLocalRotation;
+                        MovementLabFastModeSession.RestoreIfActive();
                     }
+                    catch (Exception exception)
+                    {
+                        fastRestoreFailed = true;
+                        restoreError = exception;
+                    }
+                }
+
+                TryRestoreCaptureState(ref restoreError, () => RestoreBehaviourStates(behaviourStates));
+                TryRestoreCaptureState(ref restoreError, () => RestoreObjectStates(objectStates));
+                TryRestoreCaptureState(ref restoreError, () =>
+                {
+                    if (player == null) return;
+                    player.transform.position = playerPosition;
+                    player.transform.rotation = playerRotation;
+                    player.transform.localPosition = playerLocalPosition;
+                    player.transform.localRotation = playerLocalRotation;
+                });
+                TryRestoreCaptureState(ref restoreError, () =>
+                {
                     if (gameplayCamera != null)
                         RestoreCameraState(gameplayCamera, cameraState);
-                    QualitySettings.SetQualityLevel(initialQuality, true);
+                });
+                TryRestoreCaptureState(ref restoreError, () => QualitySettings.SetQualityLevel(initialQuality, true));
+                TryRestoreCaptureState(ref restoreError, () =>
+                {
                     if (qualityRuntime != null)
                         qualityRuntime.ApplyCurrentQuality();
+                });
+                TryRestoreCaptureState(ref restoreError, () =>
+                {
                     if (viewmodelLight != null)
                         viewmodelLight.enabled = behaviourStates.FirstOrDefault(state => state.Behaviour == viewmodelLight)?.Enabled ?? viewmodelLight.enabled;
-                    RenderTexture.active = previousActive;
-                    if (renderTarget != null)
+                });
+                TryRestoreCaptureState(ref restoreError, () => RenderTexture.active = previousActive);
+                TryRestoreCaptureState(ref restoreError, () =>
+                {
+                    if (renderTarget == null) return;
+                    renderTarget.Release();
+                    UnityEngine.Object.DestroyImmediate(renderTarget);
+                });
+
+                if (!MovementLabFastModeSession.IsActive)
+                {
+                    try
                     {
-                        renderTarget.Release();
-                        UnityEngine.Object.DestroyImmediate(renderTarget);
+                        // Reopen without saving so transient presentation, quality, and
+                        // runtime-created state cannot leak into the next invocation.
+                        EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+                    }
+                    catch (Exception exception)
+                    {
+                        if (restoreError == null) restoreError = exception;
+                        else UnityEngine.Debug.LogException(exception);
                     }
                 }
-                catch (Exception exception)
-                {
-                    restoreError = exception;
-                }
-                try
-                {
-                    // Reopen without saving so transient presentation, quality, and
-                    // runtime-created state cannot leak into the next invocation.
-                    EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
-                }
-                catch (Exception exception)
-                {
-                    if (restoreError == null) restoreError = exception;
-                    else UnityEngine.Debug.LogException(exception);
-                }
+                else if (fastRestoreFailed)
+                    UnityEngine.Debug.LogError("Rocket Fooxball weapon capture left Fast preview active after restore failure; scene reopen skipped.");
+
                 if (restoreError != null)
                     throw restoreError;
+            }
+        }
+
+        private static void TryRestoreCaptureState(ref Exception restoreError, Action restoreAction)
+        {
+            try
+            {
+                restoreAction();
+            }
+            catch (Exception exception)
+            {
+                if (restoreError == null) restoreError = exception;
+                else UnityEngine.Debug.LogException(exception);
             }
         }
 
