@@ -603,16 +603,23 @@ function Test-WeaponCaptureContract {
         'New-ExclusiveWrapperDirectory', 'Get-CaptureSourceSnapshot', 'Get-IndexDigest', 'Get-ProductFileSnapshot', 'Get-ReferenceSnapshot',
         'wrapperDirectory', 'ExpectedSourceSha', 'sourceShaIsCleanHead', 'afterProductContentSha256', 'afterReferenceContentSha256', 'afterGeneratedManifestSha256',
         'WeaponVisualManifest.json', 'WEAPON_VISUAL_CAPTURE_PASS', 'Assert-WeaponManifest',
+        'Assert-ExactJsonProperties', 'logicalId', 'copiedEvidencePath', 'byteLength', 'exactly three schema-1 references',
         'SetLocalMode(true)', 'SetAlive(true)', 'SetShotgunOwned', 'MovementLabFastModeSession.EnterForCapture', 'MovementLabFastModeSession.RestoreIfActive',
         'RenderSettings.sun', 'Vector3.SignedAngle', 'Mathf.DeltaAngle', 'maskRowOrigin', 'differencePixelCount', 'differenceMeanAbsRgb',
         'DifferencePixelFloor', 'DifferenceChannelFloor', '1920', '1080', 'Git status changed during non-mutating weapon capture'
     )
     foreach ($needle in $required) {
         if ($combined.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon capture omitted contract: ' + $needle) }
-        }
+    }
     $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
     if ($missing.Count -eq 0) { return New-HarnessFail 'weapon capture red fixture unexpectedly contains every guarded contract marker' }
     if ($combined.IndexOf('BrightArenaVisualCapture', [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'weapon capture must remain independent of BrightArena capture' }
+    $referenceParser = Get-HarnessFunctionAst $source 'Read-ReferenceManifest'
+    foreach ($legacyField in @("'entries'", "'items'", "'id'", "'evidencePath'", "'bytes'")) {
+        if ($referenceParser.Extent.Text.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('reference parser retains legacy field alias: ' + $legacyField)
+        }
+    }
     $workflowSource = [IO.File]::ReadAllText($State.WorkflowPath)
     $redWorkflowPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     $redWorkflowSource = [IO.File]::ReadAllText($redWorkflowPath)
@@ -791,17 +798,81 @@ function Test-WeaponCaptureBehavior {
         $generatedSha = 'b' * 64
         $referencePath = Join-Path $root 'reference.json'
         $referenceEntries = New-Object System.Collections.Generic.List[object]
-        foreach ($id in @('game-bright', 'game-dark', 'quake-hires')) {
-            $originalPath = Join-Path $root ($id + '-original.bin')
-            $evidencePath = Join-Path $root ($id + '-evidence.bin')
+        foreach ($logicalId in @('game-bright', 'game-dark', 'quake-hires')) {
+            $originalPath = Join-Path $root ($logicalId + '-original.bin')
+            $copiedEvidencePath = Join-Path $root ($logicalId + '-evidence.bin')
             [IO.File]::WriteAllBytes($originalPath, [byte[]](1, 2, 3, 4))
-            [IO.File]::WriteAllBytes($evidencePath, [byte[]](1, 2, 3, 4))
+            [IO.File]::WriteAllBytes($copiedEvidencePath, [byte[]](1, 2, 3, 4))
             $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            $referenceEntries.Add([ordered]@{ id = $id; originalPath = $originalPath; evidencePath = $evidencePath; bytes = 4; sha256 = $hash }) | Out-Null
+            $referenceEntries.Add([ordered]@{ logicalId = $logicalId; originalPath = $originalPath; copiedEvidencePath = $copiedEvidencePath; byteLength = 4; sha256 = $hash }) | Out-Null
         }
-        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; entries = @($referenceEntries.ToArray()) })
-        $referenceHash = (Get-FileHash -LiteralPath $referencePath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $reference = [pscustomobject]@{ path = [IO.Path]::GetFullPath($referencePath); sha256 = $referenceHash; entries = @($referenceEntries.ToArray()) }
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; references = @($referenceEntries.ToArray()) })
+
+        $module = & $State.ShimCommand $State.CapturePath @(
+            'Assert-WeaponManifest', 'Read-PngDimensions', 'Assert-NumericClose', 'Assert-Vector', 'Get-Property', 'Get-Hash',
+            'Read-ReferenceManifest', 'Assert-ExactJsonProperties', 'Resolve-ReferencePath', 'Get-FullPath'
+        ) @()
+        & $module { param($project) $script:ProjectRoot = $project } $root | Out-Null
+        $parsedReference = Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $referencePath }
+        if ($parsedReference.entries.Count -ne 3) { return New-HarnessFail ('canonical reference manifest returned ' + $parsedReference.entries.Count + ' entries') }
+        foreach ($entry in @($parsedReference.entries)) {
+            foreach ($field in @('logicalId', 'originalPath', 'copiedEvidencePath', 'byteLength', 'sha256')) {
+                if ($null -eq (Get-HarnessField $entry $field)) { return New-HarnessFail ('canonical reference record omitted ' + $field) }
+            }
+            foreach ($legacyField in @('id', 'evidencePath', 'bytes')) {
+                if ($null -ne (Get-HarnessField $entry $legacyField)) { return New-HarnessFail ('canonical reference record retained ' + $legacyField) }
+            }
+        }
+        $reference = $parsedReference
+
+        $legacyEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $legacyEntries.Add([ordered]@{
+                    id = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    bytes = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $legacyPath = Join-Path $root 'reference-legacy.json'
+        Write-HarnessJson $legacyPath ([ordered]@{ schemaVersion = 1; entries = @($legacyEntries.ToArray()) })
+        $legacyRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $legacyPath } | Out-Null } catch { $legacyRejected = $true }
+        if (-not $legacyRejected) { return New-HarnessFail 'legacy reference manifest fields unexpectedly passed canonical parser' }
+
+        $wrongFieldEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $wrongFieldEntries.Add([ordered]@{
+                    logicalId = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    byteLength = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $wrongFieldPath = Join-Path $root 'reference-wrong-field.json'
+        Write-HarnessJson $wrongFieldPath ([ordered]@{ schemaVersion = 1; references = @($wrongFieldEntries.ToArray()) })
+        $wrongFieldRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $wrongFieldPath } | Out-Null } catch { $wrongFieldRejected = $true }
+        if (-not $wrongFieldRejected) { return New-HarnessFail 'wrong reference field alias unexpectedly passed canonical parser' }
+
+        $wrongLengthEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $length = if ([string]$entry.logicalId -ceq 'game-bright') { 5 } else { [int64]$entry.byteLength }
+            $wrongLengthEntries.Add([ordered]@{
+                    logicalId = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    copiedEvidencePath = [string]$entry.copiedEvidencePath
+                    byteLength = $length
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $wrongLengthPath = Join-Path $root 'reference-wrong-length.json'
+        Write-HarnessJson $wrongLengthPath ([ordered]@{ schemaVersion = 1; references = @($wrongLengthEntries.ToArray()) })
+        $wrongLengthRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $wrongLengthPath } | Out-Null } catch { $wrongLengthRejected = $true }
+        if (-not $wrongLengthRejected) { return New-HarnessFail 'reference byteLength mismatch unexpectedly passed canonical parser' }
 
         $names = @('rocket-sunward-high.png', 'rocket-sunward-low.png', 'rocket-crosslight-high.png', 'rocket-crosslight-low.png', 'rocket-awaylight-high.png', 'rocket-awaylight-low.png')
         $images = New-Object System.Collections.Generic.List[object]
@@ -822,11 +893,10 @@ function Test-WeaponCaptureBehavior {
         $manifest = [ordered]@{
             schemaVersion = 1; attemptId = 'behavior-attempt'; weaponCaptureAttemptId = 'behavior-attempt'; weapon = 'Rocket'; weaponCaptureWeapon = 'Rocket'; weaponCaptureMode = 'Fast'
             sourceSha = $sourceSha; generatedManifestSha256 = $generatedSha; referenceManifestPath = $reference.path; referenceManifestSha256 = $reference.sha256
-            referenceHashes = @($reference.entries | ForEach-Object { [ordered]@{ id = $_.id; sha256 = $_.sha256 } }); images = @($images.ToArray()); pass = $true
+            referenceHashes = @($reference.entries | ForEach-Object { [ordered]@{ id = $_.logicalId; sha256 = $_.sha256 } }); images = @($images.ToArray()); pass = $true
         }
         Write-HarnessJson $manifestPath $manifest
 
-        $module = & $State.ShimCommand $State.CapturePath @('Assert-WeaponManifest', 'Read-PngDimensions', 'Assert-NumericClose', 'Assert-Vector', 'Get-Property', 'Get-Hash') @()
         & $module {
             param($attempt, $weapon, $mode, $directory)
             $script:AttemptId = $attempt; $script:Weapon = $weapon; $script:Mode = $mode; $script:EvidenceDirectory = $directory

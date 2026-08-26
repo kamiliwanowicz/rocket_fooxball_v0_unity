@@ -200,7 +200,7 @@ function Get-ReferenceSnapshot {
     $paths.Add([string]$Reference.path) | Out-Null
     foreach ($entry in @($Reference.entries)) {
         $paths.Add([string]$entry.originalPath) | Out-Null
-        $paths.Add([string]$entry.evidencePath) | Out-Null
+        $paths.Add([string]$entry.copiedEvidencePath) | Out-Null
     }
     foreach ($path in @($paths | Sort-Object -Unique)) {
         $full = [IO.Path]::GetFullPath($path)
@@ -396,6 +396,23 @@ function Get-Property {
     return $property.Value
 }
 
+function Assert-ExactJsonProperties {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string[]]$Expected,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($null -eq $Object -or $Object -is [string] -or $Object -is [ValueType]) {
+        throw ($Label + ' must be a JSON object.')
+    }
+    $actual = @($Object.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    if ($actual.Count -ne $Expected.Count -or
+        @($actual | Where-Object { $Expected -cnotcontains $_ }).Count -gt 0 -or
+        @($Expected | Where-Object { $actual -cnotcontains $_ }).Count -gt 0) {
+        throw ($Label + ' has unexpected fields; expected exactly: ' + ($Expected -join ', '))
+    }
+}
+
 function Resolve-ReferencePath {
     param([Parameter(Mandatory = $true)][string]$Value, [Parameter(Mandatory = $true)][string]$ManifestPath)
     if ([IO.Path]::IsPathRooted($Value)) { return [IO.Path]::GetFullPath($Value) }
@@ -413,42 +430,56 @@ function Read-ReferenceManifest {
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw ('Reference manifest missing: ' + $full) }
     $raw = [IO.File]::ReadAllText($full)
     try { $manifest = $raw | ConvertFrom-Json -ErrorAction Stop } catch { throw ('Reference manifest JSON is invalid: ' + $_.Exception.Message) }
+    Assert-ExactJsonProperties $manifest @('schemaVersion', 'references') 'Reference manifest'
     if ([int](Get-Property $manifest 'schemaVersion') -ne 1) { throw 'Reference manifest schemaVersion must equal 1.' }
-    $arrayValues = New-Object System.Collections.Generic.List[object]
-    foreach ($arrayName in @('entries', 'references', 'items')) {
-        $arrayValue = Get-Property $manifest $arrayName
-        if ($null -ne $arrayValue) { $arrayValues.Add($arrayValue) | Out-Null }
-    }
-    $arrays = @($arrayValues.ToArray())
-    if ($arrays.Count -ne 1 -or @($arrays[0]).Count -ne 3) { throw 'Reference manifest must contain exactly three schema-1 entries.' }
+    $references = Get-Property $manifest 'references'
+    if ($null -eq $references -or $references -is [string]) { throw 'Reference manifest references must be an array.' }
+    $entries = @($references)
+    if ($entries.Count -ne 3) { throw 'Reference manifest must contain exactly three schema-1 references.' }
     $expectedIds = @('game-bright', 'game-dark', 'quake-hires')
-    $seen = @{}
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $records = New-Object System.Collections.Generic.List[object]
-    foreach ($entry in @($arrays[0])) {
-        $id = [string](Get-Property $entry 'id')
-        if ($expectedIds -notcontains $id -or $seen.ContainsKey($id)) { throw ('Reference manifest id is invalid or duplicated: ' + $id) }
-        $seen[$id] = $true
+    foreach ($entry in $entries) {
+        $entryLabel = 'Reference manifest reference'
+        Assert-ExactJsonProperties $entry @('logicalId', 'originalPath', 'copiedEvidencePath', 'byteLength', 'sha256') $entryLabel
+        $logicalId = [string](Get-Property $entry 'logicalId')
+        if (@($expectedIds | Where-Object { $_ -ceq $logicalId }).Count -ne 1 -or -not $seen.Add($logicalId)) {
+            throw ('Reference manifest logicalId is invalid or duplicated: ' + $logicalId)
+        }
         $original = [string](Get-Property $entry 'originalPath')
-        $evidence = [string](Get-Property $entry 'evidencePath')
-        $bytes = [int64](Get-Property $entry 'bytes')
+        $copiedEvidence = [string](Get-Property $entry 'copiedEvidencePath')
+        $byteLengthValue = Get-Property $entry 'byteLength'
+        if ($byteLengthValue -isnot [byte] -and $byteLengthValue -isnot [sbyte] -and
+            $byteLengthValue -isnot [int16] -and $byteLengthValue -isnot [uint16] -and
+            $byteLengthValue -isnot [int32] -and $byteLengthValue -isnot [uint32] -and
+            $byteLengthValue -isnot [int64] -and $byteLengthValue -isnot [uint64]) {
+            throw ('Reference manifest byteLength must be an integer: ' + $logicalId)
+        }
+        $bytes = [int64]$byteLengthValue
         $sha = [string](Get-Property $entry 'sha256')
-        if ([string]::IsNullOrWhiteSpace($original) -or [string]::IsNullOrWhiteSpace($evidence) -or $bytes -le 0 -or $sha -notmatch '^[0-9a-fA-F]{64}$') {
-            throw ('Reference manifest entry is incomplete: ' + $id)
+        if ([string]::IsNullOrWhiteSpace($original) -or [string]::IsNullOrWhiteSpace($copiedEvidence) -or $bytes -le 0 -or $sha -notmatch '^[0-9a-fA-F]{64}$') {
+            throw ('Reference manifest reference is incomplete: ' + $logicalId)
         }
         $originalPath = Resolve-ReferencePath $original $full
-        $evidencePath = Resolve-ReferencePath $evidence $full
+        $copiedEvidencePath = Resolve-ReferencePath $copiedEvidence $full
         foreach ($fileRecord in @(
-            [ordered]@{ label = $id + '.originalPath'; path = $originalPath },
-            [ordered]@{ label = $id + '.evidencePath'; path = $evidencePath }
+            [ordered]@{ label = $logicalId + '.originalPath'; path = $originalPath },
+            [ordered]@{ label = $logicalId + '.copiedEvidencePath'; path = $copiedEvidencePath }
         )) {
             if (-not (Test-Path -LiteralPath $fileRecord.path -PathType Leaf)) { throw ('Reference file missing: ' + $fileRecord.path) }
             if ((Get-Item -LiteralPath $fileRecord.path).Length -ne $bytes -or (Get-Hash $fileRecord.path) -ne $sha.ToLowerInvariant()) {
                 throw ('Reference hash mismatch: ' + $fileRecord.label)
             }
         }
-        $records.Add([ordered]@{ id = $id; sha256 = $sha.ToLowerInvariant(); bytes = $bytes; originalPath = $originalPath; evidencePath = $evidencePath }) | Out-Null
+        $records.Add([ordered]@{
+                logicalId = $logicalId
+                originalPath = $originalPath
+                copiedEvidencePath = $copiedEvidencePath
+                byteLength = $bytes
+                sha256 = $sha.ToLowerInvariant()
+            }) | Out-Null
     }
-    foreach ($id in $expectedIds) { if (-not $seen.ContainsKey($id)) { throw ('Reference manifest missing id: ' + $id) } }
+    foreach ($logicalId in $expectedIds) { if (-not $seen.Contains($logicalId)) { throw ('Reference manifest missing logicalId: ' + $logicalId) } }
     return [pscustomobject]@{ path = $full; sha256 = Get-Hash $full; entries = @($records.ToArray()) }
 }
 
@@ -521,8 +552,8 @@ function Assert-WeaponManifest {
     $referenceHashes = @(Get-Property $manifest 'referenceHashes')
     if ($referenceHashes.Count -ne $Reference.entries.Count) { throw 'Weapon capture reference hash count mismatch.' }
     foreach ($entry in $Reference.entries) {
-        $actual = @($referenceHashes | Where-Object { [string](Get-Property $_ 'id') -ceq $entry.id })
-        if ($actual.Count -ne 1 -or [string](Get-Property $actual[0] 'sha256').ToLowerInvariant() -ne $entry.sha256) { throw ('Weapon capture reference hash mismatch: ' + $entry.id) }
+        $actual = @($referenceHashes | Where-Object { [string](Get-Property $_ 'id') -ceq $entry.logicalId })
+        if ($actual.Count -ne 1 -or [string](Get-Property $actual[0] 'sha256').ToLowerInvariant() -ne $entry.sha256) { throw ('Weapon capture reference hash mismatch: ' + $entry.logicalId) }
     }
 
     $expectedNames = @(
