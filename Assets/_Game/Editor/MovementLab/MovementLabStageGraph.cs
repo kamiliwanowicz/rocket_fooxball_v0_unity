@@ -66,14 +66,14 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:5";
-        private const string MaterialContract = "material-prefab-contract:14";
+        private const string MaterialContract = "material-prefab-contract:15";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:16";
+        private const string GameplayContract = "gameplay-scene-contract:17";
         // T5 adds the persisted Iteration profile and its URP assets.
-        private const string QualityContract = "quality-contract:4";
-        private const string LightingContract = "lighting-contract:6";
-        private const string BakedContract = "baked-output-contract:6";
+        private const string QualityContract = "quality-contract:5";
+        private const string LightingContract = "lighting-contract:7";
+        private const string BakedContract = "baked-output-contract:7";
 
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a
@@ -97,6 +97,7 @@ namespace RocketFooxball.Editor
                      MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
@@ -125,17 +126,18 @@ namespace RocketFooxball.Editor
                       ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs"
                       ,"Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
                   })), MovementLabContract.ImportedAssetPaths,
-                WithMetas(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
+                 WithAssetMetasOnly(MovementLabContract.MaterialPrefabOutputs), includeUnityVersion: false),
             new StageDefinition(MovementLabStage.GameplayScene, new[] { MovementLabStage.MaterialPrefab }, Array.Empty<MovementLabStage>(),
                 GameplayContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
                  Concat(new[]
                  {
                       "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabArenaPipeline.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
-                      "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
+                       "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
                       "Assets/_Game/Scripts/Runtime/Participants/ParticipantContracts.cs",
                       "Assets/_Game/Scripts/Runtime/Input/PlayerInputReader.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/ParticipantRelationship.cs",
@@ -202,6 +204,7 @@ namespace RocketFooxball.Editor
                     MovementLabContract.LightingSettingsPath, MovementLabContract.LightingSettingsPath + ".meta",
                      MovementLabLightingProfiles.DevelopmentSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath + ".meta",
                       "Assets/_Game/Editor/MovementLab/MovementLabLightingPipeline.cs",
+                      "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabLightingProfiles.cs",
                       "Assets/_Game/Editor/MovementLab/MovementLabContractCatalog.cs"
                   }, Array.Empty<string>(),

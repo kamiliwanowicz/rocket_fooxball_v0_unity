@@ -183,6 +183,12 @@ namespace RocketFooxball.Editor
             SkyShaderPath
         };
 
+        private static readonly string[] RemovedSceneLightNamePrefixes =
+        {
+            "GoalAccent_",
+            "WallFill_"
+        };
+
         private sealed class ValidationContext
         {
             internal Scene Scene;
@@ -457,6 +463,9 @@ namespace RocketFooxball.Editor
                     Mathf.Abs(RenderSettings.fogEndDistance - 170f) > 0.01f)
                     throw new InvalidOperationException("Scene environment contract invalid.");
             });
+            accumulator.Capture("scene/layers", "exact-indices", ValidatePersistedGameplayLayerTable);
+            accumulator.Capture("scene/lighting", "removed-light-names", () => ValidateRemovedSceneLightNames(context.Scene));
+            accumulator.Capture("scene/lighting", "environment-light-scope", () => ValidateEnvironmentLightScope(context.Scene));
 
             if (context.Ball != null)
             {
@@ -1375,8 +1384,9 @@ namespace RocketFooxball.Editor
             var localCount = 0;
             accumulator.Capture("scene/layers", "names", () =>
             {
+                ValidatePersistedGameplayLayerTable();
                 if (participantLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
-                    throw new InvalidOperationException("Participants, Projectiles, and LocalPlayerHidden layers are required.");
+                    throw new InvalidOperationException("Participants, Projectiles, and LocalPlayerHidden layers are required at indices 8, 9, and 10.");
                 if (Physics.GetIgnoreLayerCollision(participantLayer, participantLayer) || Physics.GetIgnoreLayerCollision(participantLayer, projectilesLayer) || Physics.GetIgnoreLayerCollision(projectilesLayer, projectilesLayer))
                     throw new InvalidOperationException("Participants/Projectiles collision matrix must remain enabled.");
             });
@@ -1452,11 +1462,15 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Participant local-control references missing: " + expected.DisplayName);
                     if (camera.enabled != expected.IsLocal || listener.enabled != expected.IsLocal || participant.Input.enabled != expected.IsLocal || participant.Look.enabled != expected.IsLocal || participant.CameraFeedback.enabled != expected.IsLocal)
                         throw new InvalidOperationException("Participant local-control mode mismatch: " + expected.DisplayName);
-                    var viewmodels = participant.transform.Find("Head/Camera/Viewmodels");
-                    var crosshair = participant.transform.Find("Head/Camera/CrosshairCanvas");
-                    if (viewmodels == null || crosshair == null || viewmodels.gameObject.activeSelf != expected.IsLocal || crosshair.gameObject.activeSelf != expected.IsLocal)
-                        throw new InvalidOperationException("Participant FPS-only presentation mode mismatch: " + expected.DisplayName);
-                     var worldVisual = participant.transform.Find("WorldVisual");
+                     var viewmodels = participant.transform.Find("Head/Camera/Viewmodels");
+                     var crosshair = participant.transform.Find("Head/Camera/CrosshairCanvas");
+                     if (viewmodels == null || crosshair == null || viewmodels.gameObject.activeSelf != expected.IsLocal || crosshair.gameObject.activeSelf != expected.IsLocal)
+                         throw new InvalidOperationException("Participant FPS-only presentation mode mismatch: " + expected.DisplayName);
+                     ValidateViewmodelsLayerContract(viewmodels.gameObject, expected.DisplayName + " Viewmodels");
+                     if (camera == null || (camera.cullingMask & (1 << MovementLabContract.ViewmodelsLayer)) == 0)
+                         throw new InvalidOperationException("Participant camera must include Viewmodels layer 11: " + expected.DisplayName);
+                     ValidatePrivateViewmodelLight(participant, viewmodels, expected.IsLocal, expected.DisplayName);
+                      var worldVisual = participant.transform.Find("WorldVisual");
                      if (worldVisual == null) throw new InvalidOperationException("Participant WorldVisual missing: " + expected.DisplayName);
                      var fpsShotgun = participant.transform.Find("Head/Camera/Viewmodels/FpsShotgunVisual");
                      var worldMount = MovementLabPrefabPipeline.FindNamedTransform(worldVisual, "WorldShotgunMount");
@@ -1481,10 +1495,11 @@ namespace RocketFooxball.Editor
                 if (blueCount != 3 || redCount != 3 || localCount != 1 || context.Participants[0] == null || context.Participants[0].Team != ParticipantTeam.Blue)
                     throw new InvalidOperationException("MovementLab roster must contain three Blue, three Red, and one local Blue participant.");
             });
-            accumulator.Capture("scene/roster", "local-camera-count", () => { if (localCameraCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay Camera is required."); });
-            accumulator.Capture("scene/roster", "local-audio-count", () => { if (localAudioCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay AudioListener is required."); });
+             accumulator.Capture("scene/roster", "local-camera-count", () => { if (localCameraCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay Camera is required."); });
+             accumulator.Capture("scene/roster", "local-audio-count", () => { if (localAudioCount != 1) throw new InvalidOperationException("Exactly one enabled gameplay AudioListener is required."); });
+             accumulator.Capture("scene/lighting", "private-light-count", () => ValidateScenePrivateViewmodelLightCount(context));
 
-            if (context.SpawnSet != null)
+             if (context.SpawnSet != null)
             {
                  CaptureSpawnSetContracts(context, accumulator, participantLayer, projectilesLayer);
              }
@@ -1553,6 +1568,136 @@ namespace RocketFooxball.Editor
                  nameplate.gameObject.activeSelf != isEnemy)
                  throw new InvalidOperationException(label + " nickname/corpse enemy-only policy mismatch.");
          }
+
+          private static void ValidatePersistedGameplayLayerTable()
+          {
+              var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.TagManagerPath);
+              if (settings == null || settings.Length == 0)
+                  throw new InvalidOperationException("TagManager.asset is unavailable; required gameplay layers cannot be validated.");
+
+              var serialized = new SerializedObject(settings[0]);
+              var layers = serialized.FindProperty("layers");
+              if (layers == null || !layers.isArray || layers.arraySize < 32)
+                  throw new InvalidOperationException("TagManager layers schema is unavailable or incomplete.");
+
+              var expected = new[]
+              {
+                  (index: MovementLabContract.LocalPlayerHiddenLayer, name: MovementLabContract.LocalPlayerHiddenLayerName),
+                  (index: MovementLabContract.ProjectilesLayer, name: MovementLabContract.ProjectilesLayerName),
+                  (index: MovementLabContract.ParticipantsLayer, name: MovementLabContract.ParticipantsLayerName),
+                  (index: MovementLabContract.ViewmodelsLayer, name: MovementLabContract.ViewmodelsLayerName)
+              };
+              for (var i = 0; i < expected.Length; i++)
+              {
+                  var required = expected[i];
+                  var actual = layers.GetArrayElementAtIndex(required.index).stringValue;
+                  if (!string.Equals(actual, required.name, StringComparison.Ordinal))
+                      throw new InvalidOperationException("Gameplay layer index " + required.index + " must be '" + required.name + "' but is '" + actual + "'.");
+              }
+
+              for (var layerIndex = 8; layerIndex < layers.arraySize; layerIndex++)
+              {
+                  var actual = layers.GetArrayElementAtIndex(layerIndex).stringValue;
+                  for (var requiredIndex = 0; requiredIndex < expected.Length; requiredIndex++)
+                  {
+                      if (layerIndex != expected[requiredIndex].index && string.Equals(actual, expected[requiredIndex].name, StringComparison.Ordinal))
+                          throw new InvalidOperationException("Gameplay layer '" + expected[requiredIndex].name + "' is duplicated at index " + layerIndex + "; expected " + expected[requiredIndex].index + ".");
+                  }
+              }
+          }
+
+          private static void ValidateViewmodelsLayerContract(GameObject root, string label)
+          {
+              if (root == null) throw new InvalidOperationException(label + " root is missing.");
+              var transforms = root.GetComponentsInChildren<Transform>(true);
+              if (transforms == null || transforms.Length == 0)
+                  throw new InvalidOperationException(label + " hierarchy is empty.");
+              for (var i = 0; i < transforms.Length; i++)
+              {
+                  var item = transforms[i];
+                  if (item == null || item.gameObject.layer != MovementLabContract.ViewmodelsLayer)
+                      throw new InvalidOperationException(label + " hierarchy must use Viewmodels layer 11: " + (item == null ? "<missing>" : item.name));
+              }
+          }
+
+          private static void ValidatePrivateViewmodelLight(ParticipantState participant, Transform viewmodels, bool local, string label)
+          {
+              if (participant == null || viewmodels == null || participant.Presentation == null)
+                  throw new InvalidOperationException(label + " private viewmodel-light composition is incomplete.");
+
+              var lights = viewmodels.GetComponentsInChildren<Light>(true);
+              if (lights == null || lights.Length != 1)
+                  throw new InvalidOperationException(label + " Viewmodels must contain exactly one private ViewmodelLight.");
+              var light = lights[0];
+              if (light == null || light.transform.parent != viewmodels || light.name != MovementLabContract.ViewmodelLightName)
+                  throw new InvalidOperationException(label + " private ViewmodelLight must be directly parented below Viewmodels.");
+              if (Vector3.Distance(light.transform.localPosition, Vector3.zero) > 0.001f ||
+                  Quaternion.Angle(light.transform.localRotation, Quaternion.Euler(MovementLabContract.ViewmodelLightLocalEuler)) > 0.001f ||
+                  Vector3.Distance(light.transform.localScale, Vector3.one) > 0.001f)
+                  throw new InvalidOperationException(label + " ViewmodelLight transform must be position zero, authored local Euler (35,-30,0), and unit scale.");
+              if (light.type != MovementLabContract.ViewmodelLightType || light.renderMode != LightRenderMode.Auto ||
+                  light.lightmapBakeType != MovementLabContract.ViewmodelLightBakeType ||
+                  Mathf.Abs(light.color.r - MovementLabContractCatalog.SunColor.r) > 0.001f ||
+                  Mathf.Abs(light.color.g - MovementLabContractCatalog.SunColor.g) > 0.001f ||
+                  Mathf.Abs(light.color.b - MovementLabContractCatalog.SunColor.b) > 0.001f ||
+                  Mathf.Abs(light.color.a - MovementLabContractCatalog.SunColor.a) > 0.001f ||
+                  Mathf.Abs(light.intensity - MovementLabContract.ViewmodelLightIntensity) > 0.001f ||
+                  light.cullingMask != MovementLabContract.ViewmodelLightCullingMask ||
+                  light.shadows != MovementLabContract.ViewmodelLightShadows || light.cookie != null || light.enabled != local)
+                  throw new InvalidOperationException(label + " ViewmodelLight type/mode/color/intensity/culling/shadow/cookie/bake contract is invalid.");
+              if (light.gameObject.layer != MovementLabContract.ViewmodelsLayer)
+                  throw new InvalidOperationException(label + " ViewmodelLight must use Viewmodels layer 11.");
+
+              ValidateReference(participant.Presentation, "viewmodelLight", light, label + ".PlayerPresentation.viewmodelLight");
+              var source = PrefabUtility.GetCorrespondingObjectFromSource(light);
+              if (source == null || !string.Equals(AssetDatabase.GetAssetPath(source), PrefabPath, StringComparison.Ordinal))
+                  throw new InvalidOperationException(label + " ViewmodelLight prefab provenance mismatch: " + (source == null ? string.Empty : AssetDatabase.GetAssetPath(source)));
+              ValidatePersistentIdentity(source, label + " ViewmodelLight prefab source");
+          }
+
+          private static void ValidateScenePrivateViewmodelLightCount(ValidationContext context)
+          {
+              if (context == null || context.Participants == null || context.Participants.Length != ParticipantSlots.Length)
+                  throw new InvalidOperationException("MovementLab scene must expose six participant slots before private lights can be validated.");
+
+              var privateLights = new List<Light>();
+              for (var i = 0; i < context.Participants.Length; i++)
+              {
+                  var participant = context.Participants[i];
+                  var viewmodels = participant != null ? participant.transform.Find("Head/Camera/Viewmodels") : null;
+                  if (viewmodels == null)
+                      throw new InvalidOperationException("Participant " + i + " is missing its Viewmodels subtree.");
+                  var lights = viewmodels.GetComponentsInChildren<Light>(true);
+                  if (lights.Length != 1 || lights[0] == null)
+                      throw new InvalidOperationException("Participant " + i + " must contribute exactly one private ViewmodelLight.");
+                  privateLights.Add(lights[0]);
+              }
+
+              var sceneLights = UnityEngine.Object.FindObjectsByType<Light>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                  .Where(light => light != null && light.gameObject.scene == context.Scene).ToArray();
+              var scenePrivateLights = sceneLights.Where(light => privateLights.Contains(light)).ToArray();
+              if (privateLights.Count != ParticipantSlots.Length || scenePrivateLights.Length != ParticipantSlots.Length || privateLights.Distinct().Count() != ParticipantSlots.Length)
+                  throw new InvalidOperationException("MovementLab scene must contain exactly six distinct prefab-provenance private ViewmodelLights.");
+          }
+
+          private static void ValidateRemovedSceneLightNames(Scene scene)
+          {
+              if (!scene.IsValid()) throw new InvalidOperationException("MovementLab scene is invalid while checking removed light names.");
+              var transforms = scene.GetRootGameObjects().SelectMany(root => root.GetComponentsInChildren<Transform>(true));
+              var removed = transforms.Where(transform => transform != null && RemovedSceneLightNamePrefixes.Any(prefix => transform.name.StartsWith(prefix, StringComparison.Ordinal))).ToArray();
+              if (removed.Length > 0)
+                  throw new InvalidOperationException("Removed accent/fill light object remains in the generated scene: " + removed[0].name);
+          }
+
+          private static void ValidateEnvironmentLightScope(Scene scene)
+          {
+              var environment = scene.GetRootGameObjects().FirstOrDefault(root => root != null && root.name == "Environment");
+              if (environment == null)
+                  throw new InvalidOperationException("Environment root is missing from the generated scene.");
+              var lights = environment.GetComponentsInChildren<Light>(true);
+              if (lights.Length != 1 || lights[0] == null || lights[0].name != "Sun" || RenderSettings.sun != lights[0])
+                  throw new InvalidOperationException("Environment must contain exactly one Light, Environment/Sun.");
+          }
 
          private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
         {
