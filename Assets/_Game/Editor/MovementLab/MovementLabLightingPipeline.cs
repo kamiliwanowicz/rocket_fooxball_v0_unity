@@ -33,12 +33,12 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                internal static readonly Color ProductionAmbientSkyColor = new Color(0.42f, 0.40f, 0.36f, 1f);
-                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.28f, 0.25f, 0.22f, 1f);
-                internal static readonly Color ProductionAmbientGroundColor = new Color(0.16f, 0.14f, 0.12f, 1f);
+                internal static readonly Color ProductionAmbientSkyColor = new Color(0.42f, 0.41f, 0.40f, 1f);
+                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.38f, 0.32f, 0.24f, 1f);
+                internal static readonly Color ProductionAmbientGroundColor = new Color(0.17f, 0.14f, 0.12f, 1f);
                 internal static readonly Vector3 ProductionSunEuler = new Vector3(50f, 330f, 0f);
-                internal const float ProductionAmbientIntensity = 0.85f;
-                internal const float FastAmbientIntensity = 1.05f;
+                internal const float ProductionAmbientIntensity = 0.90f;
+                internal const float FastAmbientIntensity = 1.15f;
                 internal const float ProductionSunIntensity = 2.4f;
                 internal const float ProductionSunShadowStrength = 0.25f;
                 internal const float TonemappingPostExposure = 0.35f;
