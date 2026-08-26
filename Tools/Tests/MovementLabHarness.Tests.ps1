@@ -620,6 +620,68 @@ function Test-WeaponCaptureContract {
             return New-HarnessFail ('reference parser retains legacy field alias: ' + $legacyField)
         }
     }
+
+    # The C# capture boundary must consume the same canonical schema as the
+    # wrapper. JsonUtility silently ignores unknown fields, so keep the DTO
+    # surface canonical and validate every field through the C# parser.
+    $dtoStart = $facade.IndexOf('private sealed class ReferenceManifestDto', [StringComparison]::Ordinal)
+    $entryStart = $facade.IndexOf('private sealed class ReferenceEntry', $dtoStart + 1, [StringComparison]::Ordinal)
+    $hashStart = $facade.IndexOf('private sealed class ReferenceHashDto', $entryStart + 1, [StringComparison]::Ordinal)
+    if ($dtoStart -lt 0 -or $entryStart -le $dtoStart -or $hashStart -le $entryStart) {
+        return New-HarnessFail 'C# reference DTO boundaries are missing or out of order'
+    }
+    $referenceDto = $facade.Substring($dtoStart, $entryStart - $dtoStart)
+    $referenceEntry = $facade.Substring($entryStart, $hashStart - $entryStart)
+    foreach ($field in @('public int schemaVersion;', 'public ReferenceEntry[] references;')) {
+        if ($referenceDto.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference manifest DTO omitted canonical field: ' + $field)
+        }
+    }
+    if (@([Regex]::Matches($referenceDto, '(?m)^\s*public\s+[^;]+;')).Count -ne 2) {
+        return New-HarnessFail 'C# reference manifest DTO must expose exactly schemaVersion and references'
+    }
+    foreach ($field in @('public string logicalId;', 'public string originalPath;', 'public string copiedEvidencePath;', 'public long byteLength;', 'public string sha256;')) {
+        if ($referenceEntry.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference entry DTO omitted canonical field: ' + $field)
+        }
+    }
+    if (@([Regex]::Matches($referenceEntry, '(?m)^\s*public\s+[^;]+;')).Count -ne 5) {
+        return New-HarnessFail 'C# reference entry DTO must expose exactly five canonical fields'
+    }
+    foreach ($legacyField in @(
+        'public ReferenceEntry[] entries;', 'public ReferenceEntry[] items;',
+        'public string id;', 'public string evidencePath;', 'public long bytes;'
+    )) {
+        if ($referenceDto.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0 -or
+            $referenceEntry.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('C# reference DTO retains legacy field alias: ' + $legacyField)
+        }
+    }
+    $parserStart = $facade.IndexOf('private static ReferenceEvidence ReadAndValidateReferenceManifest', [StringComparison]::Ordinal)
+    $resolverStart = $facade.IndexOf('private static string ResolveReferencePath', $parserStart + 1, [StringComparison]::Ordinal)
+    if ($parserStart -lt 0 -or $resolverStart -le $parserStart) {
+        return New-HarnessFail 'C# reference manifest parser boundary is missing or out of order'
+    }
+    $csharpParser = $facade.Substring($parserStart, $resolverStart - $parserStart)
+    foreach ($field in @(
+        'var entries = manifest.references;', 'entries.Length != ExpectedReferenceIds.Length',
+        'ExpectedReferenceIds.Contains(entry.logicalId, StringComparer.Ordinal)', 'seen.Add(entry.logicalId)',
+        'entry.byteLength <= 0', 'string.IsNullOrWhiteSpace(entry.originalPath)',
+        'string.IsNullOrWhiteSpace(entry.copiedEvidencePath)', 'ResolveReferencePath(entry.copiedEvidencePath',
+        'ValidateReferenceFile(copiedEvidencePath', 'new FileInfo(originalPath).Length != entry.byteLength'
+    )) {
+        if ($csharpParser.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference parser omitted canonical validation: ' + $field)
+        }
+    }
+    foreach ($legacyField in @('manifest.entries', 'manifest.items', 'entry.id', 'entry.evidencePath', 'entry.bytes')) {
+        if ($csharpParser.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('C# reference parser retains legacy field alias: ' + $legacyField)
+        }
+    }
+    if ($facade.IndexOf('referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.logicalId, sha256 = entry.sha256 }).ToArray()', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'C# capture output no longer maps referenceHashes.id from logicalId'
+    }
     $workflowSource = [IO.File]::ReadAllText($State.WorkflowPath)
     $redWorkflowPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
     $redWorkflowSource = [IO.File]::ReadAllText($redWorkflowPath)

@@ -49,18 +49,16 @@ namespace RocketFooxball.Editor
         private sealed class ReferenceManifestDto
         {
             public int schemaVersion;
-            public ReferenceEntry[] entries;
             public ReferenceEntry[] references;
-            public ReferenceEntry[] items;
         }
 
         [Serializable]
         private sealed class ReferenceEntry
         {
-            public string id;
+            public string logicalId;
             public string originalPath;
-            public string evidencePath;
-            public long bytes;
+            public string copiedEvidencePath;
+            public long byteLength;
             public string sha256;
         }
 
@@ -263,7 +261,7 @@ namespace RocketFooxball.Editor
                 generatedManifestSha256 = generatedManifestSha,
                 referenceManifestPath = reference.ManifestPath,
                 referenceManifestSha256 = reference.ManifestSha256,
-                referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.id, sha256 = entry.sha256 }).ToArray()
+                referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.logicalId, sha256 = entry.sha256 }).ToArray()
             };
 
             try
@@ -529,32 +527,31 @@ namespace RocketFooxball.Editor
         {
             var fullPath = Path.GetFullPath(path);
             if (!File.Exists(fullPath)) throw new InvalidOperationException("Reference manifest missing: " + fullPath);
-            var bytes = File.ReadAllBytes(fullPath);
-            var hash = Sha256(bytes);
+            var manifestBytes = File.ReadAllBytes(fullPath);
+            var hash = Sha256(manifestBytes);
             ReferenceManifestDto manifest;
-            try { manifest = JsonUtility.FromJson<ReferenceManifestDto>(Encoding.UTF8.GetString(bytes)); }
+            try { manifest = JsonUtility.FromJson<ReferenceManifestDto>(Encoding.UTF8.GetString(manifestBytes)); }
             catch (Exception exception) { throw new InvalidOperationException("Reference manifest JSON is invalid: " + exception.Message); }
             if (manifest == null || manifest.schemaVersion != 1)
                 throw new InvalidOperationException("Reference manifest schemaVersion must equal 1.");
-            var arrays = new[] { manifest.entries, manifest.references, manifest.items }.Where(array => array != null).ToArray();
-            if (arrays.Length != 1 || arrays[0].Length != ExpectedReferenceIds.Length)
-                throw new InvalidOperationException("Reference manifest must contain exactly three schema-1 entries.");
-            var entries = arrays[0];
+            var entries = manifest.references;
+            if (entries == null || entries.Length != ExpectedReferenceIds.Length)
+                throw new InvalidOperationException("Reference manifest must contain exactly three schema-1 references.");
             var seen = new HashSet<string>(StringComparer.Ordinal);
             for (var index = 0; index < entries.Length; index++)
             {
                 var entry = entries[index];
-                if (entry == null || !ExpectedReferenceIds.Contains(entry.id, StringComparer.Ordinal) || !seen.Add(entry.id))
-                    throw new InvalidOperationException("Reference manifest entries must contain each expected id exactly once.");
-                if (entry.bytes <= 0 || string.IsNullOrWhiteSpace(entry.originalPath) || string.IsNullOrWhiteSpace(entry.evidencePath) ||
+                if (entry == null || !ExpectedReferenceIds.Contains(entry.logicalId, StringComparer.Ordinal) || !seen.Add(entry.logicalId))
+                    throw new InvalidOperationException("Reference manifest references must contain each expected logicalId exactly once.");
+                if (entry.byteLength <= 0 || string.IsNullOrWhiteSpace(entry.originalPath) || string.IsNullOrWhiteSpace(entry.copiedEvidencePath) ||
                     entry.sha256 == null || !System.Text.RegularExpressions.Regex.IsMatch(entry.sha256, "^[0-9a-fA-F]{64}$"))
-                    throw new InvalidOperationException("Reference manifest entry is incomplete: " + entry.id);
-                var evidencePath = ResolveReferencePath(entry.evidencePath, fullPath, projectRoot);
+                    throw new InvalidOperationException("Reference manifest reference is incomplete: " + entry.logicalId);
+                var copiedEvidencePath = ResolveReferencePath(entry.copiedEvidencePath, fullPath, projectRoot);
                 var originalPath = ResolveReferencePath(entry.originalPath, fullPath, projectRoot);
-                ValidateReferenceFile(evidencePath, entry, entry.id + " evidencePath");
+                ValidateReferenceFile(copiedEvidencePath, entry, entry.logicalId + " copiedEvidencePath");
                 if (!File.Exists(originalPath)) throw new InvalidOperationException("Reference originalPath missing: " + originalPath);
-                if (new FileInfo(originalPath).Length != entry.bytes || !HashFile(originalPath).Equals(entry.sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("Reference originalPath hash mismatch: " + entry.id);
+                if (new FileInfo(originalPath).Length != entry.byteLength || !HashFile(originalPath).Equals(entry.sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException("Reference originalPath hash mismatch: " + entry.logicalId);
             }
             return new ReferenceEvidence { ManifestPath = fullPath, ManifestSha256 = hash, Entries = entries };
         }
@@ -573,7 +570,7 @@ namespace RocketFooxball.Editor
         {
             if (!File.Exists(path)) throw new InvalidOperationException("Reference " + label + " missing: " + path);
             var info = new FileInfo(path);
-            if (info.Length != entry.bytes || !HashFile(path).Equals(entry.sha256, StringComparison.OrdinalIgnoreCase))
+            if (info.Length != entry.byteLength || !HashFile(path).Equals(entry.sha256, StringComparison.OrdinalIgnoreCase))
                 throw new InvalidOperationException("Reference " + label + " hash mismatch: " + path);
         }
 
