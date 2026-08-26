@@ -45,6 +45,7 @@ namespace RocketFooxball.Editor
         internal const float WeaponAccentCoreSmoothnessResponse = 0.60f;
         internal const float WeaponResponseOcclusion = 1f;
         internal const float WeaponResponseBumpScale = 1f;
+        internal const float WeaponResponseSpecularHighlights = 1f;
         internal const float WeaponAccentAlpha = 0.42f;
 
         internal readonly struct MovementLabMaterialCatalog
@@ -193,6 +194,9 @@ namespace RocketFooxball.Editor
                         : Color.white);
                     material.SetFloat("_EnvironmentReflections", 0f);
                     material.EnableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                    if (!material.HasProperty("_SpecularHighlights"))
+                        throw new InvalidOperationException("Weapon material shader must expose _SpecularHighlights: " + name);
+                    material.SetFloat("_SpecularHighlights", WeaponResponseSpecularHighlights);
                     // Direct specular remains enabled for readable weapon
                     // highlights; repair any stale generated keyword.
                     material.DisableKeyword("_SPECULARHIGHLIGHTS_OFF");
@@ -557,9 +561,11 @@ namespace RocketFooxball.Editor
                     if (!material.HasProperty("_EnvironmentReflections") ||
                         Mathf.Abs(material.GetFloat("_EnvironmentReflections")) > 0.001f ||
                         !material.IsKeywordEnabled("_ENVIRONMENTREFLECTIONS_OFF") ||
+                        !material.HasProperty("_SpecularHighlights") ||
+                        Mathf.Abs(material.GetFloat("_SpecularHighlights") - WeaponResponseSpecularHighlights) > 0.001f ||
                         material.IsKeywordEnabled("_SPECULARHIGHLIGHTS_OFF"))
                     {
-                        throw new InvalidOperationException(label + " must disable environment reflections while keeping direct specular enabled.");
+                        throw new InvalidOperationException(label + " must disable environment reflections while keeping direct specular enabled (_SpecularHighlights=1 and keyword off).");
                     }
 
                     var expectedBaseColor = isAccent

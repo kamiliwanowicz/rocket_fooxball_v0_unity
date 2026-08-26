@@ -1678,6 +1678,11 @@ namespace RocketFooxball.Editor
               var scenePrivateLights = sceneLights.Where(light => privateLights.Contains(light)).ToArray();
               if (privateLights.Count != ParticipantSlots.Length || scenePrivateLights.Length != ParticipantSlots.Length || privateLights.Distinct().Count() != ParticipantSlots.Length)
                   throw new InvalidOperationException("MovementLab scene must contain exactly six distinct prefab-provenance private ViewmodelLights.");
+              if (sceneLights.Length != ParticipantSlots.Length + 1)
+                  throw new InvalidOperationException("MovementLab scene must contain exactly seven Lights: six private ViewmodelLights and Environment/Sun; found " + sceneLights.Length + ".");
+              var nonPrivateLights = sceneLights.Where(light => !privateLights.Contains(light)).ToArray();
+              if (nonPrivateLights.Length != 1 || nonPrivateLights[0] != RenderSettings.sun)
+                  throw new InvalidOperationException("MovementLab scene must contain exactly one non-private Light, and it must be Environment/Sun assigned to RenderSettings.sun.");
           }
 
           private static void ValidateRemovedSceneLightNames(Scene scene)
