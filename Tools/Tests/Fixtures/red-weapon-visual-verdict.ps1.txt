@@ -1,0 +1,6 @@
+# Historical red baseline for verdict guard checks.
+# This fixture intentionally omits source/reference/capture hash binding and
+# the exact sixteen-predicate reduction.
+param([string]$VerdictPath)
+$verdict = Get-Content -Raw -LiteralPath $VerdictPath | ConvertFrom-Json
+if ($verdict.overallPass) { Write-Output 'accepted' }

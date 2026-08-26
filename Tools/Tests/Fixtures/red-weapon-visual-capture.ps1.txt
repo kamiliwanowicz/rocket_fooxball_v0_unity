@@ -1,0 +1,6 @@
+# Historical red baseline for weapon capture guard checks.
+# This fixture intentionally omits the waited hidden Unity process and the
+# exact control-image/hash contract.
+param([string]$EvidenceRoot, [string]$AttemptId)
+$arguments = @('-batchmode', '-quit', '-executeMethod', 'RocketFooxball.Editor.WeaponVisualCapture.Capture')
+& Unity.exe $arguments

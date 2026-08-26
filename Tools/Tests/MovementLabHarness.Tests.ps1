@@ -547,7 +547,93 @@ function Test-PlanOnlyPendingOnly {
     if (-not [bool](Get-HarnessField $outcomeResult 'pass')) {
         return New-HarnessFail ('production bake outcome contract failed: ' + [string](Get-HarnessField $outcomeResult 'message'))
     }
+    $workflowResult = Test-FastPersistedValidatorContract $State
+    if (-not [bool](Get-HarnessField $workflowResult 'pass')) {
+        return New-HarnessFail ('fast persisted validator contract failed: ' + [string](Get-HarnessField $workflowResult 'message'))
+    }
+    $captureResult = Test-WeaponCaptureContract $State
+    if (-not [bool](Get-HarnessField $captureResult 'pass')) {
+        return New-HarnessFail ('weapon capture contract failed: ' + [string](Get-HarnessField $captureResult 'message'))
+    }
+    $verdictResult = Test-WeaponVisualVerdictContract $State
+    if (-not [bool](Get-HarnessField $verdictResult 'pass')) {
+        return New-HarnessFail ('weapon verdict contract failed: ' + [string](Get-HarnessField $verdictResult 'message'))
+    }
     return New-HarnessPass 'PlanOnly pending assignment is production-bake-only; production bake outcome preserved'
+}
+
+function Test-FastPersistedValidatorContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $source = [IO.File]::ReadAllText($State.WorkflowPath)
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
+    if (-not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'missing workflow red fixture' }
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        "fast-persisted-validator",
+        "FastPersistedValidator",
+        "RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabFastPersisted",
+        "Invoke-UnityStep 'FastPersistedValidator'",
+        "Mark-CheckExecuted 'fast-persisted-validator'"
+    )
+    foreach ($needle in $required) {
+        if ($source.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('workflow omitted Fast persisted validator contract: ' + $needle) }
+        if ($red.IndexOf($needle, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail ('workflow red fixture unexpectedly contains new contract: ' + $needle) }
+    }
+    $buildIndex = $source.IndexOf("Invoke-UnityStep 'BuildFast'", [StringComparison]::Ordinal)
+    $persistIndex = $source.IndexOf("Invoke-UnityStep 'FastPersistedValidator'", [StringComparison]::Ordinal)
+    if ($buildIndex -lt 0 -or $persistIndex -lt 0 -or $persistIndex -le $buildIndex) {
+        return New-HarnessFail 'Fast workflow does not retain early BuildFast plus later persisted validator process.'
+    }
+    return New-HarnessPass 'Fast workflow has early BuildFast and distinct fast-persisted-validator process; red fixture rejects both'
+}
+
+function Test-WeaponCaptureContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $path = Join-Path $State.ProjectRoot 'Tools/Validation/Capture-WeaponVisuals.ps1'
+    $facadePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-capture.ps1.txt'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or -not (Test-Path -LiteralPath $facadePath -PathType Leaf) -or -not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'weapon capture source/facade or red fixture missing' }
+    $source = [IO.File]::ReadAllText($path)
+    $facade = [IO.File]::ReadAllText($facadePath)
+    $combined = $source + [Environment]::NewLine + $facade
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        '-weaponCaptureEvidenceRoot', '-weaponCaptureAttemptId', '-weaponCaptureWeapon', '-weaponCaptureMode', '-weaponCaptureReferenceManifest',
+        'Start-Process', '-WindowStyle Hidden', '-Wait', '-PassThru', 'Wait-ProjectRelease',
+        'WeaponVisualManifest.json', 'WEAPON_VISUAL_CAPTURE_PASS', 'Assert-WeaponManifest',
+        'SetLocalMode(true)', 'SetAlive(true)', 'SetShotgunOwned', 'MovementLabFastModeSession.EnterForCapture', 'MovementLabFastModeSession.RestoreIfActive',
+        'RenderSettings.sun', 'Vector3.SignedAngle', 'Mathf.DeltaAngle', 'maskRowOrigin', 'differencePixelCount', 'differenceMeanAbsRgb',
+        'DifferencePixelFloor', 'DifferenceChannelFloor', '1920', '1080', 'Git status changed during non-mutating weapon capture'
+    )
+    foreach ($needle in $required) {
+        if ($combined.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon capture omitted contract: ' + $needle) }
+        }
+    $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
+    if ($missing.Count -eq 0) { return New-HarnessFail 'weapon capture red fixture unexpectedly contains every guarded contract marker' }
+    if ($combined.IndexOf('BrightArenaVisualCapture', [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'weapon capture must remain independent of BrightArena capture' }
+    return New-HarnessPass ('weapon CLI/render/pose/control/hash contract guarded; red fixture fails at ' + $missing[0])
+}
+
+function Test-WeaponVisualVerdictContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $path = Join-Path $State.ProjectRoot 'Tools/Validation/Test-WeaponVisualVerdict.ps1'
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-verdict.ps1.txt'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or -not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'weapon verdict source or red fixture missing' }
+    $source = [IO.File]::ReadAllText($path)
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        'ExpectedAgentId', 'ExpectedSourceSha', 'ReferenceManifestPath', 'captureManifestHashes', 'referenceHashes',
+        'acceptedPriorVerdictHash', 'evidenceImages', 'overallPass', 'schemaVersion', 'sol_high', 'weapon-visual-verifier',
+        'high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed',
+        'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy',
+        'predicates must contain exactly 16', 'Get-Hash', 'Write-ImmutableJson'
+    )
+    foreach ($needle in $required) {
+        if ($source.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon verdict omitted contract: ' + $needle) }
+    }
+    $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
+    if ($missing.Count -eq 0) { return New-HarnessFail 'weapon verdict red fixture unexpectedly contains every guarded contract marker' }
+    return New-HarnessPass ('weapon verdict hash/predicate/reduction contract guarded; red fixture fails at ' + $missing[0])
 }
 
 function Test-ProductionBakeOutcomePreserved {

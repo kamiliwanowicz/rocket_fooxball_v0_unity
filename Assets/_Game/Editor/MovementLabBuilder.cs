@@ -310,6 +310,44 @@ namespace RocketFooxball.Editor
             }
         }
 
+        /// <summary>
+        /// Read-only persisted proof used after Fast assembly. The scene is
+        /// explicitly reopened in a new Editor process by the workflow, then
+        /// semantic, quality, and generated-state checks run without saving.
+        /// Lighting and baked-output staleness are allowed for Fast preview;
+        /// every other stale stage remains a failure.
+        /// </summary>
+        public static void ValidateMovementLabFastPersisted()
+        {
+            MovementLabFastModeSession.RestoreIfActive();
+            var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
+                throw new InvalidOperationException("Fast persisted validation could not reopen MovementLab scene: " + scene.path);
+
+            var accumulator = new MovementLabValidationAccumulator();
+            try
+            {
+                MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
+                accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
+                var probe = MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true, accumulator: accumulator);
+                var disallowedStale = probe.StaleStages.Where(stage =>
+                    stage != MovementLabStage.Lighting && stage != MovementLabStage.BakedOutput).ToArray();
+                if (disallowedStale.Length > 0)
+                {
+                    accumulator.Add("generated-state", "fast-persisted-stale-non-lighting",
+                        "Fast persisted validation permits only Lighting/BakedOutput staleness: " + string.Join(", ", disallowedStale));
+                }
+                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
+                    Debug.Log("Rocket Fooxball fast persisted validation: production lighting stages are stale but permitted for Fast preview.");
+                accumulator.ThrowIfAny("MovementLab fast persisted validation");
+                Debug.Log("Rocket Fooxball fast persisted validation passed after scene reopen; no project save performed.");
+            }
+            finally
+            {
+                MovementLabFastModeSession.RestoreIfActive();
+            }
+        }
+
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting Development")]
         public static void BakeMovementLabLightingDevelopment()
         {

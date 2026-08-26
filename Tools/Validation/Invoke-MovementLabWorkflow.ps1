@@ -668,6 +668,7 @@ function New-CheckLedger {
             $rows.Add((New-LedgerRow -CheckId 'compile' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
             $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
             $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-persisted-validator' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
         }
         'Development' {
             $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
@@ -1144,6 +1145,12 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Fast'
             Mark-CheckExecuted 'stage-probe'
             Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
+            # BuildFast performs an early same-process semantic check. The
+            # following waited Editor is the persisted proof after a fresh
+            # scene reload, so it cannot accidentally validate in-memory state.
+            $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'Fast'
+            Invoke-UnityStep 'FastPersistedValidator' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabFastPersisted' @() $false -NoGraphics; Mark-CheckExecuted 'fast-persisted-validator'
         }
         'Development' {
             Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
@@ -1204,7 +1211,8 @@ $predicateClassification = [ordered]@{
     preBake = @(
         [ordered]@{ predicate = 'ProductionPrepare mode contract'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode immediately after probe read'; inputs = @('Mode', 'Probe') },
         [ordered]@{ predicate = 'config/argument shape'; phase = 'pre-bake'; location = 'preflight'; inputs = @('workflow arguments', 'project configuration') },
-        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') }
+        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') },
+        [ordered]@{ predicate = 'fast persisted reload'; phase = 'pre-bake'; location = 'FastPersistedValidator in a later Unity process'; inputs = @('reopened scene', 'persisted semantic state', 'quality', 'Lighting/BakedOutput stale allowance') }
     )
     postflight = @(
         [ordered]@{ predicate = 'ProductionPrepareFinal output contract'; phase = 'postflight'; reason = 'requires post-bake probe profile and manifest' },
