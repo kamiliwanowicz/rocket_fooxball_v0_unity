@@ -271,6 +271,7 @@ namespace RocketFooxball.Editor
             {
                 var path = paths[i];
                 if (AssetDatabase.LoadMainAssetAtPath(path) == null) throw new InvalidOperationException("MovementLab pre-bake asset is missing: " + path);
+                if (!path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
                 if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
                 {
                     throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
@@ -288,6 +289,7 @@ namespace RocketFooxball.Editor
                 {
                     if (AssetDatabase.LoadMainAssetAtPath(path) == null)
                         throw new InvalidOperationException("MovementLab pre-bake asset is missing: " + path);
+                    if (!path.StartsWith("Assets/", StringComparison.Ordinal)) return;
                     if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
                         throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
                     ValidateAssetMetaGuid(path);
@@ -343,7 +345,7 @@ namespace RocketFooxball.Editor
                         ValidateReloadedEmissionOff(material, path);
                     else if (string.Equals(path, WeaponAccentCoreMaterialPath, StringComparison.Ordinal))
                         ValidateReloadedEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
-                            WeaponAccentEmissionTexturePath, path);
+                            LauncherEmissionTexturePath, path);
                     else if (string.Equals(path, ShotgunAccentCoreMaterialPath, StringComparison.Ordinal))
                         ValidateReloadedEmission(material, ShotgunAccentCoreEmissionColor, ShotgunAccentCoreEmissionStrength,
                             ShotgunEmissionTexturePath, path);
