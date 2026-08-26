@@ -1419,10 +1419,10 @@ function Test-WeaponVisualVerdictBehavior {
             [IO.File]::WriteAllBytes($originalPath, [byte[]](5, 6, 7, 8))
             [IO.File]::WriteAllBytes($evidencePath, [byte[]](5, 6, 7, 8))
             $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
-            $referenceEntries.Add([ordered]@{ id = $id; originalPath = $originalPath; evidencePath = $evidencePath; bytes = 4; sha256 = $hash }) | Out-Null
+            $referenceEntries.Add([ordered]@{ logicalId = $id; originalPath = $originalPath; copiedEvidencePath = $evidencePath; byteLength = 4; sha256 = $hash }) | Out-Null
         }
         $referencePath = Join-Path $root 'ReferenceManifest.json'
-        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; entries = @($referenceEntries.ToArray()) })
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; references = @($referenceEntries.ToArray()) })
         $captureManifestPaths = New-Object System.Collections.Generic.List[string]
         $captureManifestHashes = [ordered]@{}
         $captureImageRecords = [ordered]@{}
@@ -1461,7 +1461,7 @@ function Test-WeaponVisualVerdictBehavior {
                 $predicates.Add([ordered]@{ weapon = $weapon; id = $id; pass = $true; evidenceImages = @([ordered]@{ path = $imagePath; sha256 = $imageHash }) }) | Out-Null
             }
         }
-        $referenceHashRecords = @($referenceEntries.ToArray() | ForEach-Object { [ordered]@{ id = $_.id; sha256 = $_.sha256 } })
+        $referenceHashRecords = @($referenceEntries.ToArray() | ForEach-Object { [ordered]@{ id = $_.logicalId; sha256 = $_.sha256 } })
         $verdictPath = Join-Path $root 'WeaponVisualVerdict.json'
         $verdict = [ordered]@{
             schemaVersion = 1; agentId = 'behavior-agent'; profile = 'sol_high'; role = 'weapon-visual-verifier'; sourceSha = $sourceSha
@@ -1474,6 +1474,75 @@ function Test-WeaponVisualVerdictBehavior {
         $green = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', $greenResultPath)
         if ($green.exitCode -ne 0) { return New-HarnessFail ('green verdict validator exited ' + $green.exitCode + ': ' + (($green.output | ForEach-Object { [string]$_ }) -join ' | ')) }
         if (-not (Test-Path -LiteralPath $greenResultPath -PathType Leaf)) { return New-HarnessFail 'green verdict validator did not write result evidence' }
+
+        $assertReferenceRejected = {
+            param([Parameter(Mandatory = $true)][string]$VariantPath, [Parameter(Mandatory = $true)][string]$Label)
+            $probe = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $VariantPath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root ($Label + '-result.json')))
+            if ($probe.exitCode -eq 0) {
+                throw ('reference schema variant unexpectedly passed: ' + $Label)
+            }
+        }
+
+        $legacyEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $legacyEntries.Add([ordered]@{
+                    id = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    bytes = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $legacyReferencePath = Join-Path $root 'ReferenceManifest.legacy.json'
+        Write-HarnessJson $legacyReferencePath ([ordered]@{ schemaVersion = 1; entries = @($legacyEntries.ToArray()) })
+        & $assertReferenceRejected $legacyReferencePath 'legacy-reference'
+
+        $mixedRootReferencePath = Join-Path $root 'ReferenceManifest.mixed-root.json'
+        Write-HarnessJson $mixedRootReferencePath ([ordered]@{
+                schemaVersion = 1
+                references = @($referenceEntries.ToArray())
+                entries = @($referenceEntries.ToArray())
+            })
+        & $assertReferenceRejected $mixedRootReferencePath 'mixed-root-reference'
+
+        $mixedEntryEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $record = [ordered]@{
+                logicalId = [string]$entry.logicalId
+                originalPath = [string]$entry.originalPath
+                copiedEvidencePath = [string]$entry.copiedEvidencePath
+                byteLength = [int64]$entry.byteLength
+                sha256 = [string]$entry.sha256
+            }
+            if ([string]$entry.logicalId -ceq 'game-bright') { $record['id'] = [string]$entry.logicalId }
+            $mixedEntryEntries.Add($record) | Out-Null
+        }
+        $mixedEntryReferencePath = Join-Path $root 'ReferenceManifest.mixed-entry.json'
+        Write-HarnessJson $mixedEntryReferencePath ([ordered]@{ schemaVersion = 1; references = @($mixedEntryEntries.ToArray()) })
+        & $assertReferenceRejected $mixedEntryReferencePath 'mixed-entry-reference'
+
+        $unknownEntryEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $record = [ordered]@{
+                logicalId = [string]$entry.logicalId
+                originalPath = [string]$entry.originalPath
+                copiedEvidencePath = [string]$entry.copiedEvidencePath
+                byteLength = [int64]$entry.byteLength
+                sha256 = [string]$entry.sha256
+            }
+            if ([string]$entry.logicalId -ceq 'game-bright') { $record['unexpected'] = 'rejected' }
+            $unknownEntryEntries.Add($record) | Out-Null
+        }
+        $unknownEntryReferencePath = Join-Path $root 'ReferenceManifest.unknown-entry.json'
+        Write-HarnessJson $unknownEntryReferencePath ([ordered]@{ schemaVersion = 1; references = @($unknownEntryEntries.ToArray()) })
+        & $assertReferenceRejected $unknownEntryReferencePath 'unknown-entry-reference'
+
+        $duplicateReferencePath = Join-Path $root 'ReferenceManifest.duplicate.json'
+        $canonicalReferenceJson = [IO.File]::ReadAllText($referencePath)
+        $duplicateReferenceJson = [Regex]::Replace($canonicalReferenceJson, '("logicalId"\s*:\s*"game-bright"\s*,)', '$1"logicalId": "game-bright",', 1)
+        if ($duplicateReferenceJson -ceq $canonicalReferenceJson) { throw 'duplicate reference test could not create a duplicate property' }
+        [IO.File]::WriteAllText($duplicateReferencePath, $duplicateReferenceJson, (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $duplicateReferencePath 'duplicate-reference'
 
         $crossWeaponVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
         $crossWeaponPredicate = @($crossWeaponVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'high.sunward.readable' })[0]
@@ -1511,7 +1580,7 @@ function Test-WeaponVisualVerdictBehavior {
         Write-HarnessJson $invalidPath $invalidVerdict
         $red = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $invalidPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'invalid-result.json'))
         if ($red.exitCode -eq 0) { return New-HarnessFail 'invalid verdict unexpectedly passed behavioral validator' }
-        return New-HarnessPass 'green verdict accepted and invalid overallPass was rejected'
+        return New-HarnessPass 'canonical verdict accepted; legacy/mixed/unknown/duplicate reference schemas and invalid overallPass rejected'
     } catch {
         return New-HarnessFail ('verdict behavioral validation failed: ' + $_.Exception.Message)
     } finally {

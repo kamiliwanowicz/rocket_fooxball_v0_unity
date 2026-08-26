@@ -34,34 +34,201 @@ function Resolve-EvidencePath {
     return [IO.Path]::GetFullPath((Join-Path $BaseDirectory ($Value.Replace('/', '\'))))
 }
 
+function Skip-ReferenceJsonWhitespace {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    while ($Index.Value -lt $Json.Length) {
+        $character = $Json[$Index.Value]
+        if ($character -cne ' ' -and $character -cne "`t" -and $character -cne "`r" -and $character -cne "`n") { break }
+        $Index.Value = $Index.Value + 1
+    }
+}
+
+function Read-ReferenceJsonString {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    if ($Index.Value -ge $Json.Length -or $Json[$Index.Value] -cne '"') { throw 'Reference manifest JSON string expected.' }
+    $Index.Value = $Index.Value + 1
+    $builder = New-Object Text.StringBuilder
+    while ($Index.Value -lt $Json.Length) {
+        $character = $Json[$Index.Value]
+        if ($character -ceq '"') {
+            $Index.Value = $Index.Value + 1
+            return $builder.ToString()
+        }
+        if ([int][char]$character -lt 0x20) { throw 'Reference manifest JSON string contains an unescaped control character.' }
+        if ($character -ceq '\') {
+            $Index.Value = $Index.Value + 1
+            if ($Index.Value -ge $Json.Length) { throw 'Reference manifest JSON escape is incomplete.' }
+            $escape = $Json[$Index.Value]
+            switch ([string]$escape) {
+                '"' { [void]$builder.Append('"') }
+                '\' { [void]$builder.Append('\') }
+                '/' { [void]$builder.Append('/') }
+                'b' { [void]$builder.Append([char]8) }
+                'f' { [void]$builder.Append([char]12) }
+                'n' { [void]$builder.Append([char]10) }
+                'r' { [void]$builder.Append([char]13) }
+                't' { [void]$builder.Append([char]9) }
+                'u' {
+                    if ($Index.Value + 4 -ge $Json.Length) { throw 'Reference manifest JSON unicode escape is incomplete.' }
+                    $hex = $Json.Substring($Index.Value + 1, 4)
+                    if ($hex -notmatch '^[0-9a-fA-F]{4}$') { throw 'Reference manifest JSON unicode escape is invalid.' }
+                    [void]$builder.Append([char]([Convert]::ToInt32($hex, 16)))
+                    $Index.Value = $Index.Value + 4
+                }
+                default { throw ('Reference manifest JSON escape is invalid: \' + [string]$escape) }
+            }
+        } else {
+            [void]$builder.Append($character)
+        }
+        $Index.Value = $Index.Value + 1
+    }
+    throw 'Reference manifest JSON string is unterminated.'
+}
+
+function Read-ReferenceJsonNumber {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    $match = [regex]::Match($Json.Substring($Index.Value), '^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?')
+    if (-not $match.Success) { throw 'Reference manifest JSON number is invalid.' }
+    $Index.Value = $Index.Value + $match.Length
+}
+
+function Read-ReferenceJsonLiteral {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    foreach ($literal in @('true', 'false', 'null')) {
+        if ($Index.Value + $literal.Length -le $Json.Length -and
+            $Json.Substring($Index.Value, $literal.Length).Equals($literal, [StringComparison]::Ordinal)) {
+            $Index.Value = $Index.Value + $literal.Length
+            return
+        }
+    }
+    throw 'Reference manifest JSON literal is invalid.'
+}
+
+function Read-ReferenceJsonValue {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    Skip-ReferenceJsonWhitespace $Json $Index
+    if ($Index.Value -ge $Json.Length) { throw 'Reference manifest JSON value is missing.' }
+    $character = $Json[$Index.Value]
+    if ($character -ceq '"') { [void](Read-ReferenceJsonString $Json $Index); return }
+    if ($character -ceq '{') { Read-ReferenceJsonObject $Json $Index; return }
+    if ($character -ceq '[') { Read-ReferenceJsonArray $Json $Index; return }
+    if ($character -ceq 't' -or $character -ceq 'f' -or $character -ceq 'n') { Read-ReferenceJsonLiteral $Json $Index; return }
+    if ($character -ceq '-' -or ($character -ge '0' -and $character -le '9')) { Read-ReferenceJsonNumber $Json $Index; return }
+    throw ('Reference manifest JSON value is invalid at offset ' + $Index.Value + '.')
+}
+
+function Read-ReferenceJsonArray {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    if ($Json[$Index.Value] -cne '[') { throw 'Reference manifest JSON array expected.' }
+    $Index.Value = $Index.Value + 1
+    Skip-ReferenceJsonWhitespace $Json $Index
+    if ($Index.Value -lt $Json.Length -and $Json[$Index.Value] -ceq ']') { $Index.Value = $Index.Value + 1; return }
+    while ($true) {
+        Read-ReferenceJsonValue $Json $Index
+        Skip-ReferenceJsonWhitespace $Json $Index
+        if ($Index.Value -ge $Json.Length) { throw 'Reference manifest JSON array is unterminated.' }
+        if ($Json[$Index.Value] -ceq ']') { $Index.Value = $Index.Value + 1; return }
+        if ($Json[$Index.Value] -cne ',') { throw 'Reference manifest JSON array separator is missing.' }
+        $Index.Value = $Index.Value + 1
+        Skip-ReferenceJsonWhitespace $Json $Index
+    }
+}
+
+function Read-ReferenceJsonObject {
+    param([Parameter(Mandatory = $true)][string]$Json, [Parameter(Mandatory = $true)][ref]$Index)
+    if ($Json[$Index.Value] -cne '{') { throw 'Reference manifest JSON object expected.' }
+    $Index.Value = $Index.Value + 1
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    Skip-ReferenceJsonWhitespace $Json $Index
+    if ($Index.Value -lt $Json.Length -and $Json[$Index.Value] -ceq '}') { $Index.Value = $Index.Value + 1; return }
+    while ($true) {
+        $name = Read-ReferenceJsonString $Json $Index
+        if (-not $seen.Add($name)) { throw ('Reference manifest JSON object contains duplicate property: ' + $name) }
+        Skip-ReferenceJsonWhitespace $Json $Index
+        if ($Index.Value -ge $Json.Length -or $Json[$Index.Value] -cne ':') { throw 'Reference manifest JSON object separator is missing.' }
+        $Index.Value = $Index.Value + 1
+        Read-ReferenceJsonValue $Json $Index
+        Skip-ReferenceJsonWhitespace $Json $Index
+        if ($Index.Value -ge $Json.Length) { throw 'Reference manifest JSON object is unterminated.' }
+        if ($Json[$Index.Value] -ceq '}') { $Index.Value = $Index.Value + 1; return }
+        if ($Json[$Index.Value] -cne ',') { throw 'Reference manifest JSON object separator is missing.' }
+        $Index.Value = $Index.Value + 1
+        Skip-ReferenceJsonWhitespace $Json $Index
+    }
+}
+
+function Assert-UniqueReferenceJsonProperties {
+    param([Parameter(Mandatory = $true)][string]$Json)
+    $index = 0
+    Read-ReferenceJsonValue $Json ([ref]$index)
+    Skip-ReferenceJsonWhitespace $Json ([ref]$index)
+    if ($index -ne $Json.Length) { throw ('Reference manifest JSON has trailing data at offset ' + $index + '.') }
+}
+
+function Assert-ExactJsonProperties {
+    param(
+        [Parameter(Mandatory = $true)]$Object,
+        [Parameter(Mandatory = $true)][string[]]$Expected,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if ($null -eq $Object -or $Object -is [string] -or $Object -is [ValueType]) { throw ($Label + ' must be a JSON object.') }
+    $actual = @($Object.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    if ($actual.Count -ne $Expected.Count -or
+        @($actual | Where-Object { $Expected -cnotcontains $_ }).Count -gt 0 -or
+        @($Expected | Where-Object { $actual -cnotcontains $_ }).Count -gt 0) {
+        throw ($Label + ' has unexpected fields; expected exactly: ' + ($Expected -join ', '))
+    }
+}
+
+function Test-ReferenceJsonInteger {
+    param([AllowNull()]$Value)
+    return ($Value -is [byte] -or $Value -is [sbyte] -or $Value -is [int16] -or $Value -is [uint16] -or
+        $Value -is [int32] -or $Value -is [uint32] -or $Value -is [int64] -or $Value -is [uint64])
+}
+
 function Read-ReferenceHashes {
     param([Parameter(Mandatory = $true)][string]$Path)
     $full = [IO.Path]::GetFullPath($Path)
     if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { throw ('Reference manifest missing: ' + $full) }
     $manifestHash = Get-Hash $full
-    try { $manifest = Get-Content -Raw -LiteralPath $full | ConvertFrom-Json -ErrorAction Stop } catch { throw ('Reference manifest JSON is invalid: ' + $_.Exception.Message) }
-    if ([int](Get-Property $manifest 'schemaVersion') -ne 1) { throw 'Reference manifest schemaVersion must equal 1.' }
-    $arrays = New-Object System.Collections.Generic.List[object]
-    foreach ($name in @('entries', 'references', 'items')) {
-        $value = Get-Property $manifest $name
-        if ($null -ne $value) { $arrays.Add($value) | Out-Null }
-    }
-    if ($arrays.Count -ne 1 -or @($arrays[0]).Count -ne 3) { throw 'Reference manifest must contain exactly three entries.' }
+    $raw = [IO.File]::ReadAllText($full)
+    try { Assert-UniqueReferenceJsonProperties $raw } catch { throw ('Reference manifest JSON structure is invalid: ' + $_.Exception.Message) }
+    try { $manifest = $raw | ConvertFrom-Json -ErrorAction Stop } catch { throw ('Reference manifest JSON is invalid: ' + $_.Exception.Message) }
+    Assert-ExactJsonProperties $manifest @('schemaVersion', 'references') 'Reference manifest'
+    $schemaVersion = Get-Property $manifest 'schemaVersion'
+    if (-not (Test-ReferenceJsonInteger $schemaVersion) -or [int64]$schemaVersion -ne 1) { throw 'Reference manifest schemaVersion must equal 1.' }
+    $references = Get-Property $manifest 'references'
+    if ($null -eq $references -or $references -isnot [Array]) { throw 'Reference manifest references must be an array.' }
+    $entries = @($references)
+    if ($entries.Count -ne 3) { throw 'Reference manifest must contain exactly three schema-1 references.' }
     $expectedIds = @('game-bright', 'game-dark', 'quake-hires')
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
     $result = [ordered]@{}
-    foreach ($entry in @($arrays[0])) {
-        $id = [string](Get-Property $entry 'id')
-        $bytes = [int64](Get-Property $entry 'bytes')
-        $sha = [string](Get-Property $entry 'sha256').ToLowerInvariant()
-        if ($expectedIds -notcontains $id -or $result.Contains($id) -or $bytes -le 0 -or $sha -notmatch '^[0-9a-f]{64}$') { throw ('Reference manifest entry is invalid: ' + $id) }
-        $original = [string](Get-Property $entry 'originalPath')
-        $evidence = [string](Get-Property $entry 'evidencePath')
-        if ([string]::IsNullOrWhiteSpace($original) -or [string]::IsNullOrWhiteSpace($evidence)) { throw ('Reference manifest paths missing: ' + $id) }
+    foreach ($entry in $entries) {
+        Assert-ExactJsonProperties $entry @('logicalId', 'originalPath', 'copiedEvidencePath', 'byteLength', 'sha256') 'Reference manifest reference'
+        $idValue = Get-Property $entry 'logicalId'
+        $id = if ($idValue -is [string]) { $idValue } else { [string]$idValue }
+        if ($idValue -isnot [string] -or -not ($expectedIds -ccontains $id) -or -not $seen.Add($id)) { throw ('Reference manifest logicalId is invalid or duplicated: ' + $id) }
+        $originalValue = Get-Property $entry 'originalPath'
+        $evidenceValue = Get-Property $entry 'copiedEvidencePath'
+        $bytesValue = Get-Property $entry 'byteLength'
+        $shaValue = Get-Property $entry 'sha256'
+        if ($originalValue -isnot [string] -or $evidenceValue -isnot [string] -or
+            [string]::IsNullOrWhiteSpace($originalValue) -or [string]::IsNullOrWhiteSpace($evidenceValue) -or
+            -not (Test-ReferenceJsonInteger $bytesValue) -or [int64]$bytesValue -le 0 -or
+            $shaValue -isnot [string] -or $shaValue -notmatch '^[0-9a-fA-F]{64}$') {
+            throw ('Reference manifest reference is incomplete: ' + $id)
+        }
+        $bytes = [int64]$bytesValue
+        $sha = $shaValue.ToLowerInvariant()
+        $original = $originalValue
+        $evidence = $evidenceValue
         foreach ($file in @(
             [ordered]@{ label = 'originalPath'; path = Resolve-EvidencePath $original (Split-Path -Parent $full) },
-            [ordered]@{ label = 'evidencePath'; path = Resolve-EvidencePath $evidence (Split-Path -Parent $full) }
+            [ordered]@{ label = 'copiedEvidencePath'; path = Resolve-EvidencePath $evidence (Split-Path -Parent $full) }
         )) {
-            if (-not (Test-Path -LiteralPath $file.path -PathType Leaf) -or (Get-Item -LiteralPath $file.path).Length -ne $bytes -or (Get-Hash $file.path) -ne $sha) {
+            if (-not (Test-Path -LiteralPath $file.path -PathType Leaf)) { throw ('Reference ' + $id + ' ' + $file.label + ' is missing.') }
+            if ((Get-Item -LiteralPath $file.path).Length -ne $bytes -or (Get-Hash $file.path) -ne $sha) {
                 throw ('Reference ' + $id + ' ' + $file.label + ' hash mismatch.')
             }
         }
