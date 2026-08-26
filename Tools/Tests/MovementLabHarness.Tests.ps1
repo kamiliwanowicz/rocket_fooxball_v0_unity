@@ -687,10 +687,30 @@ function Test-WeaponCaptureContract {
         'private static void RunReferenceManifestStructureSelfTests',
         'private static void AssertReferenceManifestStructureRejected',
         'new StrictReferenceManifestJsonReader(json).ReadManifest()',
-        'mixed root alias', 'mixed entry alias', 'unknown property', 'duplicate property'
+        'mixed root alias', 'mixed entry alias', 'unknown property', 'duplicate property',
+        'var prettyPrinted', 'ValidateReferenceManifestStructure(prettyPrinted)',
+        'var reordered', 'ValidateReferenceManifestStructure(reordered)'
     )) {
         if ($facade.IndexOf($strictMarker, [StringComparison]::Ordinal) -lt 0) {
             return New-HarnessFail ('C# strict reference boundary omitted executable self-test marker: ' + $strictMarker)
+        }
+    }
+    $readerStart = $facade.IndexOf('private sealed class StrictReferenceManifestJsonReader', [StringComparison]::Ordinal)
+    if ($readerStart -lt 0) { return New-HarnessFail 'C# strict reference reader boundary is missing' }
+    $reader = $facade.Substring($readerStart)
+    foreach ($entryPoint in @(
+        'private void ReadReferenceEntries()', 'private void ReadReferenceEntry()',
+        'private void ReadValue()', 'private void ReadObjectValue()', 'private void ReadArrayValue()',
+        'private string ReadString()', 'private void ReadNumber()', 'private void ReadLiteral(string literal)',
+        'private void BeginContainer(char opening)'
+    )) {
+        $entryStart = $reader.IndexOf($entryPoint, [StringComparison]::Ordinal)
+        if ($entryStart -lt 0) { return New-HarnessFail ('C# strict reference reader entry point is missing: ' + $entryPoint) }
+        $nextMethod = $reader.IndexOf('private ', $entryStart + $entryPoint.Length, [StringComparison]::Ordinal)
+        if ($nextMethod -lt 0) { $nextMethod = $reader.Length }
+        $entryText = $reader.Substring($entryStart, $nextMethod - $entryStart)
+        if ($entryText.IndexOf('SkipWhitespace();', [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# strict reference reader entry point does not skip JSON whitespace: ' + $entryPoint)
         }
     }
     $strictCall = $facade.IndexOf('ValidateReferenceManifestStructure(manifestJson)', [StringComparison]::Ordinal)

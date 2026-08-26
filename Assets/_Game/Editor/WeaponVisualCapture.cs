@@ -578,6 +578,14 @@ namespace RocketFooxball.Editor
         {
             var canonical = "{\"references\":[{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"byteLength\":1,\"copiedEvidencePath\":\"e\\\\vidence\",\"originalPath\":\"o\",\"logicalId\":\"game-bright\"}],\"\\u0073chemaVersion\":1}";
             ValidateReferenceManifestStructure(canonical);
+            var prettyPrinted = canonical
+                .Replace("{\"", "{\r\n\t\"")
+                .Replace("\":", "\": \r\n\t")
+                .Replace(",", ",\r\n\t")
+                .Replace("}", "\r\n}");
+            ValidateReferenceManifestStructure(prettyPrinted);
+            var reordered = "{\"\\u0073chemaVersion\":1,\"references\":[{\"logicalId\":\"game-bright\",\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"originalPath\":\"o\",\"byteLength\":1,\"copiedEvidencePath\":\"e\\\\vidence\"}]}";
+            ValidateReferenceManifestStructure(reordered);
             AssertReferenceManifestStructureRejected(
                 canonical.Replace(",\"\\u0073chemaVersion\":1}", ",\"entries\":[],\"\\u0073chemaVersion\":1}"),
                 "mixed root alias");
@@ -672,6 +680,7 @@ namespace RocketFooxball.Editor
 
             private void ReadReferenceEntries()
             {
+                SkipWhitespace();
                 BeginContainer('[');
                 var count = 0;
                 try
@@ -703,6 +712,7 @@ namespace RocketFooxball.Editor
 
             private void ReadReferenceEntry()
             {
+                SkipWhitespace();
                 BeginContainer('{');
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 try
@@ -787,6 +797,7 @@ namespace RocketFooxball.Editor
 
             private void ReadObjectValue()
             {
+                SkipWhitespace();
                 BeginContainer('{');
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 try
@@ -821,6 +832,7 @@ namespace RocketFooxball.Editor
 
             private void ReadArrayValue()
             {
+                SkipWhitespace();
                 BeginContainer('[');
                 try
                 {
@@ -848,6 +860,7 @@ namespace RocketFooxball.Editor
 
             private string ReadString()
             {
+                SkipWhitespace();
                 Expect('"');
                 var builder = new StringBuilder();
                 while (offset < json.Length)
@@ -895,6 +908,7 @@ namespace RocketFooxball.Editor
 
             private void ReadNumber()
             {
+                SkipWhitespace();
                 if (Consume('-') && !IsDigit(Peek())) throw Error("invalid JSON number");
                 if (Consume('0'))
                 {
@@ -921,6 +935,7 @@ namespace RocketFooxball.Editor
 
             private void ReadLiteral(string literal)
             {
+                SkipWhitespace();
                 if (offset + literal.Length > json.Length || !string.Equals(json.Substring(offset, literal.Length), literal, StringComparison.Ordinal))
                     throw Error("invalid JSON literal");
                 offset += literal.Length;
@@ -928,6 +943,7 @@ namespace RocketFooxball.Editor
 
             private void BeginContainer(char opening)
             {
+                SkipWhitespace();
                 Expect(opening);
                 depth++;
                 if (depth > MaxReferenceManifestJsonDepth)
