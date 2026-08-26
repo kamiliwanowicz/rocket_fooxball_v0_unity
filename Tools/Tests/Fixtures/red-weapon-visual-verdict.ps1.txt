@@ -2,6 +2,17 @@
 # This fixture intentionally omits source/reference/capture hash binding and
 # the exact sixteen-predicate reduction.
 param([string]$VerdictPath)
+
+# Historical resolver searched both captures, so a Rocket predicate could cite
+# a Shotgun image. The green validator must bind lookup to the predicate's weapon.
+function Get-EvidenceImageRecord {
+    param($Value, $CaptureSet)
+    foreach ($capture in @($CaptureSet.Rocket, $CaptureSet.Shotgun)) {
+        if ($capture.images.Contains([string]$Value)) { return $capture.images[[string]$Value] }
+    }
+    throw 'Historical red resolver could not find evidence image.'
+}
+
 $verdict = Get-Content -Raw -LiteralPath $VerdictPath | ConvertFrom-Json
 if (-not $verdict.overallPass) { throw 'Historical red weapon verdict fixture intentionally rejects invalid overallPass.' }
 Write-Error 'Historical red weapon verdict fixture does not validate the required evidence contract.'

@@ -306,11 +306,12 @@ function Acquire-ProjectLease {
             if ($null -ne $owner -and $owner.StartTime.ToUniversalTime().ToString('O') -eq [string]$existing.ownerProcessStartUtc) {
                 throw ('Project lease is held by live PID ' + $existing.ownerPid + ': ' + $script:CanonicalProjectRoot)
             }
-            # Re-read before removing a stale record so a contender that won the
-            # race cannot be mistaken for the dead owner we inspected above.
-            $latest = Read-LeaseRecord $script:LeasePath
-            if ([string]$latest.leaseToken -ne [string]$existing.leaseToken) { continue }
-            Remove-Item -LiteralPath $script:LeasePath -Force -ErrorAction Stop
+            # Stale recovery is deliberately fail-closed. A read/re-read/delete
+            # sequence cannot atomically bind deletion to the stale token: a
+            # contender may acquire the path between those operations, leaving
+            # this process able to delete another owner's lease. Recovery must
+            # therefore be an explicit operator action after verifying the owner.
+            throw ('Project lease is stale; refusing automatic recovery: ' + $script:LeasePath)
         }
     }
     throw ('Unable to acquire canonical project lease: ' + $script:LeasePath)

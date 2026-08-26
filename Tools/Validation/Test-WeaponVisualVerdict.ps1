@@ -91,7 +91,14 @@ function Read-CaptureManifest {
         $actual = Get-Hash $imagePath
         if ($actual -ne $declared) { throw ('Capture image hash mismatch: ' + $imagePath) }
         if ($map.Contains($imagePath) -or $map.Contains($filename)) { throw ('Capture image key duplicated: ' + $filename) }
-        $record = [pscustomobject]@{ filename = $filename; path = $imagePath; sha256 = $actual }
+        $record = [pscustomobject]@{
+            filename = $filename
+            path = $imagePath
+            sha256 = $actual
+            captureWeapon = $ExpectedWeapon
+            view = [string](Get-Property $item 'view')
+            qualityLevel = [string](Get-Property $item 'qualityLevel')
+        }
         $map[$imagePath] = $record
         $map[$filename] = $record
     }
@@ -169,23 +176,58 @@ function Read-ReferenceHashRecords {
 }
 
 function Get-EvidenceImageRecord {
-    param([Parameter(Mandatory = $true)]$Value, [Parameter(Mandatory = $true)]$CaptureSet, [Parameter(Mandatory = $true)][string]$BaseDirectory)
+    param(
+        [Parameter(Mandatory = $true)]$Value,
+        [Parameter(Mandatory = $true)]$CaptureSet,
+        [Parameter(Mandatory = $true)][string]$BaseDirectory,
+        [Parameter(Mandatory = $true)][ValidateSet('Rocket', 'Shotgun')][string]$ExpectedWeapon,
+        [string]$ExpectedView = '',
+        [string]$ExpectedQuality = ''
+    )
     $pathText = if ($Value -is [string]) { [string]$Value } else { [string](Get-Property $Value 'path') }
     if ([string]::IsNullOrWhiteSpace($pathText) -and $Value -isnot [string]) { $pathText = [string](Get-Property $Value 'imagePath') }
     if ([string]::IsNullOrWhiteSpace($pathText)) { throw 'Verdict evidenceImages item has no path.' }
     $path = Resolve-EvidencePath $pathText $BaseDirectory
     $declared = if ($Value -is [string]) { '' } else { [string](Get-Property $Value 'sha256') }
     if ([string]::IsNullOrWhiteSpace($declared) -and $Value -isnot [string]) { $declared = [string](Get-Property $Value 'hash') }
+    $capture = Get-Property $CaptureSet $ExpectedWeapon
+    if ($null -eq $capture) { throw ('Verdict capture set has no ' + $ExpectedWeapon + ' manifest.') }
     $record = $null
-    foreach ($capture in @($CaptureSet.Rocket, $CaptureSet.Shotgun)) {
-        if ($capture.images.Contains($path)) { $record = $capture.images[$path]; break }
+    if ($capture.images.Contains($path)) {
+        $record = $capture.images[$path]
+    } else {
         $name = [IO.Path]::GetFileName($path)
-        if ($capture.images.Contains($name)) { $record = $capture.images[$name]; break }
+        # Filename-only references are supported, but a path carrying a
+        # directory must resolve to that exact weapon capture path. This keeps
+        # a Shotgun image from satisfying a Rocket predicate by basename.
+        if ([string]::IsNullOrWhiteSpace([IO.Path]::GetDirectoryName($pathText)) -and $capture.images.Contains($name)) {
+            $record = $capture.images[$name]
+        }
     }
-    if ($null -eq $record) { throw ('Verdict evidence image is not one of the current capture images: ' + $path) }
+    if ($null -eq $record) { throw ('Verdict evidence image is not one of the current ' + $ExpectedWeapon + ' capture images: ' + $path) }
+    if ([string](Get-Property $record 'captureWeapon') -ne '' -and [string](Get-Property $record 'captureWeapon') -cne $ExpectedWeapon) {
+        throw ('Verdict evidence image weapon mismatch: expected ' + $ExpectedWeapon + ': ' + $path)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedView) -and [string](Get-Property $record 'view') -cne $ExpectedView) {
+        throw ('Verdict evidence image orientation mismatch: expected ' + $ExpectedView + ' for ' + $ExpectedWeapon + ': ' + $path)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ExpectedQuality) -and [string](Get-Property $record 'qualityLevel') -cne $ExpectedQuality) {
+        throw ('Verdict evidence image quality mismatch: expected ' + $ExpectedQuality + ' for ' + $ExpectedWeapon + ': ' + $path)
+    }
     $actual = Get-Hash $record.path
     if (-not [string]::IsNullOrWhiteSpace($declared) -and $declared.ToLowerInvariant() -ne $actual) { throw ('Verdict evidence image hash mismatch: ' + $path) }
     return [ordered]@{ path = $record.path; sha256 = $actual }
+}
+
+function Get-PredicateImageRequirement {
+    param([Parameter(Mandatory = $true)][string]$Id)
+    switch ($Id) {
+        'high.sunward.readable' { return [pscustomobject]@{ view = 'sunward'; qualityLevel = 'High' } }
+        'high.crosslight.readable' { return [pscustomobject]@{ view = 'crosslight'; qualityLevel = 'High' } }
+        'high.awaylight.readable' { return [pscustomobject]@{ view = 'awaylight'; qualityLevel = 'High' } }
+        'low-material-hierarchy' { return [pscustomobject]@{ view = ''; qualityLevel = 'Low' } }
+        default { return [pscustomobject]@{ view = ''; qualityLevel = '' } }
+    }
 }
 
 function Write-ImmutableJson {
@@ -248,7 +290,10 @@ for ($index = 0; $index -lt $predicates.Count; $index++) {
     $evidence = @(Get-Property $predicate 'evidenceImages')
     if ($evidence.Count -eq 0) { $evidence = @(Get-Property $predicate 'evidence') }
     if ($evidence.Count -eq 0) { throw ('Verdict predicate has no evidence images: ' + $key) }
-    foreach ($image in $evidence) { $evidenceRecords.Add((Get-EvidenceImageRecord $image $captureSet (Split-Path -Parent $verdictFullPath))) | Out-Null }
+    $requirement = Get-PredicateImageRequirement $id
+    foreach ($image in $evidence) {
+        $evidenceRecords.Add((Get-EvidenceImageRecord $image $captureSet (Split-Path -Parent $verdictFullPath) $weapon $requirement.view $requirement.qualityLevel)) | Out-Null
+    }
 }
 foreach ($weapon in @('Rocket', 'Shotgun')) {
     foreach ($id in $expectedPredicateIds) { if (-not $seen.ContainsKey($weapon + '|' + $id)) { throw ('Verdict predicate set missing: ' + $weapon + '|' + $id) } }

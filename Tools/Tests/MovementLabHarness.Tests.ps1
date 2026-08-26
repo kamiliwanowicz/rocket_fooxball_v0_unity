@@ -613,6 +613,30 @@ function Test-WeaponCaptureContract {
     $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
     if ($missing.Count -eq 0) { return New-HarnessFail 'weapon capture red fixture unexpectedly contains every guarded contract marker' }
     if ($combined.IndexOf('BrightArenaVisualCapture', [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'weapon capture must remain independent of BrightArena capture' }
+    $workflowSource = [IO.File]::ReadAllText($State.WorkflowPath)
+    $redWorkflowPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
+    $redWorkflowSource = [IO.File]::ReadAllText($redWorkflowPath)
+    foreach ($leaseSource in @(
+        [pscustomobject]@{ Name = 'capture'; Text = $source },
+        [pscustomobject]@{ Name = 'workflow'; Text = $workflowSource }
+    )) {
+        $leaseAst = Get-HarnessFunctionAst $leaseSource.Text 'Acquire-ProjectLease'
+        if ($leaseAst.Extent.Text -match '(?im)Remove-Item\s+-LiteralPath\s+\$script:LeasePath') {
+            return New-HarnessFail ($leaseSource.Name + ' stale lease recovery still deletes the shared path')
+        }
+        if ($leaseAst.Extent.Text -notmatch '(?i)refusing automatic recovery') {
+            return New-HarnessFail ($leaseSource.Name + ' stale lease recovery is not fail-closed')
+        }
+    }
+    foreach ($redLease in @(
+        [pscustomobject]@{ Name = 'capture'; Text = $red },
+        [pscustomobject]@{ Name = 'workflow'; Text = $redWorkflowSource }
+    )) {
+        $redLeaseAst = Get-HarnessFunctionAst $redLease.Text 'Acquire-ProjectLease'
+        if ($redLeaseAst.Extent.Text -notmatch '(?im)Remove-Item\s+-LiteralPath\s+\$script:LeasePath') {
+            return New-HarnessFail ($redLease.Name + ' red lease fixture no longer retains unsafe stale deletion')
+        }
+    }
     return New-HarnessPass ('weapon CLI/render/pose/control/hash contract guarded; red fixture fails at ' + $missing[0])
 }
 
@@ -631,6 +655,129 @@ function New-HarnessPngHeader {
     $bytes[20] = [byte]0; $bytes[21] = [byte]0; $bytes[22] = [byte]4; $bytes[23] = [byte]56
     $bytes[4] = [byte]($Marker -band 0xff)
     [IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+function Get-HarnessStringSha256 {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)))).Replace('-', '').ToLowerInvariant()
+    } finally { $sha.Dispose() }
+}
+
+function Test-ProjectLeaseContentionBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('project-lease-contention-' + [Guid]::NewGuid().ToString('N'))
+    $shimPath = Join-Path $State.ProjectRoot 'Tools\Tests\HarnessShim.psm1'
+    $probeScript = Join-Path $root 'lease-contender.ps1'
+    $probeSource = @'
+param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$ShimPath,
+    [Parameter(Mandatory = $true)][string]$ProjectPath,
+    [Parameter(Mandatory = $true)][string]$GitCommonPath,
+    [Parameter(Mandatory = $true)][ValidateSet('Capture', 'Workflow')][string]$LeaseOwner
+)
+
+$ErrorActionPreference = 'Stop'
+Import-Module -Name $ShimPath -Force
+$functionNames = @('Acquire-ProjectLease', 'Read-LeaseRecord', 'Get-CanonicalPath', 'Get-FullPath', 'Get-StringSha256', 'Get-CurrentProcessStartUtc')
+if ($LeaseOwner -eq 'Capture') { $functionNames += 'Assert-LeasePath' }
+$module = Import-HarnessFunctions -Source $Source -FunctionNames $functionNames
+& $module {
+    param([string]$Project, [string]$GitCommon)
+    $script:ProjectRoot = $Project
+    $script:GitCommonRoot = $GitCommon
+    try {
+        Acquire-ProjectLease | Out-Null
+        Write-Output 'ACQUIRED'
+        $script:ProbeExitCode = 11
+    } catch {
+        Write-Output ('REJECTED ' + $_.Exception.Message)
+        $script:ProbeExitCode = 0
+    }
+} $ProjectPath $GitCommonPath
+exit [int](& $module { return $script:ProbeExitCode })
+'@
+    try {
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        [IO.File]::WriteAllText($probeScript, $probeSource, (New-Object Text.UTF8Encoding($false)))
+        $processStartUtc = (Get-Process -Id $PID -ErrorAction Stop).StartTime.ToUniversalTime().ToString('O')
+        foreach ($sourceInfo in @(
+            [pscustomobject]@{ Name = 'Capture'; Path = $State.CapturePath },
+            [pscustomobject]@{ Name = 'Workflow'; Path = $State.WorkflowPath }
+        )) {
+            $caseRoot = Join-Path $root $sourceInfo.Name
+            $leaseRoot = Join-Path $caseRoot 'common\movement-lab-proof\leases'
+            New-Item -ItemType Directory -Force -Path $leaseRoot | Out-Null
+            $canonicalProject = [IO.Path]::GetFullPath((Join-Path $caseRoot 'project')).TrimEnd('\')
+            New-Item -ItemType Directory -Force -Path $canonicalProject | Out-Null
+            $leaseName = Get-HarnessStringSha256 $canonicalProject
+            $leasePath = Join-Path $leaseRoot ($leaseName + '.lease')
+            $staleRecord = [ordered]@{
+                schemaVersion = 1
+                leaseToken = 'a' * 32
+                canonicalProjectRoot = $canonicalProject
+                ownerPid = [int]$PID
+                ownerProcessStartUtc = '2000-01-01T00:00:00.0000000Z'
+                acquiredUtc = '2000-01-01T00:00:00.0000000Z'
+            }
+            $staleJson = (($staleRecord | ConvertTo-Json -Depth 8) + "`n")
+            [IO.File]::WriteAllText($leasePath, $staleJson, (New-Object Text.UTF8Encoding($false)))
+            $staleHash = (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+            $contenders = New-Object System.Collections.Generic.List[object]
+            for ($index = 0; $index -lt 2; $index++) {
+                $stdout = Join-Path $caseRoot ('stale-' + $index + '.stdout.log')
+                $stderr = Join-Path $caseRoot ('stale-' + $index + '.stderr.log')
+                $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probeScript, '-Source', $sourceInfo.Path, '-ShimPath', $shimPath, '-ProjectPath', $canonicalProject, '-GitCommonPath', (Join-Path $caseRoot 'common'), '-LeaseOwner', $sourceInfo.Name)
+                $contenders.Add((Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru)) | Out-Null
+            }
+            foreach ($contender in @($contenders.ToArray())) { $contender.WaitForExit(); $contender.Refresh() }
+            $staleOutput = New-Object System.Collections.Generic.List[string]
+            for ($index = 0; $index -lt 2; $index++) {
+                $stdoutPath = Join-Path $caseRoot ('stale-' + $index + '.stdout.log')
+                $stderrPath = Join-Path $caseRoot ('stale-' + $index + '.stderr.log')
+                if (Test-Path -LiteralPath $stdoutPath) { $staleOutput.Add((Get-Content -Raw -LiteralPath $stdoutPath)) | Out-Null }
+                if (Test-Path -LiteralPath $stderrPath) { $staleOutput.Add((Get-Content -Raw -LiteralPath $stderrPath)) | Out-Null }
+            }
+            $staleOutputText = $staleOutput -join "`n"
+            if ($staleOutputText -notmatch '(?i)REJECTED .*stale.*refusing automatic recovery') {
+                return New-HarnessFail ($sourceInfo.Name + ' stale contenders did not fail closed: ' + $staleOutputText)
+            }
+            if (-not (Test-Path -LiteralPath $leasePath -PathType Leaf) -or (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $staleHash) {
+                return New-HarnessFail ($sourceInfo.Name + ' stale contender changed the lease record')
+            }
+
+            $liveRecord = [ordered]@{
+                schemaVersion = 1
+                leaseToken = 'b' * 32
+                canonicalProjectRoot = $canonicalProject
+                ownerPid = [int]$PID
+                ownerProcessStartUtc = $processStartUtc
+                acquiredUtc = [DateTime]::UtcNow.ToString('O')
+            }
+            [IO.File]::WriteAllText($leasePath, (($liveRecord | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
+            $liveHash = (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $liveStdout = Join-Path $caseRoot 'live.stdout.log'
+            $liveStderr = Join-Path $caseRoot 'live.stderr.log'
+            $liveArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probeScript, '-Source', $sourceInfo.Path, '-ShimPath', $shimPath, '-ProjectPath', $canonicalProject, '-GitCommonPath', (Join-Path $caseRoot 'common'), '-LeaseOwner', $sourceInfo.Name)
+            $live = Start-Process -FilePath 'powershell.exe' -ArgumentList $liveArgs -WindowStyle Hidden -RedirectStandardOutput $liveStdout -RedirectStandardError $liveStderr -Wait -PassThru
+            $liveOutput = if (Test-Path -LiteralPath $liveStdout) { Get-Content -Raw -LiteralPath $liveStdout } else { '' }
+            if ($liveOutput -notmatch '(?i)REJECTED .*live PID') {
+                $liveError = if (Test-Path -LiteralPath $liveStderr) { Get-Content -Raw -LiteralPath $liveStderr } else { '' }
+                return New-HarnessFail ($sourceInfo.Name + ' live contender did not remain token-bound: ' + $liveOutput + ' ' + $liveError)
+            }
+            if (-not (Test-Path -LiteralPath $leasePath -PathType Leaf) -or (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $liveHash) {
+                return New-HarnessFail ($sourceInfo.Name + ' live contender changed another owner lease')
+            }
+        }
+        return New-HarnessPass 'Capture and workflow stale contenders fail closed; live lease remains owner-bound'
+    } catch {
+        return New-HarnessFail ('project lease contention behavior failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-WeaponCaptureBehavior {
@@ -694,7 +841,11 @@ function Test-WeaponCaptureBehavior {
         $rejected = $false
         try { Invoke-HarnessModuleFunction $module 'Assert-WeaponManifest' @{ Path = $invalidPath; Reference = $reference; ExpectedSha = $sourceSha; ExpectedGeneratedManifestSha = $generatedSha } | Out-Null } catch { $rejected = $true }
         if (-not $rejected) { return New-HarnessFail 'invalid capture manifest unexpectedly passed behavioral validator' }
-        return New-HarnessPass 'green capture manifest accepted; invalid visibility threshold rejected'
+        $leaseResult = Test-ProjectLeaseContentionBehavior $State
+        if (-not [bool](Get-HarnessField $leaseResult 'pass')) {
+            return New-HarnessFail ('project lease contention contract failed: ' + [string](Get-HarnessField $leaseResult 'message'))
+        }
+        return New-HarnessPass 'green capture manifest accepted; invalid visibility threshold rejected; lease contention fails closed'
     } catch {
         return New-HarnessFail ('capture behavioral validation failed: ' + $_.Exception.Message)
     } finally {
@@ -715,13 +866,23 @@ function Test-WeaponVisualVerdictContract {
         'acceptedPriorVerdictHash', 'evidenceImages', 'overallPass', 'schemaVersion', 'sol_high', 'weapon-visual-verifier',
         'high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed',
         'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy',
-        'predicates must contain exactly 16', 'Get-Hash', 'Write-ImmutableJson'
+        'predicates must contain exactly 16', 'Get-Hash', 'Write-ImmutableJson',
+        'ExpectedWeapon', 'ExpectedView', 'ExpectedQuality', 'Get-PredicateImageRequirement',
+        'qualityLevel', 'view', ' capture images', 'weapon mismatch'
     )
     foreach ($needle in $required) {
         if ($source.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon verdict omitted contract: ' + $needle) }
     }
     $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
     if ($missing.Count -eq 0) { return New-HarnessFail 'weapon verdict red fixture unexpectedly contains every guarded contract marker' }
+    $resolver = Get-HarnessFunctionAst $source 'Get-EvidenceImageRecord'
+    if ($resolver.Extent.Text -match '(?im)foreach\s*\(\s*\$capture\s+in\s+@\(\s*\$CaptureSet\.Rocket\s*,\s*\$CaptureSet\.Shotgun\s*\)\s*\)') {
+        return New-HarnessFail 'weapon verdict resolver still searches both capture sets'
+    }
+    $redResolver = Get-HarnessFunctionAst $red 'Get-EvidenceImageRecord'
+    if ($redResolver.Extent.Text -notmatch '(?im)foreach\s*\(\s*\$capture\s+in\s+@\(\s*\$CaptureSet\.Rocket\s*,\s*\$CaptureSet\.Shotgun\s*\)\s*\)') {
+        return New-HarnessFail 'weapon verdict red fixture no longer retains cross-weapon resolver'
+    }
     return New-HarnessPass ('weapon verdict hash/predicate/reduction contract guarded; red fixture fails at ' + $missing[0])
 }
 
@@ -784,9 +945,11 @@ function Test-WeaponVisualVerdictBehavior {
                 $imagePath = Join-Path $captureDirectory $filename
                 [IO.File]::WriteAllBytes($imagePath, [byte[]]([int](10 + $index), [int](20 + $index), [int](30 + $index)))
                 $hash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
-                $items.Add([ordered]@{ filename = $filename; path = $imagePath; sha256 = $hash }) | Out-Null
-                if (-not $captureImageRecords.Contains($weapon)) { $captureImageRecords[$weapon] = $imagePath }
+                $view = if ($index -lt 2) { 'sunward' } elseif ($index -lt 4) { 'crosslight' } else { 'awaylight' }
+                $qualityLevel = if (($index % 2) -eq 0) { 'High' } else { 'Low' }
+                $items.Add([ordered]@{ filename = $filename; path = $imagePath; sha256 = $hash; view = $view; qualityLevel = $qualityLevel }) | Out-Null
             }
+            $captureImageRecords[$weapon] = [pscustomobject]@{ images = @($items.ToArray()) }
             $manifestPath = Join-Path $captureDirectory 'WeaponVisualManifest.json'
             Write-HarnessJson $manifestPath ([ordered]@{ schemaVersion = 1; weaponCaptureWeapon = $weapon; sourceSha = $sourceSha; images = @($items.ToArray()) })
             $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -796,7 +959,14 @@ function Test-WeaponVisualVerdictBehavior {
         $predicates = New-Object System.Collections.Generic.List[object]
         foreach ($weapon in @('Rocket', 'Shotgun')) {
             foreach ($id in @('high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed', 'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy')) {
-                $imagePath = $captureImageRecords[$weapon]
+                $imageIndex = switch ($id) {
+                    'high.sunward.readable' { 0 }
+                    'high.crosslight.readable' { 2 }
+                    'high.awaylight.readable' { 4 }
+                    'low-material-hierarchy' { 1 }
+                    default { 0 }
+                }
+                $imagePath = [string]$captureImageRecords[$weapon].images[$imageIndex].path
                 $imageHash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
                 $predicates.Add([ordered]@{ weapon = $weapon; id = $id; pass = $true; evidenceImages = @([ordered]@{ path = $imagePath; sha256 = $imageHash }) }) | Out-Null
             }
@@ -814,6 +984,36 @@ function Test-WeaponVisualVerdictBehavior {
         $green = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', $greenResultPath)
         if ($green.exitCode -ne 0) { return New-HarnessFail ('green verdict validator exited ' + $green.exitCode + ': ' + (($green.output | ForEach-Object { [string]$_ }) -join ' | ')) }
         if (-not (Test-Path -LiteralPath $greenResultPath -PathType Leaf)) { return New-HarnessFail 'green verdict validator did not write result evidence' }
+
+        $crossWeaponVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $crossWeaponPredicate = @($crossWeaponVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'high.sunward.readable' })[0]
+        $crossWeaponImagePath = [string]$captureImageRecords['Shotgun'].images[0].path
+        $crossWeaponPredicate.evidenceImages[0].path = $crossWeaponImagePath
+        $crossWeaponPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $crossWeaponImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $crossWeaponPath = Join-Path $root 'WeaponVisualVerdict.cross-weapon.json'
+        Write-HarnessJson $crossWeaponPath $crossWeaponVerdict
+        $crossWeapon = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $crossWeaponPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'cross-weapon-result.json'))
+        if ($crossWeapon.exitCode -eq 0) { return New-HarnessFail 'cross-weapon evidence unexpectedly passed behavioral validator' }
+
+        $wrongOrientationVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $wrongOrientationPredicate = @($wrongOrientationVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'high.crosslight.readable' })[0]
+        $wrongOrientationImagePath = [string]$captureImageRecords['Rocket'].images[0].path
+        $wrongOrientationPredicate.evidenceImages[0].path = $wrongOrientationImagePath
+        $wrongOrientationPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $wrongOrientationImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $wrongOrientationPath = Join-Path $root 'WeaponVisualVerdict.wrong-orientation.json'
+        Write-HarnessJson $wrongOrientationPath $wrongOrientationVerdict
+        $wrongOrientation = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $wrongOrientationPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'wrong-orientation-result.json'))
+        if ($wrongOrientation.exitCode -eq 0) { return New-HarnessFail 'wrong-orientation evidence unexpectedly passed behavioral validator' }
+
+        $wrongQualityVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $wrongQualityPredicate = @($wrongQualityVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'low-material-hierarchy' })[0]
+        $wrongQualityImagePath = [string]$captureImageRecords['Rocket'].images[0].path
+        $wrongQualityPredicate.evidenceImages[0].path = $wrongQualityImagePath
+        $wrongQualityPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $wrongQualityImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $wrongQualityPath = Join-Path $root 'WeaponVisualVerdict.wrong-quality.json'
+        Write-HarnessJson $wrongQualityPath $wrongQualityVerdict
+        $wrongQuality = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $wrongQualityPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'wrong-quality-result.json'))
+        if ($wrongQuality.exitCode -eq 0) { return New-HarnessFail 'wrong-quality evidence unexpectedly passed behavioral validator' }
 
         $invalidVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
         $invalidVerdict.overallPass = $false
