@@ -559,6 +559,10 @@ function Test-PlanOnlyPendingOnly {
     if (-not [bool](Get-HarnessField $fastRestoreResult 'pass')) {
         return New-HarnessFail ('fast restore hierarchy contract failed: ' + [string](Get-HarnessField $fastRestoreResult 'message'))
     }
+    $exceptionResult = Test-WeaponCaptureExceptionPreservation $State
+    if (-not [bool](Get-HarnessField $exceptionResult 'pass')) {
+        return New-HarnessFail ('weapon capture exception preservation failed: ' + [string](Get-HarnessField $exceptionResult 'message'))
+    }
     $verdictResult = Test-WeaponVisualVerdictContract $State
     if (-not [bool](Get-HarnessField $verdictResult 'pass')) {
         return New-HarnessFail ('weapon verdict contract failed: ' + [string](Get-HarnessField $verdictResult 'message'))
@@ -938,7 +942,7 @@ function Test-FastRestoreHierarchyContract {
         if ($openIndex -lt 0 -or $guardIndex -lt 0 -or $guardIndex -gt $openIndex) {
             return 'clean scene reopen is not guarded by inactive Fast snapshot'
         }
-        foreach ($marker in @('fastRestoreFailed = true;', 'restoreError = exception;', 'TryRestoreCaptureState(ref restoreError', 'scene reopen skipped')) {
+        foreach ($marker in @('fastRestoreFailed = true;', 'RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);', 'TryRestoreCaptureState(cleanupErrors,', 'scene reopen skipped', 'ThrowCaptureError(primaryError, cleanupErrors);')) {
             if ($finally.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'restore-failure cleanup omitted ' + $marker }
         }
         return $null
@@ -959,6 +963,182 @@ function Test-FastRestoreHierarchyContract {
     $scratchFailure = & $assertContract $fast $reopenScratch
     if ($null -eq $scratchFailure) { return New-HarnessFail 'restore-failure reopen scratch unexpectedly passed' }
     return New-HarnessPass 'persistable scene filtering, bounded deterministic hierarchy deltas, and fail-closed reopen guard are structurally covered'
+}
+
+function Test-WeaponCaptureExceptionPreservation {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $capturePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    if (-not (Test-Path -LiteralPath $capturePath -PathType Leaf)) { return New-HarnessFail 'weapon capture source missing' }
+    $source = [IO.File]::ReadAllText($capturePath)
+
+    foreach ($marker in @(
+        'using System.Runtime.ExceptionServices;',
+        'private sealed class CaptureCleanupError',
+        'ExceptionDispatchInfo primaryError = null;',
+        'primaryError = ExceptionDispatchInfo.Capture(exception);',
+        'RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);',
+        'TryRestoreCaptureState(cleanupErrors,',
+        'LogCaptureCleanupFailures(cleanupErrors, 0);',
+        'LogCaptureCleanupFailures(cleanupErrors, 1);',
+        'primaryError.Throw();',
+        'cleanupErrors[0].DispatchInfo.Throw();',
+        'ThrowCaptureError(primaryError, cleanupErrors);'
+    )) {
+        if ($source.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('exception preservation omitted ' + $marker) }
+    }
+    if ($source.IndexOf('throw restoreError', [StringComparison]::Ordinal) -ge 0) {
+        return New-HarnessFail 'weapon capture still directly throws a cleanup Exception from finally'
+    }
+
+    $captureStart = $source.IndexOf('public static void Capture()', [StringComparison]::Ordinal)
+    $outerCatchStart = $source.IndexOf('catch (Exception exception)', $captureStart + 1, [StringComparison]::Ordinal)
+    $outerFinallyStart = $source.IndexOf('finally', $outerCatchStart + 1, [StringComparison]::Ordinal)
+    $helperStart = $source.IndexOf('private static void RecordCaptureCleanupFailure', $outerFinallyStart + 1, [StringComparison]::Ordinal)
+    if ($captureStart -lt 0 -or $outerCatchStart -le $captureStart -or $outerFinallyStart -le $outerCatchStart -or $helperStart -le $outerFinallyStart) {
+        return New-HarnessFail 'outer capture exception boundaries are missing or out of order'
+    }
+    $outer = $source.Substring($outerCatchStart, $helperStart - $outerCatchStart)
+    if ($outer.IndexOf('primaryError = ExceptionDispatchInfo.Capture(exception);', [StringComparison]::Ordinal) -lt 0 -or
+        $outer.IndexOf('UnityEngine.Debug.LogException(exception);', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'outer capture does not capture and log the primary error exactly at its catch boundary'
+    }
+    $throwIndex = $outer.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal)
+    $reopenIndex = $outer.IndexOf('EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)', [StringComparison]::Ordinal)
+    if ($throwIndex -lt 0 -or $reopenIndex -lt 0 -or $throwIndex -le $reopenIndex) {
+        return New-HarnessFail 'outer capture throws before scene-reopen cleanup completes'
+    }
+
+    $imageStart = $source.IndexOf('private static ImageEvidence CaptureImage(', [StringComparison]::Ordinal)
+    $imageCatchStart = $source.IndexOf('catch (Exception exception)', $imageStart + 1, [StringComparison]::Ordinal)
+    $imageFinallyStart = $source.IndexOf('finally', $imageCatchStart + 1, [StringComparison]::Ordinal)
+    $imageEnd = $source.IndexOf('private static Color32[] ReadPixels', $imageFinallyStart + 1, [StringComparison]::Ordinal)
+    if ($imageStart -lt 0 -or $imageCatchStart -le $imageStart -or $imageFinallyStart -le $imageCatchStart -or $imageEnd -le $imageFinallyStart) {
+        return New-HarnessFail 'CaptureImage exception boundaries are missing or out of order'
+    }
+    $image = $source.Substring($imageStart, $imageEnd - $imageStart)
+    if ($image.IndexOf('primaryError = ExceptionDispatchInfo.Capture(exception);', [StringComparison]::Ordinal) -lt 0 -or
+        $image.IndexOf('TryRestoreCaptureState(cleanupErrors, "image-fast-restore"', [StringComparison]::Ordinal) -lt 0 -or
+        $image.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'CaptureImage does not preserve image failure across Fast restoration'
+    }
+    $imageRestoreIndex = $image.IndexOf('TryRestoreCaptureState(cleanupErrors, "image-fast-restore"', [StringComparison]::Ordinal)
+    $imageThrowIndex = $image.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal)
+    if ($imageThrowIndex -le $imageRestoreIndex) { return New-HarnessFail 'CaptureImage throws before attempting Fast restoration' }
+
+    $typeName = 'WeaponCaptureExceptionScratch_' + [Guid]::NewGuid().ToString('N')
+    $definition = @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
+
+public static class $typeName
+{
+    public static int CleanupCount { get; private set; }
+
+    public static void PrimaryWins()
+    {
+        ExceptionDispatchInfo primary = null;
+        var cleanupErrors = new List<ExceptionDispatchInfo>();
+        try
+        {
+            throw new InvalidOperationException("primary sentinel");
+        }
+        catch (Exception exception)
+        {
+            primary = ExceptionDispatchInfo.Capture(exception);
+        }
+        finally
+        {
+            try
+            {
+                throw new InvalidOperationException("secondary cleanup sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            CleanupCount = cleanupErrors.Count;
+            if (primary != null)
+            {
+                primary.Throw();
+            }
+            if (cleanupErrors.Count > 0) cleanupErrors[0].Throw();
+        }
+    }
+
+    public static void CleanupOnly()
+    {
+        ExceptionDispatchInfo primary = null;
+        var cleanupErrors = new List<ExceptionDispatchInfo>();
+        try { }
+        finally
+        {
+            try
+            {
+                throw new InvalidOperationException("first cleanup-only sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            try
+            {
+                throw new InvalidOperationException("second cleanup-only sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            CleanupCount = cleanupErrors.Count;
+            if (primary != null)
+            {
+                primary.Throw();
+            }
+            if (cleanupErrors.Count > 0) cleanupErrors[0].Throw();
+        }
+    }
+}
+"@
+
+    try {
+        $scratchType = @(Add-Type -TypeDefinition $definition -PassThru -ErrorAction Stop | Where-Object { $_ -is [Type] -and $_.Name -ceq $typeName })[0]
+        if ($null -eq $scratchType) { return New-HarnessFail 'exception-preservation scratch type did not compile' }
+
+        $invokeScratch = {
+            param([string]$MethodName)
+            try {
+                $method = $scratchType.GetMethod($MethodName)
+                if ($null -eq $method) { throw ('scratch method missing: ' + $MethodName) }
+                [void]$method.Invoke($null, [object[]]@())
+                return $null
+            } catch {
+                if ($null -ne $_.Exception.InnerException) { return $_.Exception.InnerException }
+                return $_.Exception
+            }
+        }
+
+        $primaryException = & $invokeScratch 'PrimaryWins'
+        if ($null -eq $primaryException -or [string]$primaryException.Message -cne 'primary sentinel') {
+            return New-HarnessFail ('primary sentinel was replaced: ' + [string]$primaryException)
+        }
+        if ([string]$primaryException.StackTrace -notmatch 'PrimaryWins') {
+            return New-HarnessFail 'primary sentinel stack was not preserved by ExceptionDispatchInfo'
+        }
+        $primaryCleanupCount = [int]$scratchType.GetProperty('CleanupCount').GetValue($null, $null)
+        if ($primaryCleanupCount -ne 1) { return New-HarnessFail ('primary scratch did not attempt secondary cleanup; count=' + $primaryCleanupCount) }
+
+        $cleanupException = & $invokeScratch 'CleanupOnly'
+        if ($null -eq $cleanupException -or [string]$cleanupException.Message -cne 'first cleanup-only sentinel') {
+            return New-HarnessFail ('cleanup-only sentinel was not the first cleanup error: ' + [string]$cleanupException)
+        }
+        $cleanupCount = [int]$scratchType.GetProperty('CleanupCount').GetValue($null, $null)
+        if ($cleanupCount -ne 2) { return New-HarnessFail ('cleanup-only scratch did not accumulate all cleanup errors; count=' + $cleanupCount) }
+    } catch {
+        return New-HarnessFail ('exception-preservation scratch failed: ' + $_.Exception.Message)
+    }
+
+    return New-HarnessPass 'primary capture survives secondary cleanup; cleanup-only throws first cleanup with preserved stack'
 }
 
 function Test-WeaponCaptureBehavior {

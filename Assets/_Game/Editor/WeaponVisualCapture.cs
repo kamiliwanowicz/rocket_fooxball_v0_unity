@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Runtime.ExceptionServices;
 using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Rendering;
@@ -180,6 +181,18 @@ namespace RocketFooxball.Editor
             public bool Enabled;
         }
 
+        private sealed class CaptureCleanupError
+        {
+            public readonly string Label;
+            public readonly ExceptionDispatchInfo DispatchInfo;
+
+            public CaptureCleanupError(string label, Exception exception)
+            {
+                Label = label;
+                DispatchInfo = ExceptionDispatchInfo.Capture(exception);
+            }
+        }
+
         private struct CameraState
         {
             public Camera Camera;
@@ -269,6 +282,7 @@ namespace RocketFooxball.Editor
                 referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.logicalId, sha256 = entry.sha256 }).ToArray()
             };
 
+            ExceptionDispatchInfo primaryError = null;
             try
             {
                 if (!Application.isBatchMode)
@@ -389,12 +403,12 @@ namespace RocketFooxball.Editor
             }
             catch (Exception exception)
             {
+                primaryError = ExceptionDispatchInfo.Capture(exception);
                 UnityEngine.Debug.LogException(exception);
-                throw;
             }
             finally
             {
-                Exception restoreError = null;
+                var cleanupErrors = new List<CaptureCleanupError>();
                 var fastRestoreFailed = false;
                 if (MovementLabFastModeSession.IsActive)
                 {
@@ -405,13 +419,13 @@ namespace RocketFooxball.Editor
                     catch (Exception exception)
                     {
                         fastRestoreFailed = true;
-                        restoreError = exception;
+                        RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);
                     }
                 }
 
-                TryRestoreCaptureState(ref restoreError, () => RestoreBehaviourStates(behaviourStates));
-                TryRestoreCaptureState(ref restoreError, () => RestoreObjectStates(objectStates));
-                TryRestoreCaptureState(ref restoreError, () =>
+                TryRestoreCaptureState(cleanupErrors, "behaviour-states", () => RestoreBehaviourStates(behaviourStates));
+                TryRestoreCaptureState(cleanupErrors, "object-states", () => RestoreObjectStates(objectStates));
+                TryRestoreCaptureState(cleanupErrors, "player-transform", () =>
                 {
                     if (player == null) return;
                     player.transform.position = playerPosition;
@@ -419,24 +433,24 @@ namespace RocketFooxball.Editor
                     player.transform.localPosition = playerLocalPosition;
                     player.transform.localRotation = playerLocalRotation;
                 });
-                TryRestoreCaptureState(ref restoreError, () =>
+                TryRestoreCaptureState(cleanupErrors, "camera-state", () =>
                 {
                     if (gameplayCamera != null)
                         RestoreCameraState(gameplayCamera, cameraState);
                 });
-                TryRestoreCaptureState(ref restoreError, () => QualitySettings.SetQualityLevel(initialQuality, true));
-                TryRestoreCaptureState(ref restoreError, () =>
+                TryRestoreCaptureState(cleanupErrors, "quality-settings", () => QualitySettings.SetQualityLevel(initialQuality, true));
+                TryRestoreCaptureState(cleanupErrors, "quality-runtime", () =>
                 {
                     if (qualityRuntime != null)
                         qualityRuntime.ApplyCurrentQuality();
                 });
-                TryRestoreCaptureState(ref restoreError, () =>
+                TryRestoreCaptureState(cleanupErrors, "viewmodel-light", () =>
                 {
                     if (viewmodelLight != null)
                         viewmodelLight.enabled = behaviourStates.FirstOrDefault(state => state.Behaviour == viewmodelLight)?.Enabled ?? viewmodelLight.enabled;
                 });
-                TryRestoreCaptureState(ref restoreError, () => RenderTexture.active = previousActive);
-                TryRestoreCaptureState(ref restoreError, () =>
+                TryRestoreCaptureState(cleanupErrors, "render-texture-active", () => RenderTexture.active = previousActive);
+                TryRestoreCaptureState(cleanupErrors, "render-target", () =>
                 {
                     if (renderTarget == null) return;
                     renderTarget.Release();
@@ -453,19 +467,22 @@ namespace RocketFooxball.Editor
                     }
                     catch (Exception exception)
                     {
-                        if (restoreError == null) restoreError = exception;
-                        else UnityEngine.Debug.LogException(exception);
+                        RecordCaptureCleanupFailure(cleanupErrors, "scene-reopen", exception);
                     }
                 }
                 else if (fastRestoreFailed)
                     UnityEngine.Debug.LogError("Rocket Fooxball weapon capture left Fast preview active after restore failure; scene reopen skipped.");
 
-                if (restoreError != null)
-                    throw restoreError;
+                ThrowCaptureError(primaryError, cleanupErrors);
             }
         }
 
-        private static void TryRestoreCaptureState(ref Exception restoreError, Action restoreAction)
+        private static void RecordCaptureCleanupFailure(List<CaptureCleanupError> cleanupErrors, string label, Exception exception)
+        {
+            cleanupErrors.Add(new CaptureCleanupError(label, exception));
+        }
+
+        private static void TryRestoreCaptureState(List<CaptureCleanupError> cleanupErrors, string label, Action restoreAction)
         {
             try
             {
@@ -473,9 +490,32 @@ namespace RocketFooxball.Editor
             }
             catch (Exception exception)
             {
-                if (restoreError == null) restoreError = exception;
-                else UnityEngine.Debug.LogException(exception);
+                RecordCaptureCleanupFailure(cleanupErrors, label, exception);
             }
+        }
+
+        private static void LogCaptureCleanupFailures(List<CaptureCleanupError> cleanupErrors, int startIndex)
+        {
+            for (var index = startIndex; index < cleanupErrors.Count; index++)
+            {
+                var cleanupError = cleanupErrors[index];
+                UnityEngine.Debug.LogError("Weapon visual capture cleanup failed: " + cleanupError.Label);
+                UnityEngine.Debug.LogException(cleanupError.DispatchInfo.SourceException);
+            }
+        }
+
+        private static void ThrowCaptureError(ExceptionDispatchInfo primaryError, List<CaptureCleanupError> cleanupErrors)
+        {
+            if (primaryError != null)
+            {
+                LogCaptureCleanupFailures(cleanupErrors, 0);
+                primaryError.Throw();
+                return;
+            }
+
+            if (cleanupErrors.Count == 0) return;
+            LogCaptureCleanupFailures(cleanupErrors, 1);
+            cleanupErrors[0].DispatchInfo.Throw();
         }
 
         private static CaptureOptions ReadCaptureOptions()
@@ -1084,10 +1124,11 @@ namespace RocketFooxball.Editor
             GameObject player, Camera camera, GraphicsQualityRuntime qualityRuntime, GameObject viewmodels, GameObject requestedVisual,
             RenderTexture renderTarget, Vector3 sunward, string evidenceDirectory)
         {
-            SetCapturePose(player, camera, sunward, pose.TargetAngle);
             var fastApplied = false;
+            ExceptionDispatchInfo primaryError = null;
             try
             {
+                SetCapturePose(player, camera, sunward, pose.TargetAngle);
                 if (options.Mode == "Fast")
                 {
                     MovementLabFastModeSession.EnterForCapture(qualityIndex);
@@ -1160,11 +1201,19 @@ namespace RocketFooxball.Editor
                     pass = true
                 };
             }
+            catch (Exception exception)
+            {
+                primaryError = ExceptionDispatchInfo.Capture(exception);
+            }
             finally
             {
+                var cleanupErrors = new List<CaptureCleanupError>();
                 if (fastApplied || MovementLabFastModeSession.IsActive)
-                    MovementLabFastModeSession.RestoreIfActive();
+                    TryRestoreCaptureState(cleanupErrors, "image-fast-restore", () => MovementLabFastModeSession.RestoreIfActive());
+                ThrowCaptureError(primaryError, cleanupErrors);
             }
+
+            return null;
         }
 
         private static Color32[] ReadPixels(Camera camera, out byte[] png)
