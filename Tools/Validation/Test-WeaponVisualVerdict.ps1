@@ -160,7 +160,9 @@ function Read-ReferenceJsonObject {
 function Assert-UniqueReferenceJsonProperties {
     param([Parameter(Mandatory = $true)][string]$Json)
     $index = 0
-    Read-ReferenceJsonValue $Json ([ref]$index)
+    Skip-ReferenceJsonWhitespace $Json ([ref]$index)
+    if ($index -ge $Json.Length -or $Json[$index] -cne '{') { throw 'Reference manifest JSON root must be an object.' }
+    Read-ReferenceJsonObject $Json ([ref]$index)
     Skip-ReferenceJsonWhitespace $Json ([ref]$index)
     if ($index -ne $Json.Length) { throw ('Reference manifest JSON has trailing data at offset ' + $index + '.') }
 }

@@ -1537,8 +1537,16 @@ function Test-WeaponVisualVerdictBehavior {
         Write-HarnessJson $unknownEntryReferencePath ([ordered]@{ schemaVersion = 1; references = @($unknownEntryEntries.ToArray()) })
         & $assertReferenceRejected $unknownEntryReferencePath 'unknown-entry-reference'
 
-        $duplicateReferencePath = Join-Path $root 'ReferenceManifest.duplicate.json'
         $canonicalReferenceJson = [IO.File]::ReadAllText($referencePath)
+        $rootArrayReferencePath = Join-Path $root 'ReferenceManifest.root-array.json'
+        [IO.File]::WriteAllText($rootArrayReferencePath, '[' + $canonicalReferenceJson + ']', (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $rootArrayReferencePath 'root-array-reference'
+
+        $rootNullReferencePath = Join-Path $root 'ReferenceManifest.root-null.json'
+        [IO.File]::WriteAllText($rootNullReferencePath, 'null', (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $rootNullReferencePath 'root-null-reference'
+
+        $duplicateReferencePath = Join-Path $root 'ReferenceManifest.duplicate.json'
         $duplicateReferenceJson = [Regex]::Replace($canonicalReferenceJson, '("logicalId"\s*:\s*"game-bright"\s*,)', '$1"logicalId": "game-bright",', 1)
         if ($duplicateReferenceJson -ceq $canonicalReferenceJson) { throw 'duplicate reference test could not create a duplicate property' }
         [IO.File]::WriteAllText($duplicateReferencePath, $duplicateReferenceJson, (New-Object Text.UTF8Encoding($false)))
@@ -1580,7 +1588,7 @@ function Test-WeaponVisualVerdictBehavior {
         Write-HarnessJson $invalidPath $invalidVerdict
         $red = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $invalidPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'invalid-result.json'))
         if ($red.exitCode -eq 0) { return New-HarnessFail 'invalid verdict unexpectedly passed behavioral validator' }
-        return New-HarnessPass 'canonical verdict accepted; legacy/mixed/unknown/duplicate reference schemas and invalid overallPass rejected'
+        return New-HarnessPass 'canonical verdict accepted; root-array/null and legacy/mixed/unknown/duplicate reference schemas and invalid overallPass rejected'
     } catch {
         return New-HarnessFail ('verdict behavioral validation failed: ' + $_.Exception.Message)
     } finally {
