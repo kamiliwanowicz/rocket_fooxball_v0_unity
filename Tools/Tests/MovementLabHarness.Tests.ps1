@@ -621,9 +621,9 @@ function Test-WeaponCaptureContract {
         }
     }
 
-    # The C# capture boundary must consume the same canonical schema as the
-    # wrapper. JsonUtility silently ignores unknown fields, so keep the DTO
-    # surface canonical and validate every field through the C# parser.
+    # Static guards below keep the C# DTO and boundary wired to the canonical
+    # schema. JsonUtility silently ignores unknown fields; executable negative
+    # proof lives in the C# parser self-tests invoked by production capture.
     $dtoStart = $facade.IndexOf('private sealed class ReferenceManifestDto', [StringComparison]::Ordinal)
     $entryStart = $facade.IndexOf('private sealed class ReferenceEntry', $dtoStart + 1, [StringComparison]::Ordinal)
     $hashStart = $facade.IndexOf('private sealed class ReferenceHashDto', $entryStart + 1, [StringComparison]::Ordinal)
@@ -681,6 +681,22 @@ function Test-WeaponCaptureContract {
     }
     if ($facade.IndexOf('referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.logicalId, sha256 = entry.sha256 }).ToArray()', [StringComparison]::Ordinal) -lt 0) {
         return New-HarnessFail 'C# capture output no longer maps referenceHashes.id from logicalId'
+    }
+    foreach ($strictMarker in @(
+        'private static void ValidateReferenceManifestStructure',
+        'private static void RunReferenceManifestStructureSelfTests',
+        'private static void AssertReferenceManifestStructureRejected',
+        'new StrictReferenceManifestJsonReader(json).ReadManifest()',
+        'mixed root alias', 'mixed entry alias', 'unknown property', 'duplicate property'
+    )) {
+        if ($facade.IndexOf($strictMarker, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# strict reference boundary omitted executable self-test marker: ' + $strictMarker)
+        }
+    }
+    $strictCall = $facade.IndexOf('ValidateReferenceManifestStructure(manifestJson)', [StringComparison]::Ordinal)
+    $jsonUtilityCall = $facade.IndexOf('JsonUtility.FromJson<ReferenceManifestDto>', [StringComparison]::Ordinal)
+    if ($strictCall -lt 0 -or $jsonUtilityCall -lt 0 -or $strictCall -ge $jsonUtilityCall) {
+        return New-HarnessFail 'C# strict reference structure validation must run before JsonUtility deserialization'
     }
     $workflowSource = [IO.File]::ReadAllText($State.WorkflowPath)
     $redWorkflowPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'

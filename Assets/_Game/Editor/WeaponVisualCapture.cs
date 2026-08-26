@@ -42,6 +42,10 @@ namespace RocketFooxball.Editor
         private const float AngleTolerance = 0.25f;
         private const float CaptureFieldOfView = 75f;
         private const float CaptureCameraPitch = 8f;
+        private const int MaxReferenceManifestBytes = 1024 * 1024;
+        private const int MaxReferenceManifestJsonDepth = 32;
+        private const int MaxReferenceManifestJsonTokens = 10000;
+        private const int MaxReferenceManifestEntries = 128;
 
         private static readonly string[] ExpectedReferenceIds = { "game-bright", "game-dark", "quake-hires" };
 
@@ -528,9 +532,16 @@ namespace RocketFooxball.Editor
             var fullPath = Path.GetFullPath(path);
             if (!File.Exists(fullPath)) throw new InvalidOperationException("Reference manifest missing: " + fullPath);
             var manifestBytes = File.ReadAllBytes(fullPath);
+            if (manifestBytes.Length > MaxReferenceManifestBytes)
+                throw new InvalidOperationException("Reference manifest exceeds the maximum supported size.");
             var hash = Sha256(manifestBytes);
+            string manifestJson;
+            try { manifestJson = new UTF8Encoding(false, true).GetString(manifestBytes); }
+            catch (DecoderFallbackException exception) { throw new InvalidOperationException("Reference manifest JSON encoding is invalid: " + exception.Message); }
+            RunReferenceManifestStructureSelfTests();
+            ValidateReferenceManifestStructure(manifestJson);
             ReferenceManifestDto manifest;
-            try { manifest = JsonUtility.FromJson<ReferenceManifestDto>(Encoding.UTF8.GetString(manifestBytes)); }
+            try { manifest = JsonUtility.FromJson<ReferenceManifestDto>(manifestJson); }
             catch (Exception exception) { throw new InvalidOperationException("Reference manifest JSON is invalid: " + exception.Message); }
             if (manifest == null || manifest.schemaVersion != 1)
                 throw new InvalidOperationException("Reference manifest schemaVersion must equal 1.");
@@ -554,6 +565,436 @@ namespace RocketFooxball.Editor
                     throw new InvalidOperationException("Reference originalPath hash mismatch: " + entry.logicalId);
             }
             return new ReferenceEvidence { ManifestPath = fullPath, ManifestSha256 = hash, Entries = entries };
+        }
+
+        private static void ValidateReferenceManifestStructure(string json)
+        {
+            if (string.IsNullOrEmpty(json) || json.Length > MaxReferenceManifestBytes)
+                throw new InvalidOperationException("Reference manifest JSON is empty or exceeds the maximum supported size.");
+            new StrictReferenceManifestJsonReader(json).ReadManifest();
+        }
+
+        private static void RunReferenceManifestStructureSelfTests()
+        {
+            var canonical = "{\"references\":[{\"sha256\":\"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\",\"byteLength\":1,\"copiedEvidencePath\":\"e\\\\vidence\",\"originalPath\":\"o\",\"logicalId\":\"game-bright\"}],\"\\u0073chemaVersion\":1}";
+            ValidateReferenceManifestStructure(canonical);
+            AssertReferenceManifestStructureRejected(
+                canonical.Replace(",\"\\u0073chemaVersion\":1}", ",\"entries\":[],\"\\u0073chemaVersion\":1}"),
+                "mixed root alias");
+            AssertReferenceManifestStructureRejected(
+                canonical.Replace("\"logicalId\":\"game-bright\"", "\"logicalId\":\"game-bright\",\"id\":\"game-bright\""),
+                "mixed entry alias");
+            AssertReferenceManifestStructureRejected(
+                canonical.Replace(",\"\\u0073chemaVersion\":1}", ",\"unexpected\":{\"nested\":[{\"value\":true}]},\"\\u0073chemaVersion\":1}"),
+                "unknown property");
+            AssertReferenceManifestStructureRejected(
+                canonical.Replace(",\"\\u0073chemaVersion\":1}", ",\"schemaVersion\":1,\"\\u0073chemaVersion\":1}"),
+                "duplicate property");
+        }
+
+        private static void AssertReferenceManifestStructureRejected(string json, string caseName)
+        {
+            var rejected = false;
+            try { ValidateReferenceManifestStructure(json); }
+            catch (InvalidOperationException) { rejected = true; }
+            if (!rejected)
+                throw new InvalidOperationException("Reference manifest structure self-test accepted " + caseName + ".");
+        }
+
+        private sealed class StrictReferenceManifestJsonReader
+        {
+            private readonly string json;
+            private int offset;
+            private int depth;
+            private int tokenCount;
+
+            public StrictReferenceManifestJsonReader(string json)
+            {
+                this.json = json;
+            }
+
+            public void ReadManifest()
+            {
+                SkipWhitespace();
+                BeginContainer('{');
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                var hasSchemaVersion = false;
+                var hasReferences = false;
+                try
+                {
+                    SkipWhitespace();
+                    if (Consume('}'))
+                        throw Error("root object is empty");
+                    while (true)
+                    {
+                        CountToken();
+                        var name = ReadString();
+                        SkipWhitespace();
+                        Expect(':');
+                        if (!seen.Add(name))
+                            throw Error("duplicate root property '" + name + "'");
+                        switch (name)
+                        {
+                            case "schemaVersion":
+                                hasSchemaVersion = true;
+                                ReadValue();
+                                break;
+                            case "references":
+                                hasReferences = true;
+                                ReadReferenceEntries();
+                                break;
+                            default:
+                                throw Error("unknown root property '" + name + "'");
+                        }
+
+                        SkipWhitespace();
+                        if (Consume(','))
+                        {
+                            SkipWhitespace();
+                            if (Peek() == '}') throw Error("trailing comma in root object");
+                            continue;
+                        }
+                        Expect('}');
+                        break;
+                    }
+                }
+                finally
+                {
+                    EndContainer();
+                }
+
+                if (!hasSchemaVersion || !hasReferences || seen.Count != 2)
+                    throw Error("root properties must be exactly schemaVersion and references");
+                SkipWhitespace();
+                if (offset != json.Length)
+                    throw Error("trailing JSON content");
+            }
+
+            private void ReadReferenceEntries()
+            {
+                BeginContainer('[');
+                var count = 0;
+                try
+                {
+                    SkipWhitespace();
+                    if (Consume(']')) return;
+                    while (true)
+                    {
+                        count++;
+                        if (count > MaxReferenceManifestEntries)
+                            throw Error("references array exceeds the maximum supported entry count");
+                        ReadReferenceEntry();
+                        SkipWhitespace();
+                        if (Consume(','))
+                        {
+                            SkipWhitespace();
+                            if (Peek() == ']') throw Error("trailing comma in references array");
+                            continue;
+                        }
+                        Expect(']');
+                        break;
+                    }
+                }
+                finally
+                {
+                    EndContainer();
+                }
+            }
+
+            private void ReadReferenceEntry()
+            {
+                BeginContainer('{');
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                try
+                {
+                    SkipWhitespace();
+                    if (Consume('}'))
+                        throw Error("reference entry object is empty");
+                    while (true)
+                    {
+                        CountToken();
+                        var name = ReadString();
+                        SkipWhitespace();
+                        Expect(':');
+                        if (!seen.Add(name))
+                            throw Error("duplicate reference entry property '" + name + "'");
+                        switch (name)
+                        {
+                            case "logicalId":
+                            case "originalPath":
+                            case "copiedEvidencePath":
+                            case "byteLength":
+                            case "sha256":
+                                ReadValue();
+                                break;
+                            default:
+                                throw Error("unknown reference entry property '" + name + "'");
+                        }
+
+                        SkipWhitespace();
+                        if (Consume(','))
+                        {
+                            SkipWhitespace();
+                            if (Peek() == '}') throw Error("trailing comma in reference entry object");
+                            continue;
+                        }
+                        Expect('}');
+                        break;
+                    }
+                }
+                finally
+                {
+                    EndContainer();
+                }
+
+                if (seen.Count != 5)
+                    throw Error("reference entry properties must be exactly logicalId, originalPath, copiedEvidencePath, byteLength, and sha256");
+            }
+
+            private void ReadValue()
+            {
+                SkipWhitespace();
+                CountToken();
+                switch (Peek())
+                {
+                    case '"':
+                        ReadString();
+                        return;
+                    case '{':
+                        ReadObjectValue();
+                        return;
+                    case '[':
+                        ReadArrayValue();
+                        return;
+                    case 't':
+                        ReadLiteral("true");
+                        return;
+                    case 'f':
+                        ReadLiteral("false");
+                        return;
+                    case 'n':
+                        ReadLiteral("null");
+                        return;
+                    default:
+                        if (Peek() == '-' || IsDigit(Peek()))
+                        {
+                            ReadNumber();
+                            return;
+                        }
+                        throw Error("invalid JSON value");
+                }
+            }
+
+            private void ReadObjectValue()
+            {
+                BeginContainer('{');
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                try
+                {
+                    SkipWhitespace();
+                    if (Consume('}')) return;
+                    while (true)
+                    {
+                        CountToken();
+                        var name = ReadString();
+                        if (!seen.Add(name))
+                            throw Error("duplicate nested object property '" + name + "'");
+                        SkipWhitespace();
+                        Expect(':');
+                        ReadValue();
+                        SkipWhitespace();
+                        if (Consume(','))
+                        {
+                            SkipWhitespace();
+                            if (Peek() == '}') throw Error("trailing comma in nested object");
+                            continue;
+                        }
+                        Expect('}');
+                        break;
+                    }
+                }
+                finally
+                {
+                    EndContainer();
+                }
+            }
+
+            private void ReadArrayValue()
+            {
+                BeginContainer('[');
+                try
+                {
+                    SkipWhitespace();
+                    if (Consume(']')) return;
+                    while (true)
+                    {
+                        ReadValue();
+                        SkipWhitespace();
+                        if (Consume(','))
+                        {
+                            SkipWhitespace();
+                            if (Peek() == ']') throw Error("trailing comma in nested array");
+                            continue;
+                        }
+                        Expect(']');
+                        break;
+                    }
+                }
+                finally
+                {
+                    EndContainer();
+                }
+            }
+
+            private string ReadString()
+            {
+                Expect('"');
+                var builder = new StringBuilder();
+                while (offset < json.Length)
+                {
+                    var character = json[offset++];
+                    if (character == '"') return builder.ToString();
+                    if (character < 0x20) throw Error("unescaped control character in string");
+                    if (character != '\\')
+                    {
+                        builder.Append(character);
+                        continue;
+                    }
+                    if (offset >= json.Length) throw Error("unterminated escape sequence");
+                    var escaped = json[offset++];
+                    switch (escaped)
+                    {
+                        case '"': builder.Append('"'); break;
+                        case '\\': builder.Append('\\'); break;
+                        case '/': builder.Append('/'); break;
+                        case 'b': builder.Append('\b'); break;
+                        case 'f': builder.Append('\f'); break;
+                        case 'n': builder.Append('\n'); break;
+                        case 'r': builder.Append('\r'); break;
+                        case 't': builder.Append('\t'); break;
+                        case 'u': builder.Append((char)ReadHexQuad()); break;
+                        default: throw Error("invalid string escape sequence");
+                    }
+                }
+                throw Error("unterminated string");
+            }
+
+            private int ReadHexQuad()
+            {
+                if (offset + 4 > json.Length) throw Error("incomplete Unicode escape sequence");
+                var value = 0;
+                for (var index = 0; index < 4; index++)
+                {
+                    var digit = json[offset++];
+                    var hex = HexValue(digit);
+                    if (hex < 0) throw Error("invalid Unicode escape sequence");
+                    value = (value << 4) | hex;
+                }
+                return value;
+            }
+
+            private void ReadNumber()
+            {
+                if (Consume('-') && !IsDigit(Peek())) throw Error("invalid JSON number");
+                if (Consume('0'))
+                {
+                    if (IsDigit(Peek())) throw Error("JSON number has a leading zero");
+                }
+                else
+                {
+                    if (!IsDigitOneToNine(Peek())) throw Error("invalid JSON number");
+                    while (IsDigit(Peek())) offset++;
+                }
+                if (Consume('.'))
+                {
+                    if (!IsDigit(Peek())) throw Error("JSON number fraction has no digits");
+                    while (IsDigit(Peek())) offset++;
+                }
+                if (Peek() == 'e' || Peek() == 'E')
+                {
+                    offset++;
+                    if (Peek() == '+' || Peek() == '-') offset++;
+                    if (!IsDigit(Peek())) throw Error("JSON number exponent has no digits");
+                    while (IsDigit(Peek())) offset++;
+                }
+            }
+
+            private void ReadLiteral(string literal)
+            {
+                if (offset + literal.Length > json.Length || !string.Equals(json.Substring(offset, literal.Length), literal, StringComparison.Ordinal))
+                    throw Error("invalid JSON literal");
+                offset += literal.Length;
+            }
+
+            private void BeginContainer(char opening)
+            {
+                Expect(opening);
+                depth++;
+                if (depth > MaxReferenceManifestJsonDepth)
+                    throw Error("JSON nesting exceeds the maximum supported depth");
+            }
+
+            private void EndContainer()
+            {
+                depth--;
+            }
+
+            private void SkipWhitespace()
+            {
+                while (offset < json.Length)
+                {
+                    var character = json[offset];
+                    if (character != ' ' && character != '\t' && character != '\r' && character != '\n') return;
+                    offset++;
+                }
+            }
+
+            private void Expect(char expected)
+            {
+                if (!Consume(expected)) throw Error("expected '" + expected + "'");
+            }
+
+            private bool Consume(char expected)
+            {
+                if (offset >= json.Length || json[offset] != expected) return false;
+                offset++;
+                return true;
+            }
+
+            private char Peek()
+            {
+                return offset < json.Length ? json[offset] : '\0';
+            }
+
+            private void CountToken()
+            {
+                tokenCount++;
+                if (tokenCount > MaxReferenceManifestJsonTokens)
+                    throw Error("JSON token count exceeds the maximum supported size");
+            }
+
+            private InvalidOperationException Error(string message)
+            {
+                return new InvalidOperationException("Reference manifest JSON structure invalid at offset " + offset + ": " + message);
+            }
+
+            private static bool IsDigit(char value)
+            {
+                return value >= '0' && value <= '9';
+            }
+
+            private static bool IsDigitOneToNine(char value)
+            {
+                return value >= '1' && value <= '9';
+            }
+
+            private static int HexValue(char value)
+            {
+                if (value >= '0' && value <= '9') return value - '0';
+                if (value >= 'a' && value <= 'f') return value - 'a' + 10;
+                if (value >= 'A' && value <= 'F') return value - 'A' + 10;
+                return -1;
+            }
         }
 
         private static string ResolveReferencePath(string value, string manifestPath, string projectRoot)
