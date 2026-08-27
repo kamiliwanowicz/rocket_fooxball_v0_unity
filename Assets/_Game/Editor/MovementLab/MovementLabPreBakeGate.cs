@@ -271,6 +271,7 @@ namespace RocketFooxball.Editor
             {
                 var path = paths[i];
                 if (AssetDatabase.LoadMainAssetAtPath(path) == null) throw new InvalidOperationException("MovementLab pre-bake asset is missing: " + path);
+                if (!path.StartsWith("Assets/", StringComparison.Ordinal)) continue;
                 if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
                 {
                     throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
@@ -288,6 +289,7 @@ namespace RocketFooxball.Editor
                 {
                     if (AssetDatabase.LoadMainAssetAtPath(path) == null)
                         throw new InvalidOperationException("MovementLab pre-bake asset is missing: " + path);
+                    if (!path.StartsWith("Assets/", StringComparison.Ordinal)) return;
                     if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path + ".meta")))
                         throw new InvalidOperationException("MovementLab pre-bake asset meta is missing: " + path + ".meta");
                     ValidateAssetMetaGuid(path);
@@ -335,23 +337,48 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("MovementLab material emission state is not persisted: " + path);
 
                     if (string.Equals(path, RocketHotMaterialPath, StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, RocketEmissionColor, RocketEmissionStrength, true, path);
+                        ValidateReloadedEmission(material, RocketEmissionColor, RocketEmissionStrength, RocketEmissionTexturePath, path);
                     else if (string.Equals(path, MaterialsPath + "/ArenaGlow.mat", StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, new Color(0.10f, 0.95f, 0.88f, 1f), 2f, false, path);
-                    else if (string.Equals(path, MaterialsPath + "/WeaponAccent.mat", StringComparison.Ordinal))
-                        ValidateReloadedEmission(material, new Color(1f, 0.16f, 0.03f, 1f), 1.5f, true, path);
+                        ValidateReloadedEmission(material, new Color(0.10f, 0.95f, 0.88f, 1f), 2f, null, path);
+                    else if (string.Equals(path, WeaponAccentMaterialPath, StringComparison.Ordinal) ||
+                             string.Equals(path, ShotgunAccentMaterialPath, StringComparison.Ordinal))
+                        ValidateReloadedEmissionOff(material, path);
+                    else if (string.Equals(path, WeaponAccentCoreMaterialPath, StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
+                            LauncherEmissionTexturePath, path);
+                    else if (string.Equals(path, ShotgunAccentCoreMaterialPath, StringComparison.Ordinal))
+                        ValidateReloadedEmission(material, ShotgunAccentCoreEmissionColor, ShotgunAccentCoreEmissionStrength,
+                            ShotgunEmissionTexturePath, path);
                 }
             }
         }
 
-        private static void ValidateReloadedEmission(Material material, Color baseColor, float strength, bool requireEmissionMap, string path)
+        private static void ValidateReloadedEmission(Material material, Color baseColor, float strength, string emissionMapPath, string path)
         {
+            var expectedEmissionMap = string.IsNullOrEmpty(emissionMapPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Texture2D>(emissionMapPath);
+            var emissionMapMismatch = string.IsNullOrEmpty(emissionMapPath)
+                ? material.GetTexture("_EmissionMap") != null
+                : expectedEmissionMap == null || material.GetTexture("_EmissionMap") != expectedEmissionMap;
             if (material.globalIlluminationFlags != MaterialGlobalIlluminationFlags.BakedEmissive ||
-                !material.IsKeywordEnabled("_EMISSION") || (requireEmissionMap && material.GetTexture("_EmissionMap") == null) ||
+                !material.IsKeywordEnabled("_EMISSION") || emissionMapMismatch ||
                 Vector4.Distance(material.GetColor("_EmissionColor"), baseColor * strength) > 0.01f ||
                 (material.HasProperty("_EmissionStrength") && Mathf.Abs(material.GetFloat("_EmissionStrength") - strength) > 0.001f))
             {
                 throw new InvalidOperationException("MovementLab emissive material failed clean-reload public-state validation: " + path);
+            }
+        }
+
+        private static void ValidateReloadedEmissionOff(Material material, string path)
+        {
+            if (material.GetTexture("_EmissionMap") != null ||
+                Vector4.Distance(material.GetColor("_EmissionColor"), Color.clear) > 0.001f ||
+                (material.HasProperty("_EmissionStrength") && Mathf.Abs(material.GetFloat("_EmissionStrength")) > 0.001f) ||
+                material.globalIlluminationFlags != MaterialGlobalIlluminationFlags.EmissiveIsBlack ||
+                material.IsKeywordEnabled("_EMISSION"))
+            {
+                throw new InvalidOperationException("MovementLab transparent weapon shell emission must be disabled after reload: " + path);
             }
         }
 

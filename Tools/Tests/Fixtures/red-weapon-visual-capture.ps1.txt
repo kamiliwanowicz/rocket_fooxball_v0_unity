@@ -1,0 +1,17 @@
+# Historical red baseline for weapon capture guard checks.
+# This fixture intentionally omits the waited hidden Unity process and the
+# exact control-image/hash contract.
+param([string]$EvidenceRoot, [string]$AttemptId)
+
+# Historical stale recovery deliberately deletes after an observation. The
+# green capture must fail closed because another contender can replace this
+# path between the read and delete.
+function Acquire-ProjectLease {
+    $existing = [pscustomobject]@{ leaseToken = 'a' * 32 }
+    if ($null -ne $existing) { Remove-Item -LiteralPath $script:LeasePath -Force }
+}
+
+# Execute the red baseline as a real failing guard without starting Unity.
+throw 'Historical red weapon capture fixture intentionally fails behavioral execution.'
+$arguments = @('-batchmode', '-quit', '-executeMethod', 'RocketFooxball.Editor.WeaponVisualCapture.Capture')
+& Unity.exe $arguments

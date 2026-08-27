@@ -25,6 +25,7 @@ namespace RocketFooxball.Runtime.Feedback
         [SerializeField] private Transform fpsShotgunVisual;
         [SerializeField] private Transform worldShotgunVisual;
         [SerializeField] private Camera gameplayCamera;
+        [SerializeField] private Light viewmodelLight;
         [SerializeField] private AudioListener audioListener;
         [SerializeField] private ParticipantState participant;
         [SerializeField] private Renderer[] teamTintRenderers;
@@ -60,6 +61,7 @@ namespace RocketFooxball.Runtime.Feedback
         private static readonly Vector3 ShotgunPumpOffset = new Vector3(0f, 0f, -0.11f);
         private static readonly Vector3 ShotgunRecoilEuler = new Vector3(6f, 0f, 0f);
         private static readonly Vector3 ShotgunPumpEuler = new Vector3(-4f, 0f, 0f);
+        private const string CompositionError = "PlayerPresentation requires serialized references: viewmodelLight.";
 
         private Vector3 neutralLocalPosition;
         private Quaternion neutralLocalRotation;
@@ -80,6 +82,8 @@ namespace RocketFooxball.Runtime.Feedback
         private bool localMode;
         private bool shotgunOwned = true;
         private bool matchPaused;
+        private bool localModeInitialized;
+        private bool presentationStateInitialized;
         private Transform[] worldLayerTransforms;
         private int[] worldLayerValues;
         private readonly List<CorpseRecord> corpses = new List<CorpseRecord>();
@@ -101,16 +105,34 @@ namespace RocketFooxball.Runtime.Feedback
         private void OnEnable()
         {
             CacheReferences();
-            CacheNeutralPose();
-            CacheShotgunNeutralPose();
-            localMode = participant != null && participant.IsLocalParticipant;
-            alive = participant == null || participant.IsAlive;
-            matchPaused = match != null && match.State == MatchController.MatchState.Paused;
+            if (viewmodelLight == null)
+            {
+                Debug.LogError(CompositionError, this);
+                enabled = false;
+                return;
+            }
+
+            if (!neutralPoseCached)
+            {
+                CacheNeutralPose();
+            }
+            if (!shotgunNeutralPoseCached)
+            {
+                CacheShotgunNeutralPose();
+            }
+            if (!presentationStateInitialized)
+            {
+                localMode = participant != null && participant.IsLocalParticipant;
+                alive = participant == null || participant.IsAlive;
+                matchPaused = match != null && match.State == MatchController.MatchState.Paused;
+            }
             RefreshShotgunVisibility();
             if (participant != null)
             {
                 ConfigureSlot(participant);
             }
+            presentationStateInitialized = true;
+            SetLocalMode(localMode);
 
             if (kick != null && !kickSubscribed)
             {
@@ -145,6 +167,11 @@ namespace RocketFooxball.Runtime.Feedback
 
         private void OnDisable()
         {
+            if (viewmodelLight != null)
+            {
+                viewmodelLight.enabled = false;
+            }
+
             if (kick != null && kickSubscribed)
             {
                 kick.DashStarted -= OnDashStarted;
@@ -175,12 +202,6 @@ namespace RocketFooxball.Runtime.Feedback
                 pauseSubscribed = false;
             }
 
-            recoilActive = false;
-            recoilElapsed = 0f;
-            RestoreNeutralPose();
-            shotgunCycleActive = false;
-            shotgunCycleElapsed = 0f;
-            RestoreShotgunNeutralPose();
             DestroyCorpses();
         }
 
@@ -308,9 +329,17 @@ namespace RocketFooxball.Runtime.Feedback
         /// <summary>Applies serialized team palette and shape cue to this participant.</summary>
         public void ConfigureSlot(ParticipantState owner)
         {
+            var ownerChanged = participant != owner;
             participant = owner;
-            localMode = owner != null && owner.IsLocalParticipant;
-            shotgunOwned = owner == null || owner.HasShotgun;
+            if (ownerChanged || !localModeInitialized)
+            {
+                localMode = owner != null && owner.IsLocalParticipant;
+                localModeInitialized = true;
+            }
+            if (ownerChanged || !presentationStateInitialized)
+            {
+                shotgunOwned = owner == null || owner.HasShotgun;
+            }
             var isBlue = owner == null || owner.Team == ParticipantTeam.Blue;
             if (blueTeamCue != null)
             {
@@ -405,6 +434,11 @@ namespace RocketFooxball.Runtime.Feedback
         public void SetLocalMode(bool local)
         {
             localMode = local;
+            localModeInitialized = true;
+            if (viewmodelLight != null)
+            {
+                viewmodelLight.enabled = local;
+            }
             if (gameplayCamera != null)
             {
                 gameplayCamera.enabled = local;

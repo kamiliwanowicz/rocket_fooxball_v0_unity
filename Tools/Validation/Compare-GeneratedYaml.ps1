@@ -105,11 +105,11 @@ function Get-ChangedPaths {
     return Invoke-GitNullDelimitedCapture -Arguments @('diff', '--name-only', '-z', $BaseRevision, $HeadRevision)
 }
 
-function Get-AuthoritativeInventoryRoots {
+function Get-AppendixAPaths {
     param([Parameter(Mandatory = $true)][string]$Revision)
 
-    # The workflow owns the generated-inventory contract.  Parse its literal root array from
-    # each revision instead of maintaining a second comparator-specific path list that can drift.
+    # The workflow owns the exact Appendix-A path contract. Parse that one
+    # literal array from each revision; never expand directories here.
     $workflowPath = 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
     $lines = Get-BlobLines $Revision $workflowPath
     if ($null -eq $lines) { throw ('Authoritative inventory source is missing in ' + $Revision + ': ' + $workflowPath) }
@@ -124,31 +124,33 @@ function Get-AuthoritativeInventoryRoots {
         param($node)
         return $node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
             $node.Left -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            $node.Left.VariablePath.UserPath -ceq 'script:AuthoritativeInventory'
+            $node.Left.VariablePath.UserPath -ceq 'script:AppendixAPaths'
     }, $true))
-    if ($assignments.Count -ne 1) { throw ('Expected one $script:AuthoritativeInventory assignment in ' + $Revision + ', found ' + $assignments.Count + '.') }
+    # Historical revisions predate the exact inventory literal.  Treat that
+    # revision as having no inventory; the union below still requires the
+    # current side to provide one valid, nonempty exact set.
+    if ($assignments.Count -eq 0) { return @() }
+    if ($assignments.Count -ne 1) { throw ('Expected one $script:AppendixAPaths assignment in ' + $Revision + ', found ' + $assignments.Count + '.') }
 
     $roots = @($assignments[0].Right.FindAll({
         param($node)
         return $node -is [System.Management.Automation.Language.StringConstantExpressionAst]
     }, $true) | ForEach-Object { ([string]$_.Value).Trim().Replace('\\', '/') } | Where-Object { $_ })
-    if ($roots.Count -eq 0) { throw ('Authoritative inventory is empty in ' + $Revision + '.') }
+    if ($roots.Count -eq 0) { throw ('Appendix-A path set is empty in ' + $Revision + '.') }
     return @($roots | Sort-Object -Unique)
 }
 
-function Test-AuthoritativeInventoryMember {
+function Test-AppendixAPath {
     param(
         [Parameter(Mandatory = $true)][string]$RelativePath,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryPaths
     )
 
     $candidate = $RelativePath.Replace('\\', '/').TrimStart('/')
-    foreach ($root in $InventoryRoots) {
-        $normalizedRoot = ([string]$root).Replace('\\', '/').Trim('/')
-        if ($candidate.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase) -or
-            $candidate.StartsWith($normalizedRoot + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    }
-    return $false
+    return @($InventoryPaths | Where-Object {
+        $normalized = ([string]$_).Replace('\\', '/').TrimStart('/')
+        $candidate.Equals($normalized, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -eq 1
 }
 
 function Get-PathCoverageKind {
@@ -160,6 +162,7 @@ function Get-PathCoverageKind {
         '.unity' { return 'supported text' }
         '.prefab' { return 'supported text' }
         '.mat' { return 'supported text' }
+        '.physicMaterial' { return 'supported text' }
         '.controller' { return 'supported text' }
         '.asset' { return 'supported text' }
         '.json' { return 'supported text' }
@@ -173,12 +176,12 @@ function Get-PathCoverageKind {
 function Resolve-SelectedPaths {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$Candidates,
-        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryRoots,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$InventoryPaths,
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][string[]]$RequestedPaths
     )
 
     $authoritative = @($Candidates | Where-Object {
-        Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots
+        Test-AppendixAPath -RelativePath ([string]$_) -InventoryPaths $InventoryPaths
     } | Sort-Object -Unique)
     if ($RequestedPaths.Count -eq 0) { return $authoritative }
 
@@ -189,7 +192,7 @@ function Resolve-SelectedPaths {
         $matches = @($Candidates | Where-Object { $_ -like $normalized } | Sort-Object -Unique)
         if ($matches.Count -eq 0) { throw ('Requested path is uncovered by both revisions: ' + $normalized) }
         $uncovered = @($matches | Where-Object {
-            -not (Test-AuthoritativeInventoryMember -RelativePath ([string]$_) -InventoryRoots $InventoryRoots)
+            -not (Test-AppendixAPath -RelativePath ([string]$_) -InventoryPaths $InventoryPaths)
         })
         if ($uncovered.Count -gt 0) {
             throw ('Requested path is outside the authoritative generated inventory: ' + ($uncovered -join ', '))
@@ -282,8 +285,8 @@ function Test-AssetPairPath {
 
 function Get-PairState {
     param(
-        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$AssetPaths,
-        [Parameter(Mandatory = $true)][System.Collections.Generic.HashSet[string]]$MetadataPaths,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$AssetPaths,
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][System.Collections.Generic.HashSet[string]]$MetadataPaths,
         [Parameter(Mandatory = $true)][string]$AssetPath
     )
     $assetPresent = $AssetPaths.Contains($AssetPath)
@@ -752,12 +755,13 @@ if ([string]::IsNullOrWhiteSpace($Base) -or [string]::IsNullOrWhiteSpace($Head))
 $basePaths = Get-RevisionPaths $Base
 $headPaths = Get-RevisionPaths $Head
 $candidates = @($basePaths + $headPaths | Sort-Object -Unique)
-$inventoryRoots = @(
-    (Get-AuthoritativeInventoryRoots $Base) +
-    (Get-AuthoritativeInventoryRoots $Head) |
-    Sort-Object -Unique
-)
-$selected = @(Resolve-SelectedPaths -Candidates $candidates -InventoryRoots $inventoryRoots -RequestedPaths @($Path))
+$baseAppendixPaths = @(Get-AppendixAPaths $Base)
+$headAppendixPaths = @(Get-AppendixAPaths $Head)
+$appendixPaths = @($baseAppendixPaths + $headAppendixPaths | Sort-Object -Unique)
+if ($appendixPaths.Count -eq 0) {
+    throw 'Neither revision supplies a valid, nonempty exact Appendix-A path set.'
+}
+$selected = @(Resolve-SelectedPaths -Candidates $candidates -InventoryPaths $appendixPaths -RequestedPaths @($Path))
 $explicitPathRequest = @($Path).Count -gt 0
 $basePathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $headPathSet = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
@@ -787,7 +791,7 @@ $semanticCheckedPathCount = 0
 $notCheckedPathCount = 0
 $unsupportedPathCount = 0
 $guidCounts = [ordered]@{ stable = 0; churn = 0; added = 0; removed = 0; invalid = 0 }
-$pairCounts = [ordered]@{ intact = 0; broken = 0 }
+$pairCounts = [ordered]@{ intact = 0; repaired = 0; broken = 0 }
 
 $basePresentPathSet = Get-PresentRevisionPathSet $Base $basePaths
 $headPresentPathSet = Get-PresentRevisionPathSet $Head $headPaths
@@ -823,7 +827,13 @@ foreach ($relative in $selected) {
         $baseState = Get-PairState $basePresentPathSet $baseMetadataPathSet $assetPath
         $headState = Get-PairState $headPresentPathSet $headMetadataPathSet $assetPath
         $guid = Get-GuidComparison $baseMeta $headMeta
-        $pairStatus = if ($baseState -eq 'one-sided' -or $headState -eq 'one-sided') { 'broken' } else { 'intact' }
+        $pairStatus = if ($headState -eq 'one-sided') {
+            'broken'
+        } elseif ($baseState -eq 'one-sided' -and $headState -in @('both-present', 'both-absent')) {
+            'repaired'
+        } else {
+            'intact'
+        }
         $pairMap.Add($assetPath, [pscustomobject]@{
             AssetPath = $assetPath
             MetadataPath = $metaPath
@@ -973,7 +983,7 @@ Write-Output ('COVERAGE: ' + $reportedPathCount + '/' + $selected.Count + ' auth
 Write-Output ('SEMANTIC: ' + $(if ($anyChanged) { 'changed' } else { 'identical' }))
 Write-Output ('DANGLING: ' + $totalHeadDangling + ' (base ' + $totalBaseDangling + ')')
 Write-Output ('GUID: stable ' + $guidCounts.stable + '; churn ' + $guidCounts.churn + '; added ' + $guidCounts.added + '; removed ' + $guidCounts.removed + '; invalid ' + $guidCounts.invalid)
-Write-Output ('PAIRS: intact ' + $pairCounts.intact + '; broken ' + $pairCounts.broken)
+Write-Output ('PAIRS: intact ' + $pairCounts.intact + '; repaired ' + $pairCounts.repaired + '; broken ' + $pairCounts.broken)
 Write-Output ('UNSUPPORTED: ' + $unsupportedPathCount)
 
 if ($FailOnDangling -and $totalHeadDangling -gt $totalBaseDangling) { exit 1 }

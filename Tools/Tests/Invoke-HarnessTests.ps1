@@ -37,6 +37,8 @@ $shimPath = Join-Path $testsRoot 'HarnessShim.psm1'
 $testsPath = Join-Path $testsRoot 'MovementLabHarness.Tests.ps1'
 $redFixturePath = Join-Path $testsRoot 'Fixtures/red-workflow.ps1.txt'
 $workflowPath = Join-Path $projectRoot 'Tools/Validation/Invoke-MovementLabWorkflow.ps1'
+$capturePath = Join-Path $projectRoot 'Tools/Validation/Capture-WeaponVisuals.ps1'
+$verdictPath = Join-Path $projectRoot 'Tools/Validation/Test-WeaponVisualVerdict.ps1'
 $comparatorPath = Join-Path $projectRoot 'Tools/Validation/Compare-GeneratedYaml.ps1'
 $comparatorRedFixturePath = Join-Path $testsRoot 'Fixtures/red-generated-yaml-comparator.ps1.txt'
 $hookSettingsPath = Join-Path $projectRoot '.claude/settings.json'
@@ -140,6 +142,8 @@ function Assert-EvidenceRoot {
 $state = [pscustomobject]@{
     ProjectRoot = $projectRoot
     WorkflowPath = $workflowPath
+    CapturePath = $capturePath
+    VerdictPath = $verdictPath
     ComparatorPath = $comparatorPath
     ComparatorRedFixturePath = $comparatorRedFixturePath
     HookSettingsPath = $hookSettingsPath
@@ -164,7 +168,12 @@ $cases = @(
     [pscustomobject]@{ Id = 'guard-g1'; Function = ${function:Test-GuardG1} },
     [pscustomobject]@{ Id = 'guard-g4'; Function = ${function:Test-GuardG4} },
     [pscustomobject]@{ Id = 'guard-g5'; Function = ${function:Test-GuardG5} },
-    [pscustomobject]@{ Id = 'scratch-drill'; Function = ${function:Test-ScratchDrill} }
+    [pscustomobject]@{ Id = 'scratch-drill'; Function = ${function:Test-ScratchDrill} },
+    [pscustomobject]@{ Id = 'weapon-capture-contract'; Function = ${function:Test-WeaponCaptureContract} },
+    [pscustomobject]@{ Id = 'weapon-capture-behavior'; Function = ${function:Test-WeaponCaptureBehavior} },
+    [pscustomobject]@{ Id = 'weapon-verdict-contract'; Function = ${function:Test-WeaponVisualVerdictContract} },
+    [pscustomobject]@{ Id = 'weapon-verdict-behavior'; Function = ${function:Test-WeaponVisualVerdictBehavior} },
+    [pscustomobject]@{ Id = 'red-fixtures-behavior'; Function = ${function:Test-RedFixturesBehavior} }
 )
 if (-not $SkipHookCheck -and [string]::IsNullOrWhiteSpace($HookMode)) {
     $cases += [pscustomobject]@{ Id = 'hook-command'; Function = ${function:Test-HookSettings} }
@@ -209,6 +218,11 @@ $summary = [ordered]@{
         [ordered]@{ case = 'generated-yaml-comparator-default-meta-coverage'; head = 'pass'; redBaseline = 'fail' }
         [ordered]@{ case = 'short-workspace-path'; head = 'pass'; redBaseline = 'fail' }
         [ordered]@{ case = 'row-reuse-equal'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'weapon-capture-contract'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'weapon-capture-behavior'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'weapon-verdict-contract'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'weapon-verdict-behavior'; head = 'pass'; redBaseline = 'fail' }
+        [ordered]@{ case = 'red-fixtures-behavior'; head = 'pass'; redBaseline = 'fail' }
     )
     scratchDrill = @($results | Where-Object { $_.id -eq 'scratch-drill' })
     hookExecution = $state.HookExecution

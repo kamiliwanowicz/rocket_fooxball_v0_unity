@@ -118,22 +118,17 @@ function Test-GeneratedPathSurfaceRemoved {
     $findLegacySurface = {
         param([string]$Source)
         $ast = Get-HarnessAst $Source
-        $generatedPathVariables = @($ast.FindAll({
+        $legacyInventoryVariables = @($ast.FindAll({
             param($Node)
             $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            [string]$Node.VariablePath.UserPath -ceq 'GeneratedPath'
-        }, $true))
-        $requestedInventoryVariables = @($ast.FindAll({
-            param($Node)
-            $Node -is [System.Management.Automation.Language.VariableExpressionAst] -and
-            [string]$Node.VariablePath.UserPath -ceq 'RequestedInventoryPaths'
+            [string]$Node.VariablePath.UserPath -in @('GeneratedRoots', 'AuthoritativeInventory', 'RequestedInventoryPaths', 'script:GeneratedRoots', 'script:AuthoritativeInventory', 'script:RequestedInventoryPaths')
         }, $true))
         $requestedInventoryFields = @($ast.FindAll({
             param($Node)
             $Node -is [System.Management.Automation.Language.StringConstantExpressionAst] -and
             [string]$Node.Value -ceq 'requested_inventory'
         }, $true))
-        return $generatedPathVariables.Count + $requestedInventoryVariables.Count + $requestedInventoryFields.Count
+        return $legacyInventoryVariables.Count + $requestedInventoryFields.Count
     }
 
     $headCount = [int](& $findLegacySurface $State.CurrentSource)
@@ -141,7 +136,49 @@ function Test-GeneratedPathSurfaceRemoved {
     $redSource = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $State.RedSource -ErrorAction Stop).Path)
     $redCount = [int](& $findLegacySurface $redSource)
     if ($redCount -eq 0) { return New-HarnessFail 'red baseline does not retain the legacy generated-path surface' }
-    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s)')
+
+    $teamRedTrailPaths = @(
+        'Assets/_Game/Materials/TeamRedTrail.mat',
+        'Assets/_Game/Materials/TeamRedTrail.mat.meta'
+    )
+    $shotgunAtlasMetaPaths = @(
+        'Assets/_Game/Textures/Shotgun_BaseColor.png.meta',
+        'Assets/_Game/Textures/Shotgun_Normal.png.meta',
+        'Assets/_Game/Textures/Shotgun_MetallicSmoothness.png.meta',
+        'Assets/_Game/Textures/Shotgun_Occlusion.png.meta',
+        'Assets/_Game/Textures/Shotgun_Emission.png.meta'
+    )
+    $currentAppendixValues = @(Get-HarnessStringAssignment $State.CurrentSource 'script:AppendixAPaths')
+    $currentAst = Get-HarnessAst $State.CurrentSource
+    $currentSourceValues = @($currentAst.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.StringConstantExpressionAst]
+    }, $true) | ForEach-Object { [string]$_.Value })
+    $redBuilderValues = @(Get-HarnessStringAssignment $redSource 'script:BuilderOutputContract')
+    $builderAlias = @($currentAst.FindAll({
+        param($Node)
+        $Node -is [System.Management.Automation.Language.AssignmentStatementAst] -and
+            [string]$Node.Left.Extent.Text -ceq '$script:BuilderOutputContract' -and
+            [string]$Node.Right.Extent.Text.Trim() -ceq '$script:AppendixAPaths'
+    }, $true))
+    if ($builderAlias.Count -ne 1) { return New-HarnessFail ('BuilderOutputContract must derive from AppendixAPaths exactly once; observed ' + $builderAlias.Count) }
+    foreach ($path in $teamRedTrailPaths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one TeamRedTrail entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('TeamRedTrail entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing TeamRedTrail entry: ' + $path) }
+    }
+    foreach ($path in $shotgunAtlasMetaPaths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one shotgun atlas metadata entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('Shotgun atlas metadata entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing shotgun atlas metadata entry: ' + $path) }
+    }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail and five shotgun atlas metadata entries are closed')
 }
 
 function Test-GeneratedYamlComparatorCoverage {
@@ -209,24 +246,28 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         [IO.Directory]::CreateDirectory($projectSettingsDirectory) | Out-Null
         Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1') -Force
         Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $validationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
-        $materialPath = Join-Path $materialsDirectory 'Fixture.mat'
+        $materialPath = Join-Path $materialsDirectory 'Floor.mat'
         $metaPath = $materialPath + '.meta'
-        $churnPath = Join-Path $materialsDirectory 'Churn.mat'
+        $physicMaterialPath = Join-Path $materialsDirectory 'BallSurface.physicMaterial'
+        $physicMaterialMetaPath = $physicMaterialPath + '.meta'
+        $churnPath = Join-Path $materialsDirectory 'Wall.mat'
         $churnMetaPath = $churnPath + '.meta'
-        $unknownPath = Join-Path $generatedDirectory 'Fixture.unknown'
-        $unknownMetaPath = $unknownPath + '.meta'
-        $projectSettingsPath = Join-Path $projectSettingsDirectory 'FixtureSettings.asset'
+        $generatedPath = Join-Path $generatedDirectory 'BlueCircleCueMesh.asset'
+        $generatedMetaPath = $generatedPath + '.meta'
+        $projectSettingsPath = Join-Path $projectSettingsDirectory 'QualitySettings.asset'
         $binaryPaths = @(
-            (Join-Path $movementLabDirectory 'Fixture.png'),
-            (Join-Path $movementLabDirectory 'Fixture.exr'),
+            (Join-Path $movementLabDirectory 'Lightmap-0_comp_dir.png'),
+            (Join-Path $movementLabDirectory 'Lightmap-0_comp_light.exr'),
             (Join-Path $movementLabDirectory 'LightingData.asset')
         )
         [IO.File]::WriteAllText($materialPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Fixture`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($metaPath, "fileFormatVersion: 2`nguid: 11111111111111111111111111111111`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($physicMaterialPath, "%YAML 1.1`n--- !u!134 &4`nPhysicMaterial:`n  m_Name: BallSurface`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($physicMaterialMetaPath, "fileFormatVersion: 2`nguid: 55555555555555555555555555555555`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnPath, "%YAML 1.1`n--- !u!21 &2`nMaterial:`n  m_Name: Churn`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: 22222222222222222222222222222222`n", (New-Object Text.UTF8Encoding($false)))
-        [IO.File]::WriteAllBytes($unknownPath, [Text.Encoding]::ASCII.GetBytes('unknown baseline'))
-        [IO.File]::WriteAllText($unknownMetaPath, "fileFormatVersion: 2`nguid: 33333333333333333333333333333333`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($generatedPath, "%YAML 1.1`n--- !u!114 &3`nMonoBehaviour:`n  m_Name: Cue`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::WriteAllText($generatedMetaPath, "fileFormatVersion: 2`nguid: 33333333333333333333333333333333`n", (New-Object Text.UTF8Encoding($false)))
         foreach ($binaryPath in $binaryPaths) {
             [IO.File]::WriteAllBytes($binaryPath, [Text.Encoding]::ASCII.GetBytes('binary baseline ' + $binaryPath))
             [IO.File]::WriteAllText(($binaryPath + '.meta'), "fileFormatVersion: 2`nguid: 44444444444444444444444444444444`n", (New-Object Text.UTF8Encoding($false)))
@@ -242,21 +283,23 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'fixture Git baseline commit failed' }
         [IO.File]::AppendAllText($materialPath, "  m_ShaderKeywords: CHANGED`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::AppendAllText($metaPath, "timeCreated: 1`n", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($physicMaterialPath, "  dynamicFriction: 0.5`n", (New-Object Text.UTF8Encoding($false)))
         foreach ($binaryPath in $binaryPaths) { [IO.File]::AppendAllText($binaryPath, "`nhead binary drift", (New-Object Text.UTF8Encoding($false))) }
-        [IO.File]::AppendAllText($unknownPath, "`nhead unknown drift", (New-Object Text.UTF8Encoding($false)))
+        [IO.File]::AppendAllText($generatedPath, "  changed: true`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::AppendAllText($projectSettingsPath, "setting: head`n", (New-Object Text.UTF8Encoding($false)))
         [IO.File]::WriteAllText($churnMetaPath, "fileFormatVersion: 2`nguid: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`n", (New-Object Text.UTF8Encoding($false)))
         Remove-Item -LiteralPath $churnPath -Force
 
         $fixtureComparator = Join-Path $validationDirectory 'Compare-GeneratedYaml.ps1'
         $paths = @(
-            'Assets/_Game/Materials/Fixture.mat', 'Assets/_Game/Materials/Fixture.mat.meta',
-            'Assets/_Game/Materials/Churn.mat', 'Assets/_Game/Materials/Churn.mat.meta',
-            'Assets/_Game/Generated/Fixture.unknown', 'Assets/_Game/Generated/Fixture.unknown.meta',
-            'Assets/_Game/Scenes/MovementLab/Fixture.png', 'Assets/_Game/Scenes/MovementLab/Fixture.png.meta',
-            'Assets/_Game/Scenes/MovementLab/Fixture.exr', 'Assets/_Game/Scenes/MovementLab/Fixture.exr.meta',
+            'Assets/_Game/Materials/Floor.mat', 'Assets/_Game/Materials/Floor.mat.meta',
+            'Assets/_Game/Materials/BallSurface.physicMaterial', 'Assets/_Game/Materials/BallSurface.physicMaterial.meta',
+            'Assets/_Game/Materials/Wall.mat', 'Assets/_Game/Materials/Wall.mat.meta',
+            'Assets/_Game/Generated/BlueCircleCueMesh.asset', 'Assets/_Game/Generated/BlueCircleCueMesh.asset.meta',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png.meta',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr.meta',
             'Assets/_Game/Scenes/MovementLab/LightingData.asset', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
-            'ProjectSettings/FixtureSettings.asset'
+            'ProjectSettings/QualitySettings.asset'
         )
         $quotedPaths = @($paths | ForEach-Object { "'" + $_.Replace("'", "''") + "'" }) -join ', '
         $command = "& '" + $fixtureComparator.Replace("'", "''") + "' -Base 'HEAD' -Head 'WORKTREE' -Path @(" + $quotedPaths + ')'
@@ -269,16 +312,16 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
         if ($text -notmatch '(?m)^SEMANTIC: changed$') {
             return New-HarnessFail 'intentional YAML/text semantic change was not reported'
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Materials/Fixture\.mat\.meta.*?kind\s+metadata.*?guid\s+stable\s+11111111111111111111111111111111') {
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Floor\.mat\.meta.*?kind\s+metadata.*?guid\s+stable\s+11111111111111111111111111111111') {
             return New-HarnessFail 'stable GUID metadata was not reported'
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Materials/Churn\.mat\.meta.*?guid\s+churn\s+22222222222222222222222222222222\s+->\s+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') {
+        if ($text -notmatch '(?s)== Assets/_Game/Materials/Wall\.mat\.meta.*?guid\s+churn\s+22222222222222222222222222222222\s+->\s+aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa') {
             return New-HarnessFail 'GUID churn was not reported'
         }
         if ($text -notmatch '(?m)^  pair\s+broken') {
             return New-HarnessFail 'broken asset/meta pair was not reported'
         }
-        $projectSettingsSection = [regex]::Match($text, '(?s)== ProjectSettings/FixtureSettings\.asset.*?(?=\r?\n== |\r?\nCOVERAGE:)')
+        $projectSettingsSection = [regex]::Match($text, '(?s)== ProjectSettings/QualitySettings\.asset.*?(?=\r?\n== |\r?\nCOVERAGE:)')
         if (-not $projectSettingsSection.Success -or $projectSettingsSection.Value -notmatch '(?m)^  pair\s+not-applicable') {
             return New-HarnessFail 'ProjectSettings asset was not reported as pair not-applicable'
         }
@@ -286,27 +329,74 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
             return New-HarnessFail 'ProjectSettings asset incorrectly received pair/GUID analysis'
         }
         foreach ($path in @(
-            'Assets/_Game/Scenes/MovementLab/Fixture.png',
-            'Assets/_Game/Scenes/MovementLab/Fixture.exr',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png',
+            'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr',
             'Assets/_Game/Scenes/MovementLab/LightingData.asset'
         )) {
             if ($text -notmatch ('(?s)== ' + [regex]::Escape($path) + '.*?kind\s+binary provenance.*?bytes\s+.*?blob\s+.*?provenance')) {
                 return New-HarnessFail ('binary provenance was not reported for ' + $path)
             }
         }
-        if ($text -notmatch '(?s)== Assets/_Game/Generated/Fixture\.unknown\r?\n.*?kind\s+unsupported') {
-            return New-HarnessFail 'unknown generated type was not reported unsupported'
-        }
         foreach ($header in @('COVERAGE:', 'SEMANTIC:', 'DANGLING:', 'GUID:', 'PAIRS:', 'UNSUPPORTED:')) {
             if ($text -notmatch ('(?m)^' + [regex]::Escape($header))) { return New-HarnessFail ('comparator omitted exact summary header ' + $header) }
         }
-        if ($text -notmatch '(?m)^COVERAGE: 13/13 authoritative changed paths reported; semantic checked 3; NOT CHECKED 10$') {
+        if ($text -notmatch '(?m)^COVERAGE: 15/15 authoritative changed paths reported; semantic checked 5; NOT CHECKED 10$') {
             return New-HarnessFail ('default comparator coverage summary did not account for every changed path: ' + $text)
         }
-        if ($text -notmatch '(?m)^GUID: stable 5; churn 1; added 0; removed 0; invalid 0$' -or
-            $text -notmatch '(?m)^PAIRS: intact 5; broken 1$' -or
-            $text -notmatch '(?m)^UNSUPPORTED: 1$') {
+        if ($text -notmatch '(?m)^GUID: stable 6; churn 1; added 0; removed 0; invalid 0$' -or
+            $text -notmatch '(?m)^PAIRS: intact 6; repaired 0; broken 1$' -or
+            $text -notmatch '(?m)^UNSUPPORTED: 0$') {
             return New-HarnessFail ('GUID/pair/unsupported summaries were incorrect: ' + $text)
+        }
+
+        # A raw asset committed before its .meta is added is a repaired pair once the
+        # working tree contains both files. The existing Wall fixture remains head-broken.
+        $repairedRoot = Join-Path $script:HarnessScratchRoot ('generated-yaml-comparator-repaired-' + [Guid]::NewGuid().ToString('N'))
+        try {
+            $repairedValidationDirectory = Join-Path $repairedRoot 'Tools/Validation'
+            $repairedMaterialsDirectory = Join-Path $repairedRoot 'Assets/_Game/Materials'
+            [IO.Directory]::CreateDirectory($repairedValidationDirectory) | Out-Null
+            [IO.Directory]::CreateDirectory($repairedMaterialsDirectory) | Out-Null
+            Copy-Item -LiteralPath $State.ComparatorPath -Destination (Join-Path $repairedValidationDirectory 'Compare-GeneratedYaml.ps1') -Force
+            Copy-Item -LiteralPath $State.WorkflowPath -Destination (Join-Path $repairedValidationDirectory 'Invoke-MovementLabWorkflow.ps1') -Force
+            # Floor.mat is already in the workflow's exact Appendix-A inventory.
+            $repairedAssetPath = Join-Path $repairedMaterialsDirectory 'Floor.mat'
+            $repairedAssetMetaPath = $repairedAssetPath + '.meta'
+            [IO.File]::WriteAllText($repairedAssetPath, "%YAML 1.1`n--- !u!21 &1`nMaterial:`n  m_Name: Repaired`n", (New-Object Text.UTF8Encoding($false)))
+            & git -C $repairedRoot init --quiet 2>$null
+            if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'repaired-pair fixture Git initialization failed' }
+            & git -C $repairedRoot config core.autocrlf false 2>$null
+            & git -C $repairedRoot config user.email 'harness@example.invalid' 2>$null
+            & git -C $repairedRoot config user.name 'Harness' 2>$null
+            & git -C $repairedRoot add . 2>$null
+            & git -C $repairedRoot commit --quiet -m 'repaired pair baseline' 2>$null
+            if ($LASTEXITCODE -ne 0) { return New-HarnessFail 'repaired-pair fixture Git baseline commit failed' }
+            [IO.File]::WriteAllText($repairedAssetMetaPath, "fileFormatVersion: 2`nguid: 66666666666666666666666666666666`n", (New-Object Text.UTF8Encoding($false)))
+            $repairedComparatorPath = Join-Path $repairedValidationDirectory 'Compare-GeneratedYaml.ps1'
+            $repairedPreviousErrorAction = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $repairedOutput = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $repairedComparatorPath -Base 'HEAD' -Head 'WORKTREE' -Path 'Assets/_Game/Materials/Floor.mat.meta' 2>&1)
+                $repairedExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $repairedPreviousErrorAction
+            }
+            if ($repairedExitCode -ne 0) {
+                $repairedDiagnostics = @($repairedOutput | ForEach-Object { '[' + $_.GetType().FullName + '] ' + ($_ | Out-String).Trim() }) -join ' | '
+                return New-HarnessFail ('repaired-pair comparator failed exit=' + $repairedExitCode + ': ' + $repairedDiagnostics)
+            }
+            $repairedText = $repairedOutput -join "`n"
+            if ($repairedText -notmatch '(?m)^  pair\s+repaired \(one-sided -> both-present\)$') {
+                return New-HarnessFail ('base one-sided/head complete pair was not reported as repaired: ' + $repairedText)
+            }
+            if ($repairedText -notmatch '(?m)^PAIRS: intact 0; repaired 1; broken 0$') {
+                return New-HarnessFail ('repaired-pair summary was incorrect: ' + $repairedText)
+            }
+            if ($text -notmatch '(?s)== Assets/_Game/Materials/Wall\.mat\.meta.*?pair\s+broken \(both-present -> one-sided\)') {
+                return New-HarnessFail 'existing head-broken pair was not reported with broken transition'
+            }
+        } finally {
+            Remove-Item -LiteralPath $repairedRoot -Recurse -Force -ErrorAction SilentlyContinue
         }
     } finally {
         Remove-Item -LiteralPath $fixtureRoot -Recurse -Force -ErrorAction SilentlyContinue
@@ -324,7 +414,7 @@ function Test-GeneratedYamlComparatorDefaultMetaCoverage {
     if ($currentSource -notmatch '(?m)^Write-Output \(''COVERAGE: '' \+ \$reportedPathCount \+ ''/'' \+ \$selected.Count') {
         return New-HarnessFail 'coverage summary does not account for every selected authoritative changed path'
     }
-    return New-HarnessPass 'semantic change exit-0; stable/churn GUIDs; binary provenance; intact/broken pairs; unsupported type; exact summaries; red fixture fail-closed'
+    return New-HarnessPass 'semantic change exit-0; stable/churn GUIDs; binary provenance; intact/repaired/broken pairs; unsupported type; exact summaries; red fixture fail-closed'
 }
 
 function Test-RowFieldSweep {
@@ -457,7 +547,1076 @@ function Test-PlanOnlyPendingOnly {
     if (-not [bool](Get-HarnessField $outcomeResult 'pass')) {
         return New-HarnessFail ('production bake outcome contract failed: ' + [string](Get-HarnessField $outcomeResult 'message'))
     }
+    $workflowResult = Test-FastPersistedValidatorContract $State
+    if (-not [bool](Get-HarnessField $workflowResult 'pass')) {
+        return New-HarnessFail ('fast persisted validator contract failed: ' + [string](Get-HarnessField $workflowResult 'message'))
+    }
+    $captureResult = Test-WeaponCaptureContract $State
+    if (-not [bool](Get-HarnessField $captureResult 'pass')) {
+        return New-HarnessFail ('weapon capture contract failed: ' + [string](Get-HarnessField $captureResult 'message'))
+    }
+    $fastRestoreResult = Test-FastRestoreHierarchyContract $State
+    if (-not [bool](Get-HarnessField $fastRestoreResult 'pass')) {
+        return New-HarnessFail ('fast restore hierarchy contract failed: ' + [string](Get-HarnessField $fastRestoreResult 'message'))
+    }
+    $exceptionResult = Test-WeaponCaptureExceptionPreservation $State
+    if (-not [bool](Get-HarnessField $exceptionResult 'pass')) {
+        return New-HarnessFail ('weapon capture exception preservation failed: ' + [string](Get-HarnessField $exceptionResult 'message'))
+    }
+    $verdictResult = Test-WeaponVisualVerdictContract $State
+    if (-not [bool](Get-HarnessField $verdictResult 'pass')) {
+        return New-HarnessFail ('weapon verdict contract failed: ' + [string](Get-HarnessField $verdictResult 'message'))
+    }
     return New-HarnessPass 'PlanOnly pending assignment is production-bake-only; production bake outcome preserved'
+}
+
+function Test-FastPersistedValidatorContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $source = [IO.File]::ReadAllText($State.WorkflowPath)
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
+    if (-not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'missing workflow red fixture' }
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        "fast-persisted-validator",
+        "FastPersistedValidator",
+        "RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabFastPersisted",
+        "Invoke-UnityStep 'FastPersistedValidator'",
+        "Mark-CheckExecuted 'fast-persisted-validator'"
+    )
+    foreach ($needle in $required) {
+        if ($source.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('workflow omitted Fast persisted validator contract: ' + $needle) }
+        if ($red.IndexOf($needle, [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail ('workflow red fixture unexpectedly contains new contract: ' + $needle) }
+    }
+    $buildIndex = $source.IndexOf("Invoke-UnityStep 'BuildFast'", [StringComparison]::Ordinal)
+    $persistIndex = $source.IndexOf("Invoke-UnityStep 'FastPersistedValidator'", [StringComparison]::Ordinal)
+    if ($buildIndex -lt 0 -or $persistIndex -lt 0 -or $persistIndex -le $buildIndex) {
+        return New-HarnessFail 'Fast workflow does not retain early BuildFast plus later persisted validator process.'
+    }
+    return New-HarnessPass 'Fast workflow has early BuildFast and distinct fast-persisted-validator process; red fixture rejects both'
+}
+
+function Test-WeaponCaptureContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $path = Join-Path $State.ProjectRoot 'Tools/Validation/Capture-WeaponVisuals.ps1'
+    $facadePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-capture.ps1.txt'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or -not (Test-Path -LiteralPath $facadePath -PathType Leaf) -or -not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'weapon capture source/facade or red fixture missing' }
+    $source = [IO.File]::ReadAllText($path)
+    $facade = [IO.File]::ReadAllText($facadePath)
+    $combined = $source + [Environment]::NewLine + $facade
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        '-weaponCaptureEvidenceRoot', '-weaponCaptureAttemptId', '-weaponCaptureWeapon', '-weaponCaptureMode', '-weaponCaptureReferenceManifest',
+        'Start-Process', '-WindowStyle Hidden', '-Wait', '-PassThru', 'Wait-ProjectRelease', 'Acquire-ProjectLease', 'Release-ProjectLease',
+        'New-ExclusiveWrapperDirectory', 'Get-CaptureSourceSnapshot', 'Get-IndexDigest', 'Get-ProductFileSnapshot', 'Get-ReferenceSnapshot',
+        'wrapperDirectory', 'ExpectedSourceSha', 'sourceShaIsCleanHead', 'afterProductContentSha256', 'afterReferenceContentSha256', 'afterGeneratedManifestSha256',
+        'WeaponVisualManifest.json', 'WEAPON_VISUAL_CAPTURE_PASS', 'Assert-WeaponManifest',
+        'Assert-ExactJsonProperties', 'logicalId', 'copiedEvidencePath', 'byteLength', 'exactly three schema-1 references',
+        'SetLocalMode(true)', 'SetAlive(true)', 'SetShotgunOwned', 'MovementLabFastModeSession.EnterForCapture', 'MovementLabFastModeSession.RestoreIfActive',
+        'RenderSettings.sun', 'Vector3.SignedAngle', 'Mathf.DeltaAngle', 'maskRowOrigin', 'differencePixelCount', 'differenceMeanAbsRgb',
+        'DifferencePixelFloor', 'DifferenceChannelFloor', '1920', '1080', 'Git status changed during non-mutating weapon capture'
+    )
+    foreach ($needle in $required) {
+        if ($combined.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon capture omitted contract: ' + $needle) }
+    }
+    $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
+    if ($missing.Count -eq 0) { return New-HarnessFail 'weapon capture red fixture unexpectedly contains every guarded contract marker' }
+    if ($combined.IndexOf('BrightArenaVisualCapture', [StringComparison]::Ordinal) -ge 0) { return New-HarnessFail 'weapon capture must remain independent of BrightArena capture' }
+    $referenceParser = Get-HarnessFunctionAst $source 'Read-ReferenceManifest'
+    foreach ($legacyField in @("'entries'", "'items'", "'id'", "'evidencePath'", "'bytes'")) {
+        if ($referenceParser.Extent.Text.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('reference parser retains legacy field alias: ' + $legacyField)
+        }
+    }
+
+    # Static guards below keep the C# DTO and boundary wired to the canonical
+    # schema. JsonUtility silently ignores unknown fields; executable negative
+    # proof lives in the C# parser self-tests invoked by production capture.
+    $dtoStart = $facade.IndexOf('private sealed class ReferenceManifestDto', [StringComparison]::Ordinal)
+    $entryStart = $facade.IndexOf('private sealed class ReferenceEntry', $dtoStart + 1, [StringComparison]::Ordinal)
+    $hashStart = $facade.IndexOf('private sealed class ReferenceHashDto', $entryStart + 1, [StringComparison]::Ordinal)
+    if ($dtoStart -lt 0 -or $entryStart -le $dtoStart -or $hashStart -le $entryStart) {
+        return New-HarnessFail 'C# reference DTO boundaries are missing or out of order'
+    }
+    $referenceDto = $facade.Substring($dtoStart, $entryStart - $dtoStart)
+    $referenceEntry = $facade.Substring($entryStart, $hashStart - $entryStart)
+    foreach ($field in @('public int schemaVersion;', 'public ReferenceEntry[] references;')) {
+        if ($referenceDto.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference manifest DTO omitted canonical field: ' + $field)
+        }
+    }
+    if (@([Regex]::Matches($referenceDto, '(?m)^\s*public\s+[^;]+;')).Count -ne 2) {
+        return New-HarnessFail 'C# reference manifest DTO must expose exactly schemaVersion and references'
+    }
+    foreach ($field in @('public string logicalId;', 'public string originalPath;', 'public string copiedEvidencePath;', 'public long byteLength;', 'public string sha256;')) {
+        if ($referenceEntry.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference entry DTO omitted canonical field: ' + $field)
+        }
+    }
+    if (@([Regex]::Matches($referenceEntry, '(?m)^\s*public\s+[^;]+;')).Count -ne 5) {
+        return New-HarnessFail 'C# reference entry DTO must expose exactly five canonical fields'
+    }
+    foreach ($legacyField in @(
+        'public ReferenceEntry[] entries;', 'public ReferenceEntry[] items;',
+        'public string id;', 'public string evidencePath;', 'public long bytes;'
+    )) {
+        if ($referenceDto.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0 -or
+            $referenceEntry.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('C# reference DTO retains legacy field alias: ' + $legacyField)
+        }
+    }
+    $parserStart = $facade.IndexOf('private static ReferenceEvidence ReadAndValidateReferenceManifest', [StringComparison]::Ordinal)
+    $resolverStart = $facade.IndexOf('private static string ResolveReferencePath', $parserStart + 1, [StringComparison]::Ordinal)
+    if ($parserStart -lt 0 -or $resolverStart -le $parserStart) {
+        return New-HarnessFail 'C# reference manifest parser boundary is missing or out of order'
+    }
+    $csharpParser = $facade.Substring($parserStart, $resolverStart - $parserStart)
+    foreach ($field in @(
+        'var entries = manifest.references;', 'entries.Length != ExpectedReferenceIds.Length',
+        'ExpectedReferenceIds.Contains(entry.logicalId, StringComparer.Ordinal)', 'seen.Add(entry.logicalId)',
+        'entry.byteLength <= 0', 'string.IsNullOrWhiteSpace(entry.originalPath)',
+        'string.IsNullOrWhiteSpace(entry.copiedEvidencePath)', 'ResolveReferencePath(entry.copiedEvidencePath',
+        'ValidateReferenceFile(copiedEvidencePath', 'new FileInfo(originalPath).Length != entry.byteLength'
+    )) {
+        if ($csharpParser.IndexOf($field, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# reference parser omitted canonical validation: ' + $field)
+        }
+    }
+    foreach ($legacyField in @('manifest.entries', 'manifest.items', 'entry.id', 'entry.evidencePath', 'entry.bytes')) {
+        if ($csharpParser.IndexOf($legacyField, [StringComparison]::Ordinal) -ge 0) {
+            return New-HarnessFail ('C# reference parser retains legacy field alias: ' + $legacyField)
+        }
+    }
+    if ($facade.IndexOf('referenceHashes = reference.Entries.Select(entry => new ReferenceHashDto { id = entry.logicalId, sha256 = entry.sha256 }).ToArray()', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'C# capture output no longer maps referenceHashes.id from logicalId'
+    }
+    foreach ($strictMarker in @(
+        'private static void ValidateReferenceManifestStructure',
+        'private static void RunReferenceManifestStructureSelfTests',
+        'private static void AssertReferenceManifestStructureRejected',
+        'new StrictReferenceManifestJsonReader(json).ReadManifest()',
+        'mixed root alias', 'mixed entry alias', 'unknown property', 'duplicate property',
+        'var prettyPrinted', 'ValidateReferenceManifestStructure(prettyPrinted)',
+        'var reordered', 'ValidateReferenceManifestStructure(reordered)'
+    )) {
+        if ($facade.IndexOf($strictMarker, [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# strict reference boundary omitted executable self-test marker: ' + $strictMarker)
+        }
+    }
+    $readerStart = $facade.IndexOf('private sealed class StrictReferenceManifestJsonReader', [StringComparison]::Ordinal)
+    if ($readerStart -lt 0) { return New-HarnessFail 'C# strict reference reader boundary is missing' }
+    $reader = $facade.Substring($readerStart)
+    foreach ($entryPoint in @(
+        'private void ReadReferenceEntries()', 'private void ReadReferenceEntry()',
+        'private void ReadValue()', 'private void ReadObjectValue()', 'private void ReadArrayValue()',
+        'private string ReadString()', 'private void ReadNumber()', 'private void ReadLiteral(string literal)',
+        'private void BeginContainer(char opening)'
+    )) {
+        $entryStart = $reader.IndexOf($entryPoint, [StringComparison]::Ordinal)
+        if ($entryStart -lt 0) { return New-HarnessFail ('C# strict reference reader entry point is missing: ' + $entryPoint) }
+        $nextMethod = $reader.IndexOf('private ', $entryStart + $entryPoint.Length, [StringComparison]::Ordinal)
+        if ($nextMethod -lt 0) { $nextMethod = $reader.Length }
+        $entryText = $reader.Substring($entryStart, $nextMethod - $entryStart)
+        if ($entryText.IndexOf('SkipWhitespace();', [StringComparison]::Ordinal) -lt 0) {
+            return New-HarnessFail ('C# strict reference reader entry point does not skip JSON whitespace: ' + $entryPoint)
+        }
+    }
+    $strictCall = $facade.IndexOf('ValidateReferenceManifestStructure(manifestJson)', [StringComparison]::Ordinal)
+    $jsonUtilityCall = $facade.IndexOf('JsonUtility.FromJson<ReferenceManifestDto>', [StringComparison]::Ordinal)
+    if ($strictCall -lt 0 -or $jsonUtilityCall -lt 0 -or $strictCall -ge $jsonUtilityCall) {
+        return New-HarnessFail 'C# strict reference structure validation must run before JsonUtility deserialization'
+    }
+    $workflowSource = [IO.File]::ReadAllText($State.WorkflowPath)
+    $redWorkflowPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-workflow.ps1.txt'
+    $redWorkflowSource = [IO.File]::ReadAllText($redWorkflowPath)
+    foreach ($leaseSource in @(
+        [pscustomobject]@{ Name = 'capture'; Text = $source },
+        [pscustomobject]@{ Name = 'workflow'; Text = $workflowSource }
+    )) {
+        $leaseAst = Get-HarnessFunctionAst $leaseSource.Text 'Acquire-ProjectLease'
+        if ($leaseAst.Extent.Text -match '(?im)Remove-Item\s+-LiteralPath\s+\$script:LeasePath') {
+            return New-HarnessFail ($leaseSource.Name + ' stale lease recovery still deletes the shared path')
+        }
+        if ($leaseAst.Extent.Text -notmatch '(?i)refusing automatic recovery') {
+            return New-HarnessFail ($leaseSource.Name + ' stale lease recovery is not fail-closed')
+        }
+    }
+    foreach ($redLease in @(
+        [pscustomobject]@{ Name = 'capture'; Text = $red },
+        [pscustomobject]@{ Name = 'workflow'; Text = $redWorkflowSource }
+    )) {
+        $redLeaseAst = Get-HarnessFunctionAst $redLease.Text 'Acquire-ProjectLease'
+        if ($redLeaseAst.Extent.Text -notmatch '(?im)Remove-Item\s+-LiteralPath\s+\$script:LeasePath') {
+            return New-HarnessFail ($redLease.Name + ' red lease fixture no longer retains unsafe stale deletion')
+        }
+    }
+    return New-HarnessPass ('weapon CLI/render/pose/control/hash contract guarded; red fixture fails at ' + $missing[0])
+}
+
+function Write-HarnessJson {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)]$Value)
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Force -Path $directory | Out-Null }
+    [IO.File]::WriteAllText($Path, (($Value | ConvertTo-Json -Depth 32) + [Environment]::NewLine), (New-Object Text.UTF8Encoding($false)))
+}
+
+function New-HarnessPngHeader {
+    param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][int]$Marker)
+    $bytes = New-Object byte[] 24
+    $bytes[0] = [byte]137; $bytes[1] = [byte]80; $bytes[2] = [byte]78; $bytes[3] = [byte]71
+    $bytes[16] = [byte]0; $bytes[17] = [byte]0; $bytes[18] = [byte]7; $bytes[19] = [byte]128
+    $bytes[20] = [byte]0; $bytes[21] = [byte]0; $bytes[22] = [byte]4; $bytes[23] = [byte]56
+    $bytes[4] = [byte]($Marker -band 0xff)
+    [IO.File]::WriteAllBytes($Path, $bytes)
+}
+
+function Get-HarnessStringSha256 {
+    param([Parameter(Mandatory = $true)][string]$Value)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+        return ([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($Value)))).Replace('-', '').ToLowerInvariant()
+    } finally { $sha.Dispose() }
+}
+
+function Test-ProjectLeaseContentionBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('project-lease-contention-' + [Guid]::NewGuid().ToString('N'))
+    $shimPath = Join-Path $State.ProjectRoot 'Tools\Tests\HarnessShim.psm1'
+    $probeScript = Join-Path $root 'lease-contender.ps1'
+    $probeSource = @'
+param(
+    [Parameter(Mandatory = $true)][string]$Source,
+    [Parameter(Mandatory = $true)][string]$ShimPath,
+    [Parameter(Mandatory = $true)][string]$ProjectPath,
+    [Parameter(Mandatory = $true)][string]$GitCommonPath,
+    [Parameter(Mandatory = $true)][ValidateSet('Capture', 'Workflow')][string]$LeaseOwner
+)
+
+$ErrorActionPreference = 'Stop'
+Import-Module -Name $ShimPath -Force
+$functionNames = @('Acquire-ProjectLease', 'Read-LeaseRecord', 'Get-CanonicalPath', 'Get-FullPath', 'Get-StringSha256', 'Get-CurrentProcessStartUtc')
+if ($LeaseOwner -eq 'Capture') { $functionNames += 'Assert-LeasePath' }
+$module = Import-HarnessFunctions -Source $Source -FunctionNames $functionNames
+& $module {
+    param([string]$Project, [string]$GitCommon)
+    $script:ProjectRoot = $Project
+    $script:GitCommonRoot = $GitCommon
+    try {
+        Acquire-ProjectLease | Out-Null
+        Write-Output 'ACQUIRED'
+        $script:ProbeExitCode = 11
+    } catch {
+        Write-Output ('REJECTED ' + $_.Exception.Message)
+        $script:ProbeExitCode = 0
+    }
+} $ProjectPath $GitCommonPath
+exit [int](& $module { return $script:ProbeExitCode })
+'@
+    try {
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        [IO.File]::WriteAllText($probeScript, $probeSource, (New-Object Text.UTF8Encoding($false)))
+        $processStartUtc = (Get-Process -Id $PID -ErrorAction Stop).StartTime.ToUniversalTime().ToString('O')
+        foreach ($sourceInfo in @(
+            [pscustomobject]@{ Name = 'Capture'; Path = $State.CapturePath },
+            [pscustomobject]@{ Name = 'Workflow'; Path = $State.WorkflowPath }
+        )) {
+            $caseRoot = Join-Path $root $sourceInfo.Name
+            $leaseRoot = Join-Path $caseRoot 'common\movement-lab-proof\leases'
+            New-Item -ItemType Directory -Force -Path $leaseRoot | Out-Null
+            $canonicalProject = [IO.Path]::GetFullPath((Join-Path $caseRoot 'project')).TrimEnd('\')
+            New-Item -ItemType Directory -Force -Path $canonicalProject | Out-Null
+            $leaseName = Get-HarnessStringSha256 $canonicalProject
+            $leasePath = Join-Path $leaseRoot ($leaseName + '.lease')
+            $staleRecord = [ordered]@{
+                schemaVersion = 1
+                leaseToken = 'a' * 32
+                canonicalProjectRoot = $canonicalProject
+                ownerPid = [int]$PID
+                ownerProcessStartUtc = '2000-01-01T00:00:00.0000000Z'
+                acquiredUtc = '2000-01-01T00:00:00.0000000Z'
+            }
+            $staleJson = (($staleRecord | ConvertTo-Json -Depth 8) + "`n")
+            [IO.File]::WriteAllText($leasePath, $staleJson, (New-Object Text.UTF8Encoding($false)))
+            $staleHash = (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+            $contenders = New-Object System.Collections.Generic.List[object]
+            for ($index = 0; $index -lt 2; $index++) {
+                $stdout = Join-Path $caseRoot ('stale-' + $index + '.stdout.log')
+                $stderr = Join-Path $caseRoot ('stale-' + $index + '.stderr.log')
+                $args = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probeScript, '-Source', $sourceInfo.Path, '-ShimPath', $shimPath, '-ProjectPath', $canonicalProject, '-GitCommonPath', (Join-Path $caseRoot 'common'), '-LeaseOwner', $sourceInfo.Name)
+                $contenders.Add((Start-Process -FilePath 'powershell.exe' -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru)) | Out-Null
+            }
+            foreach ($contender in @($contenders.ToArray())) { $contender.WaitForExit(); $contender.Refresh() }
+            $staleOutput = New-Object System.Collections.Generic.List[string]
+            for ($index = 0; $index -lt 2; $index++) {
+                $stdoutPath = Join-Path $caseRoot ('stale-' + $index + '.stdout.log')
+                $stderrPath = Join-Path $caseRoot ('stale-' + $index + '.stderr.log')
+                if (Test-Path -LiteralPath $stdoutPath) { $staleOutput.Add((Get-Content -Raw -LiteralPath $stdoutPath)) | Out-Null }
+                if (Test-Path -LiteralPath $stderrPath) { $staleOutput.Add((Get-Content -Raw -LiteralPath $stderrPath)) | Out-Null }
+            }
+            $staleOutputText = $staleOutput -join "`n"
+            if ($staleOutputText -notmatch '(?i)REJECTED .*stale.*refusing automatic recovery') {
+                return New-HarnessFail ($sourceInfo.Name + ' stale contenders did not fail closed: ' + $staleOutputText)
+            }
+            if (-not (Test-Path -LiteralPath $leasePath -PathType Leaf) -or (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $staleHash) {
+                return New-HarnessFail ($sourceInfo.Name + ' stale contender changed the lease record')
+            }
+
+            $liveRecord = [ordered]@{
+                schemaVersion = 1
+                leaseToken = 'b' * 32
+                canonicalProjectRoot = $canonicalProject
+                ownerPid = [int]$PID
+                ownerProcessStartUtc = $processStartUtc
+                acquiredUtc = [DateTime]::UtcNow.ToString('O')
+            }
+            [IO.File]::WriteAllText($leasePath, (($liveRecord | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
+            $liveHash = (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $liveStdout = Join-Path $caseRoot 'live.stdout.log'
+            $liveStderr = Join-Path $caseRoot 'live.stderr.log'
+            $liveArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $probeScript, '-Source', $sourceInfo.Path, '-ShimPath', $shimPath, '-ProjectPath', $canonicalProject, '-GitCommonPath', (Join-Path $caseRoot 'common'), '-LeaseOwner', $sourceInfo.Name)
+            $live = Start-Process -FilePath 'powershell.exe' -ArgumentList $liveArgs -WindowStyle Hidden -RedirectStandardOutput $liveStdout -RedirectStandardError $liveStderr -Wait -PassThru
+            $liveOutput = if (Test-Path -LiteralPath $liveStdout) { Get-Content -Raw -LiteralPath $liveStdout } else { '' }
+            if ($liveOutput -notmatch '(?i)REJECTED .*live PID') {
+                $liveError = if (Test-Path -LiteralPath $liveStderr) { Get-Content -Raw -LiteralPath $liveStderr } else { '' }
+                return New-HarnessFail ($sourceInfo.Name + ' live contender did not remain token-bound: ' + $liveOutput + ' ' + $liveError)
+            }
+            if (-not (Test-Path -LiteralPath $leasePath -PathType Leaf) -or (Get-FileHash -LiteralPath $leasePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $liveHash) {
+                return New-HarnessFail ($sourceInfo.Name + ' live contender changed another owner lease')
+            }
+        }
+        return New-HarnessPass 'Capture and workflow stale contenders fail closed; live lease remains owner-bound'
+    } catch {
+        return New-HarnessFail ('project lease contention behavior failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-FastRestoreHierarchyContract {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $fastPath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/MovementLab/MovementLabFastModeSession.cs'
+    $capturePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    if (-not (Test-Path -LiteralPath $fastPath -PathType Leaf) -or -not (Test-Path -LiteralPath $capturePath -PathType Leaf)) {
+        return New-HarnessFail 'Fast restore source missing'
+    }
+    $fast = [IO.File]::ReadAllText($fastPath)
+    $capture = [IO.File]::ReadAllText($capturePath)
+
+    $assertContract = {
+        param([string]$FastSource, [string]$CaptureSource)
+
+        $persistableStart = $FastSource.IndexOf('private static bool IsPersistableSceneTarget', [StringComparison]::Ordinal)
+        $persistableEnd = $FastSource.IndexOf('private static ulong GetTargetEntityId', $persistableStart + 1, [StringComparison]::Ordinal)
+        if ($persistableStart -lt 0 -or $persistableEnd -le $persistableStart) { return 'persistable scene-target helper boundary missing' }
+        $persistable = $FastSource.Substring($persistableStart, $persistableEnd - $persistableStart)
+        foreach ($flag in @('HideFlags.DontSave', 'HideFlags.DontSaveInBuild', 'HideFlags.DontSaveInEditor', 'target.hideFlags', 'gameObject.hideFlags')) {
+            if ($persistable.IndexOf($flag, [StringComparison]::Ordinal) -lt 0) { return 'persistable helper omitted ' + $flag }
+        }
+        if ($persistable.IndexOf('HideFlags.HideInHierarchy', [StringComparison]::Ordinal) -ge 0 -or
+            $persistable.IndexOf('EditorUtility.IsPersistent', [StringComparison]::Ordinal) -ge 0) {
+            return 'persistable helper excludes a non-DontSave target'
+        }
+        if (@([regex]::Matches($FastSource, 'IsPersistableSceneTarget')).Count -lt 2) {
+            return 'persistable helper is not used by scene snapshot/restore capture'
+        }
+
+        foreach ($marker in @(
+            'MaxHierarchyDeltaIdentities', 'GetTargetEntityId(item.target)', 'SceneObjectMatches',
+            'expectedCount=', 'currentCount=', 'added identities=', 'removed identities=',
+            'FormatHierarchyDelta(added)', 'FormatHierarchyDelta(removed)', 'Take(MaxHierarchyDeltaIdentities)'
+        )) {
+            if ($FastSource.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'hierarchy delta diagnostic omitted ' + $marker }
+        }
+
+        $captureStart = $CaptureSource.IndexOf('public static void Capture()', [StringComparison]::Ordinal)
+        $captureFinally = $CaptureSource.IndexOf('finally', $captureStart + 1, [StringComparison]::Ordinal)
+        $restoreHelper = $CaptureSource.IndexOf('private static void TryRestoreCaptureState', $captureFinally + 1, [StringComparison]::Ordinal)
+        if ($captureStart -lt 0 -or $captureFinally -le $captureStart -or $restoreHelper -le $captureFinally) {
+            return 'weapon capture outer finally boundary missing'
+        }
+        $finally = $CaptureSource.Substring($captureFinally, $restoreHelper - $captureFinally)
+        $openIndex = $finally.IndexOf('EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)', [StringComparison]::Ordinal)
+        $guardIndex = $finally.IndexOf('if (!MovementLabFastModeSession.IsActive)', [StringComparison]::Ordinal)
+        if ($openIndex -lt 0 -or $guardIndex -lt 0 -or $guardIndex -gt $openIndex) {
+            return 'clean scene reopen is not guarded by inactive Fast snapshot'
+        }
+        foreach ($marker in @('fastRestoreFailed = true;', 'RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);', 'TryRestoreCaptureState(cleanupErrors,', 'scene reopen skipped', 'ThrowCaptureError(primaryError, cleanupErrors);')) {
+            if ($finally.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'restore-failure cleanup omitted ' + $marker }
+        }
+
+        $initializeCall = $CaptureSource.IndexOf('viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);', $captureStart, [StringComparison]::Ordinal)
+        $captureImageCall = $CaptureSource.IndexOf('var image = CaptureImage(', $captureStart, [StringComparison]::Ordinal)
+        $enterForCapture = $CaptureSource.IndexOf('MovementLabFastModeSession.EnterForCapture(qualityIndex);', $captureStart, [StringComparison]::Ordinal)
+        $cameraRender = $CaptureSource.IndexOf('camera.Render();', $enterForCapture, [StringComparison]::Ordinal)
+        $viewmodelLightRequire = $CaptureSource.IndexOf('viewmodelLight = Require(', $captureStart, [StringComparison]::Ordinal)
+        $cameraSnapshot = $CaptureSource.IndexOf('cameraState = SaveCameraState(gameplayCamera);', $captureStart, [StringComparison]::Ordinal)
+        if ($initializeCall -le $viewmodelLightRequire -or $initializeCall -ge $cameraSnapshot -or
+            $initializeCall -ge $captureImageCall -or $initializeCall -ge $enterForCapture -or $initializeCall -ge $cameraRender) {
+            return 'ViewmodelLight URP additional data is not initialized before capture snapshots and first Fast render'
+        }
+
+        $ensureStart = $CaptureSource.IndexOf('private static UniversalAdditionalLightData EnsureViewmodelLightAdditionalData(', [StringComparison]::Ordinal)
+        $removeStart = $CaptureSource.IndexOf('private static void RemoveCaptureAddedViewmodelLightAdditionalData(', [StringComparison]::Ordinal)
+        $optionsStart = $CaptureSource.IndexOf('private static CaptureOptions ReadCaptureOptions', $removeStart + 1, [StringComparison]::Ordinal)
+        if ($ensureStart -lt 0 -or $removeStart -le $ensureStart -or $optionsStart -le $removeStart) {
+            return 'ViewmodelLight URP additional-data helper boundaries are missing or out of order'
+        }
+        $ensure = $CaptureSource.Substring($ensureStart, $removeStart - $ensureStart)
+        $remove = $CaptureSource.Substring($removeStart, $optionsStart - $removeStart)
+        foreach ($marker in @(
+            'viewmodelLight.GetComponents<UniversalAdditionalLightData>()',
+            'existingAdditionalData.Length > 1',
+            'captureAdded = existingAdditionalData.Length == 0;',
+            'viewmodelLight.GetUniversalAdditionalLightData()',
+            'additionalData.gameObject != viewmodelLight.gameObject',
+            'currentAdditionalData.Length != 1'
+        )) {
+            if ($ensure.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'URP additional-data initialization omitted ' + $marker }
+        }
+        foreach ($marker in @(
+            'if (!captureAdded) return;',
+            'additionalData.gameObject != viewmodelLight.gameObject',
+            'currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData',
+            'UnityEngine.Object.DestroyImmediate(additionalData);',
+            'GetComponents<UniversalAdditionalLightData>().Length != 0'
+        )) {
+            if ($remove.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return 'capture-owned URP additional-data cleanup omitted ' + $marker }
+        }
+
+        $restoreIndex = $finally.IndexOf('MovementLabFastModeSession.RestoreIfActive();', [StringComparison]::Ordinal)
+        $removeGate = $finally.IndexOf('if (!fastRestoreFailed && !MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)', [StringComparison]::Ordinal)
+        $removeCall = $finally.IndexOf('RemoveCaptureAddedViewmodelLightAdditionalData(viewmodelLight, viewmodelLightAdditionalData, captureAddedViewmodelLightAdditionalData)', [StringComparison]::Ordinal)
+        $additionalRemovalFailure = $finally.IndexOf('additionalDataRemovalFailed = cleanupErrors.Count != removalErrorCount;', [StringComparison]::Ordinal)
+        if ($restoreIndex -lt 0 -or $removeGate -le $restoreIndex -or $removeCall -le $removeGate -or $additionalRemovalFailure -le $removeCall -or $removeCall -ge $openIndex) {
+            return 'capture-owned URP additional-data removal is not conditional and ordered after successful Fast restore before scene reopen'
+        }
+        if ($finally.IndexOf('if (!fastRestoreFailed && !additionalDataRemovalFailed)', $removeCall, [StringComparison]::Ordinal) -lt 0) {
+            return 'scene reopen is not blocked after capture-owned URP additional-data cleanup failure'
+        }
+        return $null
+    }
+
+    $failure = & $assertContract $fast $capture
+    if ($null -ne $failure) { return New-HarnessFail $failure }
+
+    $filterScratch = $fast.Replace('if (!IsPersistableSceneTarget(target)) return;', 'if (target == null) return;')
+    $scratchFailure = & $assertContract $filterScratch $capture
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'persistable-filter scratch unexpectedly passed' }
+
+    $deltaScratch = $fast.Replace('expectedCount=', 'expected=')
+    $scratchFailure = & $assertContract $deltaScratch $capture
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'hierarchy-delta scratch unexpectedly passed' }
+
+    $reopenScratch = $capture.Replace('if (!MovementLabFastModeSession.IsActive)', 'if (true)')
+    $scratchFailure = & $assertContract $fast $reopenScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'restore-failure reopen scratch unexpectedly passed' }
+
+    $initializationScratch = $capture.Replace('viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);', 'viewmodelLightAdditionalData = null;')
+    $scratchFailure = & $assertContract $fast $initializationScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'pre-render URP initialization scratch unexpectedly passed' }
+
+    $ownershipScratch = $capture.Replace('if (!captureAdded) return;', 'if (captureAdded) return;')
+    $scratchFailure = & $assertContract $fast $ownershipScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'preexisting URP additional-data ownership scratch unexpectedly passed' }
+
+    $restoreGateScratch = $capture.Replace('if (!fastRestoreFailed && !MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)', 'if (captureAddedViewmodelLightAdditionalData)')
+    $scratchFailure = & $assertContract $fast $restoreGateScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'Fast restore URP cleanup gate scratch unexpectedly passed' }
+
+    $reopenCleanupScratch = $capture.Replace('if (!fastRestoreFailed && !additionalDataRemovalFailed)', 'if (!fastRestoreFailed)')
+    $scratchFailure = & $assertContract $fast $reopenCleanupScratch
+    if ($null -eq $scratchFailure) { return New-HarnessFail 'URP cleanup failure reopen scratch unexpectedly passed' }
+    return New-HarnessPass 'persistable scene filtering, bounded hierarchy deltas, pre-render URP warmup, ownership-safe cleanup, and fail-closed reopen guard are structurally covered'
+}
+
+function Test-WeaponCaptureExceptionPreservation {
+    param([Parameter(Mandatory = $true)]$State)
+
+    $capturePath = Join-Path $State.ProjectRoot 'Assets/_Game/Editor/WeaponVisualCapture.cs'
+    if (-not (Test-Path -LiteralPath $capturePath -PathType Leaf)) { return New-HarnessFail 'weapon capture source missing' }
+    $source = [IO.File]::ReadAllText($capturePath)
+
+    foreach ($marker in @(
+        'using System.Runtime.ExceptionServices;',
+        'private sealed class CaptureCleanupError',
+        'ExceptionDispatchInfo primaryError = null;',
+        'primaryError = ExceptionDispatchInfo.Capture(exception);',
+        'RecordCaptureCleanupFailure(cleanupErrors, "fast-restore", exception);',
+        'TryRestoreCaptureState(cleanupErrors,',
+        'LogCaptureCleanupFailures(cleanupErrors, 0);',
+        'LogCaptureCleanupFailures(cleanupErrors, 1);',
+        'primaryError.Throw();',
+        'cleanupErrors[0].DispatchInfo.Throw();',
+        'ThrowCaptureError(primaryError, cleanupErrors);'
+    )) {
+        if ($source.IndexOf($marker, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('exception preservation omitted ' + $marker) }
+    }
+    if ($source.IndexOf('throw restoreError', [StringComparison]::Ordinal) -ge 0) {
+        return New-HarnessFail 'weapon capture still directly throws a cleanup Exception from finally'
+    }
+
+    $captureStart = $source.IndexOf('public static void Capture()', [StringComparison]::Ordinal)
+    $outerCatchStart = $source.IndexOf('catch (Exception exception)', $captureStart + 1, [StringComparison]::Ordinal)
+    $outerFinallyStart = $source.IndexOf('finally', $outerCatchStart + 1, [StringComparison]::Ordinal)
+    $helperStart = $source.IndexOf('private static void RecordCaptureCleanupFailure', $outerFinallyStart + 1, [StringComparison]::Ordinal)
+    if ($captureStart -lt 0 -or $outerCatchStart -le $captureStart -or $outerFinallyStart -le $outerCatchStart -or $helperStart -le $outerFinallyStart) {
+        return New-HarnessFail 'outer capture exception boundaries are missing or out of order'
+    }
+    $outer = $source.Substring($outerCatchStart, $helperStart - $outerCatchStart)
+    if ($outer.IndexOf('primaryError = ExceptionDispatchInfo.Capture(exception);', [StringComparison]::Ordinal) -lt 0 -or
+        $outer.IndexOf('UnityEngine.Debug.LogException(exception);', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'outer capture does not capture and log the primary error exactly at its catch boundary'
+    }
+    $throwIndex = $outer.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal)
+    $reopenIndex = $outer.IndexOf('EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single)', [StringComparison]::Ordinal)
+    if ($throwIndex -lt 0 -or $reopenIndex -lt 0 -or $throwIndex -le $reopenIndex) {
+        return New-HarnessFail 'outer capture throws before scene-reopen cleanup completes'
+    }
+
+    $imageStart = $source.IndexOf('private static ImageEvidence CaptureImage(', [StringComparison]::Ordinal)
+    $imageCatchStart = $source.IndexOf('catch (Exception exception)', $imageStart + 1, [StringComparison]::Ordinal)
+    $imageFinallyStart = $source.IndexOf('finally', $imageCatchStart + 1, [StringComparison]::Ordinal)
+    $imageEnd = $source.IndexOf('private static Color32[] ReadPixels', $imageFinallyStart + 1, [StringComparison]::Ordinal)
+    if ($imageStart -lt 0 -or $imageCatchStart -le $imageStart -or $imageFinallyStart -le $imageCatchStart -or $imageEnd -le $imageFinallyStart) {
+        return New-HarnessFail 'CaptureImage exception boundaries are missing or out of order'
+    }
+    $image = $source.Substring($imageStart, $imageEnd - $imageStart)
+    if ($image.IndexOf('primaryError = ExceptionDispatchInfo.Capture(exception);', [StringComparison]::Ordinal) -lt 0 -or
+        $image.IndexOf('TryRestoreCaptureState(cleanupErrors, "image-fast-restore"', [StringComparison]::Ordinal) -lt 0 -or
+        $image.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal) -lt 0) {
+        return New-HarnessFail 'CaptureImage does not preserve image failure across Fast restoration'
+    }
+    $imageRestoreIndex = $image.IndexOf('TryRestoreCaptureState(cleanupErrors, "image-fast-restore"', [StringComparison]::Ordinal)
+    $imageThrowIndex = $image.IndexOf('ThrowCaptureError(primaryError, cleanupErrors);', [StringComparison]::Ordinal)
+    if ($imageThrowIndex -le $imageRestoreIndex) { return New-HarnessFail 'CaptureImage throws before attempting Fast restoration' }
+
+    $typeName = 'WeaponCaptureExceptionScratch_' + [Guid]::NewGuid().ToString('N')
+    $definition = @"
+using System;
+using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
+
+public static class $typeName
+{
+    public static int CleanupCount { get; private set; }
+
+    public static void PrimaryWins()
+    {
+        ExceptionDispatchInfo primary = null;
+        var cleanupErrors = new List<ExceptionDispatchInfo>();
+        try
+        {
+            throw new InvalidOperationException("primary sentinel");
+        }
+        catch (Exception exception)
+        {
+            primary = ExceptionDispatchInfo.Capture(exception);
+        }
+        finally
+        {
+            try
+            {
+                throw new InvalidOperationException("secondary cleanup sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            CleanupCount = cleanupErrors.Count;
+            if (primary != null)
+            {
+                primary.Throw();
+            }
+            if (cleanupErrors.Count > 0) cleanupErrors[0].Throw();
+        }
+    }
+
+    public static void CleanupOnly()
+    {
+        ExceptionDispatchInfo primary = null;
+        var cleanupErrors = new List<ExceptionDispatchInfo>();
+        try { }
+        finally
+        {
+            try
+            {
+                throw new InvalidOperationException("first cleanup-only sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            try
+            {
+                throw new InvalidOperationException("second cleanup-only sentinel");
+            }
+            catch (Exception exception)
+            {
+                cleanupErrors.Add(ExceptionDispatchInfo.Capture(exception));
+            }
+            CleanupCount = cleanupErrors.Count;
+            if (primary != null)
+            {
+                primary.Throw();
+            }
+            if (cleanupErrors.Count > 0) cleanupErrors[0].Throw();
+        }
+    }
+}
+"@
+
+    try {
+        $scratchType = @(Add-Type -TypeDefinition $definition -PassThru -ErrorAction Stop | Where-Object { $_ -is [Type] -and $_.Name -ceq $typeName })[0]
+        if ($null -eq $scratchType) { return New-HarnessFail 'exception-preservation scratch type did not compile' }
+
+        $invokeScratch = {
+            param([string]$MethodName)
+            try {
+                $method = $scratchType.GetMethod($MethodName)
+                if ($null -eq $method) { throw ('scratch method missing: ' + $MethodName) }
+                [void]$method.Invoke($null, [object[]]@())
+                return $null
+            } catch {
+                if ($null -ne $_.Exception.InnerException) { return $_.Exception.InnerException }
+                return $_.Exception
+            }
+        }
+
+        $primaryException = & $invokeScratch 'PrimaryWins'
+        if ($null -eq $primaryException -or [string]$primaryException.Message -cne 'primary sentinel') {
+            return New-HarnessFail ('primary sentinel was replaced: ' + [string]$primaryException)
+        }
+        if ([string]$primaryException.StackTrace -notmatch 'PrimaryWins') {
+            return New-HarnessFail 'primary sentinel stack was not preserved by ExceptionDispatchInfo'
+        }
+        $primaryCleanupCount = [int]$scratchType.GetProperty('CleanupCount').GetValue($null, $null)
+        if ($primaryCleanupCount -ne 1) { return New-HarnessFail ('primary scratch did not attempt secondary cleanup; count=' + $primaryCleanupCount) }
+
+        $cleanupException = & $invokeScratch 'CleanupOnly'
+        if ($null -eq $cleanupException -or [string]$cleanupException.Message -cne 'first cleanup-only sentinel') {
+            return New-HarnessFail ('cleanup-only sentinel was not the first cleanup error: ' + [string]$cleanupException)
+        }
+        $cleanupCount = [int]$scratchType.GetProperty('CleanupCount').GetValue($null, $null)
+        if ($cleanupCount -ne 2) { return New-HarnessFail ('cleanup-only scratch did not accumulate all cleanup errors; count=' + $cleanupCount) }
+    } catch {
+        return New-HarnessFail ('exception-preservation scratch failed: ' + $_.Exception.Message)
+    }
+
+    return New-HarnessPass 'primary capture survives secondary cleanup; cleanup-only throws first cleanup with preserved stack'
+}
+
+function Test-WeaponCaptureBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('weapon-capture-behavior-' + [Guid]::NewGuid().ToString('N'))
+    $module = $null
+    try {
+        $captureDirectory = Join-Path $root 'capture'
+        New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null
+        $sourceSha = 'a' * 40
+        $generatedSha = 'b' * 64
+        $referencePath = Join-Path $root 'reference.json'
+        $referenceEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($logicalId in @('game-bright', 'game-dark', 'quake-hires')) {
+            $originalPath = Join-Path $root ($logicalId + '-original.bin')
+            $copiedEvidencePath = Join-Path $root ($logicalId + '-evidence.bin')
+            [IO.File]::WriteAllBytes($originalPath, [byte[]](1, 2, 3, 4))
+            [IO.File]::WriteAllBytes($copiedEvidencePath, [byte[]](1, 2, 3, 4))
+            $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $referenceEntries.Add([ordered]@{ logicalId = $logicalId; originalPath = $originalPath; copiedEvidencePath = $copiedEvidencePath; byteLength = 4; sha256 = $hash }) | Out-Null
+        }
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; references = @($referenceEntries.ToArray()) })
+
+        $module = & $State.ShimCommand $State.CapturePath @(
+            'Assert-WeaponManifest', 'Read-PngDimensions', 'Assert-NumericClose', 'Assert-Vector', 'Get-Property', 'Get-Hash',
+            'Read-ReferenceManifest', 'Assert-ExactJsonProperties', 'Resolve-ReferencePath', 'Get-FullPath'
+        ) @()
+        & $module { param($project) $script:ProjectRoot = $project } $root | Out-Null
+        $parsedReference = Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $referencePath }
+        if ($parsedReference.entries.Count -ne 3) { return New-HarnessFail ('canonical reference manifest returned ' + $parsedReference.entries.Count + ' entries') }
+        foreach ($entry in @($parsedReference.entries)) {
+            foreach ($field in @('logicalId', 'originalPath', 'copiedEvidencePath', 'byteLength', 'sha256')) {
+                if ($null -eq (Get-HarnessField $entry $field)) { return New-HarnessFail ('canonical reference record omitted ' + $field) }
+            }
+            foreach ($legacyField in @('id', 'evidencePath', 'bytes')) {
+                if ($null -ne (Get-HarnessField $entry $legacyField)) { return New-HarnessFail ('canonical reference record retained ' + $legacyField) }
+            }
+        }
+        $reference = $parsedReference
+
+        $legacyEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $legacyEntries.Add([ordered]@{
+                    id = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    bytes = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $legacyPath = Join-Path $root 'reference-legacy.json'
+        Write-HarnessJson $legacyPath ([ordered]@{ schemaVersion = 1; entries = @($legacyEntries.ToArray()) })
+        $legacyRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $legacyPath } | Out-Null } catch { $legacyRejected = $true }
+        if (-not $legacyRejected) { return New-HarnessFail 'legacy reference manifest fields unexpectedly passed canonical parser' }
+
+        $wrongFieldEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $wrongFieldEntries.Add([ordered]@{
+                    logicalId = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    byteLength = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $wrongFieldPath = Join-Path $root 'reference-wrong-field.json'
+        Write-HarnessJson $wrongFieldPath ([ordered]@{ schemaVersion = 1; references = @($wrongFieldEntries.ToArray()) })
+        $wrongFieldRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $wrongFieldPath } | Out-Null } catch { $wrongFieldRejected = $true }
+        if (-not $wrongFieldRejected) { return New-HarnessFail 'wrong reference field alias unexpectedly passed canonical parser' }
+
+        $wrongLengthEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $length = if ([string]$entry.logicalId -ceq 'game-bright') { 5 } else { [int64]$entry.byteLength }
+            $wrongLengthEntries.Add([ordered]@{
+                    logicalId = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    copiedEvidencePath = [string]$entry.copiedEvidencePath
+                    byteLength = $length
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $wrongLengthPath = Join-Path $root 'reference-wrong-length.json'
+        Write-HarnessJson $wrongLengthPath ([ordered]@{ schemaVersion = 1; references = @($wrongLengthEntries.ToArray()) })
+        $wrongLengthRejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Read-ReferenceManifest' @{ Path = $wrongLengthPath } | Out-Null } catch { $wrongLengthRejected = $true }
+        if (-not $wrongLengthRejected) { return New-HarnessFail 'reference byteLength mismatch unexpectedly passed canonical parser' }
+
+        $names = @('rocket-sunward-high.png', 'rocket-sunward-low.png', 'rocket-crosslight-high.png', 'rocket-crosslight-low.png', 'rocket-awaylight-high.png', 'rocket-awaylight-low.png')
+        $images = New-Object System.Collections.Generic.List[object]
+        for ($index = 0; $index -lt $names.Count; $index++) {
+            $imagePath = Join-Path $captureDirectory $names[$index]
+            New-HarnessPngHeader $imagePath ($index + 1)
+            $quality = if (($index % 2) -eq 0) { 'High' } else { 'Low' }
+            $angle = if ($index -lt 2) { 0 } elseif ($index -lt 4) { 90 } else { 180 }
+            $imageHash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $images.Add([ordered]@{
+                    filename = $names[$index]; path = $imagePath; sha256 = $imageHash; width = 1920; height = 1080; visualMode = 'Fast'; qualityLevel = $quality; fastSessionApplied = $true
+                    targetAngle = $angle; angleDelta = 0; fieldOfView = 75; playerPosition = [ordered]@{ x = 0; y = 0; z = 0 }; cameraLocalEulerAngles = [ordered]@{ x = 8; y = 0; z = 0 }
+                    maskOrigin = 'top-left'; maskRowOrigin = 'bottom-left'; maskXMin = 64; maskXMax = 1855; maskYMin = 540; maskYMax = 1079; maskRowMin = 0; maskRowMax = 539
+                    differencePixelCount = 10001; differenceMeanAbsRgb = 0.02; differencePixelThreshold = 10000; differenceChannelThreshold = 8; controlRendered = $true; pass = $true
+                }) | Out-Null
+        }
+        $manifestPath = Join-Path $captureDirectory 'WeaponVisualManifest.json'
+        $manifest = [ordered]@{
+            schemaVersion = 1; attemptId = 'behavior-attempt'; weaponCaptureAttemptId = 'behavior-attempt'; weapon = 'Rocket'; weaponCaptureWeapon = 'Rocket'; weaponCaptureMode = 'Fast'
+            sourceSha = $sourceSha; generatedManifestSha256 = $generatedSha; referenceManifestPath = $reference.path; referenceManifestSha256 = $reference.sha256
+            referenceHashes = @($reference.entries | ForEach-Object { [ordered]@{ id = $_.logicalId; sha256 = $_.sha256 } }); images = @($images.ToArray()); pass = $true
+        }
+        Write-HarnessJson $manifestPath $manifest
+
+        & $module {
+            param($attempt, $weapon, $mode, $directory)
+            $script:AttemptId = $attempt; $script:Weapon = $weapon; $script:Mode = $mode; $script:EvidenceDirectory = $directory
+        } 'behavior-attempt' 'Rocket' 'Fast' $captureDirectory | Out-Null
+        $records = Invoke-HarnessModuleFunction $module 'Assert-WeaponManifest' @{ Path = $manifestPath; Reference = $reference; ExpectedSha = $sourceSha; ExpectedGeneratedManifestSha = $generatedSha }
+        if ($records.Count -ne 6) { return New-HarnessFail ('green capture validator returned ' + $records.Count + ' records') }
+
+        $invalid = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+        $invalid.images[0].differencePixelCount = 0
+        $invalidPath = Join-Path $captureDirectory 'WeaponVisualManifest.invalid.json'
+        Write-HarnessJson $invalidPath $invalid
+        $rejected = $false
+        try { Invoke-HarnessModuleFunction $module 'Assert-WeaponManifest' @{ Path = $invalidPath; Reference = $reference; ExpectedSha = $sourceSha; ExpectedGeneratedManifestSha = $generatedSha } | Out-Null } catch { $rejected = $true }
+        if (-not $rejected) { return New-HarnessFail 'invalid capture manifest unexpectedly passed behavioral validator' }
+        $leaseResult = Test-ProjectLeaseContentionBehavior $State
+        if (-not [bool](Get-HarnessField $leaseResult 'pass')) {
+            return New-HarnessFail ('project lease contention contract failed: ' + [string](Get-HarnessField $leaseResult 'message'))
+        }
+        return New-HarnessPass 'green capture manifest accepted; invalid visibility threshold rejected; lease contention fails closed'
+    } catch {
+        return New-HarnessFail ('capture behavioral validation failed: ' + $_.Exception.Message)
+    } finally {
+        if ($null -ne $module) { Remove-Module -ModuleInfo $module -Force -ErrorAction SilentlyContinue }
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-WeaponVisualVerdictContract {
+    param([Parameter(Mandatory = $true)]$State)
+    $path = Join-Path $State.ProjectRoot 'Tools/Validation/Test-WeaponVisualVerdict.ps1'
+    $redPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-verdict.ps1.txt'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or -not (Test-Path -LiteralPath $redPath -PathType Leaf)) { return New-HarnessFail 'weapon verdict source or red fixture missing' }
+    $source = [IO.File]::ReadAllText($path)
+    $red = [IO.File]::ReadAllText($redPath)
+    $required = @(
+        'ExpectedAgentId', 'ExpectedSourceSha', 'ReferenceManifestPath', 'captureManifestHashes', 'referenceHashes',
+        'acceptedPriorVerdictHash', 'evidenceImages', 'overallPass', 'schemaVersion', 'sol_high', 'weapon-visual-verifier',
+        'high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed',
+        'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy',
+        'predicates must contain exactly 16', 'Get-Hash', 'Write-ImmutableJson',
+        'ExpectedWeapon', 'ExpectedView', 'ExpectedQuality', 'Get-PredicateImageRequirement',
+        'qualityLevel', 'view', ' capture images', 'weapon mismatch'
+    )
+    foreach ($needle in $required) {
+        if ($source.IndexOf($needle, [StringComparison]::Ordinal) -lt 0) { return New-HarnessFail ('weapon verdict omitted contract: ' + $needle) }
+    }
+    $missing = @($required | Where-Object { $red.IndexOf($_, [StringComparison]::Ordinal) -lt 0 })
+    if ($missing.Count -eq 0) { return New-HarnessFail 'weapon verdict red fixture unexpectedly contains every guarded contract marker' }
+    $resolver = Get-HarnessFunctionAst $source 'Get-EvidenceImageRecord'
+    if ($resolver.Extent.Text -match '(?im)foreach\s*\(\s*\$capture\s+in\s+@\(\s*\$CaptureSet\.Rocket\s*,\s*\$CaptureSet\.Shotgun\s*\)\s*\)') {
+        return New-HarnessFail 'weapon verdict resolver still searches both capture sets'
+    }
+    $redResolver = Get-HarnessFunctionAst $red 'Get-EvidenceImageRecord'
+    if ($redResolver.Extent.Text -notmatch '(?im)foreach\s*\(\s*\$capture\s+in\s+@\(\s*\$CaptureSet\.Rocket\s*,\s*\$CaptureSet\.Shotgun\s*\)\s*\)') {
+        return New-HarnessFail 'weapon verdict red fixture no longer retains cross-weapon resolver'
+    }
+    return New-HarnessPass ('weapon verdict hash/predicate/reduction contract guarded; red fixture fails at ' + $missing[0])
+}
+
+function Invoke-HarnessPowerShell {
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
+    $previous = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $output = @(& powershell -NoProfile -ExecutionPolicy Bypass @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $previous }
+    return [pscustomobject]@{ exitCode = $exitCode; output = @($output) }
+}
+
+function Invoke-HarnessFixture {
+    param(
+        [Parameter(Mandatory = $true)][string]$FixturePath,
+        [Parameter(Mandatory = $true)][string]$ScratchRoot,
+        [string[]]$Arguments = @()
+    )
+    if (-not (Test-Path -LiteralPath $FixturePath -PathType Leaf)) { throw ('Fixture missing: ' + $FixturePath) }
+    $temporaryPath = Join-Path $ScratchRoot ('fixture-' + [Guid]::NewGuid().ToString('N') + '.ps1')
+    try {
+        # Checked-in red fixtures use .ps1.txt so they cannot be mistaken for
+        # runnable product scripts. Execute an exact copied source with a
+        # temporary .ps1 extension so PowerShell runs the fixture body.
+        Copy-Item -LiteralPath $FixturePath -Destination $temporaryPath -Force
+        return Invoke-HarnessPowerShell (@('-File', $temporaryPath) + @($Arguments))
+    } finally {
+        Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-WeaponVisualVerdictBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('weapon-verdict-behavior-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        $sourceSha = 'a' * 40
+        $referenceEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($id in @('game-bright', 'game-dark', 'quake-hires')) {
+            $originalPath = Join-Path $root ($id + '-original.bin')
+            $evidencePath = Join-Path $root ($id + '-evidence.bin')
+            New-Item -ItemType Directory -Force -Path $root | Out-Null
+            [IO.File]::WriteAllBytes($originalPath, [byte[]](5, 6, 7, 8))
+            [IO.File]::WriteAllBytes($evidencePath, [byte[]](5, 6, 7, 8))
+            $hash = (Get-FileHash -LiteralPath $originalPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $referenceEntries.Add([ordered]@{ logicalId = $id; originalPath = $originalPath; copiedEvidencePath = $evidencePath; byteLength = 4; sha256 = $hash }) | Out-Null
+        }
+        $referencePath = Join-Path $root 'ReferenceManifest.json'
+        Write-HarnessJson $referencePath ([ordered]@{ schemaVersion = 1; references = @($referenceEntries.ToArray()) })
+        $captureManifestPaths = New-Object System.Collections.Generic.List[string]
+        $captureManifestHashes = [ordered]@{}
+        $captureImageRecords = [ordered]@{}
+        foreach ($weapon in @('Rocket', 'Shotgun')) {
+            $captureDirectory = Join-Path $root $weapon
+            New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null
+            $items = New-Object System.Collections.Generic.List[object]
+            for ($index = 0; $index -lt 6; $index++) {
+                $filename = $weapon.ToLowerInvariant() + '-' + $index + '.png'
+                $imagePath = Join-Path $captureDirectory $filename
+                [IO.File]::WriteAllBytes($imagePath, [byte[]]([int](10 + $index), [int](20 + $index), [int](30 + $index)))
+                $hash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $view = if ($index -lt 2) { 'sunward' } elseif ($index -lt 4) { 'crosslight' } else { 'awaylight' }
+                $qualityLevel = if (($index % 2) -eq 0) { 'High' } else { 'Low' }
+                $items.Add([ordered]@{ filename = $filename; path = $imagePath; sha256 = $hash; view = $view; qualityLevel = $qualityLevel }) | Out-Null
+            }
+            $captureImageRecords[$weapon] = [pscustomobject]@{ images = @($items.ToArray()) }
+            $manifestPath = Join-Path $captureDirectory 'WeaponVisualManifest.json'
+            Write-HarnessJson $manifestPath ([ordered]@{ schemaVersion = 1; weaponCaptureWeapon = $weapon; sourceSha = $sourceSha; images = @($items.ToArray()) })
+            $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $captureManifestPaths.Add($manifestPath) | Out-Null
+            $captureManifestHashes[$weapon] = $manifestHash
+        }
+        $predicates = New-Object System.Collections.Generic.List[object]
+        foreach ($weapon in @('Rocket', 'Shotgun')) {
+            foreach ($id in @('high.sunward.readable', 'high.crosslight.readable', 'high.awaylight.readable', 'surface-marks-fixed', 'palette-warm-no-blue', 'scratches-physical', 'framing-silhouette', 'low-material-hierarchy')) {
+                $imageIndex = switch ($id) {
+                    'high.sunward.readable' { 0 }
+                    'high.crosslight.readable' { 2 }
+                    'high.awaylight.readable' { 4 }
+                    'low-material-hierarchy' { 1 }
+                    default { 0 }
+                }
+                $imagePath = [string]$captureImageRecords[$weapon].images[$imageIndex].path
+                $imageHash = (Get-FileHash -LiteralPath $imagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+                $predicates.Add([ordered]@{ weapon = $weapon; id = $id; pass = $true; evidenceImages = @([ordered]@{ path = $imagePath; sha256 = $imageHash }) }) | Out-Null
+            }
+        }
+        $referenceHashRecords = @($referenceEntries.ToArray() | ForEach-Object { [ordered]@{ id = $_.logicalId; sha256 = $_.sha256 } })
+        $verdictPath = Join-Path $root 'WeaponVisualVerdict.json'
+        $verdict = [ordered]@{
+            schemaVersion = 1; agentId = 'behavior-agent'; profile = 'sol_high'; role = 'weapon-visual-verifier'; sourceSha = $sourceSha
+            referenceHashes = $referenceHashRecords; captureManifestHashes = @([ordered]@{ weapon = 'Rocket'; sha256 = $captureManifestHashes['Rocket'] }, [ordered]@{ weapon = 'Shotgun'; sha256 = $captureManifestHashes['Shotgun'] })
+            acceptedPriorVerdictHash = ''; predicates = @($predicates.ToArray()); failures = @(); overallPass = $true
+        }
+        Write-HarnessJson $verdictPath $verdict
+        $validator = Join-Path $State.ProjectRoot 'Tools/Validation/Test-WeaponVisualVerdict.ps1'
+        $greenResultPath = Join-Path $root 'green-result.json'
+        $green = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', $greenResultPath)
+        if ($green.exitCode -ne 0) { return New-HarnessFail ('green verdict validator exited ' + $green.exitCode + ': ' + (($green.output | ForEach-Object { [string]$_ }) -join ' | ')) }
+        if (-not (Test-Path -LiteralPath $greenResultPath -PathType Leaf)) { return New-HarnessFail 'green verdict validator did not write result evidence' }
+
+        $assertReferenceRejected = {
+            param([Parameter(Mandatory = $true)][string]$VariantPath, [Parameter(Mandatory = $true)][string]$Label)
+            $probe = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $verdictPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $VariantPath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root ($Label + '-result.json')))
+            if ($probe.exitCode -eq 0) {
+                throw ('reference schema variant unexpectedly passed: ' + $Label)
+            }
+        }
+
+        $legacyEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $legacyEntries.Add([ordered]@{
+                    id = [string]$entry.logicalId
+                    originalPath = [string]$entry.originalPath
+                    evidencePath = [string]$entry.copiedEvidencePath
+                    bytes = [int64]$entry.byteLength
+                    sha256 = [string]$entry.sha256
+                }) | Out-Null
+        }
+        $legacyReferencePath = Join-Path $root 'ReferenceManifest.legacy.json'
+        Write-HarnessJson $legacyReferencePath ([ordered]@{ schemaVersion = 1; entries = @($legacyEntries.ToArray()) })
+        & $assertReferenceRejected $legacyReferencePath 'legacy-reference'
+
+        $mixedRootReferencePath = Join-Path $root 'ReferenceManifest.mixed-root.json'
+        Write-HarnessJson $mixedRootReferencePath ([ordered]@{
+                schemaVersion = 1
+                references = @($referenceEntries.ToArray())
+                entries = @($referenceEntries.ToArray())
+            })
+        & $assertReferenceRejected $mixedRootReferencePath 'mixed-root-reference'
+
+        $mixedEntryEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $record = [ordered]@{
+                logicalId = [string]$entry.logicalId
+                originalPath = [string]$entry.originalPath
+                copiedEvidencePath = [string]$entry.copiedEvidencePath
+                byteLength = [int64]$entry.byteLength
+                sha256 = [string]$entry.sha256
+            }
+            if ([string]$entry.logicalId -ceq 'game-bright') { $record['id'] = [string]$entry.logicalId }
+            $mixedEntryEntries.Add($record) | Out-Null
+        }
+        $mixedEntryReferencePath = Join-Path $root 'ReferenceManifest.mixed-entry.json'
+        Write-HarnessJson $mixedEntryReferencePath ([ordered]@{ schemaVersion = 1; references = @($mixedEntryEntries.ToArray()) })
+        & $assertReferenceRejected $mixedEntryReferencePath 'mixed-entry-reference'
+
+        $unknownEntryEntries = New-Object System.Collections.Generic.List[object]
+        foreach ($entry in @($referenceEntries.ToArray())) {
+            $record = [ordered]@{
+                logicalId = [string]$entry.logicalId
+                originalPath = [string]$entry.originalPath
+                copiedEvidencePath = [string]$entry.copiedEvidencePath
+                byteLength = [int64]$entry.byteLength
+                sha256 = [string]$entry.sha256
+            }
+            if ([string]$entry.logicalId -ceq 'game-bright') { $record['unexpected'] = 'rejected' }
+            $unknownEntryEntries.Add($record) | Out-Null
+        }
+        $unknownEntryReferencePath = Join-Path $root 'ReferenceManifest.unknown-entry.json'
+        Write-HarnessJson $unknownEntryReferencePath ([ordered]@{ schemaVersion = 1; references = @($unknownEntryEntries.ToArray()) })
+        & $assertReferenceRejected $unknownEntryReferencePath 'unknown-entry-reference'
+
+        $canonicalReferenceJson = [IO.File]::ReadAllText($referencePath)
+        $rootArrayReferencePath = Join-Path $root 'ReferenceManifest.root-array.json'
+        [IO.File]::WriteAllText($rootArrayReferencePath, '[' + $canonicalReferenceJson + ']', (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $rootArrayReferencePath 'root-array-reference'
+
+        $rootNullReferencePath = Join-Path $root 'ReferenceManifest.root-null.json'
+        [IO.File]::WriteAllText($rootNullReferencePath, 'null', (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $rootNullReferencePath 'root-null-reference'
+
+        $duplicateReferencePath = Join-Path $root 'ReferenceManifest.duplicate.json'
+        $duplicateReferenceJson = [Regex]::Replace($canonicalReferenceJson, '("logicalId"\s*:\s*"game-bright"\s*,)', '$1"logicalId": "game-bright",', 1)
+        if ($duplicateReferenceJson -ceq $canonicalReferenceJson) { throw 'duplicate reference test could not create a duplicate property' }
+        [IO.File]::WriteAllText($duplicateReferencePath, $duplicateReferenceJson, (New-Object Text.UTF8Encoding($false)))
+        & $assertReferenceRejected $duplicateReferencePath 'duplicate-reference'
+
+        $crossWeaponVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $crossWeaponPredicate = @($crossWeaponVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'high.sunward.readable' })[0]
+        $crossWeaponImagePath = [string]$captureImageRecords['Shotgun'].images[0].path
+        $crossWeaponPredicate.evidenceImages[0].path = $crossWeaponImagePath
+        $crossWeaponPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $crossWeaponImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $crossWeaponPath = Join-Path $root 'WeaponVisualVerdict.cross-weapon.json'
+        Write-HarnessJson $crossWeaponPath $crossWeaponVerdict
+        $crossWeapon = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $crossWeaponPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'cross-weapon-result.json'))
+        if ($crossWeapon.exitCode -eq 0) { return New-HarnessFail 'cross-weapon evidence unexpectedly passed behavioral validator' }
+
+        $wrongOrientationVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $wrongOrientationPredicate = @($wrongOrientationVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'high.crosslight.readable' })[0]
+        $wrongOrientationImagePath = [string]$captureImageRecords['Rocket'].images[0].path
+        $wrongOrientationPredicate.evidenceImages[0].path = $wrongOrientationImagePath
+        $wrongOrientationPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $wrongOrientationImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $wrongOrientationPath = Join-Path $root 'WeaponVisualVerdict.wrong-orientation.json'
+        Write-HarnessJson $wrongOrientationPath $wrongOrientationVerdict
+        $wrongOrientation = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $wrongOrientationPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'wrong-orientation-result.json'))
+        if ($wrongOrientation.exitCode -eq 0) { return New-HarnessFail 'wrong-orientation evidence unexpectedly passed behavioral validator' }
+
+        $wrongQualityVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $wrongQualityPredicate = @($wrongQualityVerdict.predicates | Where-Object { $_.weapon -eq 'Rocket' -and $_.id -eq 'low-material-hierarchy' })[0]
+        $wrongQualityImagePath = [string]$captureImageRecords['Rocket'].images[0].path
+        $wrongQualityPredicate.evidenceImages[0].path = $wrongQualityImagePath
+        $wrongQualityPredicate.evidenceImages[0].sha256 = (Get-FileHash -LiteralPath $wrongQualityImagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $wrongQualityPath = Join-Path $root 'WeaponVisualVerdict.wrong-quality.json'
+        Write-HarnessJson $wrongQualityPath $wrongQualityVerdict
+        $wrongQuality = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $wrongQualityPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'wrong-quality-result.json'))
+        if ($wrongQuality.exitCode -eq 0) { return New-HarnessFail 'wrong-quality evidence unexpectedly passed behavioral validator' }
+
+        $invalidVerdict = Get-Content -Raw -LiteralPath $verdictPath | ConvertFrom-Json
+        $invalidVerdict.overallPass = $false
+        $invalidPath = Join-Path $root 'WeaponVisualVerdict.invalid.json'
+        Write-HarnessJson $invalidPath $invalidVerdict
+        $red = Invoke-HarnessPowerShell @('-File', $validator, '-VerdictPath', $invalidPath, '-ExpectedAgentId', 'behavior-agent', '-ExpectedSourceSha', $sourceSha, '-ReferenceManifestPath', $referencePath, '-CaptureManifestPaths', $captureManifestPaths[0], $captureManifestPaths[1], '-ResultPath', (Join-Path $root 'invalid-result.json'))
+        if ($red.exitCode -eq 0) { return New-HarnessFail 'invalid verdict unexpectedly passed behavioral validator' }
+        return New-HarnessPass 'canonical verdict accepted; root-array/null and legacy/mixed/unknown/duplicate reference schemas and invalid overallPass rejected'
+    } catch {
+        return New-HarnessFail ('verdict behavioral validation failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-RedFixturesBehavior {
+    param([Parameter(Mandatory = $true)]$State)
+    $root = Join-Path $script:HarnessScratchRoot ('red-fixture-behavior-' + [Guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Force -Path $root | Out-Null
+        $workflow = Invoke-HarnessFixture $State.RedSource $root
+        if ($workflow.exitCode -eq 0) { return New-HarnessFail 'red workflow fixture unexpectedly succeeded when executed' }
+        $capturePath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-capture.ps1.txt'
+        $capture = Invoke-HarnessFixture $capturePath $root @('-EvidenceRoot', $root, '-AttemptId', 'red')
+        if ($capture.exitCode -eq 0) { return New-HarnessFail 'red capture fixture unexpectedly succeeded when executed' }
+        $invalidVerdictPath = Join-Path $root 'invalid-verdict.json'
+        Write-HarnessJson $invalidVerdictPath ([ordered]@{ overallPass = $false })
+        $verdictPath = Join-Path $State.ProjectRoot 'Tools/Tests/Fixtures/red-weapon-visual-verdict.ps1.txt'
+        $verdict = Invoke-HarnessFixture $verdictPath $root @('-VerdictPath', $invalidVerdictPath)
+        if ($verdict.exitCode -eq 0) { return New-HarnessFail 'red verdict fixture unexpectedly succeeded when executed' }
+        return New-HarnessPass 'workflow, capture, and verdict red fixtures all fail when executed'
+    } catch {
+        return New-HarnessFail ('red fixture behavioral check failed: ' + $_.Exception.Message)
+    } finally {
+        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-ProductionBakeOutcomePreserved {

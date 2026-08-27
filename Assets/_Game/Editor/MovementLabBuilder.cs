@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -12,6 +13,24 @@ namespace RocketFooxball.Editor
     {
         internal const string ProductionBakeSkippedMarker = "[MovementLab] production bake skipped: lighting inputs current (digest ";
         private const string PrepareProductionArgument = "-movementLabPrepareProduction";
+        private const string LightingEvidenceArgument = "-movementLabEvidencePath";
+
+        [Serializable]
+        private sealed class LightingAuthorIdempotencyEvidence
+        {
+            public int schemaVersion = 1;
+            public MovementLabLightingPipeline.VolumeProfileAuthorSnapshot before;
+            public MovementLabLightingPipeline.VolumeProfileAuthorSnapshot first;
+            public MovementLabLightingPipeline.VolumeProfileAuthorSnapshot second;
+            public MovementLabLightingPipeline.VolumeProfileAuthorSnapshot reloaded;
+            public bool sameHashes;
+            public bool sameIdentities;
+            public bool exactComponentCounts;
+            public bool observableResult;
+            public bool pass;
+            public string result;
+            public string error;
+        }
 
         [MenuItem("Rocket Fooxball/Build Movement Lab")]
         public static void BuildMovementLab()
@@ -43,6 +62,18 @@ namespace RocketFooxball.Editor
                 ? "Rocket Fooxball Movement Lab assembly reused generated state: " + MovementLabContract.ScenePath
                 : "Rocket Fooxball Movement Lab assembled without lighting bake: " + MovementLabContract.ScenePath);
         }
+
+        // Narrow weapon import command. This is intentionally separate from
+        // the full assembly pipeline so weapon source art cannot touch
+        // unrelated importer metas or generated outputs.
+        public static void ImportWeaponVisualAssets()
+        {
+            MovementLabImportPipeline.ImportWeaponVisualAssets();
+            Debug.Log("Rocket Fooxball weapon visual assets imported: " + MovementLabContractCatalog.WeaponModelPath);
+        }
+
+        // Compatibility entry point retained for existing T3 automation.
+        public static void ImportLauncherVisualAssets() => ImportWeaponVisualAssets();
 
         [MenuItem("Rocket Fooxball/Authorize Movement Lab Manifest Migration")]
         public static void AuthorizeMovementLabManifestMigration()
@@ -78,6 +109,7 @@ namespace RocketFooxball.Editor
         public static void BakeMovementLabLighting()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
             if (IsProductionPreparationRequested())
             {
                 // The workflow keeps this with the bake in one batch Editor
@@ -124,6 +156,86 @@ namespace RocketFooxball.Editor
                 string.Equals(argument, PrepareProductionArgument, StringComparison.Ordinal));
         }
 
+        [MenuItem("Rocket Fooxball/Validate Lighting Author Idempotency")]
+        public static void ValidateLightingAuthorIdempotency()
+        {
+            var evidencePath = GetRequiredLightingEvidencePath();
+            var evidence = new LightingAuthorIdempotencyEvidence();
+            try
+            {
+                MovementLabFastModeSession.RestoreIfActive();
+                evidence.before = MovementLabLightingPipeline.CapturePersistedVolumeProfileSnapshot();
+                evidence.first = MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
+                evidence.second = MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
+                AssetDatabase.ImportAsset(MovementLabContract.VolumeProfilePath, ImportAssetOptions.ForceSynchronousImport);
+                evidence.reloaded = MovementLabLightingPipeline.CapturePersistedVolumeProfileSnapshot();
+                evidence.sameHashes = string.Equals(evidence.first.persistedHash, evidence.second.persistedHash, StringComparison.Ordinal) &&
+                                      string.Equals(evidence.second.persistedHash, evidence.reloaded.persistedHash, StringComparison.Ordinal);
+                evidence.sameIdentities = IdentitiesEqual(evidence.before.identity, evidence.first.identity) &&
+                                          IdentitiesEqual(evidence.first.identity, evidence.second.identity) &&
+                                          IdentitiesEqual(evidence.second.identity, evidence.reloaded.identity);
+                evidence.exactComponentCounts = HasExactComponentCounts(evidence.before.identity) &&
+                                                HasExactComponentCounts(evidence.first.identity) &&
+                                                HasExactComponentCounts(evidence.second.identity) &&
+                                                HasExactComponentCounts(evidence.reloaded.identity);
+                evidence.observableResult = evidence.sameHashes && evidence.sameIdentities && evidence.exactComponentCounts;
+                evidence.pass = evidence.observableResult;
+                evidence.result = evidence.pass ? "pass" : "fail";
+                if (!evidence.observableResult)
+                    throw new InvalidOperationException("Lighting author idempotency proof failed: persisted bytes, identities, or component counts changed.");
+                WriteLightingEvidence(evidencePath, evidence);
+                Debug.Log("Rocket Fooxball lighting author idempotency passed: " + evidencePath);
+            }
+            catch (Exception exception)
+            {
+                evidence.observableResult = false;
+                evidence.pass = false;
+                evidence.result = "fail";
+                evidence.error = exception.Message;
+                WriteLightingEvidence(evidencePath, evidence);
+                throw;
+            }
+        }
+
+        private static bool HasExactComponentCounts(MovementLabLightingPipeline.VolumeProfileIdentitySnapshot identity)
+        {
+            return identity != null && identity.componentCount == 3 && identity.tonemappingCount == 1 &&
+                   identity.bloomCount == 1 && identity.colorAdjustmentsCount == 1;
+        }
+
+        private static bool IdentitiesEqual(MovementLabLightingPipeline.VolumeProfileIdentitySnapshot left,
+            MovementLabLightingPipeline.VolumeProfileIdentitySnapshot right)
+        {
+            return left != null && right != null && left.profileGuid == right.profileGuid && left.profileLocalId == right.profileLocalId &&
+                   left.componentCount == right.componentCount && left.tonemappingCount == right.tonemappingCount &&
+                   left.bloomCount == right.bloomCount && left.colorAdjustmentsCount == right.colorAdjustmentsCount &&
+                   (left.componentTypes ?? Array.Empty<string>()).SequenceEqual(right.componentTypes ?? Array.Empty<string>(), StringComparer.Ordinal) &&
+                   (left.componentGuids ?? Array.Empty<string>()).SequenceEqual(right.componentGuids ?? Array.Empty<string>(), StringComparer.Ordinal) &&
+                   (left.componentLocalIds ?? Array.Empty<long>()).SequenceEqual(right.componentLocalIds ?? Array.Empty<long>());
+        }
+
+        private static string GetRequiredLightingEvidencePath()
+        {
+            var arguments = Environment.GetCommandLineArgs();
+            for (var i = 0; i < arguments.Length - 1; i++)
+            {
+                if (!string.Equals(arguments[i], LightingEvidenceArgument, StringComparison.Ordinal)) continue;
+                var value = arguments[i + 1];
+                if (string.IsNullOrWhiteSpace(value) || !Path.IsPathRooted(value))
+                    throw new InvalidOperationException(LightingEvidenceArgument + " requires an absolute path.");
+                return Path.GetFullPath(value);
+            }
+            throw new InvalidOperationException("Lighting author idempotency requires " + LightingEvidenceArgument + ".");
+        }
+
+        private static void WriteLightingEvidence(string path, LightingAuthorIdempotencyEvidence evidence)
+        {
+            var directory = Path.GetDirectoryName(path);
+            if (string.IsNullOrEmpty(directory)) throw new InvalidOperationException("Lighting evidence directory is unavailable: " + path);
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(path, JsonUtility.ToJson(evidence, true) + "\n");
+        }
+
         [MenuItem("Rocket Fooxball/Validate Movement Lab")]
         public static void ValidateMovementLab()
         {
@@ -168,6 +280,7 @@ namespace RocketFooxball.Editor
         public static void BuildMovementLabFast()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
             var accumulator = new MovementLabValidationAccumulator();
             try
             {
@@ -197,10 +310,49 @@ namespace RocketFooxball.Editor
             }
         }
 
+        /// <summary>
+        /// Read-only persisted proof used after Fast assembly. The scene is
+        /// explicitly reopened in a new Editor process by the workflow, then
+        /// semantic, quality, and generated-state checks run without saving.
+        /// Lighting and baked-output staleness are allowed for Fast preview;
+        /// every other stale stage remains a failure.
+        /// </summary>
+        public static void ValidateMovementLabFastPersisted()
+        {
+            MovementLabFastModeSession.RestoreIfActive();
+            var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
+            if (!scene.IsValid() || !string.Equals(scene.path, MovementLabContract.ScenePath, StringComparison.Ordinal))
+                throw new InvalidOperationException("Fast persisted validation could not reopen MovementLab scene: " + scene.path);
+
+            var accumulator = new MovementLabValidationAccumulator();
+            try
+            {
+                MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
+                accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
+                var probe = MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true, accumulator: accumulator);
+                var disallowedStale = probe.StaleStages.Where(stage =>
+                    stage != MovementLabStage.Lighting && stage != MovementLabStage.BakedOutput).ToArray();
+                if (disallowedStale.Length > 0)
+                {
+                    accumulator.Add("generated-state", "fast-persisted-stale-non-lighting",
+                        "Fast persisted validation permits only Lighting/BakedOutput staleness: " + string.Join(", ", disallowedStale));
+                }
+                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
+                    Debug.Log("Rocket Fooxball fast persisted validation: production lighting stages are stale but permitted for Fast preview.");
+                accumulator.ThrowIfAny("MovementLab fast persisted validation");
+                Debug.Log("Rocket Fooxball fast persisted validation passed after scene reopen; no project save performed.");
+            }
+            finally
+            {
+                MovementLabFastModeSession.RestoreIfActive();
+            }
+        }
+
         [MenuItem("Rocket Fooxball/Bake Movement Lab Lighting Development")]
         public static void BakeMovementLabLightingDevelopment()
         {
             MovementLabFastModeSession.RestoreIfActive();
+            MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
             var scene = EditorSceneManager.OpenScene(MovementLabContract.ScenePath, OpenSceneMode.Single);
             MovementLabLightingProfiles.EnsurePersistedDevelopmentSettings();
             MovementLabLightingProfiles.PrepareScene(scene, MovementLabLightingProfiles.ProfileId.Development);

@@ -60,6 +60,7 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException("Bot composition requires Arena/RampWest and Arena/RampEast.");
 
             var systems = new GameObject(SystemsRootName);
+            SetObjectReference(match, "botSystemsRoot", systems);
             var graphObject = new GameObject(NavigationGraphName);
             graphObject.transform.SetParent(systems.transform, false);
             var graph = graphObject.AddComponent<BotNavigationGraph>();
@@ -171,6 +172,8 @@ namespace RocketFooxball.Editor
             if (!scene.IsValid()) throw new InvalidOperationException("Bot validation requires a valid reopened scene.");
             var systems = scene.GetRootGameObjects().SingleOrDefault(root => root != null && root.name == SystemsRootName);
             if (systems == null) throw new InvalidOperationException("MovementLab requires exactly one root-level BotSystems object.");
+            if (!systems.activeSelf) throw new InvalidOperationException("BotSystems root must remain active after composition.");
+            ValidateReference(match, "botSystemsRoot", systems, "MatchController.botSystemsRoot");
             if (scene.GetRootGameObjects().Count(root => root != null && root.name == SystemsRootName) != 1)
                 throw new InvalidOperationException("MovementLab contains duplicate BotSystems roots.");
             if (systems.transform.childCount != 3)
@@ -228,6 +231,8 @@ namespace RocketFooxball.Editor
                 ValidatePrefabComponentSource(navigator, expectedNavigator, participant.DisplayName + ".BotNavigator");
                 ValidatePrefabComponentSource(perception, expectedPerception, participant.DisplayName + ".BotPerception");
                 var expectedEnabled = i != 0;
+                if (!participant.gameObject.activeSelf)
+                    throw new InvalidOperationException("Participant slot " + i + " root must remain active for setup-time bot selection.");
                 if (controller.enabled != expectedEnabled || navigator.enabled != expectedEnabled || perception.enabled != expectedEnabled)
                     throw new InvalidOperationException("Bot component enabled state mismatch for participant slot " + i + ".");
                 ValidateReference(participant, "botController", controller, "Participant.botController");

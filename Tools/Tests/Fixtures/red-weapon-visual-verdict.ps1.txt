@@ -1,0 +1,32 @@
+# Historical red baseline for verdict guard checks.
+# This fixture intentionally keeps the pre-schema-1 reference aliases and
+# omits source/reference/capture hash binding plus the exact sixteen-predicate
+# reduction. It must stay red while the product accepts only canonical
+# schemaVersion + references records.
+param([string]$VerdictPath)
+
+# Historical parser accepted the legacy root and entry aliases. The canonical
+# validator must reject this shape, mixed aliases, unknown fields, and duplicate
+# JSON properties before ConvertFrom-Json can collapse them.
+function Read-ReferenceHashes {
+    param([string]$Path)
+    $manifest = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+    $hashes = @{}
+    foreach ($entry in @($manifest.entries)) { $hashes[[string]$entry.id] = [string]$entry.sha256 }
+    return $hashes
+}
+
+# Historical resolver searched both captures, so a Rocket predicate could cite
+# a Shotgun image. The green validator must bind lookup to the predicate's weapon.
+function Get-EvidenceImageRecord {
+    param($Value, $CaptureSet)
+    foreach ($capture in @($CaptureSet.Rocket, $CaptureSet.Shotgun)) {
+        if ($capture.images.Contains([string]$Value)) { return $capture.images[[string]$Value] }
+    }
+    throw 'Historical red resolver could not find evidence image.'
+}
+
+$verdict = Get-Content -Raw -LiteralPath $VerdictPath | ConvertFrom-Json
+if (-not $verdict.overallPass) { throw 'Historical red weapon verdict fixture intentionally rejects invalid overallPass.' }
+Write-Error 'Historical red weapon verdict fixture does not validate the required evidence contract.'
+exit 1

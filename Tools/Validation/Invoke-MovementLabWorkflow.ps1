@@ -32,36 +32,8 @@ $script:CommandRecords = New-Object System.Collections.Generic.List[object]
 $script:ExecutedCheckIds = New-Object System.Collections.Generic.List[string]
 $script:BakeCount = 0
 $script:ReleaseProof = New-Object System.Collections.Generic.List[object]
-$script:GeneratedRoots = @(
-    'Assets/_Game/Generated',
-    'Assets/_Game/Prefabs',
-    'Assets/_Game/Materials',
-    'Assets/_Game/Animations',
-    'Assets/_Game/Lighting',
-    'Assets/_Game/Scenes/MovementLab.unity',
-    'Assets/_Game/Scenes/MovementLab.unity.meta',
-    'Assets/_Game/Scenes/MovementLab',
-    'Assets/_Game/Scenes/MovementLab/LightingData.asset',
-    'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
-    'Assets/Settings',
-    'ProjectSettings'
-)
-$script:AuthoritativeInventory = @(
-    'Assets/_Game/Generated',
-    'Assets/_Game/Prefabs',
-    'Assets/_Game/Materials',
-    'Assets/_Game/Animations',
-    'Assets/_Game/Scenes/MovementLab.unity',
-    'Assets/_Game/Scenes/MovementLab.unity.meta',
-    'Assets/_Game/Scenes/MovementLab',
-    'Assets/_Game/Lighting',
-    'Assets/Settings',
-    'ProjectSettings'
-)
-# T1 deliberately keeps Models/Textures source binaries outside the closed
-# generated inventory. T4 probes still fingerprint these exact importer metas,
-# so compatibility is an explicit path set rather than a caller-expandable root.
-$script:ClosedImporterMetadataPaths = @(
+$script:AppendixAPaths = @(
+    # importer metas
     'Assets/_Game/Models/LowPolyRocket.fbx.meta', 'Assets/_Game/Models/ArenaKit.fbx.meta', 'Assets/_Game/Models/LowPolyCharacter.fbx.meta', 'Assets/_Game/Models/FpsKickRig.fbx.meta', 'Assets/_Game/Models/FpsRocketLauncher.fbx.meta', 'Assets/_Game/Models/FpsShotgun.fbx.meta', 'Assets/_Game/Models/Shotgun.fbx.meta',
     'Assets/_Game/Textures/RetroGrass.png.meta', 'Assets/_Game/Textures/RetroGrass_Normal.png.meta', 'Assets/_Game/Textures/RetroGrass_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroGrass_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroWall.png.meta', 'Assets/_Game/Textures/RetroWall_Normal.png.meta', 'Assets/_Game/Textures/RetroWall_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWall_Occlusion.png.meta',
@@ -73,33 +45,31 @@ $script:ClosedImporterMetadataPaths = @(
     'Assets/_Game/Textures/RetroWeaponDark.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_Normal.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWeaponDark_Occlusion.png.meta',
     'Assets/_Game/Textures/RetroWeaponAccent.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Normal.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Occlusion.png.meta', 'Assets/_Game/Textures/RetroWeaponAccent_Emission.png.meta',
     'Assets/_Game/Textures/RetroRocket.png.meta', 'Assets/_Game/Textures/RetroRocket_Normal.png.meta', 'Assets/_Game/Textures/RetroRocket_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/RetroRocket_Occlusion.png.meta', 'Assets/_Game/Textures/RetroRocket_Emission.png.meta', 'Assets/_Game/Textures/RetroRocketGlow.png.meta',
-    'Assets/_Game/Textures/RetroExplosion.png.meta', 'Assets/_Game/Textures/RetroSmoke.png.meta', 'Assets/_Game/Textures/RetroSunnySky.png.meta'
+    'Assets/_Game/Textures/RetroExplosion.png.meta', 'Assets/_Game/Textures/RetroSmoke.png.meta', 'Assets/_Game/Textures/RetroSunnySky.png.meta',
+    'Assets/_Game/Textures/FpsRocketLauncher_BaseColor.png.meta', 'Assets/_Game/Textures/FpsRocketLauncher_Normal.png.meta', 'Assets/_Game/Textures/FpsRocketLauncher_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/FpsRocketLauncher_Occlusion.png.meta', 'Assets/_Game/Textures/FpsRocketLauncher_Emission.png.meta',
+    'Assets/_Game/Textures/Shotgun_BaseColor.png.meta', 'Assets/_Game/Textures/Shotgun_Normal.png.meta', 'Assets/_Game/Textures/Shotgun_MetallicSmoothness.png.meta', 'Assets/_Game/Textures/Shotgun_Occlusion.png.meta', 'Assets/_Game/Textures/Shotgun_Emission.png.meta',
+    'Assets/_Game/Textures/WeaponMicroDetail_Normal.png.meta',
+    # prefab/controller pairs
+    'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Player.prefab.meta', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Ball.prefab.meta', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/Rocket.prefab.meta', 'Assets/_Game/Prefabs/ExplosionVfx.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab.meta', 'Assets/_Game/Prefabs/HealthPickup.prefab', 'Assets/_Game/Prefabs/HealthPickup.prefab.meta', 'Assets/_Game/Prefabs/ShotgunPickup.prefab', 'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
+    'Assets/_Game/Animations/WorldCharacter.controller', 'Assets/_Game/Animations/WorldCharacter.controller.meta', 'Assets/_Game/Animations/FpsKick.controller', 'Assets/_Game/Animations/FpsKick.controller.meta',
+    # material pairs
+    'Assets/_Game/Materials/Floor.mat', 'Assets/_Game/Materials/Floor.mat.meta', 'Assets/_Game/Materials/Wall.mat', 'Assets/_Game/Materials/Wall.mat.meta', 'Assets/_Game/Materials/Trim.mat', 'Assets/_Game/Materials/Trim.mat.meta', 'Assets/_Game/Materials/Hazard.mat', 'Assets/_Game/Materials/Hazard.mat.meta', 'Assets/_Game/Materials/Marking.mat', 'Assets/_Game/Materials/Marking.mat.meta', 'Assets/_Game/Materials/Ball.mat', 'Assets/_Game/Materials/Ball.mat.meta', 'Assets/_Game/Materials/Rocket.mat', 'Assets/_Game/Materials/Rocket.mat.meta', 'Assets/_Game/Materials/RocketHot.mat', 'Assets/_Game/Materials/RocketHot.mat.meta', 'Assets/_Game/Materials/ProjectileGlow.mat', 'Assets/_Game/Materials/ProjectileGlow.mat.meta', 'Assets/_Game/Materials/GoalFrame.mat', 'Assets/_Game/Materials/GoalFrame.mat.meta', 'Assets/_Game/Materials/Shield.mat', 'Assets/_Game/Materials/Shield.mat.meta', 'Assets/_Game/Materials/ShieldBlue.mat', 'Assets/_Game/Materials/ShieldBlue.mat.meta', 'Assets/_Game/Materials/ShieldRed.mat', 'Assets/_Game/Materials/ShieldRed.mat.meta', 'Assets/_Game/Materials/ArenaPrimary.mat', 'Assets/_Game/Materials/ArenaPrimary.mat.meta', 'Assets/_Game/Materials/ArenaTrim.mat', 'Assets/_Game/Materials/ArenaTrim.mat.meta', 'Assets/_Game/Materials/ArenaHazard.mat', 'Assets/_Game/Materials/ArenaHazard.mat.meta', 'Assets/_Game/Materials/ArenaGlow.mat', 'Assets/_Game/Materials/ArenaGlow.mat.meta', 'Assets/_Game/Materials/BallSurface.physicMaterial', 'Assets/_Game/Materials/BallSurface.physicMaterial.meta', 'Assets/_Game/Materials/Explosion.mat', 'Assets/_Game/Materials/Explosion.mat.meta', 'Assets/_Game/Materials/ExplosionAdditive.mat', 'Assets/_Game/Materials/ExplosionAdditive.mat.meta', 'Assets/_Game/Materials/ExplosionSparks.mat', 'Assets/_Game/Materials/ExplosionSparks.mat.meta', 'Assets/_Game/Materials/Smoke.mat', 'Assets/_Game/Materials/Smoke.mat.meta', 'Assets/_Game/Materials/ContainmentGridCeiling.mat', 'Assets/_Game/Materials/ContainmentGridCeiling.mat.meta', 'Assets/_Game/Materials/ContainmentGridLongWall.mat', 'Assets/_Game/Materials/ContainmentGridLongWall.mat.meta', 'Assets/_Game/Materials/ContainmentGridEndWall.mat', 'Assets/_Game/Materials/ContainmentGridEndWall.mat.meta', 'Assets/_Game/Materials/RetroSunnySky.mat', 'Assets/_Game/Materials/RetroSunnySky.mat.meta', 'Assets/_Game/Materials/CharacterRed.mat', 'Assets/_Game/Materials/CharacterRed.mat.meta', 'Assets/_Game/Materials/CharacterBlack.mat', 'Assets/_Game/Materials/CharacterBlack.mat.meta', 'Assets/_Game/Materials/CharacterCream.mat', 'Assets/_Game/Materials/CharacterCream.mat.meta', 'Assets/_Game/Materials/CharacterEye.mat', 'Assets/_Game/Materials/CharacterEye.mat.meta', 'Assets/_Game/Materials/WeaponMetal.mat', 'Assets/_Game/Materials/WeaponMetal.mat.meta', 'Assets/_Game/Materials/WeaponDark.mat', 'Assets/_Game/Materials/WeaponDark.mat.meta', 'Assets/_Game/Materials/WeaponAccentCore.mat', 'Assets/_Game/Materials/WeaponAccentCore.mat.meta', 'Assets/_Game/Materials/WeaponAccent.mat', 'Assets/_Game/Materials/WeaponAccent.mat.meta', 'Assets/_Game/Materials/ShotgunMetal.mat', 'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccentCore.mat', 'Assets/_Game/Materials/ShotgunAccentCore.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/TeamBlue.mat', 'Assets/_Game/Materials/TeamBlue.mat.meta', 'Assets/_Game/Materials/TeamRed.mat', 'Assets/_Game/Materials/TeamRed.mat.meta', 'Assets/_Game/Materials/TeamBlueShield.mat', 'Assets/_Game/Materials/TeamBlueShield.mat.meta', 'Assets/_Game/Materials/TeamRedShield.mat', 'Assets/_Game/Materials/TeamRedShield.mat.meta', 'Assets/_Game/Materials/TeamBlueTrail.mat', 'Assets/_Game/Materials/TeamBlueTrail.mat.meta', 'Assets/_Game/Materials/TeamRedTrail.mat', 'Assets/_Game/Materials/TeamRedTrail.mat.meta', 'Assets/_Game/Materials/HealthPickup.mat', 'Assets/_Game/Materials/HealthPickup.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat', 'Assets/_Game/Materials/AmmoShell.mat.meta',
+    # generated pairs
+    'Assets/_Game/Generated/BlueCircleCueMesh.asset', 'Assets/_Game/Generated/BlueCircleCueMesh.asset.meta', 'Assets/_Game/Generated/RedTriangleCueMesh.asset', 'Assets/_Game/Generated/RedTriangleCueMesh.asset.meta', 'Assets/_Game/Generated/MovementLabBuildManifest.json', 'Assets/_Game/Generated/MovementLabBuildManifest.json.meta',
+    # gameplay, quality, and project settings
+    'Assets/_Game/Scenes/MovementLab.unity', 'Assets/_Game/Scenes/MovementLab.unity.meta', 'ProjectSettings/EditorBuildSettings.asset', 'ProjectSettings/DynamicsManager.asset', 'ProjectSettings/TimeManager.asset', 'ProjectSettings/TagManager.asset',
+    'Assets/Settings/PC_RPAsset.asset', 'Assets/Settings/PC_RPAsset.asset.meta', 'Assets/Settings/PC_Renderer.asset', 'Assets/Settings/PC_Renderer.asset.meta', 'Assets/Settings/PC_Low_RPAsset.asset', 'Assets/Settings/PC_Low_RPAsset.asset.meta', 'Assets/Settings/PC_Low_Renderer.asset', 'Assets/Settings/PC_Low_Renderer.asset.meta', 'Assets/Settings/PC_Iteration_RPAsset.asset', 'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset', 'Assets/Settings/PC_Iteration_Renderer.asset.meta', 'ProjectSettings/QualitySettings.asset', 'ProjectSettings/ProjectSettings.asset',
+    # lighting pairs
+    'Assets/_Game/Lighting/MovementLabLightingSettings.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings.asset.meta', 'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings_Development.asset.meta', 'Assets/_Game/Lighting/MovementLabVolumeProfile.asset', 'Assets/_Game/Lighting/MovementLabVolumeProfile.asset.meta', 'Assets/_Game/Lighting/MovementLabLightingManifest.json', 'Assets/_Game/Lighting/MovementLabLightingManifest.json.meta',
+    # baked pairs
+    'Assets/_Game/Scenes/MovementLab/LightingData.asset', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png.meta',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png.meta',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png.meta',
+    'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr.meta', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png.meta',
+    'Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr.meta', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr.meta', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr.meta', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr.meta'
 )
-$script:BuilderOutputContract = @(
-    'Assets/_Game/Generated/MovementLabBuildManifest.json',
-    'Assets/_Game/Prefabs/Player.prefab', 'Assets/_Game/Prefabs/Ball.prefab', 'Assets/_Game/Prefabs/Rocket.prefab', 'Assets/_Game/Prefabs/ExplosionVfx.prefab',
-    'Assets/_Game/Prefabs/ShotgunPickup.prefab', 'Assets/_Game/Prefabs/AmmoPickup.prefab',
-    'Assets/_Game/Materials/ShotgunMetal.mat', 'Assets/_Game/Materials/ShotgunDark.mat', 'Assets/_Game/Materials/ShotgunAccent.mat', 'Assets/_Game/Materials/AmmoShell.mat',
-    'Assets/_Game/Animations/WorldCharacter.controller', 'Assets/_Game/Animations/FpsKick.controller',
-    'Assets/_Game/Scenes/MovementLab.unity', 'Assets/_Game/Scenes/MovementLab/LightingData.asset',
-    'Assets/_Game/Lighting/MovementLabVolumeProfile.asset', 'Assets/_Game/Lighting/MovementLabLightingSettings.asset', 'Assets/_Game/Lighting/MovementLabLightingManifest.json',
-    'Assets/_Game/Lighting/ReflectionProbe_Center.exr', 'Assets/_Game/Lighting/ReflectionProbe_WestGoal.exr', 'Assets/_Game/Lighting/ReflectionProbe_EastGoal.exr',
-    'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png',
-    'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png',
-    'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png',
-    'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png',
-    'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png', 'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr', 'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png',
-    'Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr', 'Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr',
-    'Assets/Settings/PC_Iteration_RPAsset.asset', 'Assets/Settings/PC_Iteration_Renderer.asset',
-    'ProjectSettings/QualitySettings.asset', 'ProjectSettings/GraphicsSettings.asset', 'ProjectSettings/ProjectSettings.asset',
-    'Assets/_Game/Generated/MovementLabBuildManifest.json.meta',
-    'Assets/_Game/Prefabs/Player.prefab.meta', 'Assets/_Game/Prefabs/Ball.prefab.meta', 'Assets/_Game/Prefabs/Rocket.prefab.meta', 'Assets/_Game/Prefabs/ExplosionVfx.prefab.meta',
-    'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
-    'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta',
-    'Assets/_Game/Animations/WorldCharacter.controller.meta', 'Assets/_Game/Animations/FpsKick.controller.meta',
-    'Assets/_Game/Scenes/MovementLab.unity.meta', 'Assets/_Game/Scenes/MovementLab/LightingData.asset.meta',
-    'Assets/Settings/PC_Iteration_RPAsset.asset.meta', 'Assets/Settings/PC_Iteration_Renderer.asset.meta'
-)
+$script:BuilderOutputContract = $script:AppendixAPaths
 
 function New-WorkflowViolationList {
     return ,(New-Object System.Collections.Generic.List[object])
@@ -216,46 +186,22 @@ function Assert-OneLineValue {
 function Test-InventoryMember {
     param([Parameter(Mandatory = $true)][string]$Path)
     $normalized = $Path.Replace('\', '/').TrimStart('/')
-    foreach ($root in $script:AuthoritativeInventory) {
-        $candidate = $root.Replace('\', '/').TrimStart('/')
-        if ($normalized.Equals($candidate, [StringComparison]::OrdinalIgnoreCase) -or
-            $normalized.StartsWith($candidate.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    }
-    return $false
+    return @($script:BuilderOutputContract | Where-Object {
+        ([string]$_).Equals($normalized, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -eq 1
 }
 
 function Test-ProbeInventoryMember {
     param([Parameter(Mandatory = $true)][string]$Path)
-    $normalized = $Path.Replace('\', '/').TrimStart('/')
-    if (Test-InventoryMember $normalized) { return $true }
-    # Importer probes may contribute only the exact .meta paths owned by the
-    # T4 importer contract. Source binaries and arbitrary probe/caller paths
-    # remain outside the closed inventory.
-    return @($script:ClosedImporterMetadataPaths | Where-Object {
-        $_.Equals($normalized, [StringComparison]::OrdinalIgnoreCase)
-    }).Count -eq 1
+    return Test-InventoryMember $Path
 }
 
 function Get-AuthoritativeGeneratedInventory {
     $paths = New-Object System.Collections.Generic.List[string]
-    foreach ($root in $script:AuthoritativeInventory) {
-        $full = Join-Path $script:ProjectRoot $root
-        if (Test-Path -LiteralPath $full -PathType Leaf) {
-            $paths.Add($root.Replace('\', '/'))
-        } elseif (Test-Path -LiteralPath $full -PathType Container) {
-            foreach ($file in @(Get-ChildItem -LiteralPath $full -File -Recurse -Force | Sort-Object FullName)) {
-                $relative = $file.FullName.Substring($script:ProjectRoot.Length).TrimStart('\', '/').Replace('\', '/')
-                $paths.Add($relative)
-            }
-            if (@(Get-ChildItem -LiteralPath $full -File -Recurse -Force).Count -eq 0) { $paths.Add($root.Replace('\', '/') + '=__EMPTY__') }
-        } else {
-            $paths.Add($root.Replace('\', '/') + '=__MISSING__')
-        }
-    }
-    foreach ($contractPath in $script:BuilderOutputContract) {
-        $full = Join-Path $script:ProjectRoot $contractPath
-        if ((Test-Path -LiteralPath $full -PathType Leaf) -and -not $paths.Contains($contractPath)) { $paths.Add($contractPath) }
-        elseif (-not (Test-Path -LiteralPath $full)) { $paths.Add($contractPath + '=__MISSING__') }
+    foreach ($relative in @($script:BuilderOutputContract | Sort-Object -Unique)) {
+        $full = Join-Path $script:ProjectRoot ([string]$relative)
+        if (Test-Path -LiteralPath $full -PathType Leaf) { $paths.Add(([string]$relative).Replace('\', '/')) }
+        else { $paths.Add(([string]$relative).Replace('\', '/') + '=__MISSING__') }
     }
     return @($paths.ToArray() | Sort-Object -Unique)
 }
@@ -281,15 +227,10 @@ function Get-HeadSha {
     return $sha
 }
 
-function Test-GeneratedPath {
+function Test-AppendixAPath {
     param([Parameter(Mandatory = $true)][string]$Path)
     $normalized = $Path.Replace('\', '/').TrimStart('/')
-    foreach ($root in $script:GeneratedRoots) {
-        $candidate = $root.Replace('\', '/').TrimStart('/')
-        if ($normalized.Equals($candidate, [StringComparison]::OrdinalIgnoreCase) -or
-            $normalized.StartsWith($candidate.TrimEnd('/') + '/', [StringComparison]::OrdinalIgnoreCase)) { return $true }
-    }
-    return $false
+    return Test-InventoryMember $normalized
 }
 
 function Get-NonGeneratedDirtyPaths {
@@ -299,7 +240,7 @@ function Get-NonGeneratedDirtyPaths {
     $untracked = @($untrackedText -split "`n")
     return @($tracked + $untracked |
         ForEach-Object { ([string]$_).Trim() } |
-        Where-Object { $_ -and -not (Test-GeneratedPath $_) } |
+        Where-Object { $_ -and -not (Test-AppendixAPath $_) } |
         Sort-Object -Unique)
 }
 
@@ -577,7 +518,12 @@ function Acquire-ProjectLease {
                 $ownerStart = $owner.StartTime.ToUniversalTime().ToString('O')
                 if ($ownerStart -eq [string]$existing.ownerProcessStartUtc) { throw ('Project lease is held by live PID ' + $existing.ownerPid + ': ' + $canonical) }
             }
-            Remove-Item -LiteralPath $script:LeasePath -Force -ErrorAction Stop
+            # Stale recovery is deliberately fail-closed. A read/re-read/delete
+            # sequence cannot atomically bind deletion to the stale token: a
+            # contender may acquire the path between those operations, leaving
+            # this process able to delete another owner's lease. Recovery must
+            # therefore be an explicit operator action after verifying the owner.
+            throw ('Project lease is stale; refusing automatic recovery: ' + $script:LeasePath)
         }
     }
     throw ('Unable to acquire canonical project lease: ' + $script:LeasePath)
@@ -727,6 +673,7 @@ function New-CheckLedger {
             $rows.Add((New-LedgerRow -CheckId 'compile' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
             $rows.Add((New-LedgerRow -CheckId 'stage-probe' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
             $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
+            $rows.Add((New-LedgerRow -CheckId 'fast-persisted-validator' -Tier 'fast' -MutatesProject $false -RunPoint 'coding'))
         }
         'Development' {
             $rows.Add((New-LedgerRow -CheckId 'fast-build' -Tier 'fast' -MutatesProject $true -RunPoint 'coding'))
@@ -1203,6 +1150,12 @@ try {
             Assert-ProbeContractForMode $probeRecord 'Fast'
             Mark-CheckExecuted 'stage-probe'
             Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
+            # BuildFast performs an early same-process semantic check. The
+            # following waited Editor is the persisted proof after a fresh
+            # scene reload, so it cannot accidentally validate in-memory state.
+            $probeRecord = Read-ProbeContract
+            Assert-ProbeContractForMode $probeRecord 'Fast'
+            Invoke-UnityStep 'FastPersistedValidator' 'RocketFooxball.Editor.MovementLabBuilder.ValidateMovementLabFastPersisted' @() $false -NoGraphics; Mark-CheckExecuted 'fast-persisted-validator'
         }
         'Development' {
             Invoke-UnityStep 'BuildFast' 'RocketFooxball.Editor.MovementLabBuilder.BuildMovementLabFast' @('-movementLabProbePath', $script:ProbeOutputPath) $true -NoGraphics; Mark-CheckExecuted 'fast-build'
@@ -1263,7 +1216,8 @@ $predicateClassification = [ordered]@{
     preBake = @(
         [ordered]@{ predicate = 'ProductionPrepare mode contract'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode immediately after probe read'; inputs = @('Mode', 'Probe') },
         [ordered]@{ predicate = 'config/argument shape'; phase = 'pre-bake'; location = 'preflight'; inputs = @('workflow arguments', 'project configuration') },
-        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') }
+        [ordered]@{ predicate = 'probe-derived facts'; phase = 'pre-bake'; location = 'Assert-ProbeContractForMode'; inputs = @('stage probe fields') },
+        [ordered]@{ predicate = 'fast persisted reload'; phase = 'pre-bake'; location = 'FastPersistedValidator in a later Unity process'; inputs = @('reopened scene', 'persisted semantic state', 'quality', 'Lighting/BakedOutput stale allowance') }
     )
     postflight = @(
         [ordered]@{ predicate = 'ProductionPrepareFinal output contract'; phase = 'postflight'; reason = 'requires post-bake probe profile and manifest' },
@@ -1281,7 +1235,7 @@ if ($Mode -eq 'ProductionPrepare') {
 }
 if ($script:BakeCount -gt 1) { Add-WorkflowViolation $postflightViolations 'postflight.bakeCount.max' ('Workflow bake count exceeded one: ' + $script:BakeCount) }
 for ($generatedIndex = 0; $generatedIndex -lt $changedGeneratedPaths.Count; $generatedIndex++) {
-    if (-not (Test-GeneratedPath ([string]$changedGeneratedPaths[$generatedIndex]))) {
+    if (-not (Test-AppendixAPath ([string]$changedGeneratedPaths[$generatedIndex]))) {
         Add-WorkflowViolation $postflightViolations ('postflight.generatedScope[' + $generatedIndex + ']') ('Changed generated path is outside authoritative generated scope: ' + [string]$changedGeneratedPaths[$generatedIndex])
     }
 }

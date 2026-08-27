@@ -76,6 +76,11 @@ namespace RocketFooxball.Runtime.Hud
             }
             return MatchHudScreen.Live;
         }
+
+        public static bool ShouldDisplayParticipantRow(bool botsEnabled, bool isLocal)
+        {
+            return botsEnabled || isLocal;
+        }
     }
 
     [DisallowMultipleComponent]
@@ -145,6 +150,10 @@ namespace RocketFooxball.Runtime.Hud
         private BotDifficulty frameSelectedEnemyDifficulty;
         private BotDifficulty frameLockedEnemyDifficulty;
         private bool frameDifficultyLocked;
+        private bool frameSelectedBotsEnabled;
+        private bool frameLockedBotsEnabled;
+        private bool frameBotsEnabled;
+        private bool frameConfigurationLocked;
 
         private GUIStyle panelStyle;
         private GUIStyle labelStyle;
@@ -309,6 +318,10 @@ namespace RocketFooxball.Runtime.Hud
             frameSelectedEnemyDifficulty = match.SelectedEnemyDifficulty;
             frameLockedEnemyDifficulty = match.LockedEnemyDifficulty;
             frameDifficultyLocked = match.DifficultyLocked;
+            frameSelectedBotsEnabled = match.SelectedBotsEnabled;
+            frameLockedBotsEnabled = match.LockedBotsEnabled;
+            frameBotsEnabled = match.BotsEnabled;
+            frameConfigurationLocked = match.ConfigurationLocked;
 
             var sourceStats = match.ParticipantStats;
             for (var i = 0; i < TableRowCount; i++)
@@ -606,8 +619,14 @@ namespace RocketFooxball.Runtime.Hud
             for (var i = 0; i < TableRowCount; i++)
             {
                 var stats = statStorage[i];
+                var isLocal = IsLocalStats(stats);
+                if (!MatchHudScreenPolicy.ShouldDisplayParticipantRow(frameBotsEnabled, isLocal))
+                {
+                    continue;
+                }
+
                 var playerName = string.IsNullOrEmpty(stats.DisplayName) ? "—" : stats.DisplayName;
-                if (IsLocalStats(stats))
+                if (isLocal)
                 {
                     playerName = "YOU  " + playerName;
                 }
@@ -644,30 +663,49 @@ namespace RocketFooxball.Runtime.Hud
 
         private void DrawSetup()
         {
-            DrawPanel(new Rect(390f, 170f, 1140f, 740f));
-            DrawText(new Rect(450f, 225f, 1020f, 72f), "MATCH SETUP", titleStyle, Color.white);
-            DrawText(new Rect(450f, 320f, 1020f, 42f), "ENEMY BOT DIFFICULTY", headingStyle, new Color(0.7f, 0.82f, 0.95f));
+            DrawPanel(new Rect(390f, 130f, 1140f, 820f));
+            DrawText(new Rect(450f, 185f, 1020f, 72f), "MATCH SETUP", titleStyle, Color.white);
+            DrawText(new Rect(450f, 285f, 1020f, 42f), "BOTS", headingStyle, new Color(0.7f, 0.82f, 0.95f));
 
-            if (GUI.Button(new Rect(500f, 405f, 280f, 78f), "LOW", buttonStyle))
+            if (GUI.Button(new Rect(500f, 350f, 420f, 78f), "ON", buttonStyle))
             {
-                match.TrySelectEnemyDifficulty(BotDifficulty.Low);
+                match.TrySelectBotsEnabled(true);
             }
-            if (GUI.Button(new Rect(820f, 405f, 280f, 78f), "MEDIUM", buttonStyle))
+            if (GUI.Button(new Rect(1000f, 350f, 280f, 78f), "OFF", buttonStyle))
             {
-                match.TrySelectEnemyDifficulty(BotDifficulty.Medium);
-            }
-            if (GUI.Button(new Rect(1140f, 405f, 280f, 78f), "HIGH", buttonStyle))
-            {
-                match.TrySelectEnemyDifficulty(BotDifficulty.High);
+                match.TrySelectBotsEnabled(false);
             }
 
             DrawText(
-                new Rect(450f, 535f, 1020f, 52f),
-                "SELECTED  " + DifficultyName(frameSelectedEnemyDifficulty),
+                new Rect(450f, 445f, 1020f, 42f),
+                "BOTS  " + (frameSelectedBotsEnabled ? "ON" : "OFF"),
                 headingStyle,
-                TeamColor(ParticipantTeam.Red));
+                frameSelectedBotsEnabled ? TeamColor(ParticipantTeam.Red) : new Color(0.65f, 0.68f, 0.72f));
 
-            if (GUI.Button(new Rect(760f, 680f, 400f, 88f), "START", buttonStyle) && match.TryStartConfiguredMatch())
+            if (frameSelectedBotsEnabled)
+            {
+                DrawText(new Rect(450f, 505f, 1020f, 42f), "ENEMY BOT DIFFICULTY", headingStyle, new Color(0.7f, 0.82f, 0.95f));
+                if (GUI.Button(new Rect(500f, 560f, 280f, 78f), "LOW", buttonStyle))
+                {
+                    match.TrySelectEnemyDifficulty(BotDifficulty.Low);
+                }
+                if (GUI.Button(new Rect(820f, 560f, 280f, 78f), "MEDIUM", buttonStyle))
+                {
+                    match.TrySelectEnemyDifficulty(BotDifficulty.Medium);
+                }
+                if (GUI.Button(new Rect(1140f, 560f, 280f, 78f), "HIGH", buttonStyle))
+                {
+                    match.TrySelectEnemyDifficulty(BotDifficulty.High);
+                }
+
+                DrawText(
+                    new Rect(450f, 660f, 1020f, 52f),
+                    "SELECTED  " + DifficultyName(frameSelectedEnemyDifficulty),
+                    headingStyle,
+                    TeamColor(ParticipantTeam.Red));
+            }
+
+            if (GUI.Button(new Rect(760f, 775f, 400f, 88f), "START", buttonStyle) && match.TryStartConfiguredMatch())
             {
                 RestoreFinalCursorOverrideForGameplay();
             }
@@ -677,12 +715,20 @@ namespace RocketFooxball.Runtime.Hud
         {
             DrawPanel(new Rect(510f, 250f, 900f, 580f));
             DrawText(new Rect(580f, 325f, 760f, 72f), "PAUSED", titleStyle, Color.white);
-            DrawText(new Rect(580f, 445f, 760f, 48f), "ENEMY BOT DIFFICULTY", headingStyle, new Color(0.7f, 0.82f, 0.95f));
             DrawText(
-                new Rect(580f, 515f, 760f, 52f),
-                "LOCKED  " + DifficultyName(frameDifficultyLocked ? frameLockedEnemyDifficulty : BotDifficulty.Medium),
+                new Rect(580f, 445f, 760f, 52f),
+                "LOCKED  BOTS " + (frameConfigurationLocked && frameLockedBotsEnabled ? "ON" : "OFF"),
                 headingStyle,
-                TeamColor(ParticipantTeam.Red));
+                frameLockedBotsEnabled ? TeamColor(ParticipantTeam.Red) : new Color(0.65f, 0.68f, 0.72f));
+
+            if (frameConfigurationLocked && frameLockedBotsEnabled)
+            {
+                DrawText(
+                    new Rect(580f, 515f, 760f, 52f),
+                    "LOCKED  " + DifficultyName(frameLockedEnemyDifficulty),
+                    headingStyle,
+                    TeamColor(ParticipantTeam.Red));
+            }
 
             if (GUI.Button(new Rect(760f, 665f, 400f, 88f), "RESUME", buttonStyle) && match.TryResumeMatch())
             {
@@ -792,7 +838,13 @@ namespace RocketFooxball.Runtime.Hud
             DrawText(new Rect(120f, 195f, 1680f, 50f), DecisionText(), headingStyle, Color.white);
             DrawText(new Rect(120f, 270f, 1680f, 46f), BlueMarker + " BLUE " + frameBlueGoals + " GOALS   " + frameBlueTeamFrags + " FRAGS", headingStyle, new Color(0.35f, 0.75f, 1f));
             DrawText(new Rect(120f, 320f, 1680f, 46f), RedMarker + " RED " + frameRedGoals + " GOALS   " + frameRedTeamFrags + " FRAGS", headingStyle, new Color(1f, 0.35f, 0.35f));
-            DrawTable(new Rect(120f, 395f, 1680f, 465f), true);
+            DrawText(
+                new Rect(120f, 365f, 1680f, 42f),
+                "LOCKED  BOTS " + (frameConfigurationLocked && frameLockedBotsEnabled ? "ON" : "OFF") +
+                (frameConfigurationLocked && frameLockedBotsEnabled ? "   DIFFICULTY " + DifficultyName(frameLockedEnemyDifficulty) : string.Empty),
+                smallStyle,
+                frameLockedBotsEnabled ? TeamColor(ParticipantTeam.Red) : new Color(0.65f, 0.68f, 0.72f));
+            DrawTable(new Rect(120f, 420f, 1680f, 440f), true);
 
             if (GUI.Button(new Rect(1320f, 900f, 250f, 70f), "REMATCH", buttonStyle))
             {

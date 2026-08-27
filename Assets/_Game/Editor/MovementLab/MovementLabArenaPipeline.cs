@@ -67,21 +67,15 @@ namespace RocketFooxball.Editor
                 internal static ArenaBuild BuildArena(Material floorMaterial, Material wallMaterial, Material markingMaterial, Material frameMaterial, Material shieldMaterial, PhysicsMaterial ballSurface, Material arenaPrimaryMaterial, Material arenaTrimMaterial, Material arenaHazardMaterial, Material arenaGlowMaterial, Material gridCeilingMaterial, Material gridLongWallMaterial, Material gridEndWallMaterial, Material northShieldMaterial, Material southShieldMaterial, Material teamBlueMaterial = null, Material teamRedMaterial = null)
                 {
                     var arena = new GameObject("Arena");
-                    CreateSolid("Floor", arena.transform, new Vector3(0f, -0.5f, 0f), new Vector3(130f, 1f, 90f), floorMaterial, ballSurface);
                     // Longest arena axis runs along X. Goals occupy opposite X ends;
                     // north/south walls therefore remain solid while end walls split
                     // around each goal opening.
-                    CreateSolid("NorthWall", arena.transform, new Vector3(0f, 4f, -44.5f), new Vector3(130f, 8f, 1f), wallMaterial, ballSurface);
-                    CreateSolid("SouthWall", arena.transform, new Vector3(0f, 4f, 44.5f), new Vector3(130f, 8f, 1f), wallMaterial, ballSurface);
-                    const float endWallSegmentSpan = 26.5f;
-                    CreateSolid("WestWallNorth", arena.transform, new Vector3(-64.5f, 4f, -31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
-                    CreateSolid("WestWallSouth", arena.transform, new Vector3(-64.5f, 4f, 31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
-                    CreateSolid("EastWallNorth", arena.transform, new Vector3(64.5f, 4f, -31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
-                    CreateSolid("EastWallSouth", arena.transform, new Vector3(64.5f, 4f, 31.75f), new Vector3(1f, 8f, endWallSegmentSpan), wallMaterial, ballSurface);
-
-                    // Each ramp rises from midfield toward its nearest X-axis goal.
-                    CreateSolid("RampWest", arena.transform, new Vector3(-22f, 2.1f, 2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, -90f, 0f));
-                    CreateSolid("RampEast", arena.transform, new Vector3(22f, 2.1f, -2f), new Vector3(18f, 0.5f, 20f), wallMaterial, ballSurface, Quaternion.Euler(-15f, 90f, 0f));
+                    for (var i = 0; i < MovementLabContract.PrimaryCollisionGeometry.Length; i++)
+                    {
+                        var geometry = MovementLabContract.PrimaryCollisionGeometry[i];
+                        CreateSolid(geometry.Name, arena.transform, geometry.Position, geometry.Scale,
+                            geometry.Name == "Floor" ? floorMaterial : wallMaterial, ballSurface, geometry.Rotation);
+                    }
 
                     var markings = new GameObject("Markings").transform;
                     markings.SetParent(arena.transform, false);
@@ -182,10 +176,11 @@ namespace RocketFooxball.Editor
 
                     // Goal shells and roster cues carry the primary silhouettes;
                     // two end trusses per wall keep secondary architecture sparse.
-                    for (var x = -48f; x <= 48f; x += 96f)
+                    for (var i = 0; i < ArenaPylonXs.Length; i++)
                     {
-                        CreateArenaKitVisual(architecture, "NorthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, -45.0f), Quaternion.identity, arenaMaterials);
-                        CreateArenaKitVisual(architecture, "SouthTruss_" + x.ToString("0"), "ArenaPerimeterTruss", new Vector3(x, 9.0f, 45.0f), Quaternion.identity, arenaMaterials);
+                        var x = ArenaPylonXs[i];
+                        CreateArenaKitVisual(architecture, ArenaPylonNames[i], "ArenaWallPylon", new Vector3(x, 0f, ArenaNorthWallPylonZ), ArenaNorthWallPylonRotation, arenaMaterials);
+                        CreateArenaKitVisual(architecture, ArenaPylonNames[i + ArenaPylonXs.Length], "ArenaWallPylon", new Vector3(x, 0f, ArenaSouthWallPylonZ), ArenaSouthWallPylonRotation, arenaMaterials);
                     }
 
                     CreateArenaKitVisual(architecture, "NorthScoreboard", "ArenaScoreboard", new Vector3(-64f, 12f, -2.5f), Quaternion.Euler(0f, -90f, 0f), arenaMaterials);
@@ -225,8 +220,10 @@ namespace RocketFooxball.Editor
                 internal static Material[] ResolveArenaKitMaterials(string meshName, Material[] allMaterials)
                 {
                     if (allMaterials == null || allMaterials.Length != 4) throw new InvalidOperationException("ArenaKit material palette is incomplete.");
-                    if (meshName == "ArenaWallPylon" || meshName == "ArenaScoreboard") return new[] { allMaterials[0], allMaterials[1], allMaterials[3] };
-                    if (meshName == "ArenaPerimeterTruss") return new[] { allMaterials[0], allMaterials[1] };
+                    var moduleName = meshName != null && meshName.EndsWith("Mesh", StringComparison.Ordinal)
+                        ? meshName.Substring(0, meshName.Length - "Mesh".Length) : meshName;
+                    if (moduleName == "ArenaWallPylon" || moduleName == "ArenaScoreboard") return new[] { allMaterials[0], allMaterials[1], allMaterials[3] };
+                    if (moduleName == "ArenaPerimeterTruss") return new[] { allMaterials[0], allMaterials[1] };
                     return new[] { allMaterials[0], allMaterials[1], allMaterials[2], allMaterials[3] };
                 }
 
@@ -299,10 +296,10 @@ namespace RocketFooxball.Editor
                 {
                     var floor = Require(arena.transform.Find("Floor"), "Arena Floor");
                     var floorRenderer = Require(floor.GetComponent<Renderer>(), "Arena Floor renderer");
-                    ValidatePbrMaterial(floorRenderer.sharedMaterial, LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), "Floor");
+                    ValidatePbrMaterial(floorRenderer.sharedMaterial, LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), FloorTextureScale, "Floor");
                     ValidatePbrScalars(floorRenderer.sharedMaterial, 1f, 1f, 0.75f, 0.65f, 0f, "Floor");
                     ValidateEmission(floorRenderer.sharedMaterial, Color.clear, 0f, "Floor");
-                    ValidatePbrMaterial(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), "Wall");
+                    ValidatePbrMaterial(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), WallTextureScale, "Wall");
                     ValidatePbrScalars(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, 1f, 1f, 0.80f, 0.80f, 0f, "Wall");
                     ValidateEmission(Require(arena.transform.Find("NorthWall").GetComponent<Renderer>(), "NorthWall renderer").sharedMaterial, Color.clear, 0f, "Wall");
                     ValidatePbrMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/Trim.mat"), LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), "Trim");
@@ -384,6 +381,26 @@ namespace RocketFooxball.Editor
                     }
                 }
 
+                internal static void ValidatePrimaryCollisionGeometry(GameObject arena, PhysicsMaterial ballSurface)
+                {
+                    if (arena == null || ballSurface == null) throw new InvalidOperationException("Primary collision geometry requires Arena and BallSurface.");
+                    var specifications = MovementLabContract.PrimaryCollisionGeometry;
+                    for (var i = 0; i < specifications.Length; i++)
+                    {
+                        var specification = specifications[i];
+                        var item = Require(arena.transform.Find(specification.Name), specification.Name);
+                        var collider = Require(item.GetComponent<BoxCollider>(), specification.Name + " BoxCollider");
+                        if (Vector3.Distance(item.localPosition, specification.Position) > 0.001f ||
+                            Vector3.Distance(item.localScale, specification.Scale) > 0.001f ||
+                            Quaternion.Angle(item.localRotation, specification.Rotation) > 0.1f ||
+                            collider.center != Vector3.zero || collider.size != Vector3.one || collider.isTrigger || collider.sharedMaterial != ballSurface ||
+                            item.GetComponent<Rigidbody>() != null || item.GetComponents<Collider>().Length != 1)
+                        {
+                            throw new InvalidOperationException("Primary collision geometry contract invalid: " + specification.Name);
+                        }
+                    }
+                }
+
                 internal static void ValidateArenaArchitecture(GameObject arena)
                 {
                     var sceneRendererCount = 0;
@@ -408,7 +425,7 @@ namespace RocketFooxball.Editor
                         var renderer = renderers[i];
                         var filter = Require(renderer.GetComponent<MeshFilter>(), "Architecture MeshFilter");
                         var mesh = Require(filter.sharedMesh, "Architecture mesh");
-                        if (mesh.name == "ArenaRampRails" || mesh.name == "ArenaWallPylon") throw new InvalidOperationException("Removed arena decoration returned: " + renderer.name);
+                        if (mesh.name == "ArenaRampRails" || mesh.name == "ArenaRampRailsMesh") throw new InvalidOperationException("Removed arena decoration returned: " + renderer.name);
                         if (AssetDatabase.GetAssetPath(mesh) != ArenaKitModelPath) throw new InvalidOperationException("Architecture mesh provenance mismatch: " + renderer.name);
                         if (renderer.GetComponentsInChildren<Collider>(true).Length != 0 || renderer.GetComponent<Rigidbody>() != null) throw new InvalidOperationException("Architecture visual must remain renderer-only: " + renderer.name);
                         var materials = renderer.sharedMaterials;
@@ -420,10 +437,45 @@ namespace RocketFooxball.Editor
                         if (uniqueMeshes.Add(mesh)) triangleCount += mesh.triangles.Length / 3;
                     }
                     Debug.Log("Rocket Fooxball Movement Lab ArenaKit imported triangles: " + triangleCount);
+                    ValidateArenaPylons(architecture, palette);
                     ValidateArchitectureTransform(architecture, "NorthGoalShell", new Vector3(-GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, -90f, 0f));
                     ValidateArchitectureTransform(architecture, "SouthGoalShell", new Vector3(GoalAxisPosition, 0f, 0f), Quaternion.Euler(0f, 90f, 0f));
                     ValidateShieldVisual(arena.transform.Find("NorthGoal"), "NorthGoal");
                     ValidateShieldVisual(arena.transform.Find("SouthGoal"), "SouthGoal");
+                }
+
+                private static void ValidateArenaPylons(Transform architecture, Material[] palette)
+                {
+                    var pylonRenderers = architecture.GetComponentsInChildren<MeshRenderer>(true)
+                        .Where(renderer => renderer != null && renderer.GetComponent<MeshFilter>() != null &&
+                            renderer.GetComponent<MeshFilter>().sharedMesh != null &&
+                            (renderer.GetComponent<MeshFilter>().sharedMesh.name == "ArenaWallPylonMesh" || renderer.GetComponent<MeshFilter>().sharedMesh.name == "ArenaWallPylon"))
+                        .ToArray();
+                    if (pylonRenderers.Length != MovementLabContract.ArenaPylonNames.Length)
+                        throw new InvalidOperationException("Arena architecture must contain exactly ten wall pylons.");
+                    for (var i = 0; i < MovementLabContract.ArenaPylonNames.Length; i++)
+                    {
+                        var item = architecture.Find(MovementLabContract.ArenaPylonNames[i]);
+                        var north = i < ArenaPylonXs.Length;
+                        var xIndex = north ? i : i - ArenaPylonXs.Length;
+                        var expectedPosition = new Vector3(ArenaPylonXs[xIndex], 0f, north ? ArenaNorthWallPylonZ : ArenaSouthWallPylonZ);
+                        var expectedRotation = north ? ArenaNorthWallPylonRotation : ArenaSouthWallPylonRotation;
+                        if (item == null || Vector3.Distance(item.localPosition, expectedPosition) > 0.001f ||
+                            Quaternion.Angle(item.localRotation, expectedRotation) > 0.1f || Vector3.Distance(item.localScale, Vector3.one) > 0.001f ||
+                            !item.gameObject.isStatic)
+                            throw new InvalidOperationException("Arena wall pylon transform contract invalid: " + MovementLabContract.ArenaPylonNames[i]);
+                        var renderer = item.GetComponent<MeshRenderer>();
+                        var filter = item.GetComponent<MeshFilter>();
+                        if (renderer == null || filter == null || filter.sharedMesh == null ||
+                            (filter.sharedMesh.name != "ArenaWallPylonMesh" && filter.sharedMesh.name != "ArenaWallPylon") ||
+                            AssetDatabase.GetAssetPath(filter.sharedMesh) != ArenaKitModelPath ||
+                            item.GetComponentsInChildren<Collider>(true).Length != 0 || item.GetComponentsInChildren<Rigidbody>(true).Length != 0)
+                            throw new InvalidOperationException("Arena wall pylon provenance/physics contract invalid: " + MovementLabContract.ArenaPylonNames[i]);
+                        var expectedMaterials = ResolveArenaKitMaterials("ArenaWallPylon", palette);
+                        if (renderer.sharedMaterials == null || renderer.sharedMaterials.Length != expectedMaterials.Length ||
+                            !renderer.sharedMaterials.SequenceEqual(expectedMaterials))
+                            throw new InvalidOperationException("Arena wall pylon material order contract invalid: " + MovementLabContract.ArenaPylonNames[i]);
+                    }
                 }
 
                 internal static void ValidateArchitectureTransform(Transform architecture, string name, Vector3 position, Quaternion rotation)

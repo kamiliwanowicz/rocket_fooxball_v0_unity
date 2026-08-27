@@ -30,7 +30,10 @@ except ImportError as exc:  # pragma: no cover - exercised by Blender installs w
 
 REPOSITORY_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 TEXTURE_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Assets", "_Game", "Textures")
-PREVIEW_DIRECTORY = os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "RetroTextures")
+PREVIEW_DIRECTORY = os.environ.get(
+    "ROCKET_FOOXBALL_TEXTURE_EVIDENCE_ROOT",
+    os.path.join(REPOSITORY_ROOT, "Temp", "BlenderPreviews", "RetroTextures"),
+)
 SEED = 0xF00B411
 MIB = 1024.0 * 1024.0
 BALL_PANEL_RADIUS = 0.29
@@ -325,30 +328,321 @@ SURFACE_PHASES = {
 }
 
 
+INDUSTRIAL_SURFACE_CONTRACT = {
+    "grass": {
+        "tile_grid": (2, 2),
+        "plate_count": 4,
+        "seam_width": 0.045,
+        "fastener_radius": 0.025,
+        "fasteners_per_plate": 4,
+        "fastener_count": 16,
+        "stain_count": 5,
+        "scratch_count": 8,
+        "palette_u8": ((24, 20, 15), (142, 118, 110)),
+        "minimum_luminance_contrast": 0.16,
+        "metallic": (0.25, 0.55),
+        "smoothness": (0.28, 0.50),
+        "seam_ao": 0.55,
+        "interior_ao": 0.88,
+    },
+    "wall": {
+        "tile_grid": (4, 2),
+        "slab_count": 8,
+        "seam_width": 0.035,
+        "rib_width": 0.055,
+        "rib_count": 4,
+        "stain_count": 4,
+        "scratch_count": 6,
+        "palette_u8": ((40, 26, 12), (202, 150, 82)),
+        "minimum_luminance_contrast": 0.18,
+        "metallic": (0.0, 0.0),
+        "smoothness": (0.30, 0.52),
+        "seam_ao": 0.50,
+        "interior_ao": 0.86,
+    },
+}
+
+
+_INDUSTRIAL_WEAR = {
+    "grass": {
+        "stains": ((0.17, 0.23, 0.085, 0.050), (0.42, 0.77, 0.060, 0.095), (0.68, 0.18, 0.105, 0.055), (0.79, 0.62, 0.075, 0.045), (0.23, 0.52, 0.050, 0.070)),
+        "scratches": ((0.08, 0.14, 0.19, 0.20, 0.0035), (0.28, 0.32, 0.41, 0.29, 0.0025), (0.57, 0.11, 0.72, 0.16, 0.0030), (0.76, 0.37, 0.91, 0.31, 0.0025), (0.10, 0.71, 0.22, 0.65, 0.0030), (0.36, 0.89, 0.49, 0.82, 0.0025), (0.58, 0.61, 0.69, 0.69, 0.0035), (0.81, 0.84, 0.93, 0.79, 0.0025)),
+    },
+    "wall": {
+        "stains": ((0.12, 0.27, 0.070, 0.110), (0.39, 0.72, 0.050, 0.080), (0.66, 0.38, 0.075, 0.060), (0.87, 0.81, 0.045, 0.085)),
+        "scratches": ((0.07, 0.18, 0.18, 0.22, 0.0025), (0.30, 0.63, 0.43, 0.57, 0.0030), (0.53, 0.16, 0.62, 0.23, 0.0025), (0.69, 0.78, 0.81, 0.72, 0.0025), (0.82, 0.43, 0.93, 0.48, 0.0030), (0.15, 0.88, 0.25, 0.83, 0.0025)),
+    },
+}
+
+
+def _periodic_grid_distance(values, cell_size):
+    local = np.mod(values, cell_size)
+    return np.minimum(local, cell_size - local)
+
+
+def _periodic_ellipse_mask(u, v, centre_u, centre_v, radius_u, radius_v):
+    du = np.abs(np.mod(u - centre_u + 0.5, 1.0) - 0.5) / radius_u
+    dv = np.abs(np.mod(v - centre_v + 0.5, 1.0) - 0.5) / radius_v
+    return du * du + dv * dv <= 1.0
+
+
+def _segment_mask(u, v, segment):
+    x0, y0, x1, y1, width = segment
+    vx, vy = x1 - x0, y1 - y0
+    denominator = vx * vx + vy * vy
+    amount = np.clip(((u - x0) * vx + (v - y0) * vy) / denominator, 0.0, 1.0)
+    dx = u - (x0 + amount * vx)
+    dy = v - (y0 + amount * vy)
+    return dx * dx + dy * dy <= width * width
+
+
+def _industrial_surface_fields(kind: str, u, v, n, n01):
+    """Derive every industrial PBR channel from one explicit motif mask set."""
+    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
+    columns, rows = contract["tile_grid"]
+    cell_width, cell_height = 1.0 / columns, 1.0 / rows
+    distance_x = _periodic_grid_distance(u, cell_width)
+    distance_y = _periodic_grid_distance(v, cell_height)
+    seam = np.logical_or(distance_x <= contract["seam_width"] * 0.5, distance_y <= contract["seam_width"] * 0.5)
+    cell_x = np.floor(np.minimum(u, np.nextafter(1.0, 0.0)) * columns).astype(np.int64)
+    cell_y = np.floor(np.minimum(v, np.nextafter(1.0, 0.0)) * rows).astype(np.int64)
+    plate_variant = ((cell_x + cell_y * 2) % 4).astype(np.float64) / 3.0
+
+    stains = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=bool)
+    for stain in _INDUSTRIAL_WEAR[kind]["stains"]:
+        stains |= _periodic_ellipse_mask(u, v, *stain)
+    scratches = np.zeros_like(stains)
+    for scratch in _INDUSTRIAL_WEAR[kind]["scratches"]:
+        scratches |= _segment_mask(u, v, scratch)
+
+    if kind == "grass":
+        local_u, local_v = np.mod(u, cell_width), np.mod(v, cell_height)
+        inset = 0.070
+        fastener_dx = np.minimum(np.abs(local_u - inset), np.abs(local_u - (cell_width - inset)))
+        fastener_dy = np.minimum(np.abs(local_v - inset), np.abs(local_v - (cell_height - inset)))
+        fasteners = fastener_dx * fastener_dx + fastener_dy * fastener_dy <= contract["fastener_radius"] ** 2
+        gunmetal = ((cell_x + cell_y) % 2).astype(np.float64)
+        brown = np.stack((0.30 + n01 * 0.13, 0.235 + n01 * 0.105, 0.16 + n01 * 0.085), axis=-1)
+        steel = np.stack((0.25 + n01 * 0.13, 0.27 + n01 * 0.12, 0.275 + n01 * 0.115), axis=-1)
+        colour = brown * (1.0 - gunmetal[..., None] * 0.72) + steel * (gunmetal[..., None] * 0.72)
+        colour *= (0.93 + plate_variant[..., None] * 0.08)
+        colour = np.where(seam[..., None], np.array((0.135, 0.122, 0.106)), colour)
+        colour = np.where(stains[..., None], colour * np.array((0.72, 0.67, 0.60)), colour)
+        colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.24 + 0.035), colour)
+        colour = np.where(fasteners[..., None], np.array((0.49, 0.38, 0.20)), colour)
+        height = 0.55 + n * 0.025 - seam * 0.14 - stains * 0.018 - scratches * 0.045 + fasteners * 0.075
+        metallic = 0.28 + gunmetal * 0.16 + n01 * 0.06
+        metallic = np.where(seam, 0.25, metallic)
+        metallic = np.where(fasteners, 0.55, metallic)
+        smoothness = 0.28 + n01 * 0.22
+        smoothness = np.where(seam, 0.30, smoothness)
+        smoothness = np.where(scratches, 0.28, smoothness)
+        ao = 0.86 + n01 * 0.04
+        ao = np.where(stains, 0.78, ao)
+        ao = np.where(scratches, 0.68, ao)
+        ao = np.where(fasteners, 0.80, ao)
+        ao = np.where(seam, contract["seam_ao"], ao)
+        masks = {"seam": seam, "fasteners": fasteners, "stains": stains, "scratches": scratches}
+        return colour, height, metallic, smoothness, ao, masks
+
+    vertical_seam = distance_x <= contract["seam_width"] * 0.5
+    horizontal_seam = distance_y <= contract["seam_width"] * 0.5
+    ribs = distance_x <= contract["rib_width"] * 0.5
+    raised_rib = ribs & ~vertical_seam
+    warm = np.stack((0.48 + n01 * 0.20, 0.34 + n01 * 0.16, 0.16 + n01 * 0.10), axis=-1)
+    colour = warm * (0.94 + plate_variant[..., None] * 0.07)
+    colour = np.where(raised_rib[..., None], np.minimum(1.0, colour * np.array((1.06, 1.02, 0.91)) + 0.025), colour)
+    colour = np.where(seam[..., None], np.array((0.21, 0.15, 0.086)), colour)
+    colour = np.where(stains[..., None], colour * np.array((0.76, 0.70, 0.59)), colour)
+    colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.18 + 0.025), colour)
+    height = 0.53 + n * 0.025 - seam * 0.13 + raised_rib * 0.095 - stains * 0.016 - scratches * 0.040
+    metallic = np.zeros_like(n)
+    smoothness = 0.30 + n01 * 0.22
+    smoothness = np.where(seam, 0.30, smoothness)
+    smoothness = np.where(scratches, 0.31, smoothness)
+    ao = 0.84 + n01 * 0.04
+    ao = np.where(stains, 0.76, ao)
+    ao = np.where(scratches, 0.66, ao)
+    ao = np.where(raised_rib, 0.82, ao)
+    ao = np.where(seam, contract["seam_ao"], ao)
+    masks = {"seam": seam, "ribs": ribs, "stains": stains, "scratches": scratches, "horizontal_seam": horizontal_seam}
+    return colour, height, metallic, smoothness, ao, masks
+
+
 # Weapon maps are authored from explicit readability targets so the scalar
 # Blender path and the NumPy path have one source of truth.  The ranges are
 # inclusive authoring bounds; PNG quantization may move a boundary by one u8.
 WEAPON_READABILITY_TARGETS = {
     "metal": {
         "palette": ((0.26, 0.19, 0.12), (0.58, 0.44, 0.27), (0.78, 0.60, 0.36)),
-        "metallic": 0.65,
-        "smoothness": (0.52, 0.74),
-        "ao": (0.86, 0.98),
-        "luminance": (0.19, 0.36, 0.50),
+        "palette_bounds": ((0.10, 0.08, 0.05), (1.0, 0.87, 0.67)),
+        "metallic": (0.48, 0.86),
+        "smoothness": (0.26, 0.88),
+        "ao": (0.62, 0.98),
+        "luminance": (0.08, 0.26, 0.50),
     },
     "dark": {
         "palette": ((0.10, 0.12, 0.15), (0.22, 0.25, 0.30), (0.32, 0.35, 0.38)),
-        "metallic": 0.05,
-        "smoothness": (0.38, 0.58),
-        "ao": (0.86, 0.98),
-        "luminance": (0.11, 0.20, 0.28),
+        "palette_bounds": ((0.035, 0.045, 0.055), (0.72, 0.69, 0.65)),
+        "metallic": (0.02, 0.68),
+        "smoothness": (0.24, 0.82),
+        "ao": (0.62, 0.98),
+        "luminance": (0.045, 0.15, 0.28),
     },
+}
+
+WEAPON_ACCENT_CONTRACT = {
+    "palette": ((0.18, 0.012, 0.018), (0.58, 0.035, 0.050), (0.96, 0.14, 0.12)),
+    "metallic": (0.0, 0.02),
+    "smoothness": (0.90, 0.98),
+    "ao": (0.94, 0.99),
+    "normal_xy_max": 0.16,
+    "emission_coverage": (0.055, 0.12),
+}
+
+# Weapon clean surfaces use broad periodic lobes instead of the general-purpose
+# multi-frequency noise. This keeps the material tileable without competing
+# with the authored scratches, chips, polish, and grime.
+WEAPON_TONAL_PHASES = {
+    "metal": ((1, 0, 0.37, 0.34), (0, 1, 1.13, 0.30), (2, 0, 2.41, 0.19), (0, 2, 3.07, 0.17)),
+    "dark": ((1, 0, 1.31, 0.32), (0, 1, 2.17, 0.34), (2, 0, 3.43, 0.16), (0, 2, 0.71, 0.18)),
+    "accent": ((1, 0, 2.03, 0.52), (0, 1, 4.11, 0.48)),
+}
+
+# Explicit motifs keep weapon wear stable across Python/NumPy versions. Every
+# mask below is consumed by base colour, height/normal, metallic, smoothness,
+# and AO so the maps describe the same physical damage rather than unrelated
+# procedural noise.
+WEAPON_WEAR_MOTIFS = {
+    "scratches": (
+        (0.06, 0.13, 0.22, 0.19, 0.0028), (0.28, 0.31, 0.43, 0.25, 0.0032),
+        (0.55, 0.10, 0.72, 0.16, 0.0026), (0.77, 0.34, 0.92, 0.29, 0.0030),
+        (0.08, 0.67, 0.24, 0.61, 0.0032), (0.34, 0.88, 0.49, 0.80, 0.0028),
+        (0.57, 0.58, 0.71, 0.67, 0.0034), (0.80, 0.84, 0.95, 0.78, 0.0028),
+        (0.18, 0.46, 0.29, 0.51, 0.0026), (0.63, 0.42, 0.76, 0.39, 0.0026),
+    ),
+    "chips": (
+        (0.12, 0.22, 0.018, 0.011), (0.31, 0.74, 0.014, 0.020),
+        (0.47, 0.37, 0.022, 0.013), (0.66, 0.15, 0.015, 0.018),
+        (0.82, 0.58, 0.023, 0.014), (0.91, 0.86, 0.014, 0.019),
+        (0.22, 0.91, 0.020, 0.012), (0.71, 0.76, 0.017, 0.015),
+    ),
+    "polish": (
+        (0.18, 0.55, 0.095, 0.065), (0.52, 0.82, 0.080, 0.055),
+        (0.83, 0.25, 0.070, 0.105),
+    ),
+    "grime": (
+        (0.07, 0.78, 0.075, 0.105), (0.38, 0.14, 0.090, 0.055),
+        (0.58, 0.52, 0.060, 0.090), (0.76, 0.91, 0.105, 0.045),
+        (0.94, 0.45, 0.050, 0.085),
+    ),
 }
 
 WEAPON_FAMILY_OUTPUTS = {
     "weapon-metal": ("RetroWeaponMetal", "RetroWeaponMetal_Normal", "RetroWeaponMetal_MetallicSmoothness", "RetroWeaponMetal_Occlusion"),
     "weapon-dark": ("RetroWeaponDark", "RetroWeaponDark_Normal", "RetroWeaponDark_MetallicSmoothness", "RetroWeaponDark_Occlusion"),
 }
+
+
+def _weapon_wear_masks(u, v):
+    shape = np.broadcast_shapes(np.shape(u), np.shape(v))
+    masks = {}
+    scratches = np.zeros(shape, dtype=bool)
+    for motif in WEAPON_WEAR_MOTIFS["scratches"]:
+        scratches |= _segment_mask(u, v, motif)
+    masks["scratches"] = scratches
+    for name in ("chips", "polish", "grime"):
+        mask = np.zeros(shape, dtype=bool)
+        for motif in WEAPON_WEAR_MOTIFS[name]:
+            mask |= _periodic_ellipse_mask(u, v, *motif)
+        masks[name] = mask
+    return masks
+
+
+def _weapon_tonal_field(kind, u, v):
+    """Return deterministic low-frequency tileable variation in ``[-1, 1]``."""
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    value = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
+    weight = 0.0
+    for frequency_u, frequency_v, phase, amplitude in WEAPON_TONAL_PHASES[kind]:
+        value += np.sin(np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase) * amplitude
+        weight += amplitude
+    return value / weight
+
+
+def _weapon_surface_fields(kind, u, v):
+    """Build one weapon material from shared deterministic physical masks."""
+    tonal = _weapon_tonal_field(kind, u, v)
+    tonal01 = np.clip(0.5 + tonal * 0.50, 0.0, 1.0)
+    if kind == "accent":
+        shadow, base_colour, highlight = (np.asarray(value, dtype=np.float64) for value in WEAPON_ACCENT_CONTRACT["palette"])
+        value = 0.46 + tonal01 * 0.16
+        low_amount = np.clip(value / 0.58, 0.0, 1.0)
+        high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
+        low_base = shadow + (base_colour - shadow) * low_amount[..., None]
+        high_base = base_colour + (highlight - base_colour) * high_amount[..., None]
+        base = np.where((value <= 0.58)[..., None], low_base, high_base)
+        pane = np.logical_or(np.mod(u * 8.0, 1.0) < 0.055, np.mod(v * 8.0, 1.0) < 0.055).astype(np.float64)
+        base = np.clip(base + pane[..., None] * np.array((0.035, 0.010, 0.012)), 0.0, 1.0)
+        height = 0.50 + tonal * 0.004 + pane * 0.006
+        metallic = np.full_like(tonal, 0.008)
+        smoothness = 0.935 + tonal01 * 0.025
+        ao = 0.965 + tonal01 * 0.020
+        return base, height, metallic, smoothness, ao, {"pane": pane > 0.0}
+
+    targets = WEAPON_READABILITY_TARGETS[kind]
+    shadow, base_colour, highlight = (np.asarray(value, dtype=np.float64) for value in targets["palette"])
+    value = 0.30 + tonal01 * 0.44
+    low_amount = np.clip(value / 0.58, 0.0, 1.0)
+    high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
+    low_base = shadow + (base_colour - shadow) * low_amount[..., None]
+    high_base = base_colour + (highlight - base_colour) * high_amount[..., None]
+    base = np.where((value <= 0.58)[..., None], low_base, high_base)
+    grid = np.logical_or(np.mod(u * 16.0, 1.0) < 0.025, np.mod(v * 16.0, 1.0) < 0.025)
+    base = base * (1.0 - grid[..., None] * 0.30) + shadow * (grid[..., None] * 0.30)
+    masks = _weapon_wear_masks(u, v)
+    scratches, chips, polish, grime = (masks[name] for name in ("scratches", "chips", "polish", "grime"))
+
+    if kind == "metal":
+        base = np.where(scratches[..., None], np.array((0.84, 0.72, 0.55)), base)
+        base = np.where(chips[..., None], np.array((0.66, 0.61, 0.52)), base)
+        base = np.where(polish[..., None], np.minimum(1.0, base * 1.17 + 0.025), base)
+        base = np.where(grime[..., None], base * np.array((0.50, 0.46, 0.40)), base)
+        metallic = np.full_like(tonal, 0.65)
+        metallic = np.where(scratches, 0.86, metallic)
+        metallic = np.where(chips, 0.78, metallic)
+        metallic = np.where(polish, 0.75, metallic)
+        metallic = np.where(grime, 0.48, metallic)
+        smoothness = 0.56 + tonal01 * 0.12
+        smoothness = np.where(scratches, 0.36, smoothness)
+        smoothness = np.where(chips, 0.33, smoothness)
+        smoothness = np.where(polish, 0.88, smoothness)
+        smoothness = np.where(grime, 0.26, smoothness)
+    else:
+        base = np.where(scratches[..., None], np.array((0.56, 0.54, 0.50)), base)
+        base = np.where(chips[..., None], np.array((0.45, 0.43, 0.40)), base)
+        base = np.where(polish[..., None], np.minimum(1.0, base * 1.24 + 0.018), base)
+        base = np.where(grime[..., None], base * np.array((0.48, 0.50, 0.52)), base)
+        metallic = np.full_like(tonal, 0.05)
+        metallic = np.where(scratches, 0.68, metallic)
+        metallic = np.where(chips, 0.62, metallic)
+        metallic = np.where(polish, 0.12, metallic)
+        metallic = np.where(grime, 0.02, metallic)
+        smoothness = 0.42 + tonal01 * 0.10
+        smoothness = np.where(scratches, 0.62, smoothness)
+        smoothness = np.where(chips, 0.40, smoothness)
+        smoothness = np.where(polish, 0.82, smoothness)
+        smoothness = np.where(grime, 0.24, smoothness)
+
+    height = 0.50 + tonal * 0.018 + grid * 0.012
+    height = height - scratches * 0.040 - chips * 0.026 + polish * 0.010 - grime * 0.007
+    ao = 0.92 + tonal01 * 0.05
+    ao = np.where(scratches, 0.70, ao)
+    ao = np.where(chips, 0.66, ao)
+    ao = np.where(polish, 0.98, ao)
+    ao = np.where(grime, 0.62, ao)
+    return base, height, metallic, smoothness, ao, {**masks, "grid": grid}
 
 
 def _surface_fields(kind: str, u: float, v: float):
@@ -358,23 +652,16 @@ def _surface_fields(kind: str, u: float, v: float):
     phases = SURFACE_PHASES[kind]
     n = periodic_noise(u, v, phases)
     n01 = clamp01(0.5 + n * 0.50)
-    panel = 0.0
-    seam = 0.0
-    if kind == "grass":
-        stripe = 0.5 + 0.5 * math.sin(math.tau * (u * 8.0))
-        panel = 1.0 if (u * 8.0) % 1.0 < 0.035 or (v * 8.0) % 1.0 < 0.035 else 0.0
-        base = (mix(0.018, 0.055, n01), mix(0.20, 0.43, n01), mix(0.20, 0.36, n01))
-        base = tuple(mix(value, value + 0.10, stripe * 0.16) for value in base)
-        height = 0.47 + n * 0.06 - panel * 0.08
-        return base, height, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
-    if kind == "wall":
-        seam = 1.0 if (u * 16.0) % 1.0 < 0.028 or (v * 16.0) % 1.0 < 0.028 else 0.0
-        base = (mix(0.46, 0.76, n01), mix(0.53, 0.80, n01), mix(0.51, 0.72, n01))
-        base = tuple(mix(value, (0.06, 0.40, 0.47)[i], seam * 0.62) for i, value in enumerate(base))
-        height = 0.50 + n * 0.07 - seam * 0.10
-        # Concrete remains non-metallic. Seam response lives in height/AO,
-        # never in metallic R.
-        return base, height, 0.0, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+    if kind in INDUSTRIAL_SURFACE_CONTRACT:
+        values = _industrial_surface_fields(
+            kind,
+            np.asarray(u, dtype=np.float64),
+            np.asarray(v, dtype=np.float64),
+            np.asarray(n, dtype=np.float64),
+            np.asarray(n01, dtype=np.float64),
+        )
+        base, height, metallic, smoothness, ao, _masks = values
+        return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
     if kind == "trim":
         stripe = (u * 12.0 + v * 12.0) % 1.0
         edge = 1.0 if stripe < 0.12 else 0.0
@@ -391,38 +678,14 @@ def _surface_fields(kind: str, u: float, v: float):
         base = tuple(clamp01(value * (0.90 + n01 * 0.14)) for value in base)
         height = 0.49 + n * 0.035 + (0.07 if yellow else -0.015)
         return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - (0.10 if yellow else 0.0)
-    if kind in WEAPON_READABILITY_TARGETS:
-        shadow, base_colour, highlight = WEAPON_READABILITY_TARGETS[kind]["palette"]
-    else:
-        # Accent remains on its existing authored contract.
-        shadow, base_colour, highlight = ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028))
-    value = round(n01 * 8.0) / 8.0
-    if kind in WEAPON_READABILITY_TARGETS:
-        # Use all three palette stops.  The old weapon colours never reached
-        # their highlight because the base stop was below the 0.58 threshold.
-        if value <= 0.58:
-            palette_amount = value / 0.58
-            base = tuple(mix(shadow[i], base_colour[i], palette_amount) for i in range(3))
-        else:
-            palette_amount = (value - 0.58) / 0.42
-            base = tuple(mix(base_colour[i], highlight[i], palette_amount) for i in range(3))
-    else:
-        base = tuple(mix(shadow[i], base_colour[i], value) for i in range(3))
-        base = tuple(mix(value, highlight[i], max(0.0, value - 0.58) / 0.42) for i, value in enumerate(base))
-    grid = 1.0 if (u * 16.0) % 1.0 < 0.025 or (v * 16.0) % 1.0 < 0.025 else 0.0
-    base = tuple(mix(value, shadow[i], grid * 0.45) for i, value in enumerate(base))
-    height = 0.50 + n * 0.09 + grid * 0.035
-    if kind in WEAPON_READABILITY_TARGETS:
-        targets = WEAPON_READABILITY_TARGETS[kind]
-        smooth_min, smooth_max = targets["smoothness"]
-        metallic = targets["metallic"]
-        smoothness = smooth_min + n01 * (smooth_max - smooth_min)
-        ao_min, ao_max = targets["ao"]
-        # Keep seam relief while staying inside the declared AO range.
-        ao_range = ao_max - ao_min
-        ao = ao_min + ao_range * 0.25 + n01 * ao_range * 0.75 - grid * ao_range * 0.25
-        return base, height, metallic, smoothness, ao
-    return base, height, 0.52, 0.64 + n01 * 0.25, 0.88 - grid * 0.16
+    if kind in ("metal", "dark", "accent"):
+        base, height, metallic, smoothness, ao, _masks = _weapon_surface_fields(
+            kind,
+            np.asarray(u, dtype=np.float64),
+            np.asarray(v, dtype=np.float64),
+        )
+        return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
+    raise ValueError(f"Unknown surface kind: {kind}")
 
 
 def _surface_normal(kind: str, u: float, v: float):
@@ -445,19 +708,9 @@ def _surface_fields_array(kind: str, u, v):
     n01 = np.clip(0.5 + n * 0.50, 0.0, 1.0)
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
-    if kind == "grass":
-        stripe = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 8.0))
-        panel = np.logical_or(np.mod(u * 8.0, 1.0) < 0.035, np.mod(v * 8.0, 1.0) < 0.035).astype(np.float64)
-        base = np.stack((0.018 + (0.055 - 0.018) * n01, 0.20 + (0.43 - 0.20) * n01, 0.20 + (0.36 - 0.20) * n01), axis=-1)
-        base += stripe[..., None] * 0.16 * np.array((0.10, 0.10, 0.10), dtype=np.float64)
-        height = 0.47 + n * 0.06 - panel * 0.08
-        return base, height, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
-    if kind == "wall":
-        seam = np.logical_or(np.mod(u * 16.0, 1.0) < 0.028, np.mod(v * 16.0, 1.0) < 0.028).astype(np.float64)
-        base = np.stack((0.46 + (0.76 - 0.46) * n01, 0.53 + (0.80 - 0.53) * n01, 0.51 + (0.72 - 0.51) * n01), axis=-1)
-        base = base * (1.0 - seam[..., None] * 0.62) + np.array((0.06, 0.40, 0.47), dtype=np.float64) * (seam[..., None] * 0.62)
-        height = 0.50 + n * 0.07 - seam * 0.10
-        return base, height, zero, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
+    if kind in INDUSTRIAL_SURFACE_CONTRACT:
+        base, height, metallic, smoothness, ao, _masks = _industrial_surface_fields(kind, u, v, n, n01)
+        return base, height, metallic, smoothness, ao
     if kind == "trim":
         stripe = np.mod(u * 12.0 + v * 12.0, 1.0)
         edge = (stripe < 0.12).astype(np.float64)
@@ -474,43 +727,14 @@ def _surface_fields_array(kind: str, u, v):
         base = np.clip(base * (0.90 + n01[..., None] * 0.14), 0.0, 1.0)
         height = 0.49 + n * 0.035 + np.where(yellow > 0.0, 0.07, -0.015)
         return base, height, 0.22 + yellow * 0.30, 0.46 + yellow * 0.24, 0.75 - yellow * 0.10
-    if kind in WEAPON_READABILITY_TARGETS:
-        palette = WEAPON_READABILITY_TARGETS[kind]["palette"]
-    else:
-        # Accent remains on its existing authored contract.
-        palette = ((0.16, 0.012, 0.008), (0.52, 0.040, 0.018), (0.90, 0.17, 0.028))
-    shadow, base_colour, highlight = (np.array(values, dtype=np.float64) for values in palette)
-    value = np.rint(n01 * 8.0) / 8.0
-    if kind in WEAPON_READABILITY_TARGETS:
-        # Mirror the scalar two-segment palette interpolation above.
-        low_amount = np.clip(value / 0.58, 0.0, 1.0)
-        high_amount = np.clip((value - 0.58) / 0.42, 0.0, 1.0)
-        low_base = shadow + (base_colour - shadow) * low_amount[..., None]
-        high_base = base_colour + (highlight - base_colour) * high_amount[..., None]
-        base = np.where((value <= 0.58)[..., None], low_base, high_base)
-    else:
-        base = shadow + (base_colour - shadow) * value[..., None]
-        # Scalar code shadows ``value`` with each channel's interpolated value in
-        # the highlight pass; retain that per-channel amount here.
-        highlight_amount = np.clip((base - 0.58) / 0.42, 0.0, 1.0)
-        base = base + (highlight - base) * highlight_amount
-    grid = np.logical_or(np.mod(u * 16.0, 1.0) < 0.025, np.mod(v * 16.0, 1.0) < 0.025).astype(np.float64)
-    base = base * (1.0 - grid[..., None] * 0.45) + shadow * (grid[..., None] * 0.45)
-    height = 0.50 + n * 0.09 + grid * 0.035
-    if kind in WEAPON_READABILITY_TARGETS:
-        targets = WEAPON_READABILITY_TARGETS[kind]
-        smooth_min, smooth_max = targets["smoothness"]
-        metallic = np.full_like(n, targets["metallic"])
-        smoothness = smooth_min + n01 * (smooth_max - smooth_min)
-        ao_min, ao_max = targets["ao"]
-        ao_range = ao_max - ao_min
-        ao = ao_min + ao_range * 0.25 + n01 * ao_range * 0.75 - grid * ao_range * 0.25
+    if kind in ("metal", "dark", "accent"):
+        base, height, metallic, smoothness, ao, _masks = _weapon_surface_fields(kind, u, v)
         return base, height, metallic, smoothness, ao
-    return base, height, np.full_like(n, 0.52), 0.64 + n01 * 0.25, 0.88 - grid * 0.16
+    raise ValueError(f"Unknown surface kind: {kind}")
 
 
 def generate_surface_maps(kind: str, width: int, height: int):
-    # Author at 1024? then deterministic nearest-upsample weapon maps to 2048?.
+    # Author at 1024, then deterministic nearest-upsample weapon maps to 2048.
     # This preserves the approved source resolution while keeping background
     # Blender generation practical on laptops.
     source_width = min(width, 1024)
@@ -519,6 +743,7 @@ def generate_surface_maps(kind: str, width: int, height: int):
     normal = _rgba_array(source_width, source_height)
     metallic = _rgba_array(source_width, source_height)
     occlusion = _rgba_array(source_width, source_height)
+    authored_height = np.empty((source_height, source_width), dtype=np.float64) if kind in INDUSTRIAL_SURFACE_CONTRACT or kind in ("metal", "dark", "accent") else None
     x_values = np.arange(source_width, dtype=np.float64) / float(source_width - 1)
     chunk_rows = max(1, min(source_height, 64))
     frequency = {"grass": 8.0, "wall": 16.0, "trim": 12.0, "hazard": 10.0, "metal": 16.0, "dark": 16.0, "accent": 16.0}[kind]
@@ -528,7 +753,7 @@ def generate_surface_maps(kind: str, width: int, height: int):
         y_values = np.arange(start, stop, dtype=np.float64) / float(source_height - 1)
         u = x_values[None, :]
         v = y_values[:, None]
-        colour, _height, metal, smooth, ao = _surface_fields_array(kind, u, v)
+        colour, surface_height, metal, smooth, ao = _surface_fields_array(kind, u, v)
         dx = 0.055 * np.cos(np.float64(math.tau) * frequency * u + 0.37) + 0.022 * np.sin(np.float64(math.tau) * (frequency * 0.5 * v + u))
         dy = 0.055 * np.sin(np.float64(math.tau) * frequency * v + 0.93) + 0.022 * np.cos(np.float64(math.tau) * (frequency * 0.5 * u - v))
         if kind == "hazard":
@@ -538,15 +763,44 @@ def generate_surface_maps(kind: str, width: int, height: int):
         ny = np.clip(0.5 - dy * strength, 0.0, 1.0)
         nz = np.clip(1.0 - 0.45 * (np.abs(dx) + np.abs(dy)), 0.0, 1.0)
         base[start:stop, :, :3] = _u8_array(colour)
-        normal[start:stop, :, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))
+        if authored_height is None:
+            normal[start:stop, :, :3] = _u8_array(np.stack((nx, ny, nz), axis=-1))
+        else:
+            authored_height[start:stop, :] = surface_height
         metallic[start:stop, :, 0] = _u8_array(metal)
         metallic[start:stop, :, 3] = _u8_array(smooth)
         occlusion[start:stop, :, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))
+    if authored_height is not None:
+        slope_x = (np.roll(authored_height, -1, axis=1) - np.roll(authored_height, 1, axis=1)) * 3.8
+        slope_y = (np.roll(authored_height, -1, axis=0) - np.roll(authored_height, 1, axis=0)) * 3.8
+        vector_x = -slope_x
+        vector_y = -slope_y
+        vector_z = np.ones_like(authored_height)
+        lengths = np.sqrt(vector_x * vector_x + vector_y * vector_y + vector_z * vector_z)
+        normal[:, :, :3] = _u8_array(np.stack((vector_x / lengths * 0.5 + 0.5, vector_y / lengths * 0.5 + 0.5, vector_z / lengths * 0.5 + 0.5), axis=-1))
     for buffer in (base, normal, metallic, occlusion):
         close_repeat_edges(buffer, source_width, source_height)
     if (source_width, source_height) != (width, height):
         return tuple(resize_nearest(buffer, source_width, source_height, width, height) for buffer in (base, normal, metallic, occlusion))
     return base, normal, metallic, occlusion
+
+
+def generate_weapon_accent_emission(width=2048, height=2048):
+    """Author a bounded red light-strip mask at the weapon source resolution."""
+    source_width = min(width, 1024)
+    source_height = min(height, 1024)
+    u = np.arange(source_width, dtype=np.float64)[None, :] / float(source_width - 1)
+    v = np.arange(source_height, dtype=np.float64)[:, None] / float(source_height - 1)
+    noise = _weapon_tonal_field("accent", u, v)
+    mask = np.mod(u * 8.0, 1.0) < 0.075
+    intensity = np.clip(0.72 + noise * 0.12 + 0.05 * np.cos(np.float64(math.tau) * v * 4.0), 0.62, 0.90)
+    emission = _rgba_array(source_width, source_height, (0, 0, 0, 255))
+    colour = np.stack((intensity, intensity * 0.075, intensity * 0.055), axis=-1)
+    emission[:, :, :3] = _u8_array(np.where(mask[..., None], colour, 0.0))
+    close_repeat_edges(emission, source_width, source_height)
+    if (source_width, source_height) != (width, height):
+        return resize_nearest(emission, source_width, source_height, width, height)
+    return emission
 
 
 def generate_detail_normal(width=512, height=512):
@@ -1461,10 +1715,11 @@ def _weapon_readability_family_audit(kind, generated):
     }
 
     palette = targets["palette"]
+    palette_floor, palette_ceiling = targets["palette_bounds"]
     base_ranges = [[int(np.min(base[:, :, channel])), int(np.max(base[:, :, channel]))] for channel in range(3)]
     palette_bounds = {
-        "shadow": [u8(value) for value in palette[0]],
-        "highlight": [u8(value) for value in palette[2]],
+        "shadow": [u8(value) for value in palette_floor],
+        "highlight": [u8(value) for value in palette_ceiling],
         "ranges": base_ranges,
     }
     palette_gates = {
@@ -1488,7 +1743,7 @@ def _weapon_readability_family_audit(kind, generated):
     metallic_target = targets["metallic"]
     smoothness_target = targets["smoothness"]
     ao_target = targets["ao"]
-    metallic_gate = metallic_range[0] >= metallic_target - tolerance and metallic_range[1] <= metallic_target + tolerance
+    metallic_gate = metallic_range[0] >= metallic_target[0] - tolerance and metallic_range[1] <= metallic_target[1] + tolerance
     smoothness_gate = smoothness_range[0] >= smoothness_target[0] - tolerance and smoothness_range[1] <= smoothness_target[1] + tolerance
     ao_gate = ao_range[0] >= ao_target[0] - tolerance and ao_range[1] <= ao_target[1] + tolerance
     gates = {
@@ -1505,7 +1760,7 @@ def _weapon_readability_family_audit(kind, generated):
         "dimensions": dimensions,
         "base_palette": {"target": [list(values) for values in palette], **palette_bounds, "gates": palette_gates},
         "base_luminance": {**base_luminance, "target": [luminance_floor, luminance_mean, luminance_peak], "gates": luminance_gates},
-        "metallic": {"range": metallic_range, "target": metallic_target},
+        "metallic": {"range": metallic_range, "target": list(metallic_target)},
         "smoothness": {"range": smoothness_range, "target": list(smoothness_target)},
         "ao": {"range": ao_range, "target": list(ao_target)},
     }
@@ -1530,10 +1785,249 @@ def audit_weapon_readability(generated, selected_families=None):
     }
 
 
+def audit_industrial_surface(kind, generated):
+    """Audit motif inventory, palette readability, and the shared PBR masks."""
+    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
+    prefix = "Retro" + kind.capitalize()
+    expected_names = tuple(FAMILY_REGISTRY[kind]["outputs"])
+    entries = {name: generated.get(name) for name in expected_names}
+    complete = all(entry is not None for entry in entries.values())
+    dimensions_ok = complete and all(entry["dimensions"] == [1024, 1024] for entry in entries.values())
+    if not complete:
+        return {"pass": False, "gates": {"inventory": False, "dimensions": False}, "expected": list(expected_names)}
+
+    width, height = entries[prefix]["dimensions"]
+    base = _rgba_view(entries[prefix]["buffer"], width, height)
+    normal = _rgba_view(entries[prefix + "_Normal"]["buffer"], width, height)
+    metallic = _rgba_view(entries[prefix + "_MetallicSmoothness"]["buffer"], width, height)
+    occlusion = _rgba_view(entries[prefix + "_Occlusion"]["buffer"], width, height)
+
+    x_values = np.arange(width, dtype=np.float64) / float(width - 1)
+    y_values = np.arange(height, dtype=np.float64) / float(height - 1)
+    u, v = x_values[None, :], y_values[:, None]
+    noise = _periodic_noise_array(kind, u, v)
+    noise01 = np.clip(0.5 + noise * 0.50, 0.0, 1.0)
+    _colour, _height, _metal, _smooth, _ao, masks = _industrial_surface_fields(kind, u, v, noise, noise01)
+
+    rgb = base[:, :, :3].astype(np.float64) / 255.0
+    luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
+    palette_ranges = [[int(np.min(base[:, :, channel])), int(np.max(base[:, :, channel]))] for channel in range(3)]
+    palette_floor, palette_ceiling = contract["palette_u8"]
+    palette_ok = all(palette_ranges[channel][0] >= palette_floor[channel] - 1 and palette_ranges[channel][1] <= palette_ceiling[channel] + 1 for channel in range(3))
+    contrast = float(np.max(luminance) - np.min(luminance))
+
+    metal_values = metallic[:, :, 0].astype(np.float64) / 255.0
+    smooth_values = metallic[:, :, 3].astype(np.float64) / 255.0
+    ao_values = occlusion[:, :, 0].astype(np.float64) / 255.0
+    tolerance = (1.0 / 255.0) + 1e-6
+    metallic_range = [float(np.min(metal_values)), float(np.max(metal_values))]
+    smoothness_range = [float(np.min(smooth_values)), float(np.max(smooth_values))]
+    metallic_ok = metallic_range[0] >= contract["metallic"][0] - tolerance and metallic_range[1] <= contract["metallic"][1] + tolerance
+    smoothness_ok = smoothness_range[0] >= contract["smoothness"][0] - tolerance and smoothness_range[1] <= contract["smoothness"][1] + tolerance
+
+    seam_values = ao_values[masks["seam"]]
+    excluded = masks["seam"] | masks["stains"] | masks["scratches"]
+    excluded |= masks.get("fasteners", np.zeros_like(excluded))
+    excluded |= masks.get("ribs", np.zeros_like(excluded))
+    interior_values = ao_values[~excluded]
+    seam_ao = float(np.mean(seam_values))
+    interior_ao = float(np.mean(interior_values))
+    ao_ok = abs(seam_ao - contract["seam_ao"]) <= tolerance and abs(interior_ao - contract["interior_ao"]) <= 0.025
+
+    columns, rows = contract["tile_grid"]
+    motif_counts = {
+        "tile_cells": columns * rows,
+        "stains": len(_INDUSTRIAL_WEAR[kind]["stains"]),
+        "scratches": len(_INDUSTRIAL_WEAR[kind]["scratches"]),
+    }
+    motif_gates = {
+        "tile_cells": motif_counts["tile_cells"] == contract["plate_count" if kind == "grass" else "slab_count"],
+        "stains": motif_counts["stains"] == contract["stain_count"],
+        "scratches": motif_counts["scratches"] == contract["scratch_count"],
+    }
+    if kind == "grass":
+        motif_counts["fasteners"] = columns * rows * contract["fasteners_per_plate"]
+        motif_gates["fasteners"] = motif_counts["fasteners"] == contract["fastener_count"]
+    else:
+        motif_counts["ribs"] = columns
+        motif_gates["ribs"] = motif_counts["ribs"] == contract["rib_count"]
+
+    normal_audit = _normal_map_audit(normal, width, height)
+    normal_xy_ranges = [[int(np.min(normal[:, :, channel])), int(np.max(normal[:, :, channel]))] for channel in range(2)]
+    normal_nonflat = normal_audit["valid"] and all(maximum - minimum >= 8 for minimum, maximum in normal_xy_ranges)
+    gates = {
+        "inventory": tuple(entries) == expected_names,
+        "dimensions": dimensions_ok,
+        "motif_counts": all(motif_gates.values()),
+        "palette_bounds": palette_ok,
+        "palette_contrast": contrast >= contract["minimum_luminance_contrast"],
+        "normal_nonflat": normal_nonflat,
+        "metallic_range": metallic_ok,
+        "smoothness_range": smoothness_ok,
+        "ao_masks": ao_ok,
+        "wall_nonmetallic": kind != "wall" or metallic_range == [0.0, 0.0],
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "contract": contract,
+        "motifs": {"counts": motif_counts, "gates": motif_gates},
+        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_contrast": contrast},
+        "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges},
+        "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
+        "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
+        "ao": {"seam_mean": seam_ao, "seam_target": contract["seam_ao"], "interior_mean": interior_ao, "interior_target": contract["interior_ao"]},
+    }
+
+
+def audit_selected_inventory(generated, selected_families):
+    expected = {name for family_id in selected_families for name in FAMILY_REGISTRY[family_id]["outputs"]}
+    actual = set(generated)
+    gates = {"exact_outputs": actual == expected, "count": len(actual) == len(expected)}
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "expected": sorted(expected),
+        "actual": sorted(actual),
+        "missing": sorted(expected - actual),
+        "unexpected": sorted(actual - expected),
+    }
+
+
+def audit_tile_edges(generated):
+    outputs = {}
+    for name, entry in generated.items():
+        audit = entry["audit"]
+        outputs[name] = {
+            "seam_u_error": audit["seam_u_error"],
+            "seam_v_error": audit["seam_v_error"],
+            "pass": audit["seam_u_error"] == 0 and audit["seam_v_error"] == 0,
+        }
+    return {"pass": bool(outputs) and all(value["pass"] for value in outputs.values()), "outputs": outputs}
+
+
+def _mask_boundary(mask):
+    interior = mask & np.roll(mask, 1, axis=0) & np.roll(mask, -1, axis=0) & np.roll(mask, 1, axis=1) & np.roll(mask, -1, axis=1)
+    return mask & ~interior
+
+
+def audit_cross_channel_weapon_wear(generated, selected_families):
+    """Prove each physical wear mask is visible in every authored PBR map."""
+    selected = [kind for kind in ("metal", "dark") if "weapon-" + kind in selected_families]
+    families = {}
+    for kind in selected:
+        prefix = "RetroWeapon" + kind.capitalize()
+        base = _rgba_view(generated[prefix]["buffer"], 2048, 2048)[::2, ::2]
+        normal = _rgba_view(generated[prefix + "_Normal"]["buffer"], 2048, 2048)[::2, ::2]
+        metallic = _rgba_view(generated[prefix + "_MetallicSmoothness"]["buffer"], 2048, 2048)[::2, ::2]
+        occlusion = _rgba_view(generated[prefix + "_Occlusion"]["buffer"], 2048, 2048)[::2, ::2]
+        size = base.shape[0]
+        u = np.arange(size, dtype=np.float64)[None, :] / float(size - 1)
+        v = np.arange(size, dtype=np.float64)[:, None] / float(size - 1)
+        masks = _weapon_wear_masks(u, v)
+        combined = np.zeros((size, size), dtype=bool)
+        for mask in masks.values():
+            combined |= mask
+        clean = ~combined
+        rgb = base[:, :, :3].astype(np.float64) / 255.0
+        luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
+        normal_xy = normal[:, :, :2].astype(np.float64) / 127.5 - 1.0
+        normal_relief = np.sqrt(np.sum(normal_xy * normal_xy, axis=-1))
+        metallic_values = metallic[:, :, 0].astype(np.float64) / 255.0
+        smoothness_values = metallic[:, :, 3].astype(np.float64) / 255.0
+        ao_values = occlusion[:, :, 0].astype(np.float64) / 255.0
+        clean_means = {
+            "base_luminance": float(np.mean(luminance[clean])),
+            "normal_relief": float(np.mean(normal_relief[clean])),
+            "metallic": float(np.mean(metallic_values[clean])),
+            "smoothness": float(np.mean(smoothness_values[clean])),
+            "ao": float(np.mean(ao_values[clean])),
+        }
+        features = {}
+        for name, mask in masks.items():
+            boundary = _mask_boundary(mask)
+            values = {
+                "coverage": float(np.mean(mask)),
+                "base_luminance_delta": abs(float(np.mean(luminance[mask])) - clean_means["base_luminance"]),
+                "normal_relief_delta": float(np.mean(normal_relief[boundary])) - clean_means["normal_relief"],
+                "metallic_delta": abs(float(np.mean(metallic_values[mask])) - clean_means["metallic"]),
+                "smoothness_delta": abs(float(np.mean(smoothness_values[mask])) - clean_means["smoothness"]),
+                "ao_delta": abs(float(np.mean(ao_values[mask])) - clean_means["ao"]),
+            }
+            gates = {
+                "bounded_coverage": 0.0005 <= values["coverage"] <= 0.16,
+                "base": values["base_luminance_delta"] >= 0.010,
+                "normal": values["normal_relief_delta"] >= 0.002,
+                "metallic": values["metallic_delta"] >= 0.025,
+                "smoothness": values["smoothness_delta"] >= 0.025,
+                "ao": values["ao_delta"] >= 0.025,
+            }
+            features[name] = {"pass": all(gates.values()), "gates": gates, **values}
+        families[kind] = {
+            "pass": all(feature["pass"] for feature in features.values()),
+            "clean_means": clean_means,
+            "features": features,
+        }
+    return {"pass": bool(families) and all(value["pass"] for value in families.values()), "families": families}
+
+
+def audit_weapon_accent_glass(generated, selected_families):
+    expected = tuple(FAMILY_REGISTRY["weapon-accent"]["outputs"])
+    if "weapon-accent" not in selected_families:
+        return {"pass": False, "gates": {"selected": False}}
+    complete = all(name in generated for name in expected)
+    if not complete:
+        return {"pass": False, "gates": {"inventory": False}, "expected": list(expected)}
+    base = _rgba_view(generated["RetroWeaponAccent"]["buffer"], 2048, 2048)
+    normal = _rgba_view(generated["RetroWeaponAccent_Normal"]["buffer"], 2048, 2048)
+    metallic = _rgba_view(generated["RetroWeaponAccent_MetallicSmoothness"]["buffer"], 2048, 2048)
+    occlusion = _rgba_view(generated["RetroWeaponAccent_Occlusion"]["buffer"], 2048, 2048)
+    emission = _rgba_view(generated["RetroWeaponAccent_Emission"]["buffer"], 2048, 2048)
+    base_rgb = base[:, :, :3].astype(np.float64) / 255.0
+    metallic_range = [float(np.min(metallic[:, :, 0])) / 255.0, float(np.max(metallic[:, :, 0])) / 255.0]
+    smoothness_range = [float(np.min(metallic[:, :, 3])) / 255.0, float(np.max(metallic[:, :, 3])) / 255.0]
+    ao_range = [float(np.min(occlusion[:, :, 0])) / 255.0, float(np.max(occlusion[:, :, 0])) / 255.0]
+    decoded_xy = normal[:, :, :2].astype(np.float64) / 127.5 - 1.0
+    normal_xy_max = float(np.max(np.abs(decoded_xy)))
+    normal_xy_span = [int(np.max(normal[:, :, channel])) - int(np.min(normal[:, :, channel])) for channel in range(2)]
+    emitted = np.any(emission[:, :, :3] > 0, axis=-1)
+    emission_coverage = float(np.mean(emitted))
+    emitted_rgb = emission[:, :, :3].astype(np.float64)[emitted]
+    tolerance = (1.0 / 255.0) + 1e-6
+    contract = WEAPON_ACCENT_CONTRACT
+    base_ranges = [[float(np.min(base_rgb[:, :, channel])), float(np.max(base_rgb[:, :, channel]))] for channel in range(3)]
+    gates = {
+        "inventory": set(expected) == {name for name in generated if name.startswith("RetroWeaponAccent")},
+        "dimensions": all(generated[name]["dimensions"] == [2048, 2048] for name in expected),
+        "authored_red_palette": base_ranges[0][0] >= contract["palette"][0][0] - tolerance and base_ranges[0][1] >= contract["palette"][1][0] and float(np.mean(base_rgb[:, :, 0])) >= 5.0 * float(np.mean(base_rgb[:, :, 1])) and float(np.mean(base_rgb[:, :, 0])) >= 5.0 * float(np.mean(base_rgb[:, :, 2])),
+        "nonmetallic": metallic_range[0] >= contract["metallic"][0] - tolerance and metallic_range[1] <= contract["metallic"][1] + tolerance,
+        "glass_smoothness": smoothness_range[0] >= contract["smoothness"][0] - tolerance and smoothness_range[1] <= contract["smoothness"][1] + tolerance,
+        "glass_ao": ao_range[0] >= contract["ao"][0] - tolerance and ao_range[1] <= contract["ao"][1] + tolerance,
+        "shallow_nonflat_normal": normal_xy_max <= contract["normal_xy_max"] and min(normal_xy_span) >= 2 and _normal_map_audit(normal, 2048, 2048)["valid"],
+        "bounded_emission": contract["emission_coverage"][0] <= emission_coverage <= contract["emission_coverage"][1],
+        "red_emission": emitted_rgb.size > 0 and float(np.mean(emitted_rgb[:, 0])) >= 8.0 * float(np.mean(emitted_rgb[:, 1])) and float(np.mean(emitted_rgb[:, 0])) >= 10.0 * float(np.mean(emitted_rgb[:, 2])),
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "base_ranges": base_ranges,
+        "metallic_range": metallic_range,
+        "smoothness_range": smoothness_range,
+        "ao_range": ao_range,
+        "normal_xy_max": normal_xy_max,
+        "normal_xy_span_u8": normal_xy_span,
+        "emission_coverage": emission_coverage,
+    }
+
+
 def run_semantic_audits(generated, frames=None, selected_families=None):
     """Run only semantic checks whose family buffers were selected/generated."""
-    selected = set(selected_families or FAMILY_IDS)
-    checks = {}
+    selected_ordered = tuple(selected_families or FAMILY_IDS)
+    selected = set(selected_ordered)
+    checks = {
+        "selected_inventory": audit_selected_inventory(generated, selected_ordered),
+        "tile_edges": audit_tile_edges(generated),
+    }
     if "ball" in selected and "RetroBall" in generated and frames is not None:
         checks["ball"] = audit_ball_layout(
             generated["RetroBall"]["buffer"], generated["RetroBall_Normal"]["buffer"], generated["RetroBall_MetallicSmoothness"]["buffer"], generated["RetroBall_Occlusion"]["buffer"], frames
@@ -1550,17 +2044,14 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         )
     if "explosion" in selected and "RetroExplosion" in generated:
         checks["explosion"] = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
-    if "wall" in selected and "RetroWall_MetallicSmoothness" in generated:
-        wall_metallic = generated["RetroWall_MetallicSmoothness"]["buffer"]
-        wall_width, wall_height = generated["RetroWall_MetallicSmoothness"]["dimensions"]
-        wall_metallic_r_max = int(np.max(_rgba_view(wall_metallic, wall_width, wall_height)[:, :, 0]))
-        checks["wall"] = {
-            "pass": wall_metallic_r_max == 0,
-            "gates": {"concrete_nonmetallic": wall_metallic_r_max == 0},
-            "metallic_r_max": wall_metallic_r_max,
-        }
+    for kind in ("grass", "wall"):
+        if kind in selected:
+            checks[kind] = audit_industrial_surface(kind, generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
         checks["weapon_readability"] = audit_weapon_readability(generated, selected)
+        checks["cross_channel_wear"] = audit_cross_channel_weapon_wear(generated, selected)
+    if "weapon-accent" in selected:
+        checks["accent_glass"] = audit_weapon_accent_glass(generated, selected)
     normal_maps = {}
     for name, entry in generated.items():
         if entry["map_type"] == "normal":
@@ -1568,7 +2059,7 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
             normal_maps[name] = _normal_map_audit(entry["buffer"], width, height)
     normal_pass = all(result["valid"] for result in normal_maps.values())
     ball_nonmetallic = checks.get("ball", {}).get("gates", {}).get("nonmetallic", True)
-    wall_nonmetallic = checks.get("wall", {}).get("gates", {}).get("concrete_nonmetallic", True)
+    wall_nonmetallic = checks.get("wall", {}).get("gates", {}).get("wall_nonmetallic", True)
     pbr = {"pass": normal_pass and ball_nonmetallic and wall_nonmetallic, "normal_maps": normal_maps, "nonmetallic_ball": ball_nonmetallic, "nonmetallic_concrete": wall_nonmetallic}
     checks["pbr_channels"] = pbr
     failed = []
@@ -1722,11 +2213,7 @@ def _family_buffers(family_id):
         record(prefix + "_MetallicSmoothness", 2048, 2048, metallic, "metallic", True, True)
         record(prefix + "_Occlusion", 2048, 2048, ao, "ao", True, True)
         if family_id == "weapon-accent":
-            base_array = _rgba_view(base, 2048, 2048)
-            emission = _rgba_array(2048, 2048, (0, 0, 0, 255))
-            bright = ((np.arange(2048, dtype=np.int64) % 96) >= 48) & ((np.arange(2048, dtype=np.int64) % 96) < 56)
-            emission[:, :, :3] = np.where(bright[None, :, None], base_array[:, :, :3], 0)
-            close_repeat_edges(emission, 2048, 2048)
+            emission = generate_weapon_accent_emission(2048, 2048)
             record(prefix + "_Emission", 2048, 2048, emission, "emission", True, True)
     elif family_id == "ball":
         ball_base, ball_normal, ball_metallic, ball_ao, frames = generate_ball_maps()
@@ -1961,22 +2448,21 @@ def compare_generation_runs(first, second):
 def build_argument_parser():
     parser = argparse.ArgumentParser(description="Generate deterministic Rocket Fooxball PBR textures.")
     parser.add_argument("--family", action="append", choices=("all",) + FAMILY_IDS, help="Generate one family; repeatable. Default/all selects the full registry.")
-    parser.add_argument("--proof-two-run", action="store_true", help="Run the full selection twice and compare all named hashes.")
+    parser.add_argument("--proof-two-run", action="store_true", help="Run the selected families twice and compare every selected output and preview hash.")
     return parser
 
 
 def main(argv=None):
     args = build_argument_parser().parse_args(argv)
     selected = resolve_families(args.family)
-    if args.proof_two_run and tuple(selected) != FAMILY_IDS:
-        raise SystemExit("--proof-two-run requires full selection (omit --family or use --family all)")
     result = _run_once(selected, write_manifest=not args.proof_two_run)
     if args.proof_two_run:
         second = _run_once(selected, write_manifest=False)
         compare_generation_runs(result, second)
-        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, "retro_texture_manifest.json"), second["manifest"])
+        manifest_name = "retro_texture_manifest.json" if tuple(selected) == FAMILY_IDS else "retro_texture_manifest_targeted.json"
+        _write_json_if_changed(os.path.join(PREVIEW_DIRECTORY, manifest_name), second["manifest"])
         result = second
-        print(f"PROOF RetroTextures: PASS ({FULL_OUTPUT_COUNT} output hashes, {FULL_PREVIEW_COUNT} preview hashes)")
+        print(f"PROOF RetroTextures: PASS ({result['manifest']['counts']['outputs']} output hashes, {result['manifest']['counts']['previews']} preview hashes)")
     print(f"MEMORY RetroTextures: compressed forecast {result['manifest']['memory_forecast']['compressed_mib']:.3f} MiB / 96.000 MiB")
     print(f"AUDIT RetroTextures: PASS ({result['manifest']['counts']['outputs']} outputs, {result['manifest']['counts']['previews']} previews, families={','.join(selected)}, seed {SEED})")
     return result

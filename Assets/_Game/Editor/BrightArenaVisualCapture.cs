@@ -57,6 +57,7 @@ namespace RocketFooxball.Editor
             public SourceInfo source;
             public UnityInfo unity;
             public BuildInfo build;
+            public string visualMode;
             public CameraPose[] cameras;
             public ImageEvidence[] images;
             public BudgetEvidence budgets;
@@ -123,6 +124,7 @@ namespace RocketFooxball.Editor
         {
             public string view;
             public string qualityLevel;
+            public string visualMode;
             public string path;
             public string sha256;
             public int width;
@@ -159,6 +161,12 @@ namespace RocketFooxball.Editor
             Rocket,
             Shotgun,
             External
+        }
+
+        private enum VisualMode
+        {
+            Fast,
+            Persisted
         }
 
         private sealed class ViewDefinition
@@ -209,6 +217,7 @@ namespace RocketFooxball.Editor
         {
             public string EvidenceRoot;
             public string AttemptId;
+            public VisualMode VisualMode;
         }
 
         [MenuItem("Rocket Fooxball/Capture Bright Arena Visuals")]
@@ -274,6 +283,7 @@ namespace RocketFooxball.Editor
                     sourceSignature = buildManifest.sourceSignature,
                     generatedOutputFingerprint = buildManifest.generatedOutputFingerprint
                 };
+                manifest.visualMode = captureOptions.VisualMode.ToString();
 
                 var player = Require(GameObject.Find("Player"), "Player root");
                 gameplayCamera = Require(player.transform.Find("Head/Camera")?.GetComponent<Camera>(), "Player camera");
@@ -315,9 +325,6 @@ namespace RocketFooxball.Editor
                 for (var qualityIndex = 0; qualityIndex < qualityLevels.Length; qualityIndex++)
                 {
                     var quality = qualityLevels[qualityIndex];
-                    QualitySettings.SetQualityLevel(quality.Item1, true);
-                    graphicsQualityRuntime.ApplyCurrentQuality();
-                    gameplayCamera.Render();
                     for (var i = 0; i < views.Length; i++)
                     {
                         var view = views[i];
@@ -355,21 +362,46 @@ namespace RocketFooxball.Editor
                             externalCamera.transform.position = view.Position;
                             externalCamera.transform.rotation = Quaternion.LookRotation(view.Target - view.Position, Vector3.up);
                             externalCamera.aspect = (float)Width / Height;
-                            captureCamera = externalCamera;
+                             captureCamera = externalCamera;
                         }
 
-                        captureCamera.targetTexture = renderTarget;
-                        captureCamera.Render();
-                        cameras.Add(new CameraPose
+                        var fastSession = false;
+                        try
                         {
-                            view = quality.Item2 + "/" + view.Name,
-                            camera = captureCamera.name,
-                            position = captureCamera.transform.position,
-                            eulerAngles = captureCamera.transform.eulerAngles,
-                            fieldOfView = captureCamera.fieldOfView,
-                            cullingMask = captureCamera.cullingMask
-                        });
-                        images.Add(CaptureImage(captureCamera, view, quality.Item2, evidenceDirectory));
+                            if (captureOptions.VisualMode == VisualMode.Fast)
+                            {
+                                MovementLabFastModeSession.EnterForCapture(quality.Item1);
+                                MovementLabFastModeSession.AssertAppliedState(quality.Item1);
+                                fastSession = true;
+                            }
+                            else
+                            {
+                                if (MovementLabFastModeSession.IsActive)
+                                    throw new InvalidOperationException("Persisted visual capture cannot run while a Fast session is active.");
+                                QualitySettings.SetQualityLevel(quality.Item1, true);
+                                graphicsQualityRuntime.ApplyCurrentQuality();
+                                if (MovementLabFastModeSession.IsActive)
+                                    throw new InvalidOperationException("Persisted visual capture unexpectedly entered Fast mode.");
+                            }
+
+                            captureCamera.targetTexture = renderTarget;
+                            captureCamera.Render();
+                            cameras.Add(new CameraPose
+                            {
+                                view = quality.Item2 + "/" + view.Name,
+                                camera = captureCamera.name,
+                                position = captureCamera.transform.position,
+                                eulerAngles = captureCamera.transform.eulerAngles,
+                                fieldOfView = captureCamera.fieldOfView,
+                                cullingMask = captureCamera.cullingMask
+                            });
+                            images.Add(CaptureImage(captureCamera, view, quality.Item2, captureOptions.VisualMode.ToString(), evidenceDirectory));
+                        }
+                        finally
+                        {
+                            if (fastSession || MovementLabFastModeSession.IsActive)
+                                MovementLabFastModeSession.RestoreIfActive();
+                        }
                     }
                 }
 
@@ -412,35 +444,42 @@ namespace RocketFooxball.Editor
             }
             finally
             {
-                if (gameplayCamera != null)
+                try
                 {
-                    RestoreCameraState(gameplayCamera, gameplayState);
+                    MovementLabFastModeSession.RestoreIfActive();
                 }
-                if (viewmodelsState.Object != null)
+                finally
                 {
-                    viewmodelsState.Object.SetActive(viewmodelsState.Active);
-                }
-                if (crosshairState.Object != null)
-                {
-                    crosshairState.Object.SetActive(crosshairState.Active);
-                }
-                if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
-                if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
-                if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
-                QualitySettings.SetQualityLevel(initialQualityLevel, true);
-                if (graphicsQualityRuntime != null)
-                {
-                    graphicsQualityRuntime.ApplyCurrentQuality();
-                }
-                if (externalCameraObject != null)
-                {
-                    UnityEngine.Object.DestroyImmediate(externalCameraObject);
-                }
-                RenderTexture.active = previousActive;
-                if (renderTarget != null)
-                {
-                    renderTarget.Release();
-                    UnityEngine.Object.DestroyImmediate(renderTarget);
+                    if (gameplayCamera != null)
+                    {
+                        RestoreCameraState(gameplayCamera, gameplayState);
+                    }
+                    if (viewmodelsState.Object != null)
+                    {
+                        viewmodelsState.Object.SetActive(viewmodelsState.Active);
+                    }
+                    if (crosshairState.Object != null)
+                    {
+                        crosshairState.Object.SetActive(crosshairState.Active);
+                    }
+                    if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
+                    if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
+                    if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
+                    QualitySettings.SetQualityLevel(initialQualityLevel, true);
+                    if (graphicsQualityRuntime != null)
+                    {
+                        graphicsQualityRuntime.ApplyCurrentQuality();
+                    }
+                    if (externalCameraObject != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(externalCameraObject);
+                    }
+                    RenderTexture.active = previousActive;
+                    if (renderTarget != null)
+                    {
+                        renderTarget.Release();
+                        UnityEngine.Object.DestroyImmediate(renderTarget);
+                    }
                 }
             }
         }
@@ -450,6 +489,7 @@ namespace RocketFooxball.Editor
             var arguments = Environment.GetCommandLineArgs();
             var root = ReadArgument(arguments, "-captureEvidenceRoot");
             var attemptId = ReadArgument(arguments, "-captureAttemptId");
+            var visualModeText = ReadArgument(arguments, "-captureVisualMode");
             if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(attemptId))
             {
                 throw new InvalidOperationException("Capture requires -captureEvidenceRoot and -captureAttemptId.");
@@ -459,7 +499,14 @@ namespace RocketFooxball.Editor
             {
                 throw new InvalidOperationException("Capture attempt id is not filename-safe: " + attemptId);
             }
-            return new CaptureOptions { EvidenceRoot = Path.GetFullPath(root), AttemptId = attemptId };
+            var visualMode = VisualMode.Persisted;
+            if (!string.IsNullOrWhiteSpace(visualModeText))
+            {
+                if (string.Equals(visualModeText, "Fast", StringComparison.OrdinalIgnoreCase)) visualMode = VisualMode.Fast;
+                else if (string.Equals(visualModeText, "Persisted", StringComparison.OrdinalIgnoreCase)) visualMode = VisualMode.Persisted;
+                else throw new InvalidOperationException("Capture visual mode must be Fast or Persisted: " + visualModeText);
+            }
+            return new CaptureOptions { EvidenceRoot = Path.GetFullPath(root), AttemptId = attemptId, VisualMode = visualMode };
         }
 
         private static string ReadArgument(string[] arguments, string name)
@@ -580,7 +627,7 @@ namespace RocketFooxball.Editor
             };
         }
 
-        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string qualityLevel, string evidenceDirectory)
+        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string qualityLevel, string visualMode, string evidenceDirectory)
         {
             var absolutePath = Path.Combine(evidenceDirectory, qualityLevel + "_" + view.FileName);
             RenderTexture.active = camera.targetTexture;
@@ -601,6 +648,7 @@ namespace RocketFooxball.Editor
                 }
                 var evidence = AnalyzeImage(absolutePath, view.Name, png);
                 evidence.qualityLevel = qualityLevel;
+                evidence.visualMode = visualMode;
                 return evidence;
             }
             finally

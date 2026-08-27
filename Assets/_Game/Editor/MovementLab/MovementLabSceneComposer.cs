@@ -61,11 +61,12 @@ namespace RocketFooxball.Editor
 
                 internal static void AssembleMaterialPrefabStage()
                 {
+                    ConfigureGameplayLayerContract();
                     EnsureFolders();
 
                     var ballSurface = GetOrCreatePhysicMaterial();
-                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(32.5f, 22.5f), Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
-                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(8f, 2f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
+                    var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath), LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), FloorTextureScale, Color.white, Color.clear, 0f, 1f, 1f, 0.75f, 0.65f));
+                    var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath), LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), WallTextureScale, Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.80f));
                     var trimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Trim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
                     var hazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Hazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
                     var markingMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Marking", null, null, null, null, null, null, Vector2.one, new Color(1.00f, 0.96f, 0.78f, 1f), Color.clear, 0f, 0f, 0.5f, 1f, 1f));
@@ -107,7 +108,7 @@ namespace RocketFooxball.Editor
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
                     BuildHealthPickupPrefab(healthPickupMaterial);
                     BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
-                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), LoadRequiredAsset<Material>(ShotgunAccentCoreMaterialPath), teamBlueMaterial, teamRedMaterial);
                     BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);
@@ -154,9 +155,7 @@ namespace RocketFooxball.Editor
                         UnityEngine.Physics.gravity = Vector3.down * GamePhysicsSettings.GravityMagnitude;
                         SetProjectFixedTimestep();
                         EnsureGameplayLayersAndCollisionMatrix();
-                        var scene = EditorSceneManager.NewScene(NewSceneSetup.DefaultGameObjects, NewSceneMode.Single);
-                        var defaultCamera = Camera.main;
-                        if (defaultCamera != null) UnityEngine.Object.DestroyImmediate(defaultCamera.gameObject);
+                        var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
                         var arena = BuildArena(floorMaterial, wallMaterial, markingMaterial, frameMaterial, shieldMaterial, ballSurface, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, gridCeilingMaterial, gridLongWallMaterial, gridEndWallMaterial, shieldRedMaterial, shieldBlueMaterial, teamBlueMaterial, teamRedMaterial);
                         var shieldSetObject = new GameObject("GoalShieldSet");
                         var goalShieldSet = shieldSetObject.AddComponent<GoalShieldSet>();
@@ -204,7 +203,7 @@ namespace RocketFooxball.Editor
                             SetObjectReference(participant.Launcher, "explosionResolver", explosionResolver);
                             SetObjectReference(participant.Shotgun, "ball", ballMotor);
                             SetObjectReference(participant.Shotgun, "ownerParticipant", participant);
-                            SetLayerMask(participant.Shotgun, "hitMask", ~(1 << LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName)));
+                            SetLayerMask(participant.Shotgun, "hitMask", ~(1 << MovementLabContract.ProjectilesLayer));
                         }
                         SetObjectReference(arena.NorthGoal.Trigger, "ball", ballMotor);
                         SetObjectReference(arena.SouthGoal.Trigger, "ball", ballMotor);
@@ -224,7 +223,8 @@ namespace RocketFooxball.Editor
                          SetFloat(match, "matchDuration", MatchDuration);
                          SetFloat(match, "goalCelebrationOrbitDuration", GoalSummaryDuration);
                         SetFloat(match, "kickoffCountdownDuration", KickoffCountdownDuration);
-                        SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                         SetFloat(match, "participantRecoveryThreshold", ParticipantRecoveryThreshold);
+                         SetBool(match, "botsEnabledByDefault", BotsEnabledByDefault);
                          SetVector3(match, "ballResetPosition", new Vector3(0f, BallSpawnHeight, 0f));
                          SetVector3(match, "resetLookTarget", Vector3.zero);
                          WirePresentationSceneReferences(participantStates, localParticipant, match);
@@ -410,7 +410,8 @@ namespace RocketFooxball.Editor
                     if (ParticipantSlots == null || ParticipantSlots.Length != 6) throw new InvalidOperationException("Participant slot catalog must contain exactly six entries.");
 
                     var roster = new ParticipantState[ParticipantSlots.Length];
-                    var hiddenLayer = EnsureLocalPlayerHiddenLayer();
+                    ValidateGameplayLayerContractReadOnly();
+                    var hiddenLayer = MovementLabContract.LocalPlayerHiddenLayer;
                     for (var i = 0; i < ParticipantSlots.Length; i++)
                     {
                         var slot = ParticipantSlots[i];
@@ -515,9 +516,8 @@ namespace RocketFooxball.Editor
                     SetObjectArray(spawnSet, "redCandidates", red.Cast<UnityEngine.Object>().ToArray());
                     SetObjectReference(spawnSet, "blueEnemyGoal", arena.NorthGoal.Root.transform);
                     SetObjectReference(spawnSet, "redEnemyGoal", arena.SouthGoal.Root.transform);
-                    var participantsLayer = LayerMask.NameToLayer("Participants");
-                    var projectilesLayer = LayerMask.NameToLayer("Projectiles");
-                    if (participantsLayer < 0 || projectilesLayer < 0) throw new InvalidOperationException("Participants and Projectiles layers must exist before spawn-set composition.");
+                    var participantsLayer = MovementLabContract.ParticipantsLayer;
+                    var projectilesLayer = MovementLabContract.ProjectilesLayer;
                     SetLayerMask(spawnSet, "visibilityMask", ~(1 << participantsLayer | 1 << projectilesLayer));
                      SetFloat(spawnSet, "eyeHeight", ParticipantSpawnSet.ExpectedEyeHeight);
                     SetFloat(spawnSet, "occupiedRadius", ParticipantSpawnSet.ExpectedOccupiedRadius);
@@ -555,18 +555,13 @@ namespace RocketFooxball.Editor
                     return material;
                 }
 
-                // GameplayScene owns TagManager/DynamicsManager repair. This
-                // runs before scene composition so stale project settings are
-                // fixed in same authoritative rebuild as scene wiring.
+                // GameplayScene validates the layer table read-only. MaterialPrefab
+                // owns the one permitted TagManager transaction.
                 internal static void EnsureGameplayLayersAndCollisionMatrix()
                 {
-                    var participantsLayer = EnsureGameplayLayer(MovementLabContract.ParticipantsLayerName);
-                    var projectilesLayer = EnsureGameplayLayer(MovementLabContract.ProjectilesLayerName);
-                    var hiddenLayer = EnsureGameplayLayer(MovementLabContract.LocalPlayerHiddenLayerName);
-                    if (participantsLayer < 0 || projectilesLayer < 0 || hiddenLayer < 0)
-                    {
-                        throw new InvalidOperationException("Gameplay layers could not be resolved.");
-                    }
+                    ValidateGameplayLayerContractReadOnly();
+                    var participantsLayer = MovementLabContract.ParticipantsLayer;
+                    var projectilesLayer = MovementLabContract.ProjectilesLayer;
 
                     var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.DynamicsManagerPath);
                     if (settings.Length == 0) throw new InvalidOperationException("DynamicsManager.asset unavailable.");
@@ -580,6 +575,71 @@ namespace RocketFooxball.Editor
                     EditorUtility.SetDirty(settings[0]);
                     AssetDatabase.SaveAssets();
                 }
+
+                private static void ConfigureGameplayLayerContract()
+                {
+                    var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.TagManagerPath);
+                    if (settings.Length == 0) throw new InvalidOperationException("TagManager.asset unavailable.");
+
+                    var serialized = new SerializedObject(settings[0]);
+                    var layers = serialized.FindProperty("layers");
+                    if (layers == null || !layers.isArray || layers.arraySize < 32)
+                        throw new InvalidOperationException("TagManager layers schema is unavailable or incomplete.");
+
+                    ValidateGameplayLayerSlots(layers, requireAssignedNames: false);
+                    for (var i = 0; i < GameplayLayerContract.Length; i++)
+                    {
+                        var required = GameplayLayerContract[i];
+                        layers.GetArrayElementAtIndex(required.index).stringValue = required.name;
+                    }
+
+                    serialized.ApplyModifiedPropertiesWithoutUndo();
+                    AssetDatabase.SaveAssets();
+                }
+
+                private static void ValidateGameplayLayerContractReadOnly()
+                {
+                    var settings = AssetDatabase.LoadAllAssetsAtPath(MovementLabContract.TagManagerPath);
+                    if (settings.Length == 0) throw new InvalidOperationException("TagManager.asset unavailable.");
+
+                    var serialized = new SerializedObject(settings[0]);
+                    var layers = serialized.FindProperty("layers");
+                    if (layers == null || !layers.isArray || layers.arraySize < 32)
+                        throw new InvalidOperationException("TagManager layers schema is unavailable or incomplete.");
+
+                    ValidateGameplayLayerSlots(layers, requireAssignedNames: true);
+                }
+
+                private static void ValidateGameplayLayerSlots(SerializedProperty layers, bool requireAssignedNames)
+                {
+                    for (var i = 8; i < layers.arraySize; i++)
+                    {
+                        var actualName = layers.GetArrayElementAtIndex(i).stringValue;
+                        for (var j = 0; j < GameplayLayerContract.Length; j++)
+                        {
+                            var required = GameplayLayerContract[j];
+                            if (i != required.index && string.Equals(actualName, required.name, StringComparison.Ordinal))
+                                throw new InvalidOperationException("Gameplay layer '" + required.name + "' is assigned to index " + i + "; expected " + required.index + ".");
+                        }
+                    }
+
+                    for (var i = 0; i < GameplayLayerContract.Length; i++)
+                    {
+                        var required = GameplayLayerContract[i];
+                        var actualName = layers.GetArrayElementAtIndex(required.index).stringValue;
+                        if ((requireAssignedNames && !string.Equals(actualName, required.name, StringComparison.Ordinal)) ||
+                            (!requireAssignedNames && !string.IsNullOrEmpty(actualName) && !string.Equals(actualName, required.name, StringComparison.Ordinal)))
+                            throw new InvalidOperationException("Gameplay layer index " + required.index + " is occupied by '" + actualName + "'; expected '" + required.name + "'.");
+                    }
+                }
+
+                private static readonly (int index, string name)[] GameplayLayerContract =
+                {
+                    (MovementLabContract.LocalPlayerHiddenLayer, MovementLabContract.LocalPlayerHiddenLayerName),
+                    (MovementLabContract.ProjectilesLayer, MovementLabContract.ProjectilesLayerName),
+                    (MovementLabContract.ParticipantsLayer, MovementLabContract.ParticipantsLayerName),
+                    (MovementLabContract.ViewmodelsLayer, MovementLabContract.ViewmodelsLayerName)
+                };
 
                 internal static void SetProjectFixedTimestep()
                 {

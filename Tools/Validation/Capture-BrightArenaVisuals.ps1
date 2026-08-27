@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory = $true)][string]$ProjectPath,
     [Parameter(Mandatory = $true)][string]$EvidenceRoot,
-    [Parameter(Mandatory = $true)][string]$AttemptId
+    [Parameter(Mandatory = $true)][string]$AttemptId,
+    [ValidateSet('Fast', 'Persisted')][string]$VisualMode = 'Persisted'
 )
 
 Set-StrictMode -Version Latest
@@ -26,11 +27,13 @@ $SourceScopeRoots = @('Assets', 'Tools', 'ProjectSettings', 'Packages')
 $RequiredSourceFiles = @('Assets/_Game/Editor/BrightArenaVisualCapture.cs', 'Tools/Validation/Capture-BrightArenaVisuals.ps1')
 
 function Get-ProjectUnityProcesses {
-    $normalized = $ProjectPath.ToLowerInvariant()
-    @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe'" | Where-Object {
+    $normalized = @($ProjectPath.TrimEnd('\').ToLowerInvariant())
+    $all = @(Get-CimInstance Win32_Process -Filter "Name = 'Unity.exe' OR Name = 'LightBaker.exe' OR Name = 'UnityShaderCompiler.exe'")
+    @(($all | Where-Object {
         $commandLine = [string]$_.CommandLine
-        -not [string]::IsNullOrEmpty($commandLine) -and $commandLine.ToLowerInvariant().Contains($normalized)
-    })
+        if ([string]::IsNullOrWhiteSpace($commandLine)) { return $true }
+        @($normalized | Where-Object { $commandLine.ToLowerInvariant().Contains($_) }).Count -gt 0
+    }))
 }
 
 function Assert-NoProjectProcessOrLock {
@@ -44,13 +47,8 @@ function Wait-ProjectRelease {
     $deadline = [DateTime]::UtcNow.AddSeconds(45)
     do {
         $active = @(Get-ProjectUnityProcesses)
-        $locks = @($LockPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf })
+        $locks = @($LockPaths | Where-Object { Test-Path -LiteralPath $_ })
         if ($active.Count -eq 0 -and $locks.Count -eq 0) { return }
-        if ($active.Count -eq 0) {
-            foreach ($lockPath in $locks) {
-                if ((Get-Item -LiteralPath $lockPath).Length -eq 0) { Remove-Item -LiteralPath $lockPath -Force }
-            }
-        }
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Unity process or project lock remained after capture.'
@@ -136,16 +134,29 @@ $arguments = @(
     '-executeMethod', 'RocketFooxball.Editor.BrightArenaVisualCapture.Capture',
     '-captureEvidenceRoot', ('"' + $EvidenceRoot + '"'),
     '-captureAttemptId', $AttemptId,
+    '-captureVisualMode', $VisualMode,
     '-logFile', ('"' + $LogPath + '"')
 )
 Write-Output ('MOVEMENT_LAB_CAPTURE_UNITY ' + $UnityPath)
 Write-Output ('MOVEMENT_LAB_CAPTURE_LOG ' + $LogPath)
 $unityStopwatch = [Diagnostics.Stopwatch]::StartNew()
-$unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+$unityProcess = $null
+$exitCode = $null
+$unityFailure = $null
+try {
+    $unityProcess = Start-Process -FilePath $UnityPath -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
+    $exitCode = $unityProcess.ExitCode
+    if ($exitCode -ne 0) { throw "Unity capture failed with exit code $exitCode. See $LogPath" }
+} catch {
+    $unityFailure = $_.Exception
+} finally {
+    try { Wait-ProjectRelease } catch {
+        if ($null -ne $unityFailure) { throw "Unity capture failed and project release was not proven: $($unityFailure.Message); $($_.Exception.Message)" }
+        throw
+    }
+}
 $unityStopwatch.Stop()
-$exitCode = $unityProcess.ExitCode
-Wait-ProjectRelease
-if ($exitCode -ne 0) { throw "Unity capture failed with exit code $exitCode. See $LogPath" }
+if ($null -ne $unityFailure) { throw $unityFailure }
 if (-not (Test-Path -LiteralPath $LogPath -PathType Leaf)) { throw "Unity log missing: $LogPath" }
 
 $marker = [Regex]::Match((Get-Content -Raw -LiteralPath $LogPath), 'BRIGHT_ARENA_CAPTURE_PASS\s+(.+)')
@@ -156,6 +167,7 @@ if (-not $manifestPath.Equals($expectedManifestPath, [StringComparison]::Ordinal
 if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "Capture manifest missing: $manifestPath" }
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 if (-not $manifest.pass) { throw 'Capture manifest pass=false.' }
+if ([string]$manifest.visualMode -ne $VisualMode) { throw "Capture visual mode mismatch: expected $VisualMode, got $($manifest.visualMode)." }
 Assert-ManifestSource -Manifest $manifest -ExpectedSha $expectedGitSha -ExpectedHashes $beforeHashes
 if ($null -eq $manifest.images -or @($manifest.images).Count -ne 6) { throw 'Capture manifest must contain six images.' }
 
@@ -171,6 +183,7 @@ foreach ($item in @($manifest.images)) {
     if ($hash -ne ([string]$item.sha256).ToLowerInvariant()) { throw "Capture hash mismatch: $imagePath" }
     $quality = [string]$item.qualityLevel
     if (-not $qualityCounts.ContainsKey($quality)) { throw "Unexpected quality: $quality" }
+    if ([string]$item.visualMode -ne $VisualMode) { throw "Image visual mode mismatch: expected $VisualMode, got $($item.visualMode): $imagePath" }
     $qualityCounts[$quality]++
     $resultImages += [ordered]@{ view = [string]$item.view; quality = $quality; path = $imagePath; sha256 = $hash; width = 1920; height = 1080 }
 }
@@ -182,7 +195,7 @@ $result = [ordered]@{
     schemaVersion = 1; pass = $true; attemptId = $AttemptId; projectPath = $ProjectPath
     evidenceDirectory = $EvidenceDirectory; manifestPath = $manifestPath; logPath = $LogPath; unityExitCode = $exitCode
     harnessMilliseconds = [Math]::Round($harnessStopwatch.Elapsed.TotalMilliseconds)
-    unityMilliseconds = [Math]::Round($unityStopwatch.Elapsed.TotalMilliseconds); images = $resultImages
+    unityMilliseconds = [Math]::Round($unityStopwatch.Elapsed.TotalMilliseconds); visualMode = $VisualMode; images = $resultImages
 }
 [System.IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
 Write-Output ('MOVEMENT_LAB_CAPTURE_RESULT ' + $ResultPath)

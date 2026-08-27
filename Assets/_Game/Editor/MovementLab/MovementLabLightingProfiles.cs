@@ -81,6 +81,7 @@ namespace RocketFooxball.Editor
 
         internal static LightingSettings EnsurePersistedDevelopmentSettings()
         {
+            MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
             var settings = AssetDatabase.LoadAssetAtPath<LightingSettings>(DevelopmentSettingsPath);
             if (settings == null)
             {
@@ -96,6 +97,7 @@ namespace RocketFooxball.Editor
 
         internal static LightingSettings EnsurePersistedProductionSettings()
         {
+            MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
             var settings = AssetDatabase.LoadAssetAtPath<LightingSettings>(ProductionSettingsPath);
             if (settings == null) throw new InvalidOperationException("Production LightingSettings asset is missing: " + ProductionSettingsPath);
             ValidateSettings(settings, Production);

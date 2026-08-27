@@ -1,9 +1,9 @@
 # Historical red baseline for harness red/green checks.
-# Intentionally violates generated-path and short-workspace contracts.
-param(
-    [string[]]$GeneratedPath = @()
-)
+# Intentionally violates exact Appendix-A inventory and short-workspace contracts.
+param([string[]]$GeneratedPath = @())
 
+$script:GeneratedRoots = @('Assets/_Game/Generated', 'ProjectSettings')
+$script:AuthoritativeInventory = @('Assets/_Game/Generated', 'ProjectSettings')
 $script:RequestedInventoryPaths = @()
 $script:ClosedImporterMetadataPaths = @(
     'Assets/_Game/Models/FpsShotgun.fbx.meta',
@@ -15,7 +15,21 @@ $script:BuilderOutputContract = @(
     'Assets/_Game/Prefabs/ShotgunPickup.prefab.meta', 'Assets/_Game/Prefabs/AmmoPickup.prefab.meta',
     'Assets/_Game/Materials/ShotgunMetal.mat.meta', 'Assets/_Game/Materials/ShotgunDark.mat.meta', 'Assets/_Game/Materials/ShotgunAccent.mat.meta', 'Assets/_Game/Materials/AmmoShell.mat.meta'
 )
+# Deliberately omits the accepted Appendix-A TeamRedTrail material pair:
+# Assets/_Game/Materials/TeamRedTrail.mat and .meta.
+# Deliberately omits the five-shotgun-atlas and shared weapon-microdetail
+# importer metadata closure; the green workflow must add each exact path once.
+# Deliberately omits the distinct Fast persisted validator process and ledger
+# row; the green workflow must retain this proof after BuildFast.
 $legacyRow = [ordered]@{ requested_inventory = @() }
+
+# Historical stale recovery deliberately deletes after an observation. The
+# green workflow must fail closed because another contender can replace this
+# path between the read and delete.
+function Acquire-ProjectLease {
+    $existing = [pscustomobject]@{ leaseToken = 'a' * 32 }
+    if ($null -ne $existing) { Remove-Item -LiteralPath $script:LeasePath -Force }
+}
 
 function Assert-ShortWorkspacePath {
     param([Parameter(Mandatory = $true)][string]$Path, [Parameter(Mandatory = $true)][string]$Label)
@@ -41,3 +55,7 @@ function Test-RowReuseProof {
     if ((Get-ObjectPropertyText $Prior 'environment_fingerprint') -ne (Get-ObjectPropertyText $Row 'environment_fingerprint')) { return @{ valid = $false; reason = 'environment fingerprint changed' } }
     return @{ valid = $true; reason = $null }
 }
+
+# Executable red baseline: the historical workflow is intentionally not a
+# runnable green workflow and must fail when the behavioral harness executes it.
+throw 'Historical red workflow fixture intentionally fails behavioral execution.'
