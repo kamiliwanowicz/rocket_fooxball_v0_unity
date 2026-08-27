@@ -360,13 +360,6 @@ namespace RocketFooxball.Editor
         internal const float WeaponMicroDetailNormalScale = MovementLabContract.WeaponMicroDetailNormalScale;
         internal static readonly Vector3 LauncherViewmodelPosition = MovementLabContract.LauncherViewmodelPosition;
         internal static readonly Vector3 ShotgunViewmodelPosition = MovementLabContract.ShotgunViewmodelPosition;
-        internal const float ArenaNorthWallPylonZ = MovementLabContract.ArenaNorthWallPylonZ;
-        internal const float ArenaSouthWallPylonZ = MovementLabContract.ArenaSouthWallPylonZ;
-        internal static readonly Quaternion ArenaNorthWallPylonRotation = MovementLabContract.ArenaNorthWallPylonRotation;
-        internal static readonly Quaternion ArenaSouthWallPylonRotation = MovementLabContract.ArenaSouthWallPylonRotation;
-        internal static readonly string[] ArenaPylonNames = MovementLabContract.ArenaPylonNames;
-        internal static readonly float[] ArenaPylonXs = MovementLabContract.ArenaPylonXs;
-
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
             PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, ScenePath,
