@@ -492,6 +492,7 @@ namespace RocketFooxball.Editor
                             ? MovementLabContract.DevelopmentLightmapCount
                             : MovementLabContract.ExpectedLightmapCount;
                         ValidateBakedLightmapTopology(expectedLightmapCount);
+                        DeleteRetiredReflectionProbeBake();
                     }
                     catch (Exception exception)
                     {
@@ -577,6 +578,24 @@ namespace RocketFooxball.Editor
                             throw new InvalidOperationException("MovementLab lightmap data reference is stale: " + i);
                         }
                     }
+                }
+
+                private static void DeleteRetiredReflectionProbeBake()
+                {
+                    const string retiredAssetPath = "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr";
+                    var projectRoot = ResolveProjectRoot();
+                    var absoluteAssetPath = GetAbsoluteProjectPath(projectRoot, retiredAssetPath);
+                    var assetExists = File.Exists(absoluteAssetPath);
+                    var metaExists = File.Exists(absoluteAssetPath + ".meta");
+                    if (assetExists != metaExists)
+                        throw new InvalidOperationException("Retired MovementLab reflection probe bake has an incomplete asset/meta pair: " + retiredAssetPath);
+                    if (!assetExists) return;
+
+                    ValidateAssetMetaGuid(retiredAssetPath);
+                    if (!AssetDatabase.DeleteAsset(retiredAssetPath))
+                        throw new InvalidOperationException("Failed to delete retired MovementLab reflection probe bake: " + retiredAssetPath);
+                    if (File.Exists(absoluteAssetPath) || File.Exists(absoluteAssetPath + ".meta"))
+                        throw new InvalidOperationException("Retired MovementLab reflection probe bake asset/meta pair remains after deletion: " + retiredAssetPath);
                 }
 
                 private readonly struct PreservedBakedOutput
@@ -670,6 +689,8 @@ namespace RocketFooxball.Editor
                     if (probeGroup == null || probeGroup.probePositions == null)
                         throw new InvalidOperationException("Light probe lattice is missing.");
                     var probes = GameObject.FindObjectsByType<ReflectionProbe>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
+                    if (ExpectedReflectionProbeBakeCount != ReflectionProbeContract.Length)
+                        throw new InvalidOperationException("Reflection probe bake count contract does not match the scene probe contract.");
                     if (probes.Length != ReflectionProbeContract.Length) throw new InvalidOperationException("Reflection probe count invalid.");
                     var expectedLightingProfile = ResolveReadOnlyValidationProfile(includeBakedLighting, probeGroup.probePositions.Length, probes);
                     ValidateLightingManifest(includeBakedLighting, expectedLightingProfile);

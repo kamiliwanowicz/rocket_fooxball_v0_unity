@@ -18,7 +18,7 @@ namespace RocketFooxball.Editor
         internal const int GameplaySceneStageContractVersion = 17;
         internal const int QualityStageContractVersion = 5;
         internal const int LightingStageContractVersion = 7;
-        internal const int BakedOutputStageContractVersion = 7;
+        internal const int BakedOutputStageContractVersion = 8;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -45,6 +45,7 @@ namespace RocketFooxball.Editor
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
         internal const int DevelopmentLightmapCount = 2;
         internal const int ExpectedLightmapCount = 5;
+        internal const int ExpectedReflectionProbeBakeCount = 3;
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
         internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
@@ -556,16 +557,14 @@ namespace RocketFooxball.Editor
         private static string[] CreateBakedOutputPaths()
         {
             var lightmapPaths = BakedLightmapPaths(ExpectedLightmapCount);
-            var paths = new string[2 + lightmapPaths.Length + 5];
+            var paths = new string[3 + lightmapPaths.Length + ExpectedReflectionProbeBakeCount];
             paths[0] = ScenePath;
             paths[1] = BakedLightingPath + "/LightingData.asset";
             Array.Copy(lightmapPaths, 0, paths, 2, lightmapPaths.Length);
             var reflectionOffset = 2 + lightmapPaths.Length;
-            paths[reflectionOffset] = BakedLightingPath + "/ReflectionProbe-0.exr";
-            paths[reflectionOffset + 1] = BakedLightingPath + "/ReflectionProbe-1.exr";
-            paths[reflectionOffset + 2] = BakedLightingPath + "/ReflectionProbe-2.exr";
-            paths[reflectionOffset + 3] = BakedLightingPath + "/ReflectionProbe-3.exr";
-            paths[reflectionOffset + 4] = LightingManifestPath;
+            for (var i = 0; i < ExpectedReflectionProbeBakeCount; i++)
+                paths[reflectionOffset + i] = BakedLightingPath + "/ReflectionProbe-" + i + ".exr";
+            paths[reflectionOffset + ExpectedReflectionProbeBakeCount] = LightingManifestPath;
             return paths;
         }
 

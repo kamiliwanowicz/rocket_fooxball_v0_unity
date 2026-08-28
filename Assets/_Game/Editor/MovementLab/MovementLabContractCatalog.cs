@@ -232,7 +232,7 @@ namespace RocketFooxball.Editor
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
         internal const int ExpectedLightmapCount = MovementLabContract.ExpectedLightmapCount;
-        internal const int ExpectedReflectionProbeBakeCount = 4;
+        internal const int ExpectedReflectionProbeBakeCount = MovementLabContract.ExpectedReflectionProbeBakeCount;
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
         internal const string BuildMarkerPrefix = MovementLabContract.BuildMarkerPrefix;
 
