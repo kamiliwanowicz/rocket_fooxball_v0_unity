@@ -92,7 +92,23 @@ After creation all Git checks use bound worktree/branch/exact SHA. Moving source
 - writer profile -> exact plan/user/`AGENTS.md` requirement; otherwise `luna_max`. Reviewer -> fresh exact `sol_medium`
 - required profile unavailable, unresolved ownership, authority, or product decision -> `blocked`
 
-Recovery preserves bound objective, requirements, ownership, dependencies, Git authority. Production bake authority -> [production-bake gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate). Out-of-bounds recovery -> `blocked`.
+Recovery preserves bound objective, requirements, dependencies, Git authority. Production bake authority -> [production-bake gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate). Plan-necessary adjacent repair may expand path ownership through [adjacent repair](#adjacent-repair). Out-of-objective recovery -> `blocked`.
+
+### Adjacent repair
+
+Review, compile, test, generation, or validation may expose unplanned in-repository consumer/support code that must mechanically follow accepted plan behavior. Orchestrator continues automatically when repair:
+
+- is required for accepted objective or declared check to pass
+- preserves accepted product behavior and stable contracts
+- changes smallest exact path/symbol set
+- needs no external mutation, dependency change, secret, user choice, or new product decision
+- can serialize after every current owner/potentially overlapping writer reaches terminal state
+
+Examples: stale validator expectation, caller signature, manifest consumer, importer assertion, or test fixture tied to changed accepted contract.
+
+Flow: capture evidence -> close overlapping writer barriers -> bind exact added paths to fresh narrow repair writer -> protect all prior/peer slices -> implement -> run invalidated local checks -> freeze/review repair with originating checkpoint -> add paths to final owned diff and generated-output classification. Use owning task profile; cross-cutting repair with no clear owner -> exact `sol_high`. Pinned plan artifact remains unchanged; execution result records absorbed paths and evidence.
+
+Block only when repair changes objective/product behavior, crosses explicit user prohibition, changes dependency/integration authority, requires external action, cannot establish exclusive ownership, or expands beyond narrow mechanical consistency. Large diff alone does not block; decompose bounded repairs while objective stays fixed.
 
 ### Repeated-struggle takeover
 
@@ -283,7 +299,7 @@ After a merge or accepted fix, final verification reruns every applicable workfl
 4. Fix -> barrier -> scope verify -> commit/freeze -> rerun every applicable workflow check -> [Review checkpoints](#review-checkpoints) fix re-review gate. Fan-in waits accepted checkpoints.
 5. Final exact committed `HEAD`: every applicable required workflow check, ancestry, owned diff plus [generated output gate](#generated-output-gate), clean status, initial unrelated status, branch, dependencies, requirements.
 
-Required unowned non-generated edit, decomposition change, dependency drift, out-of-plan decision -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
+Required unowned non-generated edit -> apply [adjacent repair](#adjacent-repair). Decomposition may change when needed to isolate adjacent repair without changing objective. Dependency drift, out-of-objective decision, unresolved ownership, or authority expansion -> `blocked`. LP receives one action in `lp-dispatched`; user receives one action in `user-direct`.
 
 ## Completion routing
 
