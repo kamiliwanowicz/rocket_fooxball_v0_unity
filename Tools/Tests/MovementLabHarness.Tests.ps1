@@ -148,6 +148,14 @@ function Test-GeneratedPathSurfaceRemoved {
         'Assets/_Game/Textures/Shotgun_Occlusion.png.meta',
         'Assets/_Game/Textures/Shotgun_Emission.png.meta'
     )
+    $lightmap4Paths = @(
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png',
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png.meta',
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr',
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr.meta',
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png',
+        'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png.meta'
+    )
     $currentAppendixValues = @(Get-HarnessStringAssignment $State.CurrentSource 'script:AppendixAPaths')
     $currentAst = Get-HarnessAst $State.CurrentSource
     $currentSourceValues = @($currentAst.FindAll({
@@ -178,7 +186,15 @@ function Test-GeneratedPathSurfaceRemoved {
         $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
         if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing shotgun atlas metadata entry: ' + $path) }
     }
-    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail and five shotgun atlas metadata entries are closed')
+    foreach ($path in $lightmap4Paths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one Lightmap-4 entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('Lightmap-4 entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing Lightmap-4 entry: ' + $path) }
+    }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail, five shotgun atlas metadata entries, and six Lightmap-4 entries are closed')
 }
 
 function Test-GeneratedYamlComparatorCoverage {

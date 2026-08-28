@@ -44,7 +44,7 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
         internal const int DevelopmentLightmapCount = 2;
-        internal const int ExpectedLightmapCount = 4;
+        internal const int ExpectedLightmapCount = 5;
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
         internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";

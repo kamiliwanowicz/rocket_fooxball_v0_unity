@@ -488,8 +488,10 @@ namespace RocketFooxball.Editor
                         if (!baked)
                             throw new InvalidOperationException("Lightmapping.Bake returned false for MovementLab.");
 
-                        if (profile == MovementLabLightingProfiles.ProfileId.Development)
-                            ValidateBakedLightmapTopology(MovementLabContract.DevelopmentLightmapCount);
+                        var expectedLightmapCount = profile == MovementLabLightingProfiles.ProfileId.Development
+                            ? MovementLabContract.DevelopmentLightmapCount
+                            : MovementLabContract.ExpectedLightmapCount;
+                        ValidateBakedLightmapTopology(expectedLightmapCount);
                     }
                     catch (Exception exception)
                     {
