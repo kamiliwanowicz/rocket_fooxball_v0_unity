@@ -704,17 +704,23 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("ArenaKit importer sourceMaterials value is null.");
                     }
 
-                    var expectedNames = new[] { "ArenaPrimary", "ArenaTrim", "ArenaHazard", "ArenaGlow" };
-                    if (sourceMaterials.Length != expectedNames.Length)
+                    var expectedNames = MovementLabContract.ArenaGoalRecessMaterialSlots;
+                    if (sourceMaterials.Length != 4)
                     {
                         throw new InvalidOperationException("ArenaKit importer source material count invalid; expected 4, actual " + sourceMaterials.Length + ".");
                     }
 
-                    for (var i = 0; i < expectedNames.Length; i++)
+                    var seenNames = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < sourceMaterials.Length; i++)
                     {
-                        if (sourceMaterials[i].type != typeof(Material) || !string.Equals(sourceMaterials[i].name, expectedNames[i], StringComparison.Ordinal))
+                        var sourceMaterial = sourceMaterials[i];
+                        if (sourceMaterial.type != typeof(Material) || Array.IndexOf(expectedNames, sourceMaterial.name) < 0)
                         {
-                            throw new InvalidOperationException("ArenaKit importer source material invalid at index " + i + "; expected Material/" + expectedNames[i] + ", actual " + sourceMaterials[i].type + "/" + sourceMaterials[i].name + ".");
+                            throw new InvalidOperationException("ArenaKit importer source material invalid at index " + i + "; expected a unique Material from ArenaGoalRecessMaterialSlots, actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
+                        }
+                        if (!seenNames.Add(sourceMaterial.name))
+                        {
+                            throw new InvalidOperationException("ArenaKit importer source material is duplicated at index " + i + ": " + sourceMaterial.name + ".");
                         }
                     }
 

@@ -122,7 +122,7 @@ namespace RocketFooxball.Editor
                     material.SetFloat("_BumpScale", specification.BumpScale);
                     material.SetColor("_EmissionColor", specification.EmissionStrength > 0.001f ? specification.EmissionColor * specification.EmissionStrength : Color.clear);
                     if (material.HasProperty("_EmissionStrength")) material.SetFloat("_EmissionStrength", specification.EmissionStrength);
-                    material.SetTexture("_BaseMap", specification.BaseMap != null ? specification.BaseMap : Texture2D.whiteTexture);
+                    material.SetTexture("_BaseMap", specification.BaseMap);
                     material.SetTexture("_BumpMap", specification.NormalMap);
                     material.SetTexture("_MetallicGlossMap", specification.MetallicGlossMap);
                     material.SetTexture("_OcclusionMap", specification.OcclusionMap);
@@ -493,7 +493,7 @@ namespace RocketFooxball.Editor
                     Vector2? detailNormalTiling = null, float detailNormalScale = 1f)
                 {
                     if (material == null || material.shader == null || material.shader.name != LitShaderName) throw new InvalidOperationException(label + " must use URP Lit.");
-                    if (material.GetTexture("_BaseMap") != (baseMap != null ? baseMap : Texture2D.whiteTexture)) throw new InvalidOperationException(label + " base texture mismatch.");
+                    if (material.GetTexture("_BaseMap") != baseMap) throw new InvalidOperationException(label + " base texture mismatch.");
                     if (material.GetTexture("_BumpMap") != normalMap || material.GetTexture("_MetallicGlossMap") != metallicMap || material.GetTexture("_OcclusionMap") != occlusionMap || material.GetTexture("_EmissionMap") != emissionMap) throw new InvalidOperationException(label + " PBR map routing mismatch.");
                     if (material.GetTexture("_DetailNormalMap") != detailNormalMap) throw new InvalidOperationException(label + " detail normal map mismatch.");
                     var expectedDetailNormalTiling = detailNormalTiling ?? Vector2.one;
