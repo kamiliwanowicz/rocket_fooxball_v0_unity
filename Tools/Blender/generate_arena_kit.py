@@ -775,6 +775,7 @@ def export_fbx(objects):
             object_types={"MESH"},
             axis_forward="-Z",
             axis_up="Y",
+            bake_space_transform=True,
             apply_unit_scale=True,
             apply_scale_options="FBX_SCALE_UNITS",
             use_mesh_modifiers=True,
