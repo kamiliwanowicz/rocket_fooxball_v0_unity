@@ -700,7 +700,7 @@ namespace RocketFooxball.Editor
             var cueMaterial = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? TeamRedMaterialPath : TeamBlueMaterialPath);
             var cueMeshPath = label == "NorthGoal" ? RedTriangleCueMeshPath : BlueCircleCueMeshPath;
             if (!cue.gameObject.activeSelf || Vector3.Distance(cue.localPosition, new Vector3(0f, 3.5f, -0.28f)) > TransformTolerance ||
-                Quaternion.Angle(cue.localRotation, Quaternion.identity) > RotationTolerance || Vector3.Distance(cue.localScale, new Vector3(3.5f, 3.5f, 1f)) > TransformTolerance ||
+                Quaternion.Angle(cue.localRotation, Quaternion.Euler(90f, 0f, 0f)) > RotationTolerance || Vector3.Distance(cue.localScale, new Vector3(3.5f, 3.5f, 1f)) > TransformTolerance ||
                 cueRenderer.sharedMaterial != cueMaterial || cue.GetComponent<MeshFilter>()?.sharedMesh == null ||
                 AssetDatabase.GetAssetPath(cue.GetComponent<MeshFilter>().sharedMesh) != cueMeshPath || cue.GetComponent<Collider>() != null)
                 throw new InvalidOperationException(label + " team shape cue contract invalid.");

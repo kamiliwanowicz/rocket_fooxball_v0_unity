@@ -655,11 +655,12 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("ArenaKit imported mesh set must contain exactly ArenaGoalRecessMesh and ArenaWallSconceMesh.");
                     }
-                    var importedRoots = new List<GameObject>();
-                    for (var i = 0; i < assets.Length; i++)
+                    var importedRoot = AssetDatabase.LoadAssetAtPath<GameObject>(ArenaKitModelPath);
+                    if (importedRoot == null)
                     {
-                        if (assets[i] is GameObject root) importedRoots.Add(root);
+                        throw new InvalidOperationException("ArenaKit imported model root is missing; expected a main GameObject at " + ArenaKitModelPath + ".");
                     }
+                    var importedRoots = new List<GameObject> { importedRoot };
                     ValidateArenaKitRendererOnly(importedRoots);
                     for (var i = 0; i < expectedNames.Length; i++)
                     {
