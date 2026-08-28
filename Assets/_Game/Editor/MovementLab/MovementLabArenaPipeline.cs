@@ -594,13 +594,11 @@ namespace RocketFooxball.Editor
         }
 
         private static void ValidateArenaKitVisual(Transform root, string name, string meshName, Vector3 position, Quaternion rotation,
-            Material[] materials, int subMeshCount, Vector3 blenderMin, Vector3 blenderMax)
+            Material[] materials, int subMeshCount, Vector3 expectedMin, Vector3 expectedMax)
         {
             var item = Require(root.Find(name), "Architecture " + name);
             var renderer = Require(item.GetComponent<MeshRenderer>(), name + " renderer");
             var mesh = Require(item.GetComponent<MeshFilter>()?.sharedMesh, name + " mesh");
-            var expectedMin = new Vector3(blenderMin.x, blenderMin.z, -blenderMax.y);
-            var expectedMax = new Vector3(blenderMax.x, blenderMax.z, -blenderMin.y);
             if (Vector3.Distance(item.localPosition, position) > TransformTolerance || Quaternion.Angle(item.localRotation, rotation) > RotationTolerance ||
                 Vector3.Distance(item.localScale, Vector3.one) > TransformTolerance || !item.gameObject.isStatic || item.GetComponents<Component>().Length != 3 ||
                 mesh.name != meshName || AssetDatabase.GetAssetPath(mesh) != ArenaKitModelPath || mesh.subMeshCount != subMeshCount ||
