@@ -764,22 +764,30 @@ def export_fbx(objects):
         obj.select_set(True)
     bpy.context.view_layer.objects.active = objects[0]
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    bpy.ops.export_scene.fbx(
-        filepath=OUTPUT_PATH,
-        use_selection=True,
-        object_types={"MESH"},
-        axis_forward="-Z",
-        axis_up="Y",
-        apply_unit_scale=True,
-        apply_scale_options="FBX_SCALE_UNITS",
-        use_mesh_modifiers=True,
-        mesh_smooth_type="OFF",
-        add_leaf_bones=False,
-        bake_anim=False,
-    )
-    if not os.path.isfile(OUTPUT_PATH) or os.path.getsize(OUTPUT_PATH) == 0:
-        raise RuntimeError(f"FBX missing or empty: {OUTPUT_PATH}")
-    print(f"OUTPUT {OUTPUT_PATH} ({os.path.getsize(OUTPUT_PATH)} bytes)")
+    original_names = tuple(obj.name for obj in objects)
+    try:
+        # Unity derives imported mesh subasset names from exported Blender object names.
+        for obj in objects:
+            obj.name = obj.data.name
+        bpy.ops.export_scene.fbx(
+            filepath=OUTPUT_PATH,
+            use_selection=True,
+            object_types={"MESH"},
+            axis_forward="-Z",
+            axis_up="Y",
+            apply_unit_scale=True,
+            apply_scale_options="FBX_SCALE_UNITS",
+            use_mesh_modifiers=True,
+            mesh_smooth_type="OFF",
+            add_leaf_bones=False,
+            bake_anim=False,
+        )
+        if not os.path.isfile(OUTPUT_PATH) or os.path.getsize(OUTPUT_PATH) == 0:
+            raise RuntimeError(f"FBX missing or empty: {OUTPUT_PATH}")
+        print(f"OUTPUT {OUTPUT_PATH} ({os.path.getsize(OUTPUT_PATH)} bytes)")
+    finally:
+        for obj, original_name in zip(objects, original_names):
+            obj.name = original_name
 
 
 def main():
