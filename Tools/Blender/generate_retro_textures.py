@@ -405,7 +405,9 @@ def _natural_surface_layers(kind: str, u, v):
         detail_weight += amplitude
     broad /= np.float64(broad_weight)
     detail /= np.float64(detail_weight)
-    mowing_wave = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (12.0 * u + 1.5 * v) + mowing_phase)
+    # Keep both axes on integer cycles so the mowing modulation closes on the
+    # sampled torus instead of introducing a V-boundary seam band.
+    mowing_wave = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (12.0 * u + 2.0 * v) + mowing_phase)
     mowing = mowing_wave * mowing_wave * (3.0 - 2.0 * mowing_wave)
     return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail, mowing
 
@@ -1474,6 +1476,63 @@ def _seam_errors(rgba, width, height, check_v=False, check_poles=False):
     return seam_u, seam_v, poles
 
 
+def _wrapped_boundary_continuity(rgba, width, height):
+    """Audit seam neighborhoods and first-derivative continuity on unique texels."""
+    image = _rgba_view(rgba, width, height).astype(np.float64)
+    unique = image[:-1, :-1, :]
+    if unique.shape[0] < 4 or unique.shape[1] < 4:
+        return {
+            "pass": False,
+            "finite": False,
+            "axes": {},
+            "reason": "wrapped continuity requires at least four unique samples per axis",
+        }
+    finite = bool(np.isfinite(unique).all())
+    axes = {}
+    for axis, label in ((1, "u"), (0, "v")):
+        forward = np.roll(unique, -1, axis=axis) - unique
+        seam_step = np.take(forward, -1, axis=axis)
+        first_step = np.take(forward, 0, axis=axis)
+        previous_step = np.take(forward, -2, axis=axis)
+        interior_steps = np.delete(np.abs(forward), -1, axis=axis)
+        interior_step_p999 = float(np.percentile(interior_steps, 99.9))
+        seam_step_max = float(np.max(np.abs(seam_step)))
+        seam_spike_limit = max(3.0, interior_step_p999 + 2.0)
+        seam_spike = seam_step_max <= seam_spike_limit
+
+        # A C1 torus has matching forward steps at both sides of the seam.
+        seam_second_difference = np.maximum(np.abs(seam_step - first_step), np.abs(seam_step - previous_step))
+        interior_second_difference = np.abs(np.diff(forward, axis=axis))
+        interior_second_p999 = float(np.percentile(interior_second_difference, 99.9))
+        seam_second_max = float(np.max(seam_second_difference))
+        neighborhood_limit = max(3.0, interior_second_p999 + 2.0)
+        neighborhood_continuous = seam_second_max <= neighborhood_limit
+
+        central = (np.roll(unique, -1, axis=axis) - np.roll(unique, 1, axis=axis)) * 0.5
+        boundary_derivative_error = np.take(central, 0, axis=axis) - np.take(central, -1, axis=axis)
+        interior_derivative_difference = np.abs(np.diff(central, axis=axis))
+        interior_derivative_p999 = float(np.percentile(interior_derivative_difference, 99.9))
+        derivative_error_max = float(np.max(np.abs(boundary_derivative_error)))
+        derivative_limit = max(3.0, interior_derivative_p999 + 2.0)
+        derivative_continuous = derivative_error_max <= derivative_limit
+        axes[label] = {
+            "seam_step_max_u8": seam_step_max,
+            "interior_step_p999_u8": interior_step_p999,
+            "seam_spike_limit_u8": seam_spike_limit,
+            "seam_spike": seam_spike,
+            "seam_second_difference_max_u8": seam_second_max,
+            "interior_second_difference_p999_u8": interior_second_p999,
+            "neighborhood_limit_u8": neighborhood_limit,
+            "neighborhood_continuous": neighborhood_continuous,
+            "boundary_derivative_error_max_u8": derivative_error_max,
+            "interior_derivative_difference_p999_u8": interior_derivative_p999,
+            "derivative_limit_u8": derivative_limit,
+            "derivative_continuous": derivative_continuous,
+            "pass": seam_spike and neighborhood_continuous and derivative_continuous,
+        }
+    return {"pass": finite and all(axis["pass"] for axis in axes.values()), "finite": finite, "axes": axes}
+
+
 def _normal_map_audit(rgba, width, height):
     pixels = _rgba_flat(rgba, width, height).astype(np.float64)
     vectors = pixels[:, :3] / 127.5 - 1.0
@@ -1928,6 +1987,8 @@ def audit_continuous_surface(kind, generated):
             "v": int(np.count_nonzero(image[0, :, :] != image[-1, :, :])),
         }
     edges_ok = all(error["u"] == 0 and error["v"] == 0 for error in edge_errors.values())
+    wrapped_continuity = {map_name: _wrapped_boundary_continuity(image, width, height) for map_name, image in maps.items()}
+    wrapped_continuity_ok = all(result["pass"] for result in wrapped_continuity.values())
 
     rgb = base[:, :, :3].astype(np.float64) / 255.0
     luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
@@ -1978,6 +2039,7 @@ def audit_continuous_surface(kind, generated):
         "inventory": inventory_ok,
         "dimensions": dimensions_ok,
         "edge_bytes": edges_ok,
+        "wrapped_continuity": wrapped_continuity_ok,
         "palette_bounds": palette_ok,
         "palette_semantics": palette_semantics,
         "normal_nonflat": normal_nonflat,
@@ -1997,6 +2059,7 @@ def audit_continuous_surface(kind, generated):
         "construction": contract["construction"],
         "motifs": {"inventory": motif_inventory, "counts": {}},
         "edges": edge_errors,
+        "wrapped_continuity": wrapped_continuity,
         "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "green_dominant_fraction": green_fraction, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
         "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges, "unit_error": unit_error},
         "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
