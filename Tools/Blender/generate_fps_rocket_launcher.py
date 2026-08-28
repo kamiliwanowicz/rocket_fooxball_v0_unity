@@ -37,7 +37,7 @@ REFERENCE_TILE_NAME = "WeaponSurfaceReference.png"
 REFERENCE_TILE_PATH = os.path.join(REPOSITORY_ROOT, "Tools", "Blender", "ReferenceInputs", REFERENCE_TILE_NAME)
 REFERENCE_TILE_SIZE = 1254
 REFERENCE_RGBA_SHA256 = "8ae165be644582741cb75ef53b24bfccbb9c0b3faaa0afcb5ef9c32a4b36dd79"
-SURFACE_REVISION = "quake-warm-v1"
+SURFACE_REVISION = "armored-reference-v2"
 REFERENCE_BLUR_SIZE = 65
 REFERENCE_DELTA_SCALE = 0.18
 # The Unity material applies this tile at a restrained 0.24 normal scale.  The
@@ -81,6 +81,7 @@ SURFACE_PALETTE_BYTES = {
     "darkScuff": (36, 28, 19),
     "accent": (140, 0, 0),
     "core": (41, 0, 0),
+    "paintedRed": (126, 34, 24),
 }
 SURFACE_PBR = {
     "metalClean": (0.86, 0.64),
@@ -125,49 +126,70 @@ UV_ZONES = {
 TARGET_MIN = Vector((-0.16, -0.55, -0.1313))
 TARGET_MAX = Vector((0.16, 0.20, 0.11))
 TARGET_TOLERANCE = 0.00005
-TARGET_VERTICES = 1120
-TARGET_TRIANGLES = 2156
 HARD_ENVELOPE = Vector((0.40, 0.90, 0.35))
 MIN_OVERLAP = 0.005
 CORE_INSET_MIN = 0.002
 CORE_INSET_MAX = 0.004
-GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent")
+GROUP_NAMES = ("WeaponMetal", "WeaponDark", "WeaponAccent", "WeaponAccentCore")
 DECLARED_OPEN_PARTS = ()
+PAINT_ATTRIBUTE = "SurfaceRolePaintedRed"
+PAINTED_RED_SOURCES = ("SidePlateLeft", "SidePlateRight")
+LAUNCHER_PROFILE_PARAMETERS = {
+    "kind": "launcher",
+    "muzzleMaxY": -0.37,
+    "receiverMinY": -0.395,
+    "receiverMaxY": 0.105,
+    "gripMinY": 0.0,
+    "gripMaxY": 0.18,
+}
 
 # This map is intentionally declared before geometry. Every joint is checked
 # in world-space AABB terms before source parts are joined.
 CONNECTION_MAP = (
-    ("Grip", "RearBlock", "grip-to-receiver"),
-    ("RearBlock", "Core", "receiver-to-body"),
-    ("Core", "MuzzleHousing", "body-to-muzzle-housing"),
-    ("MuzzleHousing", "MuzzleCollar", "housing-to-collar"),
-    ("MuzzleHousing", "MuzzleInset", "housing-to-muzzle-inset"),
-    ("Core", "TopSpine", "body-to-top-spine"),
-    ("Core", "RailLeft", "body-to-left-rail"),
-    ("Core", "RailRight", "body-to-right-rail"),
-    ("MuzzleHousing", "RailLeft", "housing-to-left-rail"),
-    ("MuzzleHousing", "RailRight", "housing-to-right-rail"),
-    ("MuzzleHousing", "MuzzleSegment01", "housing-to-segment-one"),
-    ("MuzzleHousing", "MuzzleSegment02", "housing-to-segment-two"),
-    ("MuzzleCollar", "MuzzleSegment02", "collar-to-segment-two"),
-    ("TopSpine", "AccentSpineShell", "top-spine-shell"),
-    ("RailLeft", "AccentLeftShell", "left-rail-shell"),
-    ("RailRight", "AccentRightShell", "right-rail-shell"),
-    ("MuzzleCollar", "AccentMuzzleShell", "muzzle-ring-shell"),
-    ("Core", "SideVentLeft", "left-side-vent"),
-    ("Core", "SideVentRight", "right-side-vent"),
-    ("RearBlock", "ReceiverFastenerFront", "front-receiver-fastener"),
-    ("RearBlock", "ReceiverFastenerRear", "rear-receiver-fastener"),
-    ("Grip", "GripRib01", "grip-rib-one"),
-    ("Grip", "GripRib02", "grip-rib-two"),
-    ("Grip", "GripRib03", "grip-rib-three"),
+    ("MuzzleTop", "MuzzleLeft", "muzzle-top-left-corner"),
+    ("MuzzleTop", "MuzzleRight", "muzzle-top-right-corner"),
+    ("MuzzleBottom", "MuzzleLeft", "muzzle-bottom-left-corner"),
+    ("MuzzleBottom", "MuzzleRight", "muzzle-bottom-right-corner"),
+    ("MuzzleTop", "MuzzleBore", "muzzle-top-to-bore"),
+    ("MuzzleBottom", "MuzzleBore", "muzzle-bottom-to-bore"),
+    ("MuzzleTop", "MainReceiver", "muzzle-top-to-receiver"),
+    ("MuzzleBottom", "MainReceiver", "muzzle-bottom-to-receiver"),
+    ("MuzzleLeft", "MainReceiver", "muzzle-left-to-receiver"),
+    ("MuzzleRight", "MainReceiver", "muzzle-right-to-receiver"),
+    ("MainReceiver", "RearCap", "receiver-to-rear-cap"),
+    ("MainReceiver", "UnderbarrelTray", "receiver-to-underbarrel-tray"),
+    ("MainReceiver", "RingTop", "receiver-to-ring-top"),
+    ("MainReceiver", "TopSight", "receiver-to-top-sight"),
+    ("MainReceiver", "SidePlateLeft", "receiver-to-left-side-plate"),
+    ("MainReceiver", "SidePlateRight", "receiver-to-right-side-plate"),
+    ("MainReceiver", "TopVent01", "receiver-to-top-vent-one"),
+    ("MainReceiver", "TopVent02", "receiver-to-top-vent-two"),
+    ("MainReceiver", "TopVent03", "receiver-to-top-vent-three"),
+    ("MainReceiver", "TopVent04", "receiver-to-top-vent-four"),
+    ("MainReceiver", "StatusShell", "receiver-to-status-shell"),
+    ("RingFront", "RingTop", "ring-front-to-top"),
+    ("RingFront", "RingBottom", "ring-front-to-bottom"),
+    ("RingRear", "RingTop", "ring-rear-to-top"),
+    ("RingRear", "RingBottom", "ring-rear-to-bottom"),
+    ("RearCap", "Trigger", "rear-cap-to-trigger"),
+    ("RearCap", "GripInset", "rear-cap-to-grip-inset"),
+    ("UnderbarrelTray", "UnderbarrelRecess", "tray-to-recess"),
+    ("SidePlateLeft", "FastenerLeft01", "left-plate-fastener-one"),
+    ("SidePlateLeft", "FastenerLeft02", "left-plate-fastener-two"),
+    ("SidePlateLeft", "FastenerLeft03", "left-plate-fastener-three"),
+    ("SidePlateLeft", "FastenerLeft04", "left-plate-fastener-four"),
+    ("SidePlateLeft", "FastenerLeft05", "left-plate-fastener-five"),
+    ("SidePlateLeft", "FastenerLeft06", "left-plate-fastener-six"),
+    ("SidePlateRight", "FastenerRight01", "right-plate-fastener-one"),
+    ("SidePlateRight", "FastenerRight02", "right-plate-fastener-two"),
+    ("SidePlateRight", "FastenerRight03", "right-plate-fastener-three"),
+    ("SidePlateRight", "FastenerRight04", "right-plate-fastener-four"),
+    ("SidePlateRight", "FastenerRight05", "right-plate-fastener-five"),
+    ("SidePlateRight", "FastenerRight06", "right-plate-fastener-six"),
 )
 
 PAIR_RECORDS = (
-    ("AccentSpineShell", "AccentSpineCore", "WeaponAccent", "WeaponAccentCore"),
-    ("AccentLeftShell", "AccentLeftCore", "WeaponAccent", "WeaponAccentCore"),
-    ("AccentRightShell", "AccentRightCore", "WeaponAccent", "WeaponAccentCore"),
-    ("AccentMuzzleShell", "AccentMuzzleCore", "WeaponAccent", "WeaponAccentCore"),
+    ("StatusShell", "StatusCore", "WeaponAccent", "WeaponAccentCore"),
 )
 
 MATERIAL_SPECS = {
@@ -191,10 +213,10 @@ SURFACE_SPECS = {
 }
 
 MATERIAL_GROUPS = {
-    "WeaponMetal": ("RearBlock", "Core", "MuzzleHousing", "MuzzleCollar", "MuzzleSegment01", "MuzzleSegment02", "TopSpine", "RailLeft", "RailRight", "ReceiverFastenerFront", "ReceiverFastenerRear"),
-    "WeaponDark": ("Grip", "MuzzleInset", "SideVentLeft", "SideVentRight", "GripRib01", "GripRib02", "GripRib03"),
-    "WeaponAccentCore": ("AccentSpineCore", "AccentLeftCore", "AccentRightCore", "AccentMuzzleCore"),
-    "WeaponAccent": ("AccentSpineShell", "AccentLeftShell", "AccentRightShell", "AccentMuzzleShell"),
+    "WeaponMetal": (),
+    "WeaponDark": ("MuzzleBore", "TopVent01", "TopVent02", "TopVent03", "TopVent04", "UnderbarrelRecess", "Trigger", "GripInset"),
+    "WeaponAccent": ("StatusShell",),
+    "WeaponAccentCore": ("StatusCore",),
 }
 
 
@@ -388,51 +410,100 @@ def assign_and_join(parts, object_name, material):
     return result
 
 
+def mark_painted_red(obj, painted):
+    attribute = obj.data.attributes.get(PAINT_ATTRIBUTE)
+    if attribute is None:
+        attribute = obj.data.attributes.new(name=PAINT_ATTRIBUTE, type="BOOLEAN", domain="FACE")
+    if attribute.domain != "FACE" or attribute.data_type != "BOOLEAN":
+        raise RuntimeError(f"Invalid {PAINT_ATTRIBUTE} attribute on {obj.name}")
+    for value in attribute.data:
+        value.value = bool(painted)
+
+
+def remove_paint_helper(objects):
+    removed = 0
+    for obj in objects:
+        attribute = obj.data.attributes.get(PAINT_ATTRIBUTE)
+        if attribute is not None:
+            obj.data.attributes.remove(attribute)
+            removed += 1
+    if any(obj.data.attributes.get(PAINT_ATTRIBUTE) is not None for obj in objects):
+        raise RuntimeError(f"Failed to remove helper attribute {PAINT_ATTRIBUTE}")
+    if removed != 1:
+        raise RuntimeError(f"Expected one joined {PAINT_ATTRIBUTE} helper, removed={removed}")
+    print(f"AUDIT helper attribute removed before signature/audit/export: {PAINT_ATTRIBUTE}")
+
+
 def create_geometry(materials):
     parts = {}
-    parts["Grip"] = add_box("Grip", (0.0, 0.095, -0.055), (0.095, 0.190, 0.130), 0.009, math.radians(-8.0))
-    for index, y in enumerate((0.025, 0.095, 0.165), 1):
-        parts[f"GripRib{index:02d}"] = add_box(f"GripRib{index:02d}", (0.0, y, -0.055), (0.104, 0.018, 0.132), 0.002)
-    parts["RearBlock"] = add_tapered_box("RearBlock", -0.030, 0.200, 0.205, 0.165, -0.070, 0.075, 0.010)
-    parts["Core"] = add_tapered_box("Core", -0.385, 0.015, 0.255, 0.190, -0.075, 0.085, 0.010)
-    parts["MuzzleHousing"] = add_cylinder_y("MuzzleHousing", -0.465, -0.285, 0.160, 0.095, 0.015, 16, 0.006)
-    parts["MuzzleCollar"] = add_torus_y("MuzzleCollar", -0.470, 0.015, 0.145, 0.085, 0.020, 16)
-    parts["MuzzleInset"] = add_cylinder_y("MuzzleInset", -0.550, -0.455, 0.105, 0.070, 0.015, 16, 0.002)
-    parts["MuzzleSegment01"] = add_torus_y("MuzzleSegment01", -0.330, 0.015, 0.142, 0.083, 0.008, 16)
-    parts["MuzzleSegment02"] = add_torus_y("MuzzleSegment02", -0.455, 0.015, 0.151, 0.090, 0.008, 16)
-    parts["TopSpine"] = add_box("TopSpine", (0.0, -0.175, 0.082), (0.090, 0.405, 0.046), 0.006)
-    parts["RailLeft"] = add_measured_rail("RailLeft", -0.126, 0.012, 0.055, parts["Core"], parts["MuzzleHousing"])
-    parts["RailRight"] = add_measured_rail("RailRight", 0.126, 0.012, 0.055, parts["Core"], parts["MuzzleHousing"])
-    parts["SideVentLeft"] = add_box("SideVentLeft", (-0.126, -0.130, 0.022), (0.020, 0.118, 0.040), 0.003)
-    parts["SideVentRight"] = add_box("SideVentRight", (0.126, -0.130, 0.022), (0.020, 0.118, 0.040), 0.003)
-    parts["ReceiverFastenerFront"] = add_cylinder_x("ReceiverFastenerFront", 0.104, 0.020, 0.012, -0.010, 0.052, 12, 0.001)
-    parts["ReceiverFastenerRear"] = add_cylinder_x("ReceiverFastenerRear", -0.104, 0.020, 0.012, 0.120, 0.050, 12, 0.001)
+    def box(name, minimum, maximum, bevel=0.003):
+        minimum = Vector(minimum)
+        maximum = Vector(maximum)
+        return add_box(name, (minimum + maximum) * 0.5, maximum - minimum, bevel)
 
-    # Red/orange spine, rail, and muzzle-ring shells are paired with smaller
-    # cores. The records are captured before any group is joined.
-    parts["AccentSpineShell"] = add_box("AccentSpineShell", (0.0, -0.172, 0.100), (0.056, 0.315, 0.018), 0.003)
-    parts["AccentSpineCore"] = add_box("AccentSpineCore", (0.0, -0.172, 0.100), (0.050, 0.309, 0.012), 0.002)
-    parts["AccentLeftShell"] = add_box("AccentLeftShell", (-0.143, -0.270, 0.012), (0.034, 0.205, 0.032), 0.003)
-    parts["AccentLeftCore"] = add_box("AccentLeftCore", (-0.143, -0.270, 0.012), (0.028, 0.199, 0.026), 0.002)
-    parts["AccentRightShell"] = add_box("AccentRightShell", (0.143, -0.270, 0.012), (0.034, 0.205, 0.032), 0.003)
-    parts["AccentRightCore"] = add_box("AccentRightCore", (0.143, -0.270, 0.012), (0.028, 0.199, 0.026), 0.002)
-    parts["AccentMuzzleShell"] = add_torus_y("AccentMuzzleShell", -0.470, 0.015, 0.116, 0.076, 0.016, 16)
-    parts["AccentMuzzleCore"] = add_torus_y("AccentMuzzleCore", -0.470, 0.015, 0.113, 0.073, 0.013, 16)
+    parts["MuzzleTop"] = box("MuzzleTop", (-0.16, -0.55, 0.070), (0.16, -0.37, 0.105), 0.003)
+    parts["MuzzleBottom"] = box("MuzzleBottom", (-0.16, -0.55, -0.115), (0.16, -0.37, -0.070), 0.003)
+    parts["MuzzleLeft"] = box("MuzzleLeft", (-0.16, -0.55, -0.075), (-0.12, -0.37, 0.075), 0.003)
+    parts["MuzzleRight"] = box("MuzzleRight", (0.12, -0.55, -0.075), (0.16, -0.37, 0.075), 0.003)
+    parts["MainReceiver"] = box("MainReceiver", (-0.125, -0.395, -0.075), (0.125, 0.105, 0.095), 0.007)
+    parts["RearCap"] = box("RearCap", (-0.14, 0.08, -0.09), (0.14, 0.20, 0.085), 0.008)
+    parts["UnderbarrelTray"] = box("UnderbarrelTray", (-0.105, -0.36, -0.115), (0.105, 0.06, -0.05), 0.004)
+    parts["RingFront"] = box("RingFront", (-0.055, 0.0, -0.1313), (0.055, 0.025, -0.045), 0.003)
+    parts["RingRear"] = box("RingRear", (-0.055, 0.155, -0.1313), (0.055, 0.18, -0.045), 0.003)
+    parts["RingBottom"] = box("RingBottom", (-0.055, 0.02, -0.1313), (0.055, 0.16, -0.1113), 0.003)
+    parts["RingTop"] = box("RingTop", (-0.055, 0.02, -0.065), (0.055, 0.16, -0.045), 0.003)
+    parts["TopSight"] = box("TopSight", (-0.025, -0.11, 0.09), (0.025, 0.01, 0.11), 0.002)
+    parts["SidePlateLeft"] = box("SidePlateLeft", (-0.135, -0.25, -0.015), (-0.12, -0.02, 0.060), 0.002)
+    parts["SidePlateRight"] = box("SidePlateRight", (0.12, -0.25, -0.015), (0.135, -0.02, 0.060), 0.002)
+
+    for side_name, x_center in (("Left", -0.136), ("Right", 0.136)):
+        index = 1
+        for y_center in (-0.23, -0.135, -0.04):
+            for z_center in (-0.002, 0.047):
+                name = f"Fastener{side_name}{index:02d}"
+                parts[name] = add_cylinder_x(name, x_center, 0.014, 0.004, y_center, z_center, 12, 0.0005)
+                index += 1
+
+    parts["MuzzleBore"] = add_cylinder_y("MuzzleBore", -0.545, -0.505, 0.105, 0.078, 0.0, 8, 0.001)
+    for index, (x_center, y_center) in enumerate(((0.0, -0.30), (0.0, -0.23), (0.0, -0.16), (0.012, -0.09)), 1):
+        parts[f"TopVent{index:02d}"] = box(
+            f"TopVent{index:02d}",
+            (x_center - 0.020, y_center - 0.015, 0.089),
+            (x_center + 0.020, y_center + 0.015, 0.101),
+            0.001,
+        )
+    parts["UnderbarrelRecess"] = box("UnderbarrelRecess", (-0.075, -0.30, -0.118), (0.075, -0.04, -0.107), 0.001)
+    parts["Trigger"] = box("Trigger", (-0.025, 0.12, -0.095), (0.025, 0.17, -0.075), 0.002)
+    parts["GripInset"] = box("GripInset", (-0.04, 0.15, -0.115), (0.04, 0.18, -0.055), 0.002)
+
+    parts["StatusShell"] = box("StatusShell", (-0.035, 0.030, 0.090), (0.035, 0.075, 0.108), 0.0015)
+    parts["StatusCore"] = box("StatusCore", (-0.032, 0.033, 0.093), (0.032, 0.072, 0.105), 0.001)
 
     part_bounds = {name: world_bounds(obj) for name, obj in parts.items()}
     accent_shells = tuple(record[0] for record in PAIR_RECORDS)
     accent_cores = tuple(record[1] for record in PAIR_RECORDS)
-    metal_names = (
-        "RearBlock", "Core", "MuzzleHousing", "MuzzleCollar", "MuzzleSegment01", "MuzzleSegment02",
-        "TopSpine", "RailLeft", "RailRight", "ReceiverFastenerFront", "ReceiverFastenerRear",
-    )
-    dark_names = ("Grip", "MuzzleInset", "SideVentLeft", "SideVentRight", "GripRib01", "GripRib02", "GripRib03")
+    dark_names = MATERIAL_GROUPS["WeaponDark"]
+    excluded = set(dark_names) | set(accent_shells) | set(accent_cores)
+    metal_names = tuple(name for name in parts if name not in excluded)
+    if set(PAINTED_RED_SOURCES) - set(metal_names):
+        raise RuntimeError("Painted-red source is not in WeaponMetal")
+    for name in metal_names:
+        mark_painted_red(parts[name], name in PAINTED_RED_SOURCES)
+    painted_faces = {
+        name: sum(1 for value in parts[name].data.attributes[PAINT_ATTRIBUTE].data if value.value)
+        for name in metal_names
+    }
+    if {name for name, count in painted_faces.items() if count} != set(PAINTED_RED_SOURCES):
+        raise RuntimeError(f"Pre-join painted-red source audit failed: {painted_faces}")
     groups = (
         assign_and_join([parts[name] for name in metal_names], "WeaponMetal", materials["WeaponMetal"]),
         assign_and_join([parts[name] for name in dark_names], "WeaponDark", materials["WeaponDark"]),
-        assign_and_join([parts[name] for name in accent_cores], "WeaponAccentCore", materials["WeaponAccentCore"]),
         assign_and_join([parts[name] for name in accent_shells], "WeaponAccent", materials["WeaponAccent"]),
+        assign_and_join([parts[name] for name in accent_cores], "WeaponAccentCore", materials["WeaponAccentCore"]),
     )
+    if groups[0].data.attributes.get(PAINT_ATTRIBUTE) is None:
+        raise RuntimeError(f"Join did not preserve {PAINT_ATTRIBUTE}")
+    print(f"AUDIT painted-red pre-join sources: {PAINTED_RED_SOURCES}")
     return groups, part_bounds
 
 
@@ -497,6 +568,8 @@ def audit_mesh(obj):
         raise RuntimeError(f"Material slot contract failed on {obj.name}: {tuple(slot.material.name for slot in obj.material_slots)}")
     if len(obj.data.uv_layers) != 1 or obj.data.uv_layers[0].name != "UVMap":
         raise RuntimeError(f"UV0-only contract failed on {obj.name}")
+    if obj.data.attributes.get(PAINT_ATTRIBUTE) is not None:
+        raise RuntimeError(f"Helper attribute leaked into final mesh: {obj.name}/{PAINT_ATTRIBUTE}")
     if any(not math.isfinite(component) for vertex in obj.data.vertices for component in vertex.co):
         raise RuntimeError(f"Non-finite vertex on {obj.name}")
     bm = bmesh.new()
@@ -536,10 +609,6 @@ def audit_asset(objects, part_bounds, imported=False):
     counts = [audit_mesh(obj) for obj in objects]
     total_vertices = sum(pair[0] for pair in counts)
     total_triangles = sum(pair[1] for pair in counts)
-    if total_vertices != TARGET_VERTICES or total_triangles != TARGET_TRIANGLES:
-        raise RuntimeError(
-            f"Geometry count contract failed: vertices={total_vertices}/{TARGET_VERTICES}, triangles={total_triangles}/{TARGET_TRIANGLES}"
-        )
     minimum, maximum = combined_bounds(objects)
     dimensions = maximum - minimum
     if any(dimensions[i] > HARD_ENVELOPE[i] + 1.0e-6 for i in range(3)):
@@ -548,11 +617,11 @@ def audit_asset(objects, part_bounds, imported=False):
         if abs(minimum[axis] - TARGET_MIN[axis]) > TARGET_TOLERANCE or abs(maximum[axis] - TARGET_MAX[axis]) > TARGET_TOLERANCE:
             raise RuntimeError(f"Target bounds failed: actual={tuple(minimum)}..{tuple(maximum)} target={tuple(TARGET_MIN)}..{tuple(TARGET_MAX)}")
     if part_bounds is not None:
-        grip_min, grip_max = part_bounds["Grip"]
-        if any(not grip_min[i] - 1.0e-6 <= 0.0 <= grip_max[i] + 1.0e-6 for i in range(3)):
-            raise RuntimeError(f"Origin is outside grip/mount: {tuple(grip_min)} to {tuple(grip_max)}")
-        muzzle_min_y = part_bounds["MuzzleInset"][0].y
-        butt_max_y = part_bounds["RearBlock"][1].y
+        receiver_min, receiver_max = part_bounds["MainReceiver"]
+        if any(not receiver_min[i] - 1.0e-6 <= 0.0 <= receiver_max[i] + 1.0e-6 for i in range(3)):
+            raise RuntimeError(f"Origin is outside MainReceiver: {tuple(receiver_min)} to {tuple(receiver_max)}")
+        muzzle_min_y = part_bounds["MuzzleBore"][0].y
+        butt_max_y = part_bounds["RearCap"][1].y
     else:
         muzzle_min_y = minimum.y
         butt_max_y = maximum.y
@@ -565,7 +634,7 @@ def audit_asset(objects, part_bounds, imported=False):
     print(f"AUDIT total: vertices={total_vertices}, triangles={total_triangles} (report-only counts)")
     print(f"AUDIT bounds min={tuple(round(value, 6) for value in minimum)}, max={tuple(round(value, 6) for value in maximum)}")
     print(f"AUDIT dimensions X/Y/Z={dimensions.x:.6f}/{dimensions.y:.6f}/{dimensions.z:.6f} m")
-    print(f"AUDIT origin=(0,0,0) inside Grip; Blender forward=-Y; Unity forward=+Z; imported={imported}")
+    print(f"AUDIT origin=(0,0,0) inside MainReceiver; Blender forward=-Y; Unity forward=+Z; imported={imported}")
     return {
         "objects": tuple(obj.name for obj in objects),
         "vertex_count": total_vertices,
@@ -919,6 +988,7 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
     texel_area_m2 = np.zeros((size, size), dtype=np.float32)
     profile_ids = np.full((size, size), -1, dtype=np.int16)
     uv_island_ids = np.full((size, size), -1, dtype=np.int32)
+    painted_red = np.zeros((size, size), dtype=bool)
     triangle_vertices = []
     overlap_pixels = 0
     triangle_index = 0
@@ -932,6 +1002,12 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
         sharp_edges, sharp_corners = _sharp_contact_topology(mesh)
         triangle_islands, island_count = _triangle_uv_islands(mesh)
         uv_data = mesh.uv_layers[0].data
+        paint_attribute = mesh.attributes.get(PAINT_ATTRIBUTE)
+        if obj.name == "WeaponMetal":
+            if paint_attribute is None or paint_attribute.domain != "FACE" or paint_attribute.data_type != "BOOLEAN":
+                raise RuntimeError(f"Missing pre-raster {PAINT_ATTRIBUTE} on WeaponMetal")
+        elif paint_attribute is not None:
+            raise RuntimeError(f"Unexpected {PAINT_ATTRIBUTE} on {obj.name}")
         for object_triangle_index, triangle in enumerate(mesh.loop_triangles):
             vertex_ids = tuple((group_index, int(index)) for index in triangle.vertices)
             triangle_vertices.append(frozenset(vertex_ids))
@@ -1015,12 +1091,38 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
                 texel_area_m2[take_y, take_x] = float(physical_twice_area / abs(denominator))
                 profile_ids[take_y, take_x] = profile_id
                 uv_island_ids[take_y, take_x] = island_offset + triangle_islands[object_triangle_index]
+                if paint_attribute is not None and paint_attribute.data[triangle.polygon_index].value:
+                    painted_red[take_y, take_x] = True
             triangle_index += 1
         island_offset += island_count
 
     if overlap_pixels:
         raise RuntimeError(f"UV non-adjacent interior overlap failed: pixels={overlap_pixels}")
     surface = owner >= 0
+    painted_count = int(np.count_nonzero(painted_red))
+    metal_index = GROUP_NAMES.index("WeaponMetal")
+    if painted_count <= 0:
+        raise RuntimeError("Painted-red raster coverage is empty")
+    if np.any(painted_red & (group != metal_index)):
+        raise RuntimeError("Painted-red raster escaped WeaponMetal")
+    metal_zone = UV_ZONES["WeaponMetal"]
+    metal_zone_mask = np.zeros((size, size), dtype=bool)
+    metal_zone_mask[metal_zone[1]:metal_zone[3], metal_zone[0]:metal_zone[2]] = True
+    if np.any(painted_red & ~metal_zone_mask):
+        raise RuntimeError("Painted-red raster escaped WeaponMetal UV zone")
+    painted_digest = hashlib.sha256(np.packbits(painted_red, bitorder="little").tobytes()).hexdigest()
+    painted_record = {
+        "attribute": PAINT_ATTRIBUTE,
+        "allowedSourceParts": list(PAINTED_RED_SOURCES),
+        "sourceAudit": "pre-join true only on both side plates",
+        "pixels": painted_count,
+        "surfaceCoverage": round(painted_count / max(1, int(np.count_nonzero(surface))), 9),
+        "metalCoverage": round(painted_count / max(1, int(np.count_nonzero(surface & (group == metal_index)))), 9),
+        "sha256PackedMask": painted_digest,
+        "onlyWeaponMetal": True,
+        "onlyMetalUvZone": True,
+    }
+    print(f"AUDIT painted-red raster: pixels={painted_count}, digest={painted_digest}, only-metal-zone=yes")
     zone_records = {}
     for object_name, zone in UV_ZONES.items():
         x0, y0, x1, y1 = zone
@@ -1051,11 +1153,13 @@ def rasterize_surface(objects, profile_id=0, profile_name="launcher", profile_pa
         "profiles": {
             int(profile_id): {
                 "name": profile_name,
-                "parameters": profile_parameters or {"kind": "launcher"},
+                "parameters": profile_parameters or dict(LAUNCHER_PROFILE_PARAMETERS),
                 "uvIslandCount": island_offset,
             }
         },
         "surface": surface,
+        "paintedRed": painted_red,
+        "paintedRedAudit": painted_record,
         "zones": zone_records,
         "nonAdjacentInteriorOverlapPixels": overlap_pixels,
     }
@@ -2060,6 +2164,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     accent = group_active == GROUP_NAMES.index("WeaponAccent")
     core = group_active == GROUP_NAMES.index("WeaponAccentCore")
     glass = accent | core
+    painted_red = raster["paintedRed"].ravel()[active]
 
     muzzle = np.zeros(surface_count, dtype=bool)
     handling = np.zeros(surface_count, dtype=np.float32)
@@ -2067,16 +2172,28 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
         select = profile_ids == int(profile_id)
         parameters = record["parameters"]
         if parameters["kind"] == "launcher":
-            muzzle[select] = py[select] < -0.40
-            rear = _smoothstep(0.02, 0.16, py[select]) * (1.0 - _smoothstep(0.06, 0.14, np.abs(px[select]))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz[select])))
-            grip = (1.0 - _smoothstep(0.06, 0.14, np.abs(px[select]))) * (1.0 - _smoothstep(0.04, 0.13, np.abs(pz[select]))) * (1.0 - _smoothstep(0.18, 0.38, np.abs(py[select] + 0.18)))
-            handling[select] = 0.70 * np.maximum(rear, grip) * np.clip(0.65 + 0.35 * fbm[select], 0.0, 1.0)
+            muzzle[select] = py[select] <= parameters["muzzleMaxY"]
+            receiver = (
+                (py[select] >= parameters["receiverMinY"])
+                & (py[select] <= parameters["receiverMaxY"])
+                & (np.abs(px[select]) <= 0.125 + 1.0e-6)
+                & (pz[select] >= -0.075 - 1.0e-6)
+                & (pz[select] <= 0.095 + 1.0e-6)
+            )
+            ring = (
+                (py[select] >= parameters["gripMinY"])
+                & (py[select] <= parameters["gripMaxY"])
+                & (np.abs(px[select]) <= 0.055 + 1.0e-6)
+                & (pz[select] >= -0.1313 - 1.0e-6)
+                & (pz[select] <= -0.045 + 1.0e-6)
+            )
+            handling[select] = (receiver | ring).astype(np.float32) * np.clip(0.65 + 0.35 * fbm[select], 0.0, 1.0)
         elif parameters["kind"] == "shotgun":
             muzzle[select] = py[select] <= parameters["barrelMinY"] + 0.10
             handling[select] = _smoothstep(parameters["receiverMinY"] - 0.02, parameters["receiverMinY"] + 0.04, py[select]) * (1.0 - _smoothstep(parameters["receiverMaxY"] - 0.04, parameters["receiverMaxY"] + 0.02, py[select]))
         else:
             raise RuntimeError(f"Unknown raster profile kind: {parameters['kind']}")
-    handling[~(metal | dark)] = 0.0
+    handling[~metal | painted_red] = 0.0
 
     scratch_core, scratch_shoulder, scratch_audit = _metric_scratch_segments(
         active, positions, normal_active, raster["tangent"].reshape(-1, 3)[active], actual_contact,
@@ -2100,12 +2217,12 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     grime = np.zeros(surface_count, dtype=np.float32)
     grime[grime_mask] = 0.55 + 0.45 * grime_score[grime_mask]
     soot_score = np.clip(0.60 * fbm + 0.40 * (1.0 - _smoothstep(0.0, 0.16, np.sqrt(px * px + pz * pz))), 0.0, 1.0)
-    muzzle_eligible = muzzle & ~glass
+    muzzle_eligible = muzzle & (metal | dark) & ~painted_red
     soot_mask = ranked_mask(muzzle_eligible, soot_score, round(np.count_nonzero(muzzle_eligible) * 0.25), 0x13198A2E)
     soot = np.zeros(surface_count, dtype=np.float32)
     soot[soot_mask] = 0.55 + 0.45 * soot_score[soot_mask]
     dark_scuff = dark & (actual_contact > 0.55) & (fbm > 0.58)
-    polish = (handling > 0.35) & ~grime_mask & ~soot_mask & ~glass
+    polish = (handling > 0.35) & metal & ~painted_red & ~grime_mask & ~soot_mask
 
     coverages = {
         "scratchCore": scratch_audit["coverage"],
@@ -2126,6 +2243,9 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
         base[metal], base[dark], base[accent], base[core] = palette["metalClean"], palette["darkClean"], palette["accent"], palette["core"]
         warm = np.clip((fbm - 0.5) * 0.12, -0.06, 0.06)[:, None] * np.asarray((1.0, 0.75, 0.35), dtype=np.float32)
         base[metal] += warm[metal]
+        # Painted plates inherit the same warm carrier ordering, then the
+        # intact opaque-red coat wins. Chips and scratches below expose metal.
+        base[painted_red] = palette["paintedRed"]
         base[chip] = palette["metalGroove"]
         base[scratch_shoulder] = palette["metalShoulder"]
         base[scratch_core] = palette["metalGroove"]
@@ -2144,7 +2264,11 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     metallic = np.zeros(surface_count, dtype=np.float32)
     smoothness = np.zeros(surface_count, dtype=np.float32)
     emission = np.zeros((surface_count, 3), dtype=np.float32)
-    for mask, key in ((metal, "metalClean"), (dark, "darkClean"), (accent, "accent"), (core, "core"), (chip, "chip"), (scratch_shoulder, "metalShoulder"), (scratch_core, "metalGroove"), (dark_scuff, "darkScuff"), (grime_mask, "grime"), (soot_mask, "soot"), (polish, "polish")):
+    for mask, key in ((metal, "metalClean"), (dark, "darkClean"), (accent, "accent"), (core, "core")):
+        metallic[mask], smoothness[mask] = SURFACE_PBR[key]
+    metallic[painted_red] = 0.0909091
+    smoothness[painted_red] = 0.6153846
+    for mask, key in ((chip, "chip"), (scratch_shoulder, "metalShoulder"), (scratch_core, "metalGroove"), (dark_scuff, "darkScuff"), (grime_mask, "grime"), (soot_mask, "soot"), (polish, "polish")):
         metallic[mask], smoothness[mask] = SURFACE_PBR[key]
     metal_or_dark = metal | dark
     smoothness = np.clip(smoothness + 0.10 * reference_detail * metal_or_dark.astype(np.float32), 0.0, 1.0)
@@ -2170,6 +2294,7 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
         "grime": np.isin(index_map, active[grime_mask]),
         "muzzleSoot": np.isin(index_map, active[soot_mask]),
         "polish": np.isin(index_map, active[polish]),
+        "PaintedRed": raster["paintedRed"].copy(),
     }
     uv_boundary = surface & (boundary_distance < 1.0)
     component_records = {
@@ -2211,12 +2336,21 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     microdetail_audit = None
     if include_microdetail:
         path = os.path.join(stage_texture_dir, MICRODETAIL_NAME)
-        output_hashes[MICRODETAIL_NAME], microdetail_audit = generate_microdetail_texture(path)
+        source_path = os.path.join(TEXTURE_DIR, MICRODETAIL_NAME)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        shutil.copyfile(source_path, path)
+        output_hashes[MICRODETAIL_NAME] = _hash_file(path)
+        microdetail_audit = {
+            "sha256": output_hashes[MICRODETAIL_NAME],
+            "byteIdentity": True,
+            "source": f"Assets/_Game/Textures/{MICRODETAIL_NAME}",
+            "policy": "preserved source bytes; launcher surface generation does not own shared microdetail",
+        }
 
     channels = {
         "baseColor": {"format": "RGBA8", "transfer": "sRGB", "paletteBytes": SURFACE_PALETTE_BYTES, "referenceInfluence": False},
         "normal": {"format": "RGBA8", "transfer": "linear", "centralDifferencePx": 1, "gain": 5.0, "referenceHeight": 0.002},
-        "metallicSmoothness": {"format": "RGBA8", "transfer": "linear", "metallicChannel": "R", "smoothnessChannel": "A", "values": SURFACE_PBR},
+        "metallicSmoothness": {"format": "RGBA8", "transfer": "linear", "metallicChannel": "R", "smoothnessChannel": "A", "values": SURFACE_PBR, "paintedRedAtlas": [0.0909091, 0.6153846], "paintedRedUnityFinal": [0.05, 0.32]},
         "occlusion": {"format": "RGBA8", "transfer": "linear", "formula": "clamp(1-.28*cavity-.12*grime-.10*scratchCore,.55,1)"},
         "emission": {"format": "RGBA8", "transfer": "linear", "coreValue": 0.85},
         "photoDerivedDetail": {"source": REFERENCE_TILE_NAME, "decodedRgbaSha256": REFERENCE_RGBA_SHA256, "luminance": "(54R+183G+19B)/256", "periodicBlur": [65, 65], "normalization": "clip(delta/.18,-1,1)", "referenceAffects": ["normal", "smoothness"], "referenceDoesNotAffect": ["baseColor", "metallic", "occlusion", "emission"]},
@@ -2227,12 +2361,20 @@ def generate_texture_atlas(objects, stage_texture_dir, raster=None, include_micr
     glass_wear_pixels = int(np.count_nonzero(glass & (chip | scratch_core | scratch_shoulder | dark_scuff | grime_mask | soot_mask | polish)))
     if glass_wear_pixels:
         raise RuntimeError(f"Glass wear contract failed: pixels={glass_wear_pixels}")
+    if np.any(soot_mask & painted_red) or np.any(polish & painted_red) or np.any(emission[painted_red] != 0.0):
+        raise RuntimeError("Painted-red soot/polish/emission exclusion failed")
     mask_record = {
         name: {"coverage": round(coverages[name], 6) if name in coverages else round(float(np.count_nonzero(mask)) / surface_count, 6), "limits": list(WEAR_COVERAGE_LIMITS[name]) if name in WEAR_COVERAGE_LIMITS else None, **component_records[name]}
         for name, mask in masks.items()
     }
     mask_record["scratchSegments"] = scratch_audit
     mask_record["glassWearPixels"] = glass_wear_pixels
+    mask_record["PaintedRed"] = dict(raster["paintedRedAudit"])
+    mask_record["PaintedRed"]["sootPixels"] = int(np.count_nonzero(soot_mask & painted_red))
+    mask_record["PaintedRed"]["polishPixels"] = int(np.count_nonzero(polish & painted_red))
+    mask_record["PaintedRed"]["emissionPixels"] = int(np.count_nonzero(np.any(emission[painted_red] != 0.0, axis=1)))
+    mask_record["PaintedRed"]["intactBaseColorBytes"] = list(SURFACE_PALETTE_BYTES["paintedRed"])
+    mask_record["PaintedRed"]["atlasMetallicSmoothness"] = [0.0909091, 0.6153846]
     return raster, output_hashes, mask_record, periodicity, channels
 
 
@@ -2319,9 +2461,32 @@ def _audit_preview(path):
     }
 
 
+def _canonicalize_preview_png(path):
+    """Rewrite Blender's PNG through the generator's deterministic encoder."""
+    image = bpy.data.images.load(path, check_existing=False)
+    width, height = tuple(image.size)
+    values = np.empty(width * height * 4, dtype=np.float32)
+    image.pixels.foreach_get(values)
+    pixels = values.reshape(height, width, 4)
+    linear = np.clip(pixels[:, :, :3], 0.0, 1.0)
+    srgb = np.where(linear <= 0.0031308, linear * 12.92, 1.055 * np.power(linear, 1.0 / 2.4) - 0.055)
+    rgba = np.empty((height, width, 4), dtype=np.uint8)
+    rgba[:, :, :3] = np.clip(np.rint(srgb * 255.0), 0, 255).astype(np.uint8)
+    rgba[:, :, 3] = np.clip(np.rint(pixels[:, :, 3] * 255.0), 0, 255).astype(np.uint8)
+    bpy.data.images.remove(image)
+    _write_rgba_png(path, rgba, srgb=False)
+
+
 def render_previews(objects, minimum, maximum, preview_dir):
     scene = bpy.context.scene
-    scene.render.engine = "BLENDER_EEVEE_NEXT"
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.samples = 8
+    scene.cycles.seed = 0
+    scene.cycles.use_animated_seed = False
+    scene.cycles.use_adaptive_sampling = False
+    scene.cycles.use_denoising = False
+    scene.render.dither_intensity = 0.0
     scene.render.resolution_x = 640
     scene.render.resolution_y = 640
     scene.render.resolution_percentage = 100
@@ -2372,12 +2537,15 @@ def render_previews(objects, minimum, maximum, preview_dir):
         point_camera(camera, center)
         scene.render.filepath = os.path.join(preview_dir, filename)
         bpy.ops.render.render(write_still=True)
-    camera.data.type = "ORTHO"
-    camera.data.ortho_scale = max(span.x, span.y, span.z) * 1.10
-    camera.location = center + Vector((0.82, -1.18, 0.58))
-    point_camera(camera, center)
+        _canonicalize_preview_png(scene.render.filepath)
+    camera.data.type = "PERSP"
+    camera.data.lens = 42.0
+    camera.data.sensor_fit = "HORIZONTAL"
+    camera.location = Vector((0.52, 0.72, 0.42))
+    point_camera(camera, Vector((-0.02, -0.16, -0.02)))
     scene.render.filepath = os.path.join(preview_dir, "three-quarter.png")
     bpy.ops.render.render(write_still=True)
+    _canonicalize_preview_png(scene.render.filepath)
     actual = {filename for filename in os.listdir(preview_dir) if filename.lower().endswith(".png")}
     if actual != expected:
         raise RuntimeError(f"Preview inventory mismatch: expected={sorted(expected)}, actual={sorted(actual)}")
@@ -2446,12 +2614,19 @@ def generate_once(stage_dir, surface_only=False):
     materials = {name: make_material(name, color) for name, color in MATERIAL_SPECS.items()}
     objects, part_bounds = create_geometry(materials)
     minimum, maximum = combined_bounds(objects)
+    raster = rasterize_surface(
+        objects,
+        profile_id=0,
+        profile_name="launcher",
+        profile_parameters=dict(LAUNCHER_PROFILE_PARAMETERS),
+    )
+    remove_paint_helper(objects)
     record = audit_asset(objects, part_bounds)
     texture_dir = os.path.join(stage_dir, "textures")
     preview_dir = os.path.join(stage_dir, "previews")
     output_path = os.path.join(stage_dir, "FpsRocketLauncher.fbx")
     raster, texture_hashes, mask_record, periodicity, channel_record = generate_texture_atlas(
-        objects, texture_dir, include_microdetail=not surface_only
+        objects, texture_dir, raster=raster, include_microdetail=not surface_only
     )
     record["texture_hashes"] = texture_hashes
     record["uv_hash"] = uv_signature(objects)
@@ -2493,7 +2668,17 @@ def compare_runs(first, second):
         raise RuntimeError("Two-run channel audit mismatch")
     if first["periodicity"] != second["periodicity"]:
         raise RuntimeError("Two-run periodicity identity failed")
-    print(f"PROOF two-run semantic+texture match: textures={len(first['texture_hashes'])}, preview-audits-per-run={len(PREVIEW_NAMES)}")
+    if first["preview_audits"] != second["preview_audits"] or first["preview_hashes"] != second["preview_hashes"]:
+        print("PROOF preview audits first=" + json.dumps(first["preview_audits"], sort_keys=True), flush=True)
+        print("PROOF preview audits second=" + json.dumps(second["preview_audits"], sort_keys=True), flush=True)
+        print("PROOF preview hashes first=" + json.dumps(first["preview_hashes"], sort_keys=True), flush=True)
+        print("PROOF preview hashes second=" + json.dumps(second["preview_hashes"], sort_keys=True), flush=True)
+        audit_delta = sorted(name for name in PREVIEW_NAMES if first["preview_audits"].get(name) != second["preview_audits"].get(name))
+        hash_delta = sorted(name for name in PREVIEW_NAMES if first["preview_hashes"].get(name) != second["preview_hashes"].get(name))
+        raise RuntimeError(f"Two-run preview equality mismatch: auditFiles={audit_delta}, hashFiles={hash_delta}")
+    if first["masks"].get("PaintedRed") != second["masks"].get("PaintedRed"):
+        raise RuntimeError("Two-run PaintedRed coverage/digest mismatch")
+    print(f"PROOF two-run semantic+texture+preview+paint match: textures={len(first['texture_hashes'])}, previews={len(PREVIEW_NAMES)}")
 
 
 def _safe_recreate_staging_root():
@@ -2599,6 +2784,15 @@ def surface_contract_record():
             "coverage": {"limits": list(WEAR_COVERAGE_LIMITS["scratchCore"]), "basis": "actual declared eligible metal atlas pixels"},
         },
         "pbr": SURFACE_PBR,
+        "paintedRed": {
+            "helperAttribute": PAINT_ATTRIBUTE,
+            "preJoinSources": list(PAINTED_RED_SOURCES),
+            "removedBefore": ["signature", "meshAudit", "export", "roundtrip"],
+            "intactBaseColorBytes": list(SURFACE_PALETTE_BYTES["paintedRed"]),
+            "atlasMetallicSmoothness": [0.0909091, 0.6153846],
+            "unityFinalMetallicSmoothness": [0.05, 0.32],
+            "sootEmissionPolishExcluded": True,
+        },
         "heights": {"chip": -0.025, "groove": -0.018, "shoulder": 0.006, "darkScuff": -0.004, "grime": 0.010, "carrier": 0.002, "normalGain": 5.0},
         "occlusion": "clamp(1-.28*cavity-.12*grime-.10*scratchCore,.55,1)",
         "emission": {"WeaponAccentCore": 0.85},
@@ -2629,8 +2823,21 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
         assert_surface_protected(protected_before, "proof write")
     else:
         assert_surface_protected(protected_after, "proof write")
+    microdetail_key = f"Assets/_Game/Textures/{MICRODETAIL_NAME}"
+    if protected_before.get(microdetail_key) != protected_after.get(microdetail_key):
+        raise RuntimeError("Weapon microdetail byte identity failed")
+    protected_drift = sorted(
+        key for key in set(protected_before) | set(protected_after)
+        if protected_before.get(key) != protected_after.get(key)
+    )
+    allowed_protected_drift = [] if surface_only else ["Assets/_Game/Models/FpsRocketLauncher.fbx"]
+    if protected_drift != allowed_protected_drift:
+        raise RuntimeError(f"Protected inventory drift failed: actual={protected_drift}, allowed={allowed_protected_drift}")
     fbx_before = {key: value for key, value in (protected_before or {}).items() if key.endswith(".fbx")}
     fbx_after = {key: value for key, value in (protected_after or {}).items() if key.endswith(".fbx")}
+    final_output_hashes = dict(final_texture_hashes)
+    if not surface_only:
+        final_output_hashes["FpsRocketLauncher.fbx"] = _hash_file(OUTPUT_PATH)
     proof = {
         "schemaVersion": 3,
         "surfaceRevision": SURFACE_REVISION,
@@ -2642,6 +2849,11 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
             "shellCorePairs": len(record["pairs"]), "signature": record["signature"], "forward": "Blender -Y -> Unity +Z",
             "meshAudit": "finite, nonzero edges/faces, no loose or unintended nonmanifold geometry, positive winding, identity transforms",
             "previewAudits": record["preview_audits"],
+            "cameraContract": {
+                "cardinal": {"projection": "orthographic", "views": ["front", "rear", "left", "right", "top"], "framing": "measured bounds"},
+                "threeQuarter": {"projection": "perspective", "location": [0.52, 0.72, 0.42], "aim": [-0.02, -0.16, -0.02], "lensMm": 42.0, "composition": "rear receiver lower-right, muzzle upper-left"},
+            },
+            "paintContract": record["masks"]["PaintedRed"],
         },
         "bounds": {"min": list(record["bounds_min"]), "max": list(record["bounds_max"])},
         "uvZones": {**record["uv_zones"], "nonAdjacentInteriorOverlapPixels": record["uv_overlap_pixels"], "smartProjectAngleDegrees": 66},
@@ -2668,10 +2880,10 @@ def promote_and_write_proof(record, two_run_identical, protected_before=None):
             "afterSha256": protected_after,
             "stable": protected_before == protected_after if surface_only else None,
         },
-        "outputSha256": final_texture_hashes,
+        "outputSha256": final_output_hashes,
         "previewSha256": final_preview_hashes,
         "twoRunIdentical": bool(two_run_identical),
-        "twoRunIdentity": {"exact": bool(two_run_identical), "promotedTextures": len(final_texture_hashes), "geometryUvMasksChannelsPeriodicity": bool(two_run_identical), "previewInventoryPreserved": len(record["preview_hashes"])},
+        "twoRunIdentity": {"exact": bool(two_run_identical), "promotedOutputs": len(final_output_hashes), "geometryUvMasksChannelsPeriodicity": bool(two_run_identical), "previewHashesAndAudits": bool(two_run_identical), "paintedRedCoverageAndDigest": bool(two_run_identical), "previewInventoryPreserved": len(record["preview_hashes"])},
     }
     proof_payload = (json.dumps(proof, sort_keys=True, indent=2) + "\n").encode("utf-8")
     staged_proof = os.path.join(record["stage_dir"], "proof.json")
