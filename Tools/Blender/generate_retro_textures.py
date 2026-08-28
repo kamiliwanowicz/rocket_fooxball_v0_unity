@@ -368,6 +368,29 @@ def _segment_mask(u, v, segment):
     return dx * dx + dy * dy <= width * width
 
 
+def _balanced_toroidal_field(u, v, layers, u_frequency_scale=1.0):
+    """Sum symmetric lattice directions so no layer owns one dominant ridge."""
+    shape = np.broadcast_shapes(np.shape(u), np.shape(v))
+    field = np.zeros(shape, dtype=np.float64)
+    total_weight = 0.0
+    phase_offsets = (0.0, 1.71, 3.83, 5.37)
+    for frequency_u, frequency_v, phase, amplitude in layers:
+        directions = (
+            (u_frequency_scale * frequency_u, frequency_v),
+            (u_frequency_scale * frequency_v, -frequency_u),
+            (u_frequency_scale * frequency_u, -frequency_v),
+            (u_frequency_scale * frequency_v, frequency_u),
+        )
+        symmetric_layer = np.zeros(shape, dtype=np.float64)
+        for (direction_u, direction_v), phase_offset in zip(directions, phase_offsets):
+            symmetric_layer += np.sin(
+                np.float64(math.tau) * (direction_u * u + direction_v * v) + phase + phase_offset
+            )
+        field += amplitude * symmetric_layer * np.float64(0.25)
+        total_weight += amplitude
+    return field / np.float64(total_weight)
+
+
 def _natural_surface_layers(kind: str, u, v):
     """Return deterministic multi-scale periodic values for a natural surface."""
     if kind not in NATURAL_SURFACE_CONTRACT:
@@ -393,21 +416,10 @@ def _natural_surface_layers(kind: str, u, v):
         detail_layers = ((19.0, 11.0, 0.41, 0.58), (37.0, 17.0, 4.27, 0.42))
         mowing_phase = 2.37
 
-    broad = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
-    broad_weight = 0.0
-    for frequency_u, frequency_v, phase, amplitude in layers:
-        broad += np.sin(np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase) * amplitude
-        broad_weight += amplitude
-    detail = np.zeros_like(broad)
-    detail_weight = 0.0
-    for frequency_u, frequency_v, phase, amplitude in detail_layers:
-        detail += np.sin(np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase) * amplitude
-        detail_weight += amplitude
-    broad /= np.float64(broad_weight)
-    detail /= np.float64(detail_weight)
-    # Keep both axes on integer cycles so the mowing modulation closes on the
-    # sampled torus instead of introducing a V-boundary seam band.
-    mowing_wave = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (12.0 * u + 2.0 * v) + mowing_phase)
+    broad = _balanced_toroidal_field(u, v, layers)
+    detail = _balanced_toroidal_field(u, v, detail_layers)
+    # Subtle mowing bands stay axis-aligned and close on the sampled torus.
+    mowing_wave = 0.5 + 0.5 * np.sin(np.float64(math.tau) * 12.0 * v + mowing_phase)
     mowing = mowing_wave * mowing_wave * (3.0 - 2.0 * mowing_wave)
     return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail, mowing
 
@@ -1296,27 +1308,26 @@ def generate_sprite_sheet(kind: str, width=128, height=128):
     return buffer
 
 
-_SKY_CLOUD_LAYERS = (
-    (1.0, 2.0, 0.53, 0.46),
-    (2.0, 3.0, 2.71, 0.25),
-    (5.0, 7.0, 4.19, 0.16),
-    (11.0, 13.0, 1.07, 0.08),
-    (23.0, 19.0, 3.83, 0.05),
+_SKY_CLOUD_BROAD_LAYERS = (
+    (1.0, 2.0, 0.53, 0.55),
+    (2.0, 3.0, 2.71, 0.30),
+    (4.0, 5.0, 4.19, 0.15),
+)
+_SKY_CLOUD_DETAIL_LAYERS = (
+    (6.0, 9.0, 1.07, 0.58),
+    (11.0, 13.0, 3.83, 0.27),
+    (19.0, 23.0, 5.10, 0.15),
 )
 
 
 def _sky_cloud_density(u, v):
-    """Return smooth layered cloud density on an exact U-periodic panorama."""
+    """Return scattered cloud masses on an exact U-periodic panorama."""
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.asarray(v, dtype=np.float64)
-    density = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
-    weight = 0.0
-    for frequency_u, frequency_v, phase, amplitude in _SKY_CLOUD_LAYERS:
-        density += np.sin(np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase) * amplitude
-        density += np.cos(np.float64(math.tau) * (frequency_v * u - frequency_u * v) - phase * 0.61) * amplitude * 0.34
-        weight += amplitude * 1.34
-    density = np.clip(0.5 + density / np.float64(weight), 0.0, 1.0)
-    density = _smoothstep_array(0.24, 0.76, density)
+    # A 2:1 panorama needs twice as many U cycles for square-pixel symmetry.
+    broad = _balanced_toroidal_field(u, v, _SKY_CLOUD_BROAD_LAYERS, u_frequency_scale=2.0)
+    detail = _balanced_toroidal_field(u, v, _SKY_CLOUD_DETAIL_LAYERS, u_frequency_scale=2.0)
+    density = _smoothstep_array(0.52, 0.68, 0.5 + broad * 0.95 + detail * 0.30)
     pole_fade = _smoothstep_array(0.0, 0.08, v) * _smoothstep_array(0.0, 0.08, 1.0 - v)
     return np.clip(density * pole_fade, 0.0, 1.0)
 
@@ -1942,9 +1953,30 @@ _NATURAL_FORBIDDEN_SOURCE_TOKENS = (
 )
 
 
+def _directional_structure_audit(field, maximum_coherence):
+    """Measure global ridge bias from the wrapped luminance/density tensor."""
+    values = np.asarray(field, dtype=np.float64)
+    gradient_x = (np.roll(values, -1, axis=1) - np.roll(values, 1, axis=1)) * np.float64(0.5)
+    gradient_y = (np.roll(values, -1, axis=0) - np.roll(values, 1, axis=0)) * np.float64(0.5)
+    tensor_xx = float(np.mean(gradient_x * gradient_x))
+    tensor_yy = float(np.mean(gradient_y * gradient_y))
+    tensor_xy = float(np.mean(gradient_x * gradient_y))
+    energy = tensor_xx + tensor_yy
+    coherence = 1.0 if energy <= np.finfo(np.float64).eps else math.sqrt(
+        (tensor_xx - tensor_yy) ** 2 + 4.0 * tensor_xy * tensor_xy
+    ) / energy
+    return {
+        "pass": bool(np.isfinite(coherence) and coherence <= maximum_coherence),
+        "coherence": float(coherence),
+        "maximum": float(maximum_coherence),
+        "tensor": {"xx": tensor_xx, "yy": tensor_yy, "xy": tensor_xy},
+    }
+
+
 def _natural_surface_source_guard():
     """Keep the grass/concrete call path free of discrete motif helpers."""
     path_functions = (
+        _balanced_toroidal_field,
         _natural_surface_layers,
         _natural_surface_fields,
         _natural_surface_height,
@@ -2021,6 +2053,7 @@ def audit_continuous_surface(kind, generated):
     height_field = _natural_surface_height(kind, x_values[None, :], y_values[:, None])
     slope_u, slope_v = _wrapped_central_differences(height_field, 1.0 / unique_width, 1.0 / unique_height)
     finite_gradients = bool(np.isfinite(height_field).all() and np.isfinite(slope_u).all() and np.isfinite(slope_v).all())
+    directional = _directional_structure_audit(height_field, 0.55 if kind == "grass" else 0.12)
 
     if kind == "grass":
         green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
@@ -2047,6 +2080,7 @@ def audit_continuous_surface(kind, generated):
         "smoothness_range": smoothness_ok,
         "ao_range": ao_ok,
         "finite_gradients": finite_gradients,
+        "directional_balance": directional["pass"],
         "construction": contract["construction"] == "continuous-periodic-field",
         "motif_inventory": not motif_inventory,
         "source_guard": source_guard["pass"],
@@ -2066,7 +2100,34 @@ def audit_continuous_surface(kind, generated):
         "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
         "ao": {"range": ao_range, "target": list(contract["ao"])},
         "gradients": {"finite": finite_gradients, "u_range": [float(np.min(slope_u)), float(np.max(slope_u))], "v_range": [float(np.min(slope_v)), float(np.max(slope_v))]},
+        "directional_balance": directional,
         "source_guard": source_guard,
+    }
+
+
+def audit_sky_clouds(generated):
+    """Audit the panorama seam, pole fade, scattered coverage, and ridge bias."""
+    entry = generated.get("RetroSunnySky")
+    if entry is None:
+        return {"pass": False, "gates": {"inventory": False}}
+    width, height = entry["dimensions"]
+    image = _rgba_view(entry["buffer"], width, height)
+    density = image[:, :-1, 3].astype(np.float64) / 255.0
+    directional = _directional_structure_audit(density, 0.12)
+    coverage = float(np.mean(density >= 0.20))
+    gates = {
+        "inventory": width == 2048 and height == 1024,
+        "exact_u_seam": bool(np.array_equal(image[:, 0, :], image[:, -1, :])),
+        "pole_fade": bool(np.count_nonzero(image[0, :, 3]) == 0 and np.count_nonzero(image[-1, :, 3]) == 0),
+        "scattered_coverage": 0.10 <= coverage <= 0.60,
+        "directional_balance": directional["pass"],
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "coverage_at_0_20": coverage,
+        "density_range": [float(np.min(density)), float(np.max(density))],
+        "directional_balance": directional,
     }
 
 
@@ -2237,6 +2298,8 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
     for kind in ("grass", "wall"):
         if kind in selected:
             checks[kind] = audit_continuous_surface(kind, generated)
+    if "sky" in selected:
+        checks["sky"] = audit_sky_clouds(generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
         checks["weapon_readability"] = audit_weapon_readability(generated, selected)
         checks["cross_channel_wear"] = audit_cross_channel_weapon_wear(generated, selected)
