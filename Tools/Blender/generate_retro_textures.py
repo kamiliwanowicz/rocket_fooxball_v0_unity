@@ -332,9 +332,12 @@ SURFACE_PHASES = {
 NATURAL_SURFACE_CONTRACT = {
     "grass": {
         "construction": "continuous-periodic-field",
-        "palette_u8": ((14, 64, 8), (88, 164, 52)),
+        "palette_u8": ((72, 92, 15), (94, 122, 26)),
+        "mean_rgb_u8": ((80.0, 103.0, 17.0), (86.0, 111.0, 24.0)),
         "green_dominance_fraction": 0.99,
         "near_white_threshold_u8": 236,
+        "maximum_directional_coherence": 0.12,
+        "maximum_axis_band_fraction": 0.02,
         "metallic": (0.0, 0.0),
         "smoothness": (0.12, 0.26),
         "ao": (0.88, 1.0),
@@ -405,7 +408,6 @@ def _natural_surface_layers(kind: str, u, v):
             (16.0, 9.0, 1.47, 0.06),
         )
         detail_layers = ((12.0, 3.0, 0.93, 0.60), (24.0, 7.0, 3.31, 0.40))
-        mowing_phase = 0.71
     else:
         layers = (
             (2.0, 3.0, 1.17, 0.48),
@@ -414,14 +416,10 @@ def _natural_surface_layers(kind: str, u, v):
             (23.0, 13.0, 2.63, 0.09),
         )
         detail_layers = ((19.0, 11.0, 0.41, 0.58), (37.0, 17.0, 4.27, 0.42))
-        mowing_phase = 2.37
 
     broad = _balanced_toroidal_field(u, v, layers)
     detail = _balanced_toroidal_field(u, v, detail_layers)
-    # Subtle mowing bands stay axis-aligned and close on the sampled torus.
-    mowing_wave = 0.5 + 0.5 * np.sin(np.float64(math.tau) * 12.0 * v + mowing_phase)
-    mowing = mowing_wave * mowing_wave * (3.0 - 2.0 * mowing_wave)
-    return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail, mowing
+    return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail
 
 
 def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
@@ -431,26 +429,25 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
     u = np.asarray(u, dtype=np.float64)
     v = np.asarray(v, dtype=np.float64)
     if n is None or n01 is None:
-        n, n01, detail, mowing = _natural_surface_layers(kind, u, v)
+        n, n01, detail = _natural_surface_layers(kind, u, v)
     else:
-        _unused_n, _unused_n01, detail, mowing = _natural_surface_layers(kind, u, v)
+        _unused_n, _unused_n01, detail = _natural_surface_layers(kind, u, v)
         n = np.asarray(n, dtype=np.float64)
         n01 = np.asarray(n01, dtype=np.float64)
     tone = np.clip(n01, 0.0, 1.0)
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
     if kind == "grass":
-        mowing_shift = mowing - 0.5
         colour = np.stack(
             (
-                np.clip(0.085 + 0.070 * tone + 0.008 * mowing_shift, 0.0, 1.0),
-                np.clip(0.285 + 0.255 * tone + 0.018 * mowing_shift, 0.0, 1.0),
-                np.clip(0.050 + 0.060 * tone + 0.006 * mowing_shift, 0.0, 1.0),
+                np.clip(0.270 + 0.110 * tone, 0.0, 1.0),
+                np.clip(0.340 + 0.160 * tone, 0.0, 1.0),
+                np.clip(0.055 + 0.050 * tone, 0.0, 1.0),
             ),
             axis=-1,
         )
-        height = 0.50 + 0.032 * n + 0.012 * detail + 0.010 * mowing_shift
-        response = np.clip(0.5 + n * 0.42 + (mowing - 0.5) * 0.10, 0.0, 1.0)
+        height = 0.50 + 0.032 * n + 0.012 * detail
+        response = np.clip(0.5 + n * 0.42 + detail * 0.08, 0.0, 1.0)
         smoothness = np.clip(0.12 + 0.14 * response, 0.12, 0.26)
         ao = np.clip(0.88 + 0.12 * np.clip(0.5 + n * 0.36 + detail * 0.08, 0.0, 1.0), 0.88, 1.0)
     else:
@@ -468,9 +465,9 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
 
 def _natural_surface_height(kind: str, u, v):
     """Return the authored height field before normal encoding."""
-    n, _n01, detail, mowing = _natural_surface_layers(kind, u, v)
+    n, _n01, detail = _natural_surface_layers(kind, u, v)
     if kind == "grass":
-        return 0.50 + 0.032 * n + 0.012 * detail + 0.010 * (mowing - 0.5)
+        return 0.50 + 0.032 * n + 0.012 * detail
     if kind == "wall":
         return 0.50 + 0.024 * n + 0.012 * detail
     raise ValueError(f"Unknown natural surface kind: {kind}")
@@ -659,7 +656,7 @@ def _surface_fields(kind: str, u: float, v: float):
     if kind in NATURAL_SURFACE_CONTRACT:
         u_array = np.asarray(u, dtype=np.float64)
         v_array = np.asarray(v, dtype=np.float64)
-        n, n01, _detail, _mowing = _natural_surface_layers(kind, u_array, v_array)
+        n, n01, _detail = _natural_surface_layers(kind, u_array, v_array)
         values = _natural_surface_fields(kind, u_array, v_array, n, n01)
         base, height, metallic, smoothness, ao, _masks = values
         return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
@@ -720,7 +717,7 @@ def _surface_fields_array(kind: str, u, v):
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
     if kind in NATURAL_SURFACE_CONTRACT:
-        n, n01, _detail, _mowing = _natural_surface_layers(kind, u, v)
+        n, n01, _detail = _natural_surface_layers(kind, u, v)
         base, height, metallic, smoothness, ao, _masks = _natural_surface_fields(kind, u, v, n, n01)
         return base, height, metallic, smoothness, ao
     n = _periodic_noise_array(kind, u, v)
@@ -1950,6 +1947,7 @@ _NATURAL_FORBIDDEN_SOURCE_TOKENS = (
     "rib",
     "stain",
     "scratch",
+    "mowing",
 )
 
 
@@ -1970,6 +1968,39 @@ def _directional_structure_audit(field, maximum_coherence):
         "coherence": float(coherence),
         "maximum": float(maximum_coherence),
         "tensor": {"xx": tensor_xx, "yy": tensor_yy, "xy": tensor_xy},
+    }
+
+
+def _axis_periodic_band_audit(field, maximum_axis_fraction):
+    """Reject horizontal/vertical periodic energy hidden inside a tiled field."""
+    values = np.asarray(field, dtype=np.float64)
+    centred = values - float(np.mean(values))
+    total_variance = float(np.mean(centred * centred))
+
+    def profile_metrics(profile):
+        profile = np.asarray(profile, dtype=np.float64)
+        variance_fraction = 0.0 if total_variance <= np.finfo(np.float64).eps else float(np.mean(profile * profile) / total_variance)
+        spectrum = np.abs(np.fft.rfft(profile)) ** 2
+        if spectrum.size:
+            spectrum[0] = 0.0
+        dominant_cycle = int(np.argmax(spectrum)) if spectrum.size else 0
+        spectral_energy = float(np.sum(spectrum))
+        peak_fraction = 0.0 if spectral_energy <= np.finfo(np.float64).eps else float(spectrum[dominant_cycle] / spectral_energy)
+        return {
+            "variance_fraction": variance_fraction,
+            "dominant_cycle": dominant_cycle,
+            "peak_fraction": peak_fraction,
+        }
+
+    horizontal = profile_metrics(np.mean(centred, axis=1))
+    vertical = profile_metrics(np.mean(centred, axis=0))
+    maximum_observed = max(horizontal["variance_fraction"], vertical["variance_fraction"])
+    return {
+        "pass": bool(np.isfinite(maximum_observed) and maximum_observed <= maximum_axis_fraction),
+        "maximum_observed": maximum_observed,
+        "maximum": float(maximum_axis_fraction),
+        "horizontal": horizontal,
+        "vertical": vertical,
     }
 
 
@@ -2053,17 +2084,33 @@ def audit_continuous_surface(kind, generated):
     height_field = _natural_surface_height(kind, x_values[None, :], y_values[:, None])
     slope_u, slope_v = _wrapped_central_differences(height_field, 1.0 / unique_width, 1.0 / unique_height)
     finite_gradients = bool(np.isfinite(height_field).all() and np.isfinite(slope_u).all() and np.isfinite(slope_v).all())
-    directional = _directional_structure_audit(height_field, 0.55 if kind == "grass" else 0.12)
+    directional = _directional_structure_audit(height_field, contract.get("maximum_directional_coherence", 0.12))
 
     if kind == "grass":
         green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
         green_fraction = float(np.mean(green_dominant))
         near_white = int(np.count_nonzero(np.all(base[:, :, :3] >= contract["near_white_threshold_u8"], axis=-1)))
         palette_semantics = green_fraction >= contract["green_dominance_fraction"] and near_white == 0
+        palette_mean = [float(np.mean(base[:, :, channel])) for channel in range(3)]
+        mean_floor, mean_ceiling = contract["mean_rgb_u8"]
+        palette_mean_ok = all(mean_floor[channel] <= palette_mean[channel] <= mean_ceiling[channel] for channel in range(3))
+        directional_fields = {
+            "albedo_luminance": _directional_structure_audit(luminance[:-1, :-1], contract["maximum_directional_coherence"]),
+            "height": directional,
+            "smoothness": _directional_structure_audit(smooth_values[:-1, :-1], contract["maximum_directional_coherence"]),
+        }
+        axis_bands = {
+            "albedo_luminance": _axis_periodic_band_audit(luminance[:-1, :-1], contract["maximum_axis_band_fraction"]),
+            "height": _axis_periodic_band_audit(height_field, contract["maximum_axis_band_fraction"]),
+            "smoothness": _axis_periodic_band_audit(smooth_values[:-1, :-1], contract["maximum_axis_band_fraction"]),
+        }
+        directional_ok = all(result["pass"] for result in directional_fields.values())
+        axis_bands_ok = all(result["pass"] for result in axis_bands.values())
         surface_spread = None
     else:
         surface_spread = np.max(rgb, axis=-1) - np.min(rgb, axis=-1)
         palette_semantics = bool(float(np.max(surface_spread)) <= contract["rgb_spread_max"] + tolerance)
+        directional_ok = directional["pass"]
         green_fraction = None
         near_white = None
     source_guard = _natural_surface_source_guard()
@@ -2080,13 +2127,13 @@ def audit_continuous_surface(kind, generated):
         "smoothness_range": smoothness_ok,
         "ao_range": ao_ok,
         "finite_gradients": finite_gradients,
-        "directional_balance": directional["pass"],
+        "directional_balance": directional_ok,
         "construction": contract["construction"] == "continuous-periodic-field",
         "motif_inventory": not motif_inventory,
         "source_guard": source_guard["pass"],
         "wall_nonmetallic": kind != "wall" or metallic_range[1] <= tolerance,
     }
-    return {
+    result = {
         "pass": all(gates.values()),
         "gates": gates,
         "contract": contract,
@@ -2103,6 +2150,14 @@ def audit_continuous_surface(kind, generated):
         "directional_balance": directional,
         "source_guard": source_guard,
     }
+    if kind == "grass":
+        gates["palette_mean"] = palette_mean_ok
+        gates["periodic_bands"] = axis_bands_ok
+        result["palette"].update({"mean_rgb_u8": palette_mean, "mean_bounds_u8": [list(bound) for bound in contract["mean_rgb_u8"]]})
+        result["directional_balance"] = {"pass": directional_ok, "fields": directional_fields}
+        result["periodic_bands"] = {"pass": axis_bands_ok, "fields": axis_bands}
+        result["pass"] = all(gates.values())
+    return result
 
 
 def audit_sky_clouds(generated):
