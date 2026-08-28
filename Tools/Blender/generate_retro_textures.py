@@ -338,6 +338,8 @@ NATURAL_SURFACE_CONTRACT = {
         "near_white_threshold_u8": 236,
         "maximum_directional_coherence": 0.12,
         "maximum_axis_band_fraction": 0.02,
+        "maximum_low_frequency_rms_u8": 0.5,
+        "maximum_luminance_span_u8": 8,
         "metallic": (0.0, 0.0),
         "smoothness": (0.12, 0.26),
         "ao": (0.88, 1.0),
@@ -350,6 +352,9 @@ NATURAL_SURFACE_CONTRACT = {
         "metallic": (0.0, 0.0),
         "smoothness": (0.18, 0.32),
         "ao": (0.90, 1.0),
+        "effective_tile": (13, 2),
+        "maximum_diagonal_spectral_fraction": 0.40,
+        "maximum_diagonal_autocorrelation": 0.72,
         "motif_inventory": (),
     },
 }
@@ -394,6 +399,28 @@ def _balanced_toroidal_field(u, v, layers, u_frequency_scale=1.0):
     return field / np.float64(total_weight)
 
 
+def _irregular_periodic_mottle(u, v, layers, warp_layers):
+    """Build an irregular continuous torus by warping several periodic modes."""
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    shape = np.broadcast_shapes(u.shape, v.shape)
+    warp_u = np.zeros(shape, dtype=np.float64)
+    warp_v = np.zeros(shape, dtype=np.float64)
+    for frequency_u, frequency_v, phase, amplitude in warp_layers:
+        angle = np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase
+        warp_u += np.sin(angle) * np.float64(amplitude)
+        warp_v += np.cos(angle) * np.float64(amplitude * 0.83)
+    warped_u = u + warp_u
+    warped_v = v + warp_v
+    field = np.zeros(shape, dtype=np.float64)
+    total_weight = 0.0
+    for frequency_u, frequency_v, phase, amplitude in layers:
+        angle = np.float64(math.tau) * (frequency_u * warped_u + frequency_v * warped_v) + phase
+        field += np.sin(angle) * np.float64(amplitude)
+        total_weight += amplitude
+    return field / np.float64(total_weight)
+
+
 def _natural_surface_layers(kind: str, u, v):
     """Return deterministic multi-scale periodic values for a natural surface."""
     if kind not in NATURAL_SURFACE_CONTRACT:
@@ -410,15 +437,32 @@ def _natural_surface_layers(kind: str, u, v):
         detail_layers = ((12.0, 3.0, 0.93, 0.60), (24.0, 7.0, 3.31, 0.40))
     else:
         layers = (
-            (2.0, 3.0, 1.17, 0.48),
-            (5.0, 4.0, 3.09, 0.27),
-            (11.0, 7.0, 5.11, 0.16),
-            (23.0, 13.0, 2.63, 0.09),
+            (3.0, 8.0, 1.17, 0.30),
+            (8.0, 3.0, 3.09, 0.30),
+            (5.0, -14.0, 5.11, 0.176),
+            (-14.0, 5.0, 2.63, 0.176),
+            (7.0, 19.0, 0.87, 0.13),
+            (19.0, 7.0, 4.31, 0.13),
+            (11.0, -23.0, 2.21, 0.094),
+            (-23.0, 11.0, 5.07, 0.094),
         )
-        detail_layers = ((19.0, 11.0, 0.41, 0.58), (37.0, 17.0, 4.27, 0.42))
+        detail_layers = (
+            (17.0, 5.0, 0.41, 0.23), (5.0, 17.0, 2.59, 0.23),
+            (13.0, -31.0, 4.27, 0.14), (-31.0, 13.0, 1.18, 0.14),
+            (23.0, 47.0, 2.08, 0.10), (47.0, 23.0, 5.33, 0.10),
+            (19.0, -61.0, 3.12, 0.06), (-61.0, 19.0, 0.72, 0.06),
+        )
 
-    broad = _balanced_toroidal_field(u, v, layers)
-    detail = _balanced_toroidal_field(u, v, detail_layers)
+    if kind == "grass":
+        broad = _balanced_toroidal_field(u, v, layers)
+        detail = _balanced_toroidal_field(u, v, detail_layers)
+    else:
+        warp_layers = (
+            (2.0, 5.0, 0.73, 0.018), (5.0, 2.0, 3.41, 0.018),
+            (3.0, -11.0, 5.19, 0.011), (-11.0, 3.0, 1.83, 0.011),
+        )
+        broad = _irregular_periodic_mottle(u, v, layers, warp_layers)
+        detail = _irregular_periodic_mottle(u, v, detail_layers, warp_layers)
     return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail
 
 
@@ -438,28 +482,29 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
     if kind == "grass":
+        micro = np.clip(0.5 + 0.10 * detail, 0.0, 1.0)
         colour = np.stack(
             (
-                np.clip(0.270 + 0.110 * tone, 0.0, 1.0),
-                np.clip(0.340 + 0.160 * tone, 0.0, 1.0),
-                np.clip(0.055 + 0.050 * tone, 0.0, 1.0),
+                np.clip(0.270 + 0.110 * micro, 0.0, 1.0),
+                np.clip(0.340 + 0.160 * micro, 0.0, 1.0),
+                np.clip(0.055 + 0.050 * micro, 0.0, 1.0),
             ),
             axis=-1,
         )
-        height = 0.50 + 0.032 * n + 0.012 * detail
-        response = np.clip(0.5 + n * 0.42 + detail * 0.08, 0.0, 1.0)
+        height = 0.50 + 0.012 * detail
+        response = micro
         smoothness = np.clip(0.12 + 0.14 * response, 0.12, 0.26)
-        ao = np.clip(0.88 + 0.12 * np.clip(0.5 + n * 0.36 + detail * 0.08, 0.0, 1.0), 0.88, 1.0)
+        ao = np.clip(0.88 + 0.12 * micro, 0.88, 1.0)
     else:
         aggregate = np.clip(0.5 + n * 0.5, 0.0, 1.0)
         pore_tone = np.clip(0.5 + detail * 0.5, 0.0, 1.0)
-        neutral = 0.50 + 0.23 * aggregate + 0.014 * (pore_tone - 0.5)
+        neutral = 0.56 + 0.11 * aggregate + 0.008 * (pore_tone - 0.5)
         tint = np.stack((-0.010 + 0.003 * detail, 0.001 * detail, 0.010 - 0.003 * detail), axis=-1)
         colour = np.clip(neutral[..., None] + tint, 0.0, 1.0)
-        height = 0.50 + 0.024 * n + 0.012 * detail
-        response = np.clip(0.5 + n * 0.42 + detail * 0.08, 0.0, 1.0)
-        smoothness = np.clip(0.18 + 0.14 * response, 0.18, 0.32)
-        ao = np.clip(0.90 + 0.10 * np.clip(0.5 + n * 0.35 + detail * 0.10, 0.0, 1.0), 0.90, 1.0)
+        height = 0.50 + 0.018 * n + 0.006 * detail
+        response = np.clip(0.5 + n * 0.22 + detail * 0.04, 0.0, 1.0)
+        smoothness = np.clip(0.22 + 0.08 * response, 0.18, 0.32)
+        ao = np.clip(0.93 + 0.05 * np.clip(0.5 + n * 0.25 + detail * 0.05, 0.0, 1.0), 0.90, 1.0)
     return colour, height, zero, smoothness, ao, {}
 
 
@@ -467,9 +512,9 @@ def _natural_surface_height(kind: str, u, v):
     """Return the authored height field before normal encoding."""
     n, _n01, detail = _natural_surface_layers(kind, u, v)
     if kind == "grass":
-        return 0.50 + 0.032 * n + 0.012 * detail
+        return 0.50 + 0.012 * detail
     if kind == "wall":
-        return 0.50 + 0.024 * n + 0.012 * detail
+        return 0.50 + 0.018 * n + 0.006 * detail
     raise ValueError(f"Unknown natural surface kind: {kind}")
 
 
@@ -1234,27 +1279,36 @@ def generate_rocket_maps(width=1024, height=1024):
 
 def generate_shield(width=128, height=128):
     buffer = _rgba_array(width, height)
-    x = (np.arange(width, dtype=np.float64) + 0.5) / 16.0
-    y = (np.arange(height, dtype=np.float64) + 0.5)[:, None] / 16.0
-    u = x[None, :]
-    v = y
-    fu = u - np.floor(u)
-    fv_a = (v + u * 0.58) - np.floor(v + u * 0.58)
-    fv_b = (v - u * 0.58) - np.floor(v - u * 0.58)
-    line_distance = np.minimum.reduce(np.broadcast_arrays(fu, 1.0 - fu, fv_a, 1.0 - fv_a, fv_b, 1.0 - fv_b))
-    line = 1.0 - _smoothstep_array(0.015, 0.105, line_distance)
-    pulse = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 0.13 + v * 0.17))
-    alpha = np.clip(0.035 + line * (0.76 + 0.18 * pulse), 0.0, 1.0)
+    u = (np.arange(width, dtype=np.float64) + 0.5) / float(width)
+    v = (np.arange(height, dtype=np.float64) + 0.5)[:, None] / float(height)
+    u = u[None, :]
+    # Several soft, irregular periodic modes keep the mask continuous while
+    # leaving the shader's animated scan line as the only deliberate scan cue.
+    mottle_layers = (
+        (2.0, 5.0, 0.37, 0.42),
+        (5.0, 2.0, 2.11, 0.29),
+        (3.0, -7.0, 4.03, 0.19),
+        (-7.0, 3.0, 1.47, 0.10),
+    )
+    warp_layers = ((1.0, 3.0, 0.71, 0.028), (3.0, 1.0, 3.27, 0.017))
+    mottle = _irregular_periodic_mottle(u, v, mottle_layers, warp_layers)
+    pulse = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 1.0 + v * 4.0) + 0.59)
+    density = np.clip(0.5 + 0.5 * (0.78 * mottle + 0.22 * (2.0 * pulse - 1.0)), 0.0, 1.0)
+    density = (density - np.min(density)) / np.float64(np.max(density) - np.min(density))
+    alpha = 0.063 + 0.80 * density
     colour = np.stack(
         (
-            np.clip(0.44 + 0.18 * pulse + 0.22 * line, 0.0, 1.0),
-            np.clip(0.82 + 0.12 * pulse, 0.0, 1.0),
-            np.clip(0.92 + 0.08 * line, 0.0, 1.0),
+            np.clip(0.40 + 0.12 * pulse + 0.08 * density, 0.0, 1.0),
+            np.clip(0.76 + 0.12 * pulse + 0.06 * density, 0.0, 1.0),
+            np.clip(0.88 + 0.08 * pulse + 0.06 * density, 0.0, 1.0),
             alpha,
         ),
         axis=-1,
     )
     buffer[:, :, :] = _u8_array(colour)
+    # Keep the VFX source compatible with the generator's repeat-edge audit;
+    # the runtime importer still uses Clamp wrapping for this mask.
+    buffer[:, -1, :] = buffer[:, 0, :]
     return buffer
 
 
@@ -1821,6 +1875,46 @@ def audit_explosion_semantics(rgba, width=128, height=128):
     }
 
 
+def audit_shield_semantics(rgba, width=128, height=128):
+    """Check the soft team mask and reject the former diagonal line lattice."""
+    array = _rgba_view(rgba, width, height)
+    alpha = array[:, :, 3].astype(np.float64)
+    rgb = array[:, :, :3].astype(np.float64)
+    luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
+    centred = alpha - float(np.mean(alpha))
+    spectrum = np.abs(np.fft.fftshift(np.fft.fft2(centred))) ** 2
+    frequency_v = np.fft.fftshift(np.fft.fftfreq(height)) * np.float64(height)
+    frequency_u = np.fft.fftshift(np.fft.fftfreq(width)) * np.float64(width)
+    v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+    non_dc = (u_grid != 0.0) | (v_grid != 0.0)
+    maximum_frequency = np.maximum(np.abs(u_grid), np.abs(v_grid))
+    minimum_frequency = np.minimum(np.abs(u_grid), np.abs(v_grid))
+    ratio = np.divide(minimum_frequency, maximum_frequency, out=np.zeros_like(maximum_frequency), where=maximum_frequency > 0.0)
+    diagonal_line_band = non_dc & (ratio >= 0.50) & (ratio <= 2.0)
+    total_energy = float(np.sum(spectrum[non_dc]))
+    diagonal_energy = float(np.sum(spectrum[diagonal_line_band]))
+    diagonal_fraction = diagonal_energy / total_energy if total_energy > np.finfo(np.float64).eps else 1.0
+    alpha_range = [int(np.min(alpha)), int(np.max(alpha))]
+    gates = {
+        "dimensions": bool(array.shape == (height, width, 4)),
+        "alpha_range": bool(alpha_range[0] >= 16 and alpha_range[1] <= 220),
+        "soft_alpha_mask": bool(alpha_range[1] - alpha_range[0] >= 96 and np.count_nonzero(alpha > 24) < alpha.size),
+        "team_tint": bool(float(np.mean(rgb[:, :, 1])) > float(np.mean(rgb[:, :, 0])) and float(np.mean(rgb[:, :, 2])) > float(np.mean(rgb[:, :, 1]))),
+        "no_diagonal_line_lattice": bool(np.isfinite(diagonal_fraction) and diagonal_fraction <= 0.30),
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "alpha_range_u8": alpha_range,
+        "mean_rgb_u8": [float(np.mean(rgb[:, :, channel])) for channel in range(3)],
+        "luminance_range_u8": [float(np.min(luminance)), float(np.max(luminance))],
+        "diagonal_lattice_spectral_fraction": float(diagonal_fraction),
+        "diagonal_lattice_spectral_limit": 0.30,
+        "spectral_energy": total_energy,
+        "diagonal_lattice_spectral_energy": diagonal_energy,
+    }
+
+
 def _weapon_readability_family_audit(kind, generated):
     """Check palette, PBR channel ranges, dimensions, and base luminance."""
     family_id = "weapon-" + kind
@@ -2004,10 +2098,112 @@ def _axis_periodic_band_audit(field, maximum_axis_fraction):
     }
 
 
+def _quantized_audit_field(field, normalized=False):
+    """Convert authored or output fields to the same u8 domain used by the PNG."""
+    values = np.asarray(field, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError("spectral audit fields must be two-dimensional")
+    return _u8_array(values) if normalized else np.rint(np.clip(values, 0.0, 255.0)).astype(np.uint8)
+
+
+def _radial_low_frequency_audit(fields, radius=6, maximum_rms_u8=0.5):
+    """Report non-DC FFT RMS in the low radial band of quantized fields."""
+    reports = {}
+    for name, (field, normalized) in fields.items():
+        quantized = _quantized_audit_field(field, normalized)
+        values = quantized.astype(np.float64)
+        centred = values - float(np.mean(values))
+        height, width = values.shape
+        spectrum = np.fft.fft2(centred) / np.float64(values.size)
+        frequency_v = np.fft.fftfreq(height) * np.float64(height)
+        frequency_u = np.fft.fftfreq(width) * np.float64(width)
+        v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+        radial_squared = u_grid * u_grid + v_grid * v_grid
+        low_mask = (radial_squared > 0.0) & (radial_squared <= np.float64(radius * radius))
+        rms_u8 = float(np.sqrt(np.sum(np.abs(spectrum[low_mask]) ** 2)))
+        full_rms_u8 = float(np.sqrt(np.sum(np.abs(spectrum) ** 2)))
+        reports[name] = {
+            "shape": [int(height), int(width)],
+            "quantized_range_u8": [int(np.min(quantized)), int(np.max(quantized))],
+            "low_frequency_radius": int(radius),
+            "low_frequency_rms_u8": rms_u8,
+            "full_rms_u8": full_rms_u8,
+            "low_frequency_energy_fraction": float((rms_u8 / full_rms_u8) ** 2) if full_rms_u8 > np.finfo(np.float64).eps else 0.0,
+            "pass": bool(np.isfinite(rms_u8) and rms_u8 <= maximum_rms_u8),
+        }
+    maximum_observed = max((report["low_frequency_rms_u8"] for report in reports.values()), default=float("inf"))
+    return {
+        "pass": bool(reports) and all(report["pass"] for report in reports.values()),
+        "maximum_observed_rms_u8": float(maximum_observed),
+        "maximum_rms_u8": float(maximum_rms_u8),
+        "radius": int(radius),
+        "fields": reports,
+    }
+
+
+def _effective_tiled_field(field, tile_u=13, tile_v=2, sample_size=127):
+    """Downsample one unique torus, then apply the arena's effective 13x2 tiling."""
+    values = np.asarray(field, dtype=np.float64)
+    if values.ndim != 2 or min(values.shape) < 4:
+        raise ValueError("wall tiling audit requires a two-dimensional field")
+    count_u = min(int(sample_size), values.shape[1])
+    count_v = min(int(sample_size), values.shape[0])
+    indices_u = np.linspace(0, values.shape[1] - 1, count_u).round().astype(np.int64)
+    indices_v = np.linspace(0, values.shape[0] - 1, count_v).round().astype(np.int64)
+    sampled = values[np.ix_(indices_v, indices_u)]
+    return np.tile(sampled, (int(tile_v), int(tile_u)))
+
+
+def _wall_diagonal_pattern_audit(field, tile_u=13, tile_v=2, maximum_diagonal_fraction=0.40, maximum_autocorrelation_limit=0.60):
+    """Reject texture-space diagonal lattice energy and long diagonal repeats."""
+    effective = _effective_tiled_field(field, tile_u, tile_v)
+    centred = effective - float(np.mean(effective))
+    spectrum = np.abs(np.fft.fftshift(np.fft.fft2(centred))) ** 2
+    height, width = effective.shape
+    frequency_v = np.fft.fftshift(np.fft.fftfreq(height)) * np.float64(height) / np.float64(tile_v)
+    frequency_u = np.fft.fftshift(np.fft.fftfreq(width)) * np.float64(width) / np.float64(tile_u)
+    v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+    non_dc = (u_grid != 0.0) | (v_grid != 0.0)
+    maximum_frequency = np.maximum(np.abs(u_grid), np.abs(v_grid))
+    minimum_frequency = np.minimum(np.abs(u_grid), np.abs(v_grid))
+    ratio = np.divide(minimum_frequency, maximum_frequency, out=np.zeros_like(maximum_frequency), where=maximum_frequency > 0.0)
+    diagonal_band = non_dc & (ratio >= 0.60) & (ratio <= 1.0 / 0.60)
+    total_energy = float(np.sum(spectrum[non_dc]))
+    diagonal_energy = float(np.sum(spectrum[diagonal_band]))
+    diagonal_fraction = diagonal_energy / total_energy if total_energy > np.finfo(np.float64).eps else 1.0
+
+    variance = float(np.sum(centred * centred))
+    autocorrelations = []
+    # Exclude the repeated tile period itself; the diagonal lag window stays
+    # within one source tile while still covering non-local pattern repeats.
+    maximum_lag = min(effective.shape[0] // int(tile_v), effective.shape[1] // int(tile_u)) // 2
+    for lag in range(4, maximum_lag):
+        correlation = float(np.sum(centred * np.roll(centred, (lag, lag), axis=(0, 1))) / variance) if variance > np.finfo(np.float64).eps else 1.0
+        autocorrelations.append({"lag": int(lag), "correlation": correlation})
+    maximum_autocorrelation = max((abs(item["correlation"]) for item in autocorrelations), default=float("inf"))
+    gates = {
+        "diagonal_spectrum": bool(np.isfinite(diagonal_fraction) and diagonal_fraction <= maximum_diagonal_fraction),
+        "diagonal_autocorrelation": bool(np.isfinite(maximum_autocorrelation) and maximum_autocorrelation <= maximum_autocorrelation_limit),
+    }
+    return {
+        "pass": all(gates.values()),
+        "effective_tiling": {"u": int(tile_u), "v": int(tile_v), "sample_shape": [int(effective.shape[0] // tile_v), int(effective.shape[1] // tile_u)]},
+        "diagonal_spectral_fraction": float(diagonal_fraction),
+        "diagonal_spectral_limit": float(maximum_diagonal_fraction),
+        "diagonal_autocorrelation_max": float(maximum_autocorrelation),
+        "diagonal_autocorrelation_limit": float(maximum_autocorrelation_limit),
+        "diagonal_autocorrelation": autocorrelations,
+        "spectral_energy": total_energy,
+        "diagonal_spectral_energy": diagonal_energy,
+        "gates": gates,
+    }
+
+
 def _natural_surface_source_guard():
     """Keep the grass/concrete call path free of discrete motif helpers."""
     path_functions = (
         _balanced_toroidal_field,
+        _irregular_periodic_mottle,
         _natural_surface_layers,
         _natural_surface_fields,
         _natural_surface_height,
@@ -2085,6 +2281,9 @@ def audit_continuous_surface(kind, generated):
     slope_u, slope_v = _wrapped_central_differences(height_field, 1.0 / unique_width, 1.0 / unique_height)
     finite_gradients = bool(np.isfinite(height_field).all() and np.isfinite(slope_u).all() and np.isfinite(slope_v).all())
     directional = _directional_structure_audit(height_field, contract.get("maximum_directional_coherence", 0.12))
+    radial_low_frequency = None
+    luminance_span_u8 = None
+    wall_pattern = None
 
     if kind == "grass":
         green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
@@ -2106,11 +2305,30 @@ def audit_continuous_surface(kind, generated):
         }
         directional_ok = all(result["pass"] for result in directional_fields.values())
         axis_bands_ok = all(result["pass"] for result in axis_bands.values())
+        radial_low_frequency = _radial_low_frequency_audit(
+            {
+                "albedo_luminance": (luminance[:-1, :-1], True),
+                "height": (height_field, True),
+                "smoothness": (smooth_values[:-1, :-1], True),
+                "ao": (ao_values[:-1, :-1], True),
+            },
+            radius=6,
+            maximum_rms_u8=contract["maximum_low_frequency_rms_u8"],
+        )
+        luminance_u8 = _quantized_audit_field(luminance[:-1, :-1], normalized=True)
+        luminance_span_u8 = int(np.max(luminance_u8) - np.min(luminance_u8))
         surface_spread = None
     else:
         surface_spread = np.max(rgb, axis=-1) - np.min(rgb, axis=-1)
         palette_semantics = bool(float(np.max(surface_spread)) <= contract["rgb_spread_max"] + tolerance)
         directional_ok = directional["pass"]
+        wall_pattern = _wall_diagonal_pattern_audit(
+            luminance[:-1, :-1],
+            tile_u=contract["effective_tile"][0],
+            tile_v=contract["effective_tile"][1],
+            maximum_diagonal_fraction=contract["maximum_diagonal_spectral_fraction"],
+            maximum_autocorrelation_limit=contract["maximum_diagonal_autocorrelation"],
+        )
         green_fraction = None
         near_white = None
     source_guard = _natural_surface_source_guard()
@@ -2133,6 +2351,11 @@ def audit_continuous_surface(kind, generated):
         "source_guard": source_guard["pass"],
         "wall_nonmetallic": kind != "wall" or metallic_range[1] <= tolerance,
     }
+    if kind == "grass":
+        gates["low_frequency_detail"] = radial_low_frequency["pass"]
+        gates["luminance_span"] = luminance_span_u8 <= contract["maximum_luminance_span_u8"]
+    else:
+        gates["wall_diagonal_pattern"] = wall_pattern["pass"]
     result = {
         "pass": all(gates.values()),
         "gates": gates,
@@ -2156,6 +2379,12 @@ def audit_continuous_surface(kind, generated):
         result["palette"].update({"mean_rgb_u8": palette_mean, "mean_bounds_u8": [list(bound) for bound in contract["mean_rgb_u8"]]})
         result["directional_balance"] = {"pass": directional_ok, "fields": directional_fields}
         result["periodic_bands"] = {"pass": axis_bands_ok, "fields": axis_bands}
+        result["radial_low_frequency"] = radial_low_frequency
+        result["ao_spectral"] = radial_low_frequency["fields"]["ao"]
+        result["palette"].update({"luminance_span_u8": luminance_span_u8, "maximum_luminance_span_u8": contract["maximum_luminance_span_u8"]})
+        result["pass"] = all(gates.values())
+    else:
+        result["wall_diagonal_pattern"] = wall_pattern
         result["pass"] = all(gates.values())
     return result
 
@@ -2350,6 +2579,8 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         )
     if "explosion" in selected and "RetroExplosion" in generated:
         checks["explosion"] = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
+    if "shield" in selected and "RetroShield" in generated:
+        checks["shield"] = audit_shield_semantics(generated["RetroShield"]["buffer"])
     for kind in ("grass", "wall"):
         if kind in selected:
             checks[kind] = audit_continuous_surface(kind, generated)
