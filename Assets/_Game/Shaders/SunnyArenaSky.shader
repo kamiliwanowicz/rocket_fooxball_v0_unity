@@ -30,7 +30,6 @@ Shader "RocketFooxball/SunnyArenaSky"
         Pass
         {
             Name "Skybox"
-            Tags { "LightMode" = "Skybox" }
             Cull Off
             ZWrite Off
 
@@ -97,9 +96,13 @@ Shader "RocketFooxball/SunnyArenaSky"
                 // One authored panorama supplies cloud shape and colour; coverage remains bounded.
                 half2 panoramaUv = EquirectangularUv(direction);
                 half4 panorama = SAMPLE_TEXTURE2D(_Panorama, sampler_Panorama, panoramaUv);
-                half cloudMask = saturate((panorama.a - (1.0h - _CloudCoverage)) / max(_CloudSoftness, 0.001h));
-                half3 cloudLayer = panorama.rgb * _CloudTint.rgb;
-                gradient = lerp(gradient, cloudLayer, cloudMask * _CloudCoverage);
+                half threshold = 1.0h - _CloudCoverage;
+                half cloudMask = smoothstep(
+                    max(0.0h, threshold - _CloudSoftness),
+                    max(0.001h, threshold),
+                    panorama.a);
+                half3 cloudLayer = lerp(panorama.rgb, _CloudTint.rgb, panorama.a);
+                gradient = lerp(gradient, cloudLayer, cloudMask);
 
                 half horizonFog = 1.0h - smoothstep(
                     _FogHorizonHeight - max(_FogHorizonWidth, 0.01h),
