@@ -1,7 +1,6 @@
 ---
 name: orchestrate-implementation
 description: Use when LP dispatches one accepted coding plan for orchestration, or user explicitly invokes this skill to execute one accepted coding plan through bounded workers, independent reviewers, fixes, and exact-SHA validation.
-disable-model-invocation: true
 ---
 
 # Orchestrate Implementation
