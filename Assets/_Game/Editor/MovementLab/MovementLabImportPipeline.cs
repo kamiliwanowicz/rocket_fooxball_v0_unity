@@ -631,6 +631,7 @@ namespace RocketFooxball.Editor
                 {
                     var importer = AssetImporter.GetAtPath(ArenaKitModelPath) as ModelImporter;
                     if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("ArenaKit importer contract invalid.");
+                    ValidateArenaKitSourceMaterials(importer);
                     ValidatePbrModelImporter(importer, true, "ArenaKit");
                     var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
                     var meshes = new List<Mesh>();
@@ -682,7 +683,45 @@ namespace RocketFooxball.Editor
                         {
                             throw new InvalidOperationException("ArenaKit mesh bounds contract invalid: " + expectedNames[i] + "; expected " + expectedBoundsMin[i] + ".." + expectedBoundsMax[i] + ", actual " + found.bounds.min + ".." + found.bounds.max);
                         }
-                        ValidateImportedMaterialSlots(importedRoots, found, expectedMaterialSlots[i], expectedNames[i]);
+                        ValidateImportedMaterialSlotCount(importedRoots, found, expectedMaterialSlots[i].Length, expectedNames[i]);
+                    }
+                }
+
+                private static void ValidateArenaKitSourceMaterials(ModelImporter importer)
+                {
+                    var sourceMaterialsProperty = typeof(ModelImporter).GetProperty(
+                        "sourceMaterials",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    var expectedPropertyType = typeof(AssetImporter.SourceAssetIdentifier[]);
+                    if (sourceMaterialsProperty == null || sourceMaterialsProperty.PropertyType != expectedPropertyType)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer sourceMaterials property is missing or has an unexpected type; expected SourceAssetIdentifier[].");
+                    }
+
+                    var sourceMaterials = sourceMaterialsProperty.GetValue(importer, null) as AssetImporter.SourceAssetIdentifier[];
+                    if (sourceMaterials == null)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer sourceMaterials value is null.");
+                    }
+
+                    var expectedNames = new[] { "ArenaPrimary", "ArenaTrim", "ArenaHazard", "ArenaGlow" };
+                    if (sourceMaterials.Length != expectedNames.Length)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer source material count invalid; expected 4, actual " + sourceMaterials.Length + ".");
+                    }
+
+                    for (var i = 0; i < expectedNames.Length; i++)
+                    {
+                        if (sourceMaterials[i].type != typeof(Material) || !string.Equals(sourceMaterials[i].name, expectedNames[i], StringComparison.Ordinal))
+                        {
+                            throw new InvalidOperationException("ArenaKit importer source material invalid at index " + i + "; expected Material/" + expectedNames[i] + ", actual " + sourceMaterials[i].type + "/" + sourceMaterials[i].name + ".");
+                        }
+                    }
+
+                    var externalObjectMap = importer.GetExternalObjectMap();
+                    if (externalObjectMap == null || externalObjectMap.Count != 0)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer must not contain external object remaps; actual count " + (externalObjectMap == null ? "null" : externalObjectMap.Count.ToString()) + ".");
                     }
                 }
 
@@ -707,7 +746,7 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                private static void ValidateImportedMaterialSlots(List<GameObject> importedRoots, Mesh mesh, string[] expectedSlots, string label)
+                private static void ValidateImportedMaterialSlotCount(List<GameObject> importedRoots, Mesh mesh, int expectedSlotCount, string label)
                 {
                     MeshRenderer target = null;
                     for (var i = 0; i < importedRoots.Count && target == null; i++)
@@ -728,16 +767,9 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("ArenaKit imported mesh renderer missing: " + label);
                     }
                     var materials = target.sharedMaterials;
-                    if (materials == null || materials.Length != expectedSlots.Length)
+                    if (materials == null || materials.Length != expectedSlotCount)
                     {
-                        throw new InvalidOperationException("ArenaKit material slot count invalid: " + label);
-                    }
-                    for (var i = 0; i < expectedSlots.Length; i++)
-                    {
-                        if (materials[i] == null || !string.Equals(materials[i].name, expectedSlots[i], StringComparison.Ordinal))
-                        {
-                            throw new InvalidOperationException("ArenaKit material slot order invalid: " + label + " index " + i + " expected " + expectedSlots[i]);
-                        }
+                        throw new InvalidOperationException("ArenaKit material slot count invalid: " + label + "; expected " + expectedSlotCount + ", actual " + (materials == null ? "null" : materials.Length.ToString()) + ".");
                     }
                 }
 
