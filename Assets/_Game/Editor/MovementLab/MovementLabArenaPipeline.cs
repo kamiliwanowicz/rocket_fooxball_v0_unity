@@ -352,21 +352,21 @@ namespace RocketFooxball.Editor
             var hazard = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat");
             var glow = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat");
 
-            ValidatePbrMaterial(floor, LoadTexture(GrassTexturePath), LoadTexture(GrassNormalTexturePath),
-                LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath),
-                new Vector2(13f, 9f), "Floor", new Vector2(65f, 45f), 0.35f);
-            ValidatePbrScalars(floor, 0f, 0.24f, 1f, 0.5f, 0f, "Floor");
+            ValidatePbrMaterial(floor, LoadTexture(GrassTexturePath), null,
+                LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, null,
+                new Vector2(13f, 9f), "Floor", Vector2.one, 0f);
+            ValidatePbrScalars(floor, 0f, 0.24f, 1f, 0f, 0f, "Floor");
             ValidateEmission(floor, Color.clear, 0f, "Floor");
-            ValidatePbrMaterial(wall, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath),
-                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath),
-                new Vector2(13f, 2f), "Wall", new Vector2(52f, 12f), 0.25f);
-            ValidatePbrScalars(wall, 0f, 0.28f, 1f, 0.45f, 0f, "Wall");
+            ValidatePbrMaterial(wall, LoadTexture(WallTexturePath), null,
+                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null,
+                new Vector2(13f, 2f), "Wall", Vector2.one, 0f);
+            ValidatePbrScalars(wall, 0f, 0.28f, 1f, 0f, 0f, "Wall");
             ValidateEmission(wall, Color.clear, 0f, "Wall");
             ValidateFlatMaterial(marking, new Color(0.96f, 0.96f, 0.90f, 1f), 0.20f, 0f, "Marking");
-            ValidatePbrMaterial(primary, LoadTexture(WallTexturePath), LoadTexture(WallNormalTexturePath),
-                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath),
-                new Vector2(13f, 2f), "ArenaPrimary", new Vector2(52f, 12f), 0.25f);
-            ValidatePbrScalars(primary, 0f, 0.28f, 1f, 0.45f, 0f, "ArenaPrimary");
+            ValidatePbrMaterial(primary, LoadTexture(WallTexturePath), null,
+                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null,
+                new Vector2(13f, 2f), "ArenaPrimary", Vector2.one, 0f);
+            ValidatePbrScalars(primary, 0f, 0.28f, 1f, 0f, 0f, "ArenaPrimary");
             ValidateEmission(primary, Color.clear, 0f, "ArenaPrimary");
             ValidateFlatMaterial(trim, new Color(0.78f, 0.79f, 0.77f, 1f), 0.30f, 0f, "ArenaTrim");
             ValidateFlatMaterial(hazard, new Color(233f / 255f, 90f / 255f, 22f / 255f, 1f), 0.35f, 0f, "ArenaHazard");
