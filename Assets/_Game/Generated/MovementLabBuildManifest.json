@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "09e9a986a662927ac9b36b595cf16ac9bfdd2144",
+    "gitSha": "bfeb2279efde72b318d687652a7b76f5c3626a2a",
     "manifestStatus": "current",
-    "sourceSignature": "6c8a03697caf01da58ac65caf577c860d19ec9d289c7856467e824e161fb5e47",
-    "generatedOutputFingerprint": "1ce16b71357249d446226a8c6ec839dd0c1cb24a020274420b49a6bc06328d85",
+    "sourceSignature": "2949877c0f2e5292be2f3bd953ccef386e6ed953b37f175d4610b8ae150f3529",
+    "generatedOutputFingerprint": "1b9e62b06d179ef11e46be42695b1be2cdacddcfe0fe24def3e199ddee19c0d7",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "e022899602ef892ad54c7c5c6569f5d0a79b58a127f3e7eef8e62df9547ead70",
+    "lightingInputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
     "bakedProfile": "Production",
     "staleStages": [],
     "staleReasons": [],
@@ -274,7 +274,7 @@
         "5d7990ee5ccf29f49871e4312211a549",
         "640596db53efd2367678624b6a50dcd674bd727e93671e39d86b03e05157c2fc",
         "62b65894efce7c445beb868116b3009a",
-        "239138724ad814be539dd1cc78c28bdceff3faf29cae9810a21a2faaa7dbe30a",
+        "9255f9059721d7e2ac0f232c321c7fbd9fb8253ef22a54b4e50d81191821adc4",
         "72e0360e42e1d194eac2b9de78fe5b83",
         "0b9f5938b1632a12ad3e9ccdffe00546af178af586fd9cbbbd7026b84e1fca5e",
         "9de7bc27372189346b95e51479e6c8c9",
@@ -389,7 +389,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "c89ea430d02b83486e72994e880c72ce28b616e304816b12fe15565786efa671",
+        "6bb4a637fa86fc6a8d4d2d625cd6f22783a5a7020f02b783ead63823f4355bef",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -397,43 +397,43 @@
         "052b0bad7e1c977438a11b8a680a6f9c",
         "215bf30c053a6315825a1042db57ed0efad4e1e2f6f47ccbad4d0ac36c2325da",
         "4f646a78eaba1c2409e9bb3fce837175",
-        "28607f730a540fbc0946b806642b0cf18dce888580e5d8a108855ff732b94e57",
+        "16b2cac6559121a26ab257d41514f1dceaaaeaba40b576e2325a351e287c4269",
         "d6fecb47b29c96247bccd3306e910ef1",
-        "9f2f43d4b2dc0eeb82fd7ea6aba08755b289ac6eb0c0a53a77a5d0fae5bb062a",
+        "a4f25dda419241ceab45607a5f1b8cb9650c217dab2d2cc75152a7e2131cbbb4",
         "9b9608cccbee7a34b8339141b8987124",
-        "7e112d447ebf35e4ab1710e1d94e9f3f89e8888d07394e6d922d7fde3df2a1be",
+        "f36c339de4410a57ff68bdb30cb1cf55e9a67264f4899402c2dc085aaad37e57",
         "a523cfd3fcb32f64793a6c0b125f5693",
-        "928c3a74983dbb4a993dcf52e1f4aac6acd413759d239cf1ffb660271be4d898",
+        "3c514be5ca3da67777da7d19efb59e9e4fe3e53c9847dad8ccbe70300720bdbc",
         "398501dbd7d940c40bf14cc716604fbe",
-        "0fc975b671057ddf0309b0c88a8b96c05a82d6730e271a548d9e1958291767ce",
+        "10c6a65fb7a6c23398b45881558b0b0edad700cd28b90289fec9c9b3c618a97b",
         "c05e4a9f7241449408b69fddd2b668c1",
-        "2b26c2063af30d0970eb130fc71ce369f1a3d4ccb52bb88ba3c3e2577f403ba0",
+        "133971d7ae8f4c44bbecd5432bde655dd15052f3a2e2f236121a8a693db9b113",
         "2c58d3b279e208945a03c2afdcd1007d",
-        "09dfe9dc01e6dffa3d3218cf961ee200d8b8826b6c1ec1da900780260bbf9861",
+        "a84cc40f09fe30ffc21f11196fe8777a8d66ed468bd41dbd199e82d70804a5de",
         "31a5a4c0c7a856443bbfabd685cd4781",
-        "45f213f9c1223e2a778e0764b26c6b0104bc9dd242aeaebeaa91eb9534161b57",
+        "74540f5962cee8349e8560564d6d20af7a48c64617a40ad44cf763b109214ce5",
         "2e6626e5d3c5d2b4e88f30d5529d072c",
-        "06932f982941f4cd6643e5dc0b95d95bd7439c707542bee775a2bf8f01f14a5d",
+        "8d50b42d4e48da3340d4c212908fb6300397d0bf12a57ff97a13076e9752079f",
         "06f7795a149ea1f4eb11e3d67b7f75e3",
-        "eb8438fa9b16f333a0ba88aad1043cbf9a95f31eff110e80749aa709635554ad",
+        "46d1fdae9d04bf18fe7b7a4e2ee522b2922a851b55af4c673809638026d6d21f",
         "440e91dc930311443adcbcf32a2faad7",
-        "0513c7178a7aadebf156ea10debc320abf7c73d0b9b4956a127c970bdddd7b3c",
+        "4021510ffbeb31c6a58d73614570902a11e72da6e796a2ae31a7c23a9a972e72",
         "8362bce8cdaa75b439988314fc3ed7a0",
-        "dbb4ca0235123f8c4454d95af832228aea423df73cf58d4bc68fcbe321e08db6",
+        "a8586c20134ab09037733ebae90ed080683fa2d4fa350a2f7abc7d79f8c51f3b",
         "072a580eb7e3f494d905c0344ca6f59f",
-        "d90dd5a024c82da91ea0a56cd21a5ccce25b707eaa4863e32df7013d2696edd0",
+        "8490787fce1c1008394219bc1ef77c0d3ba660bb6875268dfa87eff2d943cb73",
         "c1161e72ce5d28f4e8b05688a7a7271b",
-        "6b2a152842f6214baa3bac20fb2b6a32e4bb93a7cc3d41854766d42ad8902a66",
+        "dc5e50993a66d9f3ae4ac660b9d962f0365928a2993cb89de1f10becc50091d4",
         "714e50bfc28a43e44aabf2173b408aca",
-        "6b73efa62caac3ed3e53bbd8092fff13a657f80a9df3ed65dae5fbd227bdd989",
+        "e49d04a60f33beaf5eea3bccb6807cfe040f1f8e0401fc280185a745e37d7cb3",
         "e7d89a4de0c2b3e4c9714801a3b657b7",
-        "9f0081d9027f095993c4fdaf5b5b5d263f20d704144b783a9faf5b136166c81a",
+        "b90d3fdc75c0f969d3cbf7162d8fcb7495b96659ec24032a95456af7b65a15be",
         "9e3ed7cf9e3f93a4bbcbd8791f48f21a",
-        "e427e91bea7f553d9f4fb49aadab6450e8acc7b8438f7fbf6c5826709e26483e",
+        "be0bf40075eaf5330da7b56556f5f96b5faa8fcea15fc057b880970246e04106",
         "d8e149926c16f5446a4269af758ce5c3",
-        "81e05e31805e2f930de5f7ced8aee434e77a571c1b72d0f58e20ca64131b8f6e",
+        "9b96645a018f24aa3bc34989ae25f51bc229383b8ecde463c58ea42c7db99a10",
         "fc37a95c5c6fe09488f12d42fdfb966f",
-        "ffe271d9dcaab2afc72a67e550069c1529391db208b7c6fb52f58052508c8edb",
+        "c849e50b9189a682dcc1c3d4921796b132c498bfb5aa7a3dd553a50cf2ff5fab",
         "409213d61ad893b498262420b6489218",
         "d44cd845f6cf0294c8860d4014496e51",
         "57d2be1d9501c71479347db337265ef6",
@@ -503,8 +503,8 @@
             "schemaVersion": 8,
             "contractVersion": "importer-contract:5",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "23b62668970800dc6a725804d60c45867810894add3c3cc6d1ebed01ca46a9eb",
-            "repositoryInputDigest": "23b62668970800dc6a725804d60c45867810894add3c3cc6d1ebed01ca46a9eb",
+            "inputDigest": "6343b6cb087e5218ffd071263810d9c2e8a14546d4dc10110f9aa2355fe1af95",
+            "repositoryInputDigest": "6343b6cb087e5218ffd071263810d9c2e8a14546d4dc10110f9aa2355fe1af95",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "816dd05d30c9ca2a1cd5989d6ec370bfb48383d14483fa28f6150e564dd7afb8",
             "predecessorDigests": [],
@@ -830,10 +830,10 @@
             "schemaVersion": 8,
             "contractVersion": "material-prefab-contract:15;serialized:13",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "3f0d86535ea408f0a716614f248dd280ce9ab85355b8cae5925e886c2f2bd0c5",
-            "repositoryInputDigest": "54eaf3ae8346455e7011ab6548266cd17e3f1dcef820b5fc790e5c853c1ebbe5",
-            "dependencyDigest": "91fbfcfa28abbfeea3732c44a324e3fd44fa8c0e3b7c80491843fda7b1b1c326",
-            "outputDigest": "61dea52e33769677b1c179b09bfea8cf2e59297cda20ee960995f5921a1a9102",
+            "inputDigest": "7f5442c5bd6f1d1962a9af1f6f13f0ccda6c40d052e0ae9ceea3aa13cad025fc",
+            "repositoryInputDigest": "472eefd2c5de66a78dc8b2bc5b68b7c67a335f0cbe37ec47a160fe94cb36755d",
+            "dependencyDigest": "8d654d36e7cebb174283ad56d23cdd22dd7f48f7dfda65018aa5b34feb13e935",
+            "outputDigest": "6d552ccec06da0d04d9406f315f4927603d90a93b420f255e9e40ad15fafd43b",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1382,7 +1382,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "c89ea430d02b83486e72994e880c72ce28b616e304816b12fe15565786efa671",
+                    "digest": "6bb4a637fa86fc6a8d4d2d625cd6f22783a5a7020f02b783ead63823f4355bef",
                     "missing": false
                 },
                 {
@@ -1422,10 +1422,10 @@
             "schemaVersion": 8,
             "contractVersion": "gameplay-scene-contract:17;serialized:13",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "cf0c7b6c9e3bef2c2af690f858c327902067c5c5df5a438247bb030648752062",
+            "inputDigest": "a841cd384212f437188f6383517d582c8991b049bd4509c307bd263f07f30c30",
             "repositoryInputDigest": "7b6e337d476fa6deae62cd64ab684ff0206d67531f4dd7c1e68ffb1b6ea97c2c",
-            "dependencyDigest": "796d38058a9f20b894fbb9f84bd382fa20c1dbe5a771bf94fe0fa9bdd1acf257",
-            "outputDigest": "d03a75d44acc86b7b12e6d8372f3b876eab327bebca181d76c20c592e759a71e",
+            "dependencyDigest": "0f226afe05939e3135b7dd9b5fa13238c64da5f6e3207551da55c5576e34f50f",
+            "outputDigest": "aa6ce9c1f6489de3d13a8995c0493f46722d25f62b53ecf01b04aaacc1020dfe",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1434,7 +1434,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "7edffa646b48d26542526ae7a36b9dede2e51efff3b5609e81a3a79d86346777",
+                    "digest": "1364b961e94441782f302c2edfc5be0388b4464f2af565d12697c49e04d2fc5f",
                     "missing": false
                 },
                 {
@@ -1551,8 +1551,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:7",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "e022899602ef892ad54c7c5c6569f5d0a79b58a127f3e7eef8e62df9547ead70",
-            "repositoryInputDigest": "e022899602ef892ad54c7c5c6569f5d0a79b58a127f3e7eef8e62df9547ead70",
+            "inputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
+            "repositoryInputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14",
             "predecessorDigests": [],
@@ -1598,10 +1598,10 @@
             "schemaVersion": 8,
             "contractVersion": "baked-output-contract:8",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "a4ee34ba22770d44dcb0615b29952736361a4d4c3d55164158087ecdf910baaf",
-            "repositoryInputDigest": "283ee1102524adcc2ebfb94237049970b6afe74308760b12bb936af6cc83edd8",
+            "inputDigest": "32fff5503f6af7cc76769c8733d904a1012461ddd660dd49eb53a44e04877045",
+            "repositoryInputDigest": "6ee2be2160794f4e33625dab64d2760724e5b59a0eba16286e9031bee2ff3974",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "bf3591c5d239111261d17e8fefac7b215df131f5f5fca7c5819407e36a401971",
+            "outputDigest": "a3a93015f1ef50efc448dcd02517e62bf89aa28ef52cdb0a4001d763a45d9ca6",
             "predecessorDigests": [
                 "Lighting:b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14"
             ],
@@ -1612,7 +1612,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Lighting/MovementLabLightingManifest.json",
-                    "digest": "239138724ad814be539dd1cc78c28bdceff3faf29cae9810a21a2faaa7dbe30a",
+                    "digest": "9255f9059721d7e2ac0f232c321c7fbd9fb8253ef22a54b4e50d81191821adc4",
                     "missing": false
                 },
                 {
@@ -1632,7 +1632,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/LightingData.asset",
-                    "digest": "28607f730a540fbc0946b806642b0cf18dce888580e5d8a108855ff732b94e57",
+                    "digest": "16b2cac6559121a26ab257d41514f1dceaaaeaba40b576e2325a351e287c4269",
                     "missing": false
                 },
                 {
@@ -1642,7 +1642,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png",
-                    "digest": "9f2f43d4b2dc0eeb82fd7ea6aba08755b289ac6eb0c0a53a77a5d0fae5bb062a",
+                    "digest": "a4f25dda419241ceab45607a5f1b8cb9650c217dab2d2cc75152a7e2131cbbb4",
                     "missing": false
                 },
                 {
@@ -1652,7 +1652,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr",
-                    "digest": "7e112d447ebf35e4ab1710e1d94e9f3f89e8888d07394e6d922d7fde3df2a1be",
+                    "digest": "f36c339de4410a57ff68bdb30cb1cf55e9a67264f4899402c2dc085aaad37e57",
                     "missing": false
                 },
                 {
@@ -1662,7 +1662,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png",
-                    "digest": "928c3a74983dbb4a993dcf52e1f4aac6acd413759d239cf1ffb660271be4d898",
+                    "digest": "3c514be5ca3da67777da7d19efb59e9e4fe3e53c9847dad8ccbe70300720bdbc",
                     "missing": false
                 },
                 {
@@ -1672,7 +1672,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png",
-                    "digest": "0fc975b671057ddf0309b0c88a8b96c05a82d6730e271a548d9e1958291767ce",
+                    "digest": "10c6a65fb7a6c23398b45881558b0b0edad700cd28b90289fec9c9b3c618a97b",
                     "missing": false
                 },
                 {
@@ -1682,7 +1682,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr",
-                    "digest": "2b26c2063af30d0970eb130fc71ce369f1a3d4ccb52bb88ba3c3e2577f403ba0",
+                    "digest": "133971d7ae8f4c44bbecd5432bde655dd15052f3a2e2f236121a8a693db9b113",
                     "missing": false
                 },
                 {
@@ -1692,7 +1692,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png",
-                    "digest": "09dfe9dc01e6dffa3d3218cf961ee200d8b8826b6c1ec1da900780260bbf9861",
+                    "digest": "a84cc40f09fe30ffc21f11196fe8777a8d66ed468bd41dbd199e82d70804a5de",
                     "missing": false
                 },
                 {
@@ -1702,7 +1702,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png",
-                    "digest": "45f213f9c1223e2a778e0764b26c6b0104bc9dd242aeaebeaa91eb9534161b57",
+                    "digest": "74540f5962cee8349e8560564d6d20af7a48c64617a40ad44cf763b109214ce5",
                     "missing": false
                 },
                 {
@@ -1712,7 +1712,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr",
-                    "digest": "06932f982941f4cd6643e5dc0b95d95bd7439c707542bee775a2bf8f01f14a5d",
+                    "digest": "8d50b42d4e48da3340d4c212908fb6300397d0bf12a57ff97a13076e9752079f",
                     "missing": false
                 },
                 {
@@ -1722,7 +1722,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png",
-                    "digest": "eb8438fa9b16f333a0ba88aad1043cbf9a95f31eff110e80749aa709635554ad",
+                    "digest": "46d1fdae9d04bf18fe7b7a4e2ee522b2922a851b55af4c673809638026d6d21f",
                     "missing": false
                 },
                 {
@@ -1732,7 +1732,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png",
-                    "digest": "0513c7178a7aadebf156ea10debc320abf7c73d0b9b4956a127c970bdddd7b3c",
+                    "digest": "4021510ffbeb31c6a58d73614570902a11e72da6e796a2ae31a7c23a9a972e72",
                     "missing": false
                 },
                 {
@@ -1742,7 +1742,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr",
-                    "digest": "dbb4ca0235123f8c4454d95af832228aea423df73cf58d4bc68fcbe321e08db6",
+                    "digest": "a8586c20134ab09037733ebae90ed080683fa2d4fa350a2f7abc7d79f8c51f3b",
                     "missing": false
                 },
                 {
@@ -1752,7 +1752,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png",
-                    "digest": "d90dd5a024c82da91ea0a56cd21a5ccce25b707eaa4863e32df7013d2696edd0",
+                    "digest": "8490787fce1c1008394219bc1ef77c0d3ba660bb6875268dfa87eff2d943cb73",
                     "missing": false
                 },
                 {
@@ -1762,7 +1762,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png",
-                    "digest": "6b2a152842f6214baa3bac20fb2b6a32e4bb93a7cc3d41854766d42ad8902a66",
+                    "digest": "dc5e50993a66d9f3ae4ac660b9d962f0365928a2993cb89de1f10becc50091d4",
                     "missing": false
                 },
                 {
@@ -1772,7 +1772,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr",
-                    "digest": "6b73efa62caac3ed3e53bbd8092fff13a657f80a9df3ed65dae5fbd227bdd989",
+                    "digest": "e49d04a60f33beaf5eea3bccb6807cfe040f1f8e0401fc280185a745e37d7cb3",
                     "missing": false
                 },
                 {
@@ -1782,7 +1782,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png",
-                    "digest": "9f0081d9027f095993c4fdaf5b5b5d263f20d704144b783a9faf5b136166c81a",
+                    "digest": "b90d3fdc75c0f969d3cbf7162d8fcb7495b96659ec24032a95456af7b65a15be",
                     "missing": false
                 },
                 {
@@ -1792,7 +1792,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr",
-                    "digest": "e427e91bea7f553d9f4fb49aadab6450e8acc7b8438f7fbf6c5826709e26483e",
+                    "digest": "be0bf40075eaf5330da7b56556f5f96b5faa8fcea15fc057b880970246e04106",
                     "missing": false
                 },
                 {
@@ -1802,7 +1802,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr",
-                    "digest": "81e05e31805e2f930de5f7ced8aee434e77a571c1b72d0f58e20ca64131b8f6e",
+                    "digest": "9b96645a018f24aa3bc34989ae25f51bc229383b8ecde463c58ea42c7db99a10",
                     "missing": false
                 },
                 {
@@ -1812,7 +1812,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr",
-                    "digest": "ffe271d9dcaab2afc72a67e550069c1529391db208b7c6fb52f58052508c8edb",
+                    "digest": "c849e50b9189a682dcc1c3d4921796b132c498bfb5aa7a3dd553a50cf2ff5fab",
                     "missing": false
                 },
                 {
