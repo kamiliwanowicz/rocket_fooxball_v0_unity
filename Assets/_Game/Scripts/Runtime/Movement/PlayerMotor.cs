@@ -1,11 +1,40 @@
 using System;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Physics;
 
 namespace RocketFooxball.Runtime.Movement
 {
+    /// <summary>Immutable collision snapshot emitted after player velocity resolution.</summary>
+    public readonly struct PlayerCollisionResolution
+    {
+        public PlayerCollisionResolution(
+            ControllerColliderHit hit,
+            Vector3 incomingPlayerVelocity,
+            Vector3 resolvedPlayerVelocity,
+            Vector3 attachedBodyVelocity,
+            bool wasDashing)
+        {
+            Hit = hit;
+            IncomingPlayerVelocity = incomingPlayerVelocity;
+            ResolvedPlayerVelocity = resolvedPlayerVelocity;
+            AttachedBodyVelocity = attachedBodyVelocity;
+            WasDashing = wasDashing;
+        }
+
+        public ControllerColliderHit Hit { get; }
+        public Vector3 IncomingPlayerVelocity { get; }
+        public Vector3 ResolvedPlayerVelocity { get; }
+        public Vector3 AttachedBodyVelocity { get; }
+        public bool WasDashing { get; }
+
+        public Vector3 IncomingVelocity => IncomingPlayerVelocity;
+        public Vector3 ResolvedVelocity => ResolvedPlayerVelocity;
+        public Vector3 BodyVelocity => AttachedBodyVelocity;
+    }
+
     public enum DashEndReason
     {
         Duration,
@@ -78,6 +107,9 @@ namespace RocketFooxball.Runtime.Movement
 
         /// <summary>Raised during CharacterController collision dispatch with actual contact data.</summary>
         public event Action<ControllerColliderHit> CollisionHit;
+
+        /// <summary>Raised after a dynamic non-kinematic collision resolves player velocity.</summary>
+        public event Action<PlayerCollisionResolution> DynamicCollisionResolved;
 
         public Vector3 Velocity => velocity;
         public Vector2 CurrentEffectiveMoveIntent => currentEffectiveMoveIntent;
@@ -211,21 +243,69 @@ namespace RocketFooxball.Runtime.Movement
                 return;
             }
 
-            var walkable = controller != null && MovementMath.IsWalkableNormal(hit.normal, controller.slopeLimit);
-            if (walkable)
+            var incomingVelocity = velocity;
+            var attachedBody = hit.collider != null ? hit.collider.attachedRigidbody : null;
+            var dynamicBody = attachedBody != null && !attachedBody.isKinematic;
+            var wasDashing = dashActive;
+            if (dynamicBody)
             {
-                if (!groundContactThisStep || hit.normal.y > groundNormalThisStep.y)
+                var attachedBodyVelocity = attachedBody.linearVelocity;
+                var resolvedVelocity = BallMotionRules.ResolvePlayerCollision(
+                    incomingVelocity,
+                    hit.normal,
+                    attachedBodyVelocity,
+                    true,
+                    GamePhysicsSettings.PlayerCollisionTransferFraction);
+                if (wasDashing)
                 {
-                    groundNormalThisStep = hit.normal.normalized;
+                    dashContribution = BallMotionRules.ResolveDashContributionAfterCollision(
+                        incomingVelocity,
+                        dashContribution,
+                        hit.normal,
+                        attachedBodyVelocity,
+                        true,
+                        GamePhysicsSettings.PlayerCollisionTransferFraction);
                 }
-                groundContactThisStep = true;
+
+                velocity = resolvedVelocity;
+                DynamicCollisionResolved?.Invoke(new PlayerCollisionResolution(
+                    hit,
+                    incomingVelocity,
+                    resolvedVelocity,
+                    attachedBodyVelocity,
+                    wasDashing));
             }
             else
             {
-                var intoSurface = Vector3.Dot(velocity, hit.normal);
-                if (intoSurface < 0f)
+                var walkable = controller != null && MovementMath.IsWalkableNormal(hit.normal, controller.slopeLimit);
+                if (walkable)
                 {
-                    velocity -= hit.normal * intoSurface;
+                    if (!groundContactThisStep || hit.normal.y > groundNormalThisStep.y)
+                    {
+                        groundNormalThisStep = hit.normal.normalized;
+                    }
+                    groundContactThisStep = true;
+                }
+                else
+                {
+                    var resolvedVelocity = BallMotionRules.ResolvePlayerCollision(
+                        incomingVelocity,
+                        hit.normal,
+                        Vector3.zero,
+                        false,
+                        GamePhysicsSettings.PlayerCollisionTransferFraction);
+                    if (wasDashing)
+                    {
+                        dashContribution = BallMotionRules.ResolveDashContributionAfterCollision(
+                            incomingVelocity,
+                            dashContribution,
+                            hit.normal,
+                            Vector3.zero,
+                            false,
+                            GamePhysicsSettings.PlayerCollisionTransferFraction);
+                    }
+
+                    velocity = resolvedVelocity;
                 }
             }
 
