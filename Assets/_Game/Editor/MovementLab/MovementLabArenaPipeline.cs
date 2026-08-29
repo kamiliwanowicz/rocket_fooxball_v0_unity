@@ -571,60 +571,44 @@ namespace RocketFooxball.Editor
 
         private static void ValidateRampPrismMesh(Mesh mesh)
         {
-            if (mesh == null || mesh.name != "ArenaRampPrismMesh" || mesh.vertexCount != 6 || mesh.triangles.Length != 24 ||
-                mesh.uv == null || mesh.uv.Length != 6 || mesh.uv2 == null || mesh.uv2.Length != 6)
-                throw new InvalidOperationException("Ramp prism mesh channel contract invalid.");
-            var height = MovementLabContract.ArenaRampHeight;
-            var vertices = new[]
-            {
-                new Vector3(-10f, 0f, -9f),
-                new Vector3(-10f, height, -9f),
-                new Vector3(10f, 0f, -9f),
-                new Vector3(-10f, 0f, 9f),
-                new Vector3(-10f, height, 9f),
-                new Vector3(10f, 0f, 9f)
-            };
-            var triangles = new[]
-            {
-                0, 1, 2,
-                3, 5, 4,
-                0, 2, 5,
-                0, 5, 3,
-                0, 3, 4,
-                0, 4, 1,
-                1, 4, 5,
-                1, 5, 2
-            };
-            var meshVertices = mesh.vertices;
-            var meshUv = mesh.uv;
-            var meshTriangles = mesh.triangles;
-            for (var i = 0; i < vertices.Length; i++)
-            {
-                if (Vector3.Distance(meshVertices[i], vertices[i]) > TransformTolerance)
-                    throw new InvalidOperationException("Ramp prism vertex mismatch: " + i);
-                var uv = new Vector2(vertices[i].x / MovementLabContract.ArenaRampLength + 0.5f,
-                    vertices[i].z / MovementLabContract.ArenaRampWidth + 0.5f);
-                if (Vector2.Distance(meshUv[i], uv) > TransformTolerance)
-                    throw new InvalidOperationException("Ramp prism UV0 mismatch: " + i);
-            }
-            for (var i = 0; i < triangles.Length; i++)
-                if (meshTriangles[i] != triangles[i])
-                    throw new InvalidOperationException("Ramp prism triangle winding mismatch: " + i);
-            var expectedBounds = new Bounds(new Vector3(0f, height * 0.5f, 0f),
-                new Vector3(MovementLabContract.ArenaRampLength, height, MovementLabContract.ArenaRampWidth));
-            if (Vector3.Distance(mesh.bounds.min, expectedBounds.min) > TransformTolerance ||
-                Vector3.Distance(mesh.bounds.max, expectedBounds.max) > TransformTolerance)
-                throw new InvalidOperationException("Ramp prism bounds contract invalid.");
-
             Mesh canonicalMesh = null;
             try
             {
                 canonicalMesh = CreateRampPrismMesh();
-                var expectedUv2 = canonicalMesh.uv2;
-                var meshUv2 = mesh.uv2;
-                for (var i = 0; i < expectedUv2.Length; i++)
-                    if (Vector2.Distance(meshUv2[i], expectedUv2[i]) > TransformTolerance)
+                var canonicalVertices = canonicalMesh.vertices;
+                var canonicalUv = canonicalMesh.uv;
+                var canonicalTriangles = canonicalMesh.triangles;
+                var canonicalUv2 = canonicalMesh.uv2;
+                var meshVertices = mesh == null ? null : mesh.vertices;
+                var meshUv = mesh == null ? null : mesh.uv;
+                var meshTriangles = mesh == null ? null : mesh.triangles;
+                var meshUv2 = mesh == null ? null : mesh.uv2;
+                if (mesh == null || mesh.name != canonicalMesh.name || mesh.vertexCount != canonicalMesh.vertexCount ||
+                    meshVertices == null || canonicalVertices == null || meshVertices.Length != canonicalVertices.Length ||
+                    meshTriangles == null || canonicalTriangles == null || meshTriangles.Length != canonicalTriangles.Length ||
+                    meshUv == null || canonicalUv == null || meshUv.Length != canonicalUv.Length ||
+                    meshUv2 == null || canonicalUv2 == null || meshUv2.Length != canonicalUv2.Length)
+                    throw new InvalidOperationException("Ramp prism mesh channel contract invalid.");
+
+                for (var i = 0; i < canonicalVertices.Length; i++)
+                    if (Vector3.Distance(meshVertices[i], canonicalVertices[i]) > TransformTolerance)
+                        throw new InvalidOperationException("Ramp prism vertex mismatch: " + i);
+                for (var i = 0; i < canonicalUv.Length; i++)
+                    if (Vector2.Distance(meshUv[i], canonicalUv[i]) > TransformTolerance)
+                        throw new InvalidOperationException("Ramp prism UV0 mismatch: " + i);
+                for (var i = 0; i < canonicalTriangles.Length; i++)
+                    if (meshTriangles[i] != canonicalTriangles[i])
+                        throw new InvalidOperationException("Ramp prism triangle winding mismatch: " + i);
+                for (var i = 0; i < canonicalUv2.Length; i++)
+                    if (Vector2.Distance(meshUv2[i], canonicalUv2[i]) > TransformTolerance)
                         throw new InvalidOperationException("Ramp prism UV2 mismatch: " + i);
+
+                var height = MovementLabContract.ArenaRampHeight;
+                var expectedBounds = new Bounds(new Vector3(0f, height * 0.5f, 0f),
+                    new Vector3(MovementLabContract.ArenaRampLength, height, MovementLabContract.ArenaRampWidth));
+                if (Vector3.Distance(mesh.bounds.min, expectedBounds.min) > TransformTolerance ||
+                    Vector3.Distance(mesh.bounds.max, expectedBounds.max) > TransformTolerance)
+                    throw new InvalidOperationException("Ramp prism bounds contract invalid.");
             }
             finally
             {
