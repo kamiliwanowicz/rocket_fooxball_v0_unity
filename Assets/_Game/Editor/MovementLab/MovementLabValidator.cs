@@ -2069,8 +2069,8 @@ namespace RocketFooxball.Editor
                 pelletMain.loop || pelletMain.playOnAwake ||
                 Mathf.Abs(pelletMain.duration - MovementLabContractCatalog.WeaponImpactTracerSystemDuration) > 0.001f ||
                 pelletMain.simulationSpace != ParticleSystemSimulationSpace.World || pelletMain.useUnscaledTime ||
-                Mathf.Abs(pelletMain.startLifetime.constantMin - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
-                Mathf.Abs(pelletMain.startLifetime.constantMax - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
+                pelletMain.startLifetime.mode != ParticleSystemCurveMode.Constant ||
+                Mathf.Abs(pelletMain.startLifetime.constant - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
                 Mathf.Abs(pelletMain.startSize.constantMax - 0.06f) > 0.001f ||
                 Mathf.Abs(pelletMain.startSpeed.constantMax - MovementLabContractCatalog.WeaponImpactTracerSpeed) > 0.001f ||
                 pelletMain.maxParticles != MovementLabContractCatalog.ShotgunPelletMaxParticles ||
@@ -2096,8 +2096,8 @@ namespace RocketFooxball.Editor
                 markMain.loop || markMain.playOnAwake ||
                 Mathf.Abs(markMain.duration - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
                 markMain.simulationSpace != ParticleSystemSimulationSpace.World || markMain.useUnscaledTime ||
-                Mathf.Abs(markMain.startLifetime.constantMin - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
-                Mathf.Abs(markMain.startLifetime.constantMax - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
+                markMain.startLifetime.mode != ParticleSystemCurveMode.Constant ||
+                Mathf.Abs(markMain.startLifetime.constant - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
                 Mathf.Abs(markMain.startSize.constantMax - MovementLabContractCatalog.ShotgunImpactMarkSize) > 0.001f ||
                 Mathf.Abs(markMain.startSpeed.constantMax) > 0.001f ||
                 markMain.maxParticles != MovementLabContractCatalog.WeaponImpactMarkMaxParticles ||
