@@ -23,8 +23,8 @@ namespace RocketFooxball.Editor
         internal const string BlueCoordinatorName = "BlueRoleCoordinator";
         internal const string RedCoordinatorName = "RedRoleCoordinator";
 
-        private const int NodeCount = 34;
-        private const int EdgeCount = 98;
+        private const int NodeCount = 35;
+        private const int EdgeCount = 102;
         private const float WalkWidth = 3f;
         private const float RampWidth = 6f;
         private const float DropWidth = 2f;
@@ -286,9 +286,9 @@ namespace RocketFooxball.Editor
             if (roster == null || roster.Length != 6 || roster.Any(item => item == null) ||
                 roster.Select(item => item.SlotId).Distinct().Count() != 6)
                 throw new InvalidOperationException("Bot composition requires an exact six-participant roster.");
-            if (match == null || ball == null || pickups == null || pickups.Length != 5 || pickups.Any(item => item == null) ||
+            if (match == null || ball == null || pickups == null || pickups.Length != 6 || pickups.Any(item => item == null) ||
                 redDefendedGoal == null || blueDefendedGoal == null || redShield == null || blueShield == null)
-                throw new InvalidOperationException("Bot composition requires match, ball, five pickups, both goals, and both shields.");
+                throw new InvalidOperationException("Bot composition requires match, ball, six pickups, both goals, and both shields.");
         }
 
         private static BotNavigationNodeRecord[] BuildNodes(Transform rampWest, Transform rampEast)
@@ -321,6 +321,7 @@ namespace RocketFooxball.Editor
             nodes.Add(new BotNavigationNodeRecord(31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
             nodes.Add(new BotNavigationNodeRecord(32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
+            nodes.Add(new BotNavigationNodeRecord(34, new Vector3(0f, 0f, -14f), BotNavigationArea.Floor, 2f));
             return nodes.ToArray();
         }
 
@@ -361,7 +362,9 @@ namespace RocketFooxball.Editor
             AddPair(edges, ref edgeId, nodes, 30, 31, BotNavigationTraversal.ShieldGate, ShieldWidth, redShield);
             AddPair(edges, ref edgeId, nodes, 13, 32, BotNavigationTraversal.Walk, WalkWidth, null);
             AddPair(edges, ref edgeId, nodes, 32, 33, BotNavigationTraversal.ShieldGate, ShieldWidth, blueShield);
-            if (edges.Count != EdgeCount) throw new InvalidOperationException("Bot navigation edge catalog must contain exactly 98 edges.");
+            AddPair(edges, ref edgeId, nodes, 6, 34, BotNavigationTraversal.Walk, WalkWidth, null);
+            AddPair(edges, ref edgeId, nodes, 7, 34, BotNavigationTraversal.Walk, WalkWidth, null);
+            if (edges.Count != EdgeCount) throw new InvalidOperationException("Bot navigation edge catalog must contain exactly 102 edges.");
             return edges.ToArray();
         }
 
@@ -465,7 +468,7 @@ namespace RocketFooxball.Editor
 
         private static void ValidateGraphGeometry(BotNavigationGraph graph, Transform rampWest, Transform rampEast, Collider redShield, Collider blueShield)
         {
-            if (graph.NodeCount != NodeCount || graph.EdgeCount != EdgeCount) throw new InvalidOperationException("Bot graph must contain nodes 0..33 and edges 0..97.");
+            if (graph.NodeCount != NodeCount || graph.EdgeCount != EdgeCount) throw new InvalidOperationException("Bot graph must contain nodes 0..34 and edges 0..101.");
             for (var column = 0; column < LaneXs.Length; column++)
                 for (var z = 0; z < LaneZs.Length; z++)
                     ValidateNode(graph.GetNode(column * 3 + z), column * 3 + z, new Vector3(LaneXs[column], 0f, LaneZs[z]), BotNavigationArea.Floor, 4f);
@@ -488,6 +491,7 @@ namespace RocketFooxball.Editor
             ValidateNode(graph.GetNode(31), 31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius);
             ValidateNode(graph.GetNode(32), 32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(33), 33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius);
+            ValidateNode(graph.GetNode(34), 34, new Vector3(0f, 0f, -14f), BotNavigationArea.Floor, 2f);
             if (graph.ArenaBounds == null || graph.ArenaBounds.Center != BotNavigationGraph.ExpectedArenaCenter ||
                 Mathf.Abs(graph.ArenaBounds.HalfLength - BotNavigationGraph.ExpectedArenaHalfLength) > 0.001f ||
                 Mathf.Abs(graph.ArenaBounds.HalfWidth - BotNavigationGraph.ExpectedArenaHalfWidth) > 0.001f)
