@@ -59,10 +59,12 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < MovementLabContract.PrimaryCollisionGeometry.Length; i++)
             {
                 var geometry = MovementLabContract.PrimaryCollisionGeometry[i];
-                var usesGrass = geometry.Name == "Floor" || geometry.Name == "RampWest" || geometry.Name == "RampEast";
+                var usesGrass = geometry.Name == "Floor";
                 CreateSolid(geometry.Name, arena.transform, geometry.Position, geometry.Scale,
                     usesGrass ? floorMaterial : wallMaterial, ballSurface, geometry.Rotation);
             }
+
+            BuildRamps(arena.transform, floorMaterial, ballSurface);
 
             BuildMarkings(arena.transform, markingMaterial);
             var north = BuildGoal("NorthGoal", GoalTrigger.GoalSide.North,
@@ -82,8 +84,12 @@ namespace RocketFooxball.Editor
             CreateContainment("WestContainment", containment, new Vector3(-64.5f, 28f, 0f), new Vector3(1f, 42f, 90f), ballSurface);
             CreateContainment("NorthContainment", containment, new Vector3(0f, 28f, -44.5f), new Vector3(130f, 42f, 1f), ballSurface);
             CreateContainment("SouthContainment", containment, new Vector3(0f, 28f, 44.5f), new Vector3(130f, 42f, 1f), ballSurface);
-            CreateContainment("WestGoalOpeningContainment", containment, new Vector3(-67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
-            CreateContainment("EastGoalOpeningContainment", containment, new Vector3(67f, 3.5f, 0f), new Vector3(1f, 8f, 38f), ballSurface);
+            CreateContainment("WestGoalOpeningContainment", containment,
+                new Vector3(-67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth), ballSurface);
+            CreateContainment("EastGoalOpeningContainment", containment,
+                new Vector3(67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth), ballSurface);
 
             BuildArenaArchitecture(arena.transform, arenaPrimaryMaterial, arenaTrimMaterial, arenaHazardMaterial, arenaGlowMaterial, teamBlueMaterial);
             return new ArenaBuild
@@ -93,6 +99,62 @@ namespace RocketFooxball.Editor
                 SouthGoal = south,
                 Shields = new[] { north.Shield, south.Shield }
             };
+        }
+
+        private static void BuildRamps(Transform arenaRoot, Material floorMaterial, PhysicsMaterial ballSurface)
+        {
+            var mesh = CreateRampPrismMesh();
+            var specifications = MovementLabContract.ArenaRampSpecifications;
+            for (var i = 0; i < specifications.Length; i++)
+            {
+                var specification = specifications[i];
+                var ramp = new GameObject(specification.Name);
+                ramp.transform.SetParent(arenaRoot, false);
+                ramp.transform.localPosition = specification.Center;
+                ramp.transform.localRotation = specification.Rotation;
+                ramp.transform.localScale = Vector3.one;
+                ramp.AddComponent<MeshFilter>().sharedMesh = mesh;
+                ramp.AddComponent<MeshRenderer>().sharedMaterial = floorMaterial;
+                ramp.AddComponent<MeshCollider>().sharedMesh = mesh;
+                ramp.GetComponent<MeshCollider>().sharedMaterial = ballSurface;
+                ramp.isStatic = true;
+            }
+        }
+
+        private static Mesh CreateRampPrismMesh()
+        {
+            var mesh = new Mesh { name = "ArenaRampPrismMesh" };
+            var height = MovementLabContract.ArenaRampHeight;
+            var vertices = new[]
+            {
+                new Vector3(-10f, 0f, -9f),
+                new Vector3(-10f, height, -9f),
+                new Vector3(10f, 0f, -9f),
+                new Vector3(-10f, 0f, 9f),
+                new Vector3(-10f, height, 9f),
+                new Vector3(10f, 0f, 9f)
+            };
+            var uvs = new Vector2[vertices.Length];
+            for (var i = 0; i < vertices.Length; i++)
+                uvs[i] = new Vector2(vertices[i].x / MovementLabContract.ArenaRampLength + 0.5f,
+                    vertices[i].z / MovementLabContract.ArenaRampWidth + 0.5f);
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = new[]
+            {
+                0, 1, 2,
+                3, 5, 4,
+                0, 2, 5,
+                0, 5, 3,
+                0, 3, 4,
+                0, 4, 1,
+                1, 4, 5,
+                1, 5, 2
+            };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            Unwrapping.GenerateSecondaryUVSet(mesh);
+            return mesh;
         }
 
         private static void BuildMarkings(Transform arenaRoot, Material markingMaterial)
@@ -191,41 +253,62 @@ namespace RocketFooxball.Editor
             var triggerCollider = root.AddComponent<BoxCollider>();
             var trigger = root.AddComponent<GoalTrigger>();
             triggerCollider.isTrigger = true;
-            triggerCollider.center = new Vector3(0f, 3.5f, 0f);
-            triggerCollider.size = new Vector3(36f, 7f, 0.5f);
+            triggerCollider.center = new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, 0f);
+            triggerCollider.size = new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 0.5f);
             SetEnum(trigger, "goalSide", side == GoalTrigger.GoalSide.North ? "North" : "South");
             SetVector3(trigger, "planeNormal", Vector3.right);
-            SetFloat(trigger, "openingHalfWidth", 18f);
+            SetFloat(trigger, "openingHalfWidth", MovementLabContract.ArenaGoalOpeningHalfWidth);
             SetFloat(trigger, "openingMinHeight", 0f);
-            SetFloat(trigger, "openingMaxHeight", 7f);
+            SetFloat(trigger, "openingMaxHeight", MovementLabContract.ArenaGoalOpeningHeight);
             SetFloat(trigger, "rearmDistance", 0.5f);
             SetObjectReference(trigger, "planeReference", root.transform);
             SetObjectReference(trigger, "openingTrigger", triggerCollider);
 
             var shield = new GameObject("ShieldCollider");
             shield.transform.SetParent(root.transform, false);
-            shield.transform.localPosition = new Vector3(0f, 3.5f, 0f);
+            shield.transform.localPosition = new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, 0f);
             var shieldCollider = shield.AddComponent<BoxCollider>();
-            shieldCollider.size = new Vector3(36f, 7f, 0.4f);
+            shieldCollider.size = new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 0.4f);
             shieldCollider.sharedMaterial = ballSurface;
             var shieldVisual = GameObject.CreatePrimitive(PrimitiveType.Quad);
             shieldVisual.name = "ShieldVisual";
             shieldVisual.transform.SetParent(root.transform, false);
-            shieldVisual.transform.localPosition = new Vector3(0f, 3.5f, -0.22f);
-            shieldVisual.transform.localScale = new Vector3(36f, 7f, 1f);
+            shieldVisual.transform.localPosition = new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, -0.22f);
+            shieldVisual.transform.localScale = new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 1f);
             UnityEngine.Object.DestroyImmediate(shieldVisual.GetComponent<Collider>());
             shieldVisual.GetComponent<Renderer>().sharedMaterial = shieldMaterial;
             var cue = MovementLabPrefabPipeline.CreateShapeCue(side == GoalTrigger.GoalSide.North ? "RedTriangleCue" : "BlueCircleCue",
-                side == GoalTrigger.GoalSide.North, teamMaterial != null ? teamMaterial : shieldMaterial, new Vector3(0f, 3.5f, -0.28f));
+                side == GoalTrigger.GoalSide.North, teamMaterial != null ? teamMaterial : shieldMaterial,
+                new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, -0.28f));
             cue.transform.SetParent(root.transform, false);
             cue.transform.localScale = new Vector3(3.5f, 3.5f, 1f);
-            CreateColliderSolid("FrameWest", root.transform, new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), ballSurface);
-            CreateColliderSolid("FrameEast", root.transform, new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), ballSurface);
-            CreateColliderSolid("FrameTop", root.transform, new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), ballSurface);
-            CreateColliderSolid("RecessWest", root.transform, new Vector3(-18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), ballSurface);
-            CreateColliderSolid("RecessEast", root.transform, new Vector3(18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), ballSurface);
-            CreateColliderSolid("RecessFloor", root.transform, new Vector3(0f, -0.25f, 4.5f), new Vector3(37f, 0.5f, 9f), ballSurface);
-            CreateColliderSolid("RecessBack", root.transform, new Vector3(0f, 3.5f, 9f), new Vector3(37f, 7f, 1f), ballSurface);
+            CreateColliderSolid("FrameWest", root.transform,
+                new Vector3(-MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            CreateColliderSolid("FrameEast", root.transform,
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            CreateColliderSolid("FrameTop", root.transform,
+                new Vector3(0f, MovementLabContract.ArenaGoalOpeningLintelCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningWidth + MovementLabContract.ArenaGoalOpeningFrameThickness * 2f,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            CreateColliderSolid("RecessWest", root.transform,
+                new Vector3(-MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY,
+                    MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            CreateColliderSolid("RecessEast", root.transform,
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY,
+                    MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            CreateColliderSolid("RecessFloor", root.transform, new Vector3(0f, -0.25f, MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalRecessBackWidth, 0.5f, MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            CreateColliderSolid("RecessBack", root.transform,
+                new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, MovementLabContract.ArenaGoalRecessBackCenterZ),
+                new Vector3(MovementLabContract.ArenaGoalRecessBackWidth, MovementLabContract.ArenaGoalOpeningHeight, 1f), ballSurface);
             return new GoalBuild { Root = root, Trigger = trigger, Shield = shieldCollider, TeamCue = cue };
         }
 
@@ -376,9 +459,16 @@ namespace RocketFooxball.Editor
             {
                 var specification = MovementLabContract.PrimaryCollisionGeometry[i];
                 var renderer = Require(arena.transform.Find(specification.Name)?.GetComponent<MeshRenderer>(), specification.Name + " renderer");
-                var grass = specification.Name == "Floor" || specification.Name == "RampWest" || specification.Name == "RampEast";
+                var grass = specification.Name == "Floor";
                 if (renderer.sharedMaterial != (grass ? floor : wall))
                     throw new InvalidOperationException("Arena gameplay surface material routing mismatch: " + specification.Name);
+            }
+            var rampSpecifications = MovementLabContract.ArenaRampSpecifications;
+            for (var i = 0; i < rampSpecifications.Length; i++)
+            {
+                var renderer = Require(arena.transform.Find(rampSpecifications[i].Name)?.GetComponent<MeshRenderer>(), rampSpecifications[i].Name + " renderer");
+                if (renderer.sharedMaterial != floor)
+                    throw new InvalidOperationException("Arena gameplay surface material routing mismatch: " + rampSpecifications[i].Name);
             }
             var colliders = arena.GetComponentsInChildren<Collider>(true);
             for (var i = 0; i < colliders.Length; i++)
@@ -401,8 +491,20 @@ namespace RocketFooxball.Editor
         internal static void ValidateContainment(Transform containment, PhysicsMaterial ballSurface)
         {
             var names = new[] { "FloorContainment", "CeilingContainment", "NorthContainment", "SouthContainment", "WestContainment", "EastContainment", "WestGoalOpeningContainment", "EastGoalOpeningContainment" };
-            var positions = new[] { new Vector3(0f, -4f, 0f), new Vector3(0f, 48.5f, 0f), new Vector3(0f, 28f, -44.5f), new Vector3(0f, 28f, 44.5f), new Vector3(-64.5f, 28f, 0f), new Vector3(64.5f, 28f, 0f), new Vector3(-67f, 3.5f, 0f), new Vector3(67f, 3.5f, 0f) };
-            var sizes = new[] { new Vector3(140f, 1f, 120f), new Vector3(130f, 1f, 90f), new Vector3(130f, 42f, 1f), new Vector3(130f, 42f, 1f), new Vector3(1f, 42f, 90f), new Vector3(1f, 42f, 90f), new Vector3(1f, 8f, 38f), new Vector3(1f, 8f, 38f) };
+            var positions = new[]
+            {
+                new Vector3(0f, -4f, 0f), new Vector3(0f, 48.5f, 0f), new Vector3(0f, 28f, -44.5f), new Vector3(0f, 28f, 44.5f),
+                new Vector3(-64.5f, 28f, 0f), new Vector3(64.5f, 28f, 0f),
+                new Vector3(-67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f)
+            };
+            var sizes = new[]
+            {
+                new Vector3(140f, 1f, 120f), new Vector3(130f, 1f, 90f), new Vector3(130f, 42f, 1f), new Vector3(130f, 42f, 1f),
+                new Vector3(1f, 42f, 90f), new Vector3(1f, 42f, 90f),
+                new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth),
+                new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth)
+            };
             if (containment == null || containment.childCount != names.Length || containment.GetComponents<Component>().Length != 1 ||
                 containment.GetComponent<Renderer>() != null || containment.GetComponent<Rigidbody>() != null || containment.GetComponents<MonoBehaviour>().Length != 0)
                 throw new InvalidOperationException("Containment root contract invalid.");
@@ -438,6 +540,81 @@ namespace RocketFooxball.Editor
                     item.GetComponent<Rigidbody>() != null || item.GetComponents<Collider>().Length != 1)
                     throw new InvalidOperationException("Primary collision geometry contract invalid: " + specification.Name);
             }
+            ValidateRampGeometry(arena, ballSurface);
+        }
+
+        private static void ValidateRampGeometry(GameObject arena, PhysicsMaterial ballSurface)
+        {
+            var specifications = MovementLabContract.ArenaRampSpecifications;
+            Mesh sharedMesh = null;
+            for (var i = 0; i < specifications.Length; i++)
+            {
+                var specification = specifications[i];
+                var item = Require(arena.transform.Find(specification.Name), specification.Name);
+                var filter = Require(item.GetComponent<MeshFilter>(), specification.Name + " MeshFilter");
+                var renderer = Require(item.GetComponent<MeshRenderer>(), specification.Name + " MeshRenderer");
+                var collider = Require(item.GetComponent<MeshCollider>(), specification.Name + " MeshCollider");
+                if (Vector3.Distance(item.localPosition, specification.Center) > TransformTolerance ||
+                    Quaternion.Angle(item.localRotation, specification.Rotation) > RotationTolerance ||
+                    Vector3.Distance(item.localScale, Vector3.one) > TransformTolerance || !item.gameObject.isStatic ||
+                    !item.gameObject.activeSelf || renderer.sharedMaterial == null || filter.sharedMesh == null ||
+                    collider.sharedMaterial != ballSurface || collider.sharedMesh != filter.sharedMesh ||
+                    item.GetComponents<Component>().Length != 4 || item.GetComponents<Collider>().Length != 1 ||
+                    item.GetComponent<Rigidbody>() != null)
+                    throw new InvalidOperationException("Ramp geometry contract invalid: " + specification.Name);
+                if (sharedMesh == null) sharedMesh = filter.sharedMesh;
+                else if (sharedMesh != filter.sharedMesh)
+                    throw new InvalidOperationException("Ramp geometry must share one canonical mesh.");
+            }
+            ValidateRampPrismMesh(sharedMesh);
+        }
+
+        private static void ValidateRampPrismMesh(Mesh mesh)
+        {
+            if (mesh == null || mesh.name != "ArenaRampPrismMesh" || mesh.vertexCount != 6 || mesh.triangles.Length != 24 ||
+                mesh.uv == null || mesh.uv.Length != 6 || mesh.uv2 == null || mesh.uv2.Length != 6)
+                throw new InvalidOperationException("Ramp prism mesh channel contract invalid.");
+            var height = MovementLabContract.ArenaRampHeight;
+            var vertices = new[]
+            {
+                new Vector3(-10f, 0f, -9f),
+                new Vector3(-10f, height, -9f),
+                new Vector3(10f, 0f, -9f),
+                new Vector3(-10f, 0f, 9f),
+                new Vector3(-10f, height, 9f),
+                new Vector3(10f, 0f, 9f)
+            };
+            var triangles = new[]
+            {
+                0, 1, 2,
+                3, 5, 4,
+                0, 2, 5,
+                0, 5, 3,
+                0, 3, 4,
+                0, 4, 1,
+                1, 4, 5,
+                1, 5, 2
+            };
+            var meshVertices = mesh.vertices;
+            var meshUv = mesh.uv;
+            var meshTriangles = mesh.triangles;
+            for (var i = 0; i < vertices.Length; i++)
+            {
+                if (Vector3.Distance(meshVertices[i], vertices[i]) > TransformTolerance)
+                    throw new InvalidOperationException("Ramp prism vertex mismatch: " + i);
+                var uv = new Vector2(vertices[i].x / MovementLabContract.ArenaRampLength + 0.5f,
+                    vertices[i].z / MovementLabContract.ArenaRampWidth + 0.5f);
+                if (Vector2.Distance(meshUv[i], uv) > TransformTolerance)
+                    throw new InvalidOperationException("Ramp prism UV0 mismatch: " + i);
+            }
+            for (var i = 0; i < triangles.Length; i++)
+                if (meshTriangles[i] != triangles[i])
+                    throw new InvalidOperationException("Ramp prism triangle winding mismatch: " + i);
+            var expectedBounds = new Bounds(Vector3.zero, new Vector3(MovementLabContract.ArenaRampLength,
+                MovementLabContract.ArenaRampHeight, MovementLabContract.ArenaRampWidth));
+            if (Vector3.Distance(mesh.bounds.min, expectedBounds.min) > TransformTolerance ||
+                Vector3.Distance(mesh.bounds.max, expectedBounds.max) > TransformTolerance)
+                throw new InvalidOperationException("Ramp prism bounds contract invalid.");
         }
 
         private static void ValidateMarkings(GameObject arena, Material material)
@@ -633,30 +810,53 @@ namespace RocketFooxball.Editor
             var opening = Require(root.GetComponent<BoxCollider>(), name + " opening BoxCollider");
             if (!root.gameObject.activeInHierarchy || !trigger.enabled || !opening.enabled || !opening.isTrigger ||
                 Vector3.Distance(root.localPosition, position) > TransformTolerance || Quaternion.Angle(root.localRotation, rotation) > RotationTolerance ||
-                Vector3.Distance(root.localScale, Vector3.one) > TransformTolerance || Vector3.Distance(opening.center, new Vector3(0f, 3.5f, 0f)) > TransformTolerance ||
-                Vector3.Distance(opening.size, new Vector3(36f, 7f, 0.5f)) > TransformTolerance || trigger.Side != side || trigger.DefendingTeam != defendingTeam)
+                Vector3.Distance(root.localScale, Vector3.one) > TransformTolerance ||
+                Vector3.Distance(opening.center, new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, 0f)) > TransformTolerance ||
+                Vector3.Distance(opening.size, new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 0.5f)) > TransformTolerance ||
+                trigger.Side != side || trigger.DefendingTeam != defendingTeam)
                 throw new InvalidOperationException(name + " root/trigger/opening contract invalid.");
             var serialized = new SerializedObject(trigger);
             if (serialized.FindProperty("ball")?.objectReferenceValue == null || serialized.FindProperty("planeReference")?.objectReferenceValue != root ||
                 serialized.FindProperty("openingTrigger")?.objectReferenceValue != opening || serialized.FindProperty("planeNormal")?.vector3Value != Vector3.right ||
-                Mathf.Abs(serialized.FindProperty("openingHalfWidth").floatValue - 18f) > TransformTolerance ||
+                Mathf.Abs(serialized.FindProperty("openingHalfWidth").floatValue - MovementLabContract.ArenaGoalOpeningHalfWidth) > TransformTolerance ||
                 Mathf.Abs(serialized.FindProperty("openingMinHeight").floatValue) > TransformTolerance ||
-                Mathf.Abs(serialized.FindProperty("openingMaxHeight").floatValue - 7f) > TransformTolerance ||
+                Mathf.Abs(serialized.FindProperty("openingMaxHeight").floatValue - MovementLabContract.ArenaGoalOpeningHeight) > TransformTolerance ||
                 Mathf.Abs(serialized.FindProperty("rearmDistance").floatValue - 0.5f) > TransformTolerance)
                 throw new InvalidOperationException(name + " serialized trigger contract invalid.");
-            ValidateColliderSolid(root, "FrameWest", new Vector3(-18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), ballSurface);
-            ValidateColliderSolid(root, "FrameEast", new Vector3(18.5f, 3.5f, 0f), new Vector3(1f, 7f, 1f), ballSurface);
-            ValidateColliderSolid(root, "FrameTop", new Vector3(0f, 7.5f, 0f), new Vector3(38f, 1f, 1f), ballSurface);
-            ValidateColliderSolid(root, "RecessWest", new Vector3(-18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), ballSurface);
-            ValidateColliderSolid(root, "RecessEast", new Vector3(18.5f, 3.5f, 4.5f), new Vector3(1f, 7f, 9f), ballSurface);
-            ValidateColliderSolid(root, "RecessFloor", new Vector3(0f, -0.25f, 4.5f), new Vector3(37f, 0.5f, 9f), ballSurface);
-            ValidateColliderSolid(root, "RecessBack", new Vector3(0f, 3.5f, 9f), new Vector3(37f, 7f, 1f), ballSurface);
+            ValidateColliderSolid(root, "FrameWest",
+                new Vector3(-MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            ValidateColliderSolid(root, "FrameEast",
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            ValidateColliderSolid(root, "FrameTop",
+                new Vector3(0f, MovementLabContract.ArenaGoalOpeningLintelCenterY, 0f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningWidth + MovementLabContract.ArenaGoalOpeningFrameThickness * 2f,
+                    MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningFrameThickness), ballSurface);
+            ValidateColliderSolid(root, "RecessWest",
+                new Vector3(-MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY,
+                    MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            ValidateColliderSolid(root, "RecessEast",
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameCenterX, MovementLabContract.ArenaGoalOpeningCenterY,
+                    MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalOpeningFrameThickness, MovementLabContract.ArenaGoalOpeningHeight,
+                    MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            ValidateColliderSolid(root, "RecessFloor", new Vector3(0f, -0.25f, MovementLabContract.ArenaGoalRecessDepth * 0.5f),
+                new Vector3(MovementLabContract.ArenaGoalRecessBackWidth, 0.5f, MovementLabContract.ArenaGoalRecessDepth), ballSurface);
+            ValidateColliderSolid(root, "RecessBack",
+                new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, MovementLabContract.ArenaGoalRecessBackCenterZ),
+                new Vector3(MovementLabContract.ArenaGoalRecessBackWidth, MovementLabContract.ArenaGoalOpeningHeight, 1f), ballSurface);
             var shieldTransform = Require(root.Find("ShieldCollider"), name + " ShieldCollider");
             var shield = Require(shieldTransform.GetComponent<BoxCollider>(), name + " shield collider");
             if (!shieldTransform.gameObject.activeSelf || !shield.enabled || shield.isTrigger ||
-                Vector3.Distance(shieldTransform.localPosition, new Vector3(0f, 3.5f, 0f)) > TransformTolerance ||
+                Vector3.Distance(shieldTransform.localPosition, new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, 0f)) > TransformTolerance ||
                 Quaternion.Angle(shieldTransform.localRotation, Quaternion.identity) > RotationTolerance ||
-                Vector3.Distance(shieldTransform.localScale, Vector3.one) > TransformTolerance || colliderMismatch(shield, new Vector3(36f, 7f, 0.4f), ballSurface))
+                Vector3.Distance(shieldTransform.localScale, Vector3.one) > TransformTolerance ||
+                colliderMismatch(shield, new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 0.4f), ballSurface))
                 throw new InvalidOperationException(name + " shield collider contract invalid.");
             ValidateShieldVisual(root, name);
             return shield;
@@ -685,9 +885,9 @@ namespace RocketFooxball.Editor
             var visual = Require(goal?.Find("ShieldVisual"), label + " ShieldVisual");
             var renderer = Require(visual.GetComponent<MeshRenderer>(), label + " shield renderer");
             if (!visual.gameObject.activeSelf || collider.isTrigger || visual.GetComponent<Collider>() != null ||
-                Vector3.Distance(visual.localPosition, new Vector3(0f, 3.5f, -0.22f)) > TransformTolerance ||
+                Vector3.Distance(visual.localPosition, new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, -0.22f)) > TransformTolerance ||
                 Quaternion.Angle(visual.localRotation, Quaternion.identity) > RotationTolerance ||
-                Vector3.Distance(visual.localScale, new Vector3(36f, 7f, 1f)) > TransformTolerance)
+                Vector3.Distance(visual.localScale, new Vector3(MovementLabContract.ArenaGoalOpeningWidth, MovementLabContract.ArenaGoalOpeningHeight, 1f)) > TransformTolerance)
                 throw new InvalidOperationException(label + " shield collider/render split invalid.");
             var expectedShield = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? MaterialsPath + "/ShieldRed.mat" : MaterialsPath + "/ShieldBlue.mat");
             var material = renderer.sharedMaterial;
@@ -699,7 +899,7 @@ namespace RocketFooxball.Editor
             var cueRenderer = Require(cue.GetComponent<MeshRenderer>(), label + " team cue renderer");
             var cueMaterial = AssetDatabase.LoadAssetAtPath<Material>(label == "NorthGoal" ? TeamRedMaterialPath : TeamBlueMaterialPath);
             var cueMeshPath = label == "NorthGoal" ? RedTriangleCueMeshPath : BlueCircleCueMeshPath;
-            if (!cue.gameObject.activeSelf || Vector3.Distance(cue.localPosition, new Vector3(0f, 3.5f, -0.28f)) > TransformTolerance ||
+            if (!cue.gameObject.activeSelf || Vector3.Distance(cue.localPosition, new Vector3(0f, MovementLabContract.ArenaGoalOpeningCenterY, -0.28f)) > TransformTolerance ||
                 Quaternion.Angle(cue.localRotation, Quaternion.Euler(90f, 0f, 0f)) > RotationTolerance || Vector3.Distance(cue.localScale, new Vector3(3.5f, 3.5f, 1f)) > TransformTolerance ||
                 cueRenderer.sharedMaterial != cueMaterial || cue.GetComponent<MeshFilter>()?.sharedMesh == null ||
                 AssetDatabase.GetAssetPath(cue.GetComponent<MeshFilter>().sharedMesh) != cueMeshPath || cue.GetComponent<Collider>() != null)
