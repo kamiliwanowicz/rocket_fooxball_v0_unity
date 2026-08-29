@@ -67,6 +67,19 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void DefaultDashBurstUsesTwentyFourUnitsWithoutExceedingThirtyUnitCap()
+        {
+            var direction = new Vector3(0f, -1f, 1f).normalized;
+            var composed = MovementMath.ComposeDashVelocity(Vector3.zero, direction, PlayerMotorDefaults.DashBurstSpeed, PlayerMotorDefaults.DashSpeedCap);
+
+            Assert.That(PlayerMotorDefaults.DashBurstSpeed, Is.EqualTo(24f));
+            Assert.That(composed.magnitude, Is.EqualTo(24f).Within(0.0001f));
+            Assert.That(composed.y, Is.LessThan(0f));
+            Assert.That(composed.z, Is.GreaterThan(0f));
+            Assert.That(composed.magnitude, Is.LessThanOrEqualTo(PlayerMotorDefaults.DashSpeedCap));
+        }
+
+        [Test]
         public void DashCompositionCapsTheFullVectorIncludingVerticalMomentum()
         {
             var composed = MovementMath.ComposeDashVelocity(new Vector3(20f, 20f, 0f), Vector3.up, 12f, 30f);

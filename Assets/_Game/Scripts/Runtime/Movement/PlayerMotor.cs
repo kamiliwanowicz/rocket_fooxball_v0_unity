@@ -57,6 +57,7 @@ namespace RocketFooxball.Runtime.Movement
         private Vector3 velocity;
         private Vector3 queuedExternalImpulse;
         private Vector2 requestedMove;
+        private Vector2 currentEffectiveMoveIntent;
         private bool moveIntentPending;
         private bool jumpRequestPending;
         private Vector3 groundNormal = Vector3.up;
@@ -79,6 +80,7 @@ namespace RocketFooxball.Runtime.Movement
         public event Action<ControllerColliderHit> CollisionHit;
 
         public Vector3 Velocity => velocity;
+        public Vector2 CurrentEffectiveMoveIntent => currentEffectiveMoveIntent;
         public float BaseSpeed => baseSpeed;
         public float SoftCap => baseSpeed * bhopSoftCapMultiplier;
         public float HardCap => baseSpeed * hardCapMultiplier;
@@ -102,6 +104,7 @@ namespace RocketFooxball.Runtime.Movement
         {
             paused = false;
             ClearProgrammaticInput();
+            ClearEffectiveMoveIntent();
         }
 
         private void FixedUpdate()
@@ -120,6 +123,7 @@ namespace RocketFooxball.Runtime.Movement
             if (!simulationEnabled)
             {
                 ClearProgrammaticInput();
+                ClearEffectiveMoveIntent();
                 input?.ClearGameplayState();
                 queuedExternalImpulse = Vector3.zero;
                 return;
@@ -128,6 +132,9 @@ namespace RocketFooxball.Runtime.Movement
             var hasProgrammaticMove = moveIntentPending;
             var programmaticMove = requestedMove;
             var programmaticJump = jumpRequestPending;
+            var deviceMove = input != null ? input.Move : Vector2.zero;
+            var effectiveMove = hasProgrammaticMove ? programmaticMove : SanitizeMoveIntent(deviceMove);
+            currentEffectiveMoveIntent = effectiveMove;
             ClearProgrammaticInput();
 
             var deltaTime = Time.fixedDeltaTime;
@@ -172,7 +179,7 @@ namespace RocketFooxball.Runtime.Movement
             }
             jumpBufferTimer = Mathf.Max(jumpBufferTimer - deltaTime, 0f);
 
-            var move = hasProgrammaticMove ? programmaticMove : (input != null ? input.Move : Vector2.zero);
+            var move = effectiveMove;
             var strafeDirection = Mathf.Abs(move.x) > 0.001f ? transform.right * Mathf.Sign(move.x) : Vector3.zero;
             var forwardDirection = Mathf.Abs(move.y) > 0.001f ? transform.forward * Mathf.Sign(move.y) : Vector3.zero;
             var jumpedThisStep = TryConsumeJump(grounded, strafeDirection + forwardDirection);
@@ -245,6 +252,7 @@ namespace RocketFooxball.Runtime.Movement
             }
 
             requestedMove = Vector2.ClampMagnitude(move, 1f);
+            currentEffectiveMoveIntent = requestedMove;
             moveIntentPending = true;
             return true;
         }
@@ -331,6 +339,7 @@ namespace RocketFooxball.Runtime.Movement
                 EndDash(DashEndReason.SimulationDisabled, 1f);
                 queuedExternalImpulse = Vector3.zero;
                 ClearProgrammaticInput();
+                ClearEffectiveMoveIntent();
                 coyoteTimer = 0f;
                 jumpBufferTimer = 0f;
                 input?.ClearGameplayState();
@@ -359,6 +368,7 @@ namespace RocketFooxball.Runtime.Movement
             EndDash(DashEndReason.SimulationDisabled, 1f);
             queuedExternalImpulse = Vector3.zero;
             ClearProgrammaticInput();
+            ClearEffectiveMoveIntent();
             coyoteTimer = 0f;
             jumpBufferTimer = 0f;
             groundContactThisStep = false;
@@ -452,6 +462,21 @@ namespace RocketFooxball.Runtime.Movement
             requestedMove = Vector2.zero;
             moveIntentPending = false;
             jumpRequestPending = false;
+        }
+
+        private void ClearEffectiveMoveIntent()
+        {
+            currentEffectiveMoveIntent = Vector2.zero;
+        }
+
+        private static Vector2 SanitizeMoveIntent(Vector2 move)
+        {
+            if (!IsFinite(move))
+            {
+                return Vector2.zero;
+            }
+
+            return Vector2.ClampMagnitude(move, 1f);
         }
 
         private void ApplyGroundMovement(Vector3 strafeDirection, Vector3 forwardDirection, Vector3 activeGroundNormal, float deltaTime)

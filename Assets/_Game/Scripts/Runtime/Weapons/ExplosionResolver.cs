@@ -208,8 +208,11 @@ namespace RocketFooxball.Runtime.Weapons
 
             var controller = target.GetComponent<CharacterController>();
             var facing = Vector3.zero;
-            var isUnderfoot = controller != null && BlastMath.TryGetUnderfootFacing(
+            var effectiveFacing = BlastMath.ResolvePlanarDirection(
                 target.transform.forward,
+                target.CurrentEffectiveMoveIntent);
+            var isUnderfoot = controller != null && BlastMath.TryGetUnderfootFacing(
+                effectiveFacing,
                 controller.bounds,
                 controller.radius,
                 origin,

@@ -17,6 +17,39 @@ namespace RocketFooxball.Runtime.Weapons
             return IsFinite(value.x) && IsFinite(value.y) && IsFinite(value.z);
         }
 
+        public static bool IsFinite(Vector2 value)
+        {
+            return IsFinite(value.x) && IsFinite(value.y);
+        }
+
+        /// <summary>Resolves local movement intent into a normalized XZ direction relative to player facing.</summary>
+        public static Vector3 ResolvePlanarDirection(Vector3 playerForward, Vector2 moveIntent)
+        {
+            var forward = new Vector3(playerForward.x, 0f, playerForward.z);
+            if (!IsFinite(forward) || forward.sqrMagnitude <= Epsilon)
+            {
+                forward = Vector3.forward;
+            }
+            else
+            {
+                forward.Normalize();
+            }
+
+            if (!IsFinite(moveIntent) || moveIntent.sqrMagnitude <= Epsilon)
+            {
+                return forward;
+            }
+
+            var right = Vector3.Cross(Vector3.up, forward);
+            var direction = right * moveIntent.x + forward * moveIntent.y;
+            if (!IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
+            {
+                return forward;
+            }
+
+            return direction.normalized;
+        }
+
         public static float ComputeFalloff(float surfaceDistance, float blastRadius)
         {
             if (!IsFinite(surfaceDistance) || !IsFinite(blastRadius))
@@ -68,12 +101,11 @@ namespace RocketFooxball.Runtime.Weapons
             }
 
             var speedT = Mathf.Clamp01((horizontalSpeed - baseSpeed) / Mathf.Max(softCap - baseSpeed, Epsilon));
-            var redirectT = speedT * underfootHighSpeedVerticalRedirect;
-            var forwardScale = underfootForwardImpulseScale * (1f - redirectT);
-            var impulseScaleSqr =
-                underfootForwardImpulseScale * underfootForwardImpulseScale +
-                underfootUpwardImpulseScale * underfootUpwardImpulseScale;
-            var upwardScale = Mathf.Sqrt(Mathf.Max(impulseScaleSqr - forwardScale * forwardScale, 0f));
+            var redirectT = speedT * Mathf.Clamp01(underfootHighSpeedVerticalRedirect);
+            var baseForwardScale = underfootForwardImpulseScale;
+            var baseUpwardScale = underfootUpwardImpulseScale;
+            var forwardScale = baseForwardScale * (1f - redirectT);
+            var upwardScale = baseUpwardScale + baseForwardScale * redirectT;
             var underfootImpulse = underfootFacing.normalized * forwardScale + Vector3.up * upwardScale;
             return underfootImpulse.sqrMagnitude <= Epsilon ? Vector3.up * strength : underfootImpulse * strength;
         }
