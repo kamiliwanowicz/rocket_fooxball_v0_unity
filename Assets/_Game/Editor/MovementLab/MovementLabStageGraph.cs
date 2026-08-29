@@ -73,7 +73,7 @@ namespace RocketFooxball.Editor
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:5";
         private const string LightingContract = "lighting-contract:7";
-        private const string BakedContract = "baked-output-contract:7";
+        private const string BakedContract = "baked-output-contract:8";
 
         // Ordering predecessors document writer sequencing. Staleness is driven
         // only by each stage's explicit keys and digest predecessors so a

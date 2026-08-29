@@ -19,6 +19,8 @@ $script:BuilderOutputContract = @(
 # Assets/_Game/Materials/TeamRedTrail.mat and .meta.
 # Deliberately omits the five-shotgun-atlas and shared weapon-microdetail
 # importer metadata closure; the green workflow must add each exact path once.
+# Deliberately omits the six Lightmap-4 asset/meta paths required by the
+# five-atlas production contract; the green workflow must add each once.
 # Deliberately omits the distinct Fast persisted validator process and ledger
 # row; the green workflow must retain this proof after BuildFast.
 $legacyRow = [ordered]@{ requested_inventory = @() }

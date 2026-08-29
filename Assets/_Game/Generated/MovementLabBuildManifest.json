@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "aa692fbd98a8d6af88f29f7c1ac94ff98fb56e38",
+    "gitSha": "bfeb2279efde72b318d687652a7b76f5c3626a2a",
     "manifestStatus": "current",
-    "sourceSignature": "23686dbde784ac38442ca4ce794a6fc3ebde9d0138f2deddf2aca16596ce86f6",
-    "generatedOutputFingerprint": "1ce7b3f6854478a5b988189232f8ec9b293947487a00e3d7bd83942c98b34be3",
+    "sourceSignature": "2949877c0f2e5292be2f3bd953ccef386e6ed953b37f175d4610b8ae150f3529",
+    "generatedOutputFingerprint": "1b9e62b06d179ef11e46be42695b1be2cdacddcfe0fe24def3e199ddee19c0d7",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "2e5924e3fb04e7f420fb22bfcf861254a288ae0de68cf34da7ec9887409ebfbe",
+    "lightingInputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
     "bakedProfile": "Production",
     "staleStages": [],
     "staleReasons": [],
@@ -179,14 +179,18 @@
         "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr.meta",
         "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png",
         "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png.meta",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png.meta",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr.meta",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png",
+        "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png.meta",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr.meta",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr.meta",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr",
         "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr.meta",
-        "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr",
-        "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr.meta",
         "Assets/_Game/Textures/FpsRocketLauncher_BaseColor.png.meta",
         "Assets/_Game/Textures/FpsRocketLauncher_Emission.png.meta",
         "Assets/_Game/Textures/FpsRocketLauncher_MetallicSmoothness.png.meta",
@@ -270,7 +274,7 @@
         "5d7990ee5ccf29f49871e4312211a549",
         "640596db53efd2367678624b6a50dcd674bd727e93671e39d86b03e05157c2fc",
         "62b65894efce7c445beb868116b3009a",
-        "18b3fdcec3f9fd5ef818080f28d5108f1cdbf6e84da8b2aadddf8d1e1d446396",
+        "9255f9059721d7e2ac0f232c321c7fbd9fb8253ef22a54b4e50d81191821adc4",
         "72e0360e42e1d194eac2b9de78fe5b83",
         "0b9f5938b1632a12ad3e9ccdffe00546af178af586fd9cbbbd7026b84e1fca5e",
         "9de7bc27372189346b95e51479e6c8c9",
@@ -280,13 +284,13 @@
         "c6e7eaf4bbc0468459bebe71e809eeda",
         "60e5b2de22ff070cfeedb3c2deca148824d39ded7a2a9eaaedbab74adcdf3dfc",
         "ee86cab47e9f5484a807d49425020949",
-        "ea7762877abe794217431c0991e6f630f761d2fc7a3ef8a714321e2fb029ec3c",
+        "b38bb2c40927e7c7cea9a48156ee66e9dffd16eb8f159cb59a44e2392637f204",
         "49c4dabbadbd02d41b80191f94645307",
-        "a48bf3d4837d257c21c705f5a522d79fa498a8e5bd33cb9a1dae6417c3fb213a",
+        "831fdb79b7b6e2d332579abcd4ad65385da47db76fe0a6c200bef00bd4801755",
         "6391b7c8c608aff43bb6322c026feb67",
-        "1be2f40a5313c039bedc97325404936ff27c5df72f3c76c534fa803d7a03c460",
+        "3b704a9541f81716ec7047785a60e2b17e9f8abdb2868bb05b5f69a4ed78f06f",
         "180678f372fc13a4caeadb4e6fa9a084",
-        "14141b40849f4aae037299caafc8f729e7df341f7c7535dc0b50b9f7f15fb0c5",
+        "564b013a4f0fcde694e1ce80ad88239881df9d481086b91eed2e54e41794d212",
         "d14fb7c67f2006c46bc0d9177df4b143",
         "977efbde91651505e725cca13872ce89810b9f36611cf044430dc0672d85e64e",
         "a7ae45ca3ba510d4fa2900abebc2e680",
@@ -312,7 +316,7 @@
         "b5a9e54c0b5ca6f48b28b4a1cd30592f",
         "f672ece41db74921f1cde6c428e859ba0efe3ef28ed662c165c8b9ceffbf14e8",
         "ce405be7ddf242646991074551e65d6c",
-        "0b5f102e9e1cf139d62bf1f5e238f0c67a9d6fad6332bf86d4767a6cf468c225",
+        "21fbc463ea16aa4b8f1f2e53bb7f7ee52d0c6cd610994153843b19ff6e71f24a",
         "e693f4f10592518419e679a3c1266cfd",
         "b1331bc80ceb40c14bcba76c2ae4c86a5d12d825c12351d1626721142c9d7330",
         "a256dce2cbc89e54f934981d48c00e70",
@@ -320,11 +324,11 @@
         "a9585b86f9cc5194facf9bea6509a551",
         "5395f365a62ed4060902970d90ea9683063b6d5098ef23268c806a852879b5fd",
         "26f953a18b358094290f33dd64b0c96d",
-        "dc9868b1427e27525e87513ed71743b3c98f80ced870a7a4306145fde9ea9246",
+        "91454ec607abc04b3b94804fd441541ddaa1144739b9b62152c88c06a77bd496",
         "7d93bd4314658f643b0ec8cff4d8c226",
         "0051fc6fcad0dce28088dfcf24e72be37d519faf032fec5e4e6bf8c537cf293b",
         "77e865abd335f6c4b8ff8052fc61c34a",
-        "37e474fed0c148b2e1fda13518fa2d2d4f7032644397a2f477ca045d6b734170",
+        "c3dcd9bf39cce89e46bd5a55649d99381d8b2d8419b26ec59ecab3fbfc1597ef",
         "ddd0f5d96b665d24d8a3de304c8c82b8",
         "e98b7b25aea3e4f620f062866faa4bd4302b87451cdbf4ae7de5d7e5f64c7453",
         "750dfb9a8aee53843991150e295e40c2",
@@ -360,7 +364,7 @@
         "5a702ad7e41f9b04aa188c268a09fc5e",
         "e9b7d1492ea797b78fb8a9ee6ee6a1a0e27d4653e1d347363ce1f3a1c0c477cc",
         "fcdd2739449183b48aedb5cba5a1f8b9",
-        "6d064b3c68440d0d070a840326c2c2a7dcaca290bdcabb47972b5edbf666b31c",
+        "07525a0160ddc2785d5fbeb23d146eef81b759149f5c722023a84e77b7da3c99",
         "7a152a4b7f543df41a4721a78ffd259a",
         "1670b40be63c1a5330222a3961b9cdc1e0cf12780eccd139958f87eb6f3f0b24",
         "8f518237f01f0174899ae335f094f6bf",
@@ -385,7 +389,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "7a839401693dd067fe1e2d56b6d63fd6f2a0f0df765f7d641a06926e68d7169f",
+        "6bb4a637fa86fc6a8d4d2d625cd6f22783a5a7020f02b783ead63823f4355bef",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -393,40 +397,44 @@
         "052b0bad7e1c977438a11b8a680a6f9c",
         "215bf30c053a6315825a1042db57ed0efad4e1e2f6f47ccbad4d0ac36c2325da",
         "4f646a78eaba1c2409e9bb3fce837175",
-        "3bde158cd2bb10b900e83273746b28ad3bd25638a2e17052fba517cf1d2f36bd",
+        "16b2cac6559121a26ab257d41514f1dceaaaeaba40b576e2325a351e287c4269",
         "d6fecb47b29c96247bccd3306e910ef1",
-        "bce09411b07626c8df516b2ae7625c073be87545ddc5830edc7412e4e82225bd",
+        "a4f25dda419241ceab45607a5f1b8cb9650c217dab2d2cc75152a7e2131cbbb4",
         "9b9608cccbee7a34b8339141b8987124",
-        "a7bb7e669906d77c91e72034a3bd36593c1c527b449976019cdb3ba8b022a995",
+        "f36c339de4410a57ff68bdb30cb1cf55e9a67264f4899402c2dc085aaad37e57",
         "a523cfd3fcb32f64793a6c0b125f5693",
-        "063a08bd0611b6a00187fd005fd58d4feb8bc0653923d3afdd1828c5a5e27d65",
+        "3c514be5ca3da67777da7d19efb59e9e4fe3e53c9847dad8ccbe70300720bdbc",
         "398501dbd7d940c40bf14cc716604fbe",
-        "47d4386e167f60ced02f47ffae02ad071f8c19413a34b0d14cd20e41d45131a4",
+        "10c6a65fb7a6c23398b45881558b0b0edad700cd28b90289fec9c9b3c618a97b",
         "c05e4a9f7241449408b69fddd2b668c1",
-        "49fb99521e72118ea31ae06e5a57e982199d267f61f9d3af1410beef493fc87b",
+        "133971d7ae8f4c44bbecd5432bde655dd15052f3a2e2f236121a8a693db9b113",
         "2c58d3b279e208945a03c2afdcd1007d",
-        "d3416fb34c037270ed8c46f7b37e1744f2e3fb13c1ba73875e8442239306faf2",
+        "a84cc40f09fe30ffc21f11196fe8777a8d66ed468bd41dbd199e82d70804a5de",
         "31a5a4c0c7a856443bbfabd685cd4781",
-        "41793e37f733033c3d5f0d75739a6e35ba1a0b461518f6f45feee7416dd2e686",
+        "74540f5962cee8349e8560564d6d20af7a48c64617a40ad44cf763b109214ce5",
         "2e6626e5d3c5d2b4e88f30d5529d072c",
-        "9ac67fd97e0ba0ff55fd41310aba3ccb079d76fba7e9f13d60a5c3fa85f15ad5",
+        "8d50b42d4e48da3340d4c212908fb6300397d0bf12a57ff97a13076e9752079f",
         "06f7795a149ea1f4eb11e3d67b7f75e3",
-        "69af37c38359802acdf23e2040d4807b262221de551a1ebf6f487ebce1800088",
+        "46d1fdae9d04bf18fe7b7a4e2ee522b2922a851b55af4c673809638026d6d21f",
         "440e91dc930311443adcbcf32a2faad7",
-        "abb872598260451d0a0a5f41a7735918a67344619a8e67d745a5def346c3c9e9",
+        "4021510ffbeb31c6a58d73614570902a11e72da6e796a2ae31a7c23a9a972e72",
         "8362bce8cdaa75b439988314fc3ed7a0",
-        "a66ad818544fb69d6372a92052f7ed1057b25a27cc490036b09eb20135aa8996",
+        "a8586c20134ab09037733ebae90ed080683fa2d4fa350a2f7abc7d79f8c51f3b",
         "072a580eb7e3f494d905c0344ca6f59f",
-        "a5b7262263a7f6dfa1ff422f4907c31a173ff84b66b81f8b6d11f50391bc608c",
+        "8490787fce1c1008394219bc1ef77c0d3ba660bb6875268dfa87eff2d943cb73",
         "c1161e72ce5d28f4e8b05688a7a7271b",
-        "8a85f62204dead9ce013e1e220a3d1eab62aedf872e471be594ef24577891fcf",
+        "dc5e50993a66d9f3ae4ac660b9d962f0365928a2993cb89de1f10becc50091d4",
+        "714e50bfc28a43e44aabf2173b408aca",
+        "e49d04a60f33beaf5eea3bccb6807cfe040f1f8e0401fc280185a745e37d7cb3",
+        "e7d89a4de0c2b3e4c9714801a3b657b7",
+        "b90d3fdc75c0f969d3cbf7162d8fcb7495b96659ec24032a95456af7b65a15be",
+        "9e3ed7cf9e3f93a4bbcbd8791f48f21a",
+        "be0bf40075eaf5330da7b56556f5f96b5faa8fcea15fc057b880970246e04106",
         "d8e149926c16f5446a4269af758ce5c3",
-        "5bc455633390f28d9be54d6a83b190943bcf80303dab438cbd78faa85e2eb718",
+        "9b96645a018f24aa3bc34989ae25f51bc229383b8ecde463c58ea42c7db99a10",
         "fc37a95c5c6fe09488f12d42fdfb966f",
-        "e1b89770f8e41070b95bb4321742f989b28085efc14f58b351699a007b84fbc2",
+        "c849e50b9189a682dcc1c3d4921796b132c498bfb5aa7a3dd553a50cf2ff5fab",
         "409213d61ad893b498262420b6489218",
-        "edd872fc7ef0ff123988605c461fcce608f8e0135811535c8e6f3fe672e1fb97",
-        "0c9fe416b986053428f37c80c23cb43e",
         "d44cd845f6cf0294c8860d4014496e51",
         "57d2be1d9501c71479347db337265ef6",
         "eb43e579a69d90844ab192451c66ba9c",
@@ -495,8 +503,8 @@
             "schemaVersion": 8,
             "contractVersion": "importer-contract:5",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "31288cf771ac0b575d71d1f955216a4dcb99e1471ba4ce2de2e034bcb8768346",
-            "repositoryInputDigest": "31288cf771ac0b575d71d1f955216a4dcb99e1471ba4ce2de2e034bcb8768346",
+            "inputDigest": "6343b6cb087e5218ffd071263810d9c2e8a14546d4dc10110f9aa2355fe1af95",
+            "repositoryInputDigest": "6343b6cb087e5218ffd071263810d9c2e8a14546d4dc10110f9aa2355fe1af95",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "816dd05d30c9ca2a1cd5989d6ec370bfb48383d14483fa28f6150e564dd7afb8",
             "predecessorDigests": [],
@@ -820,12 +828,12 @@
         {
             "stage": "MaterialPrefab",
             "schemaVersion": 8,
-            "contractVersion": "material-prefab-contract:15;serialized:12",
+            "contractVersion": "material-prefab-contract:15;serialized:13",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "b4bdc2a4652c72b5cb5d3bc7f66a75a1601f439552f6a16f18545d8d59d7740b",
-            "repositoryInputDigest": "3e4ef7a7153e3c6cb38f2a4a3a89a4de0a99b6d29d0dedb8c70eb2c8e4f0bbdb",
-            "dependencyDigest": "6c4e209f7272e161d06aacc555ea0c97d8e3672836bd89e4d39d844c6484a685",
-            "outputDigest": "abd8a3edcc174de205157fec4d6caad6fef7c47d0d9ed3094d7c3984c9400853",
+            "inputDigest": "7f5442c5bd6f1d1962a9af1f6f13f0ccda6c40d052e0ae9ceea3aa13cad025fc",
+            "repositoryInputDigest": "472eefd2c5de66a78dc8b2bc5b68b7c67a335f0cbe37ec47a160fe94cb36755d",
+            "dependencyDigest": "8d654d36e7cebb174283ad56d23cdd22dd7f48f7dfda65018aa5b34feb13e935",
+            "outputDigest": "6d552ccec06da0d04d9406f315f4927603d90a93b420f255e9e40ad15fafd43b",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -884,7 +892,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaGlow.mat",
-                    "digest": "ea7762877abe794217431c0991e6f630f761d2fc7a3ef8a714321e2fb029ec3c",
+                    "digest": "b38bb2c40927e7c7cea9a48156ee66e9dffd16eb8f159cb59a44e2392637f204",
                     "missing": false
                 },
                 {
@@ -894,7 +902,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaHazard.mat",
-                    "digest": "a48bf3d4837d257c21c705f5a522d79fa498a8e5bd33cb9a1dae6417c3fb213a",
+                    "digest": "831fdb79b7b6e2d332579abcd4ad65385da47db76fe0a6c200bef00bd4801755",
                     "missing": false
                 },
                 {
@@ -904,7 +912,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaPrimary.mat",
-                    "digest": "1be2f40a5313c039bedc97325404936ff27c5df72f3c76c534fa803d7a03c460",
+                    "digest": "3b704a9541f81716ec7047785a60e2b17e9f8abdb2868bb05b5f69a4ed78f06f",
                     "missing": false
                 },
                 {
@@ -914,7 +922,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaTrim.mat",
-                    "digest": "14141b40849f4aae037299caafc8f729e7df341f7c7535dc0b50b9f7f15fb0c5",
+                    "digest": "564b013a4f0fcde694e1ce80ad88239881df9d481086b91eed2e54e41794d212",
                     "missing": false
                 },
                 {
@@ -1044,7 +1052,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Floor.mat",
-                    "digest": "0b5f102e9e1cf139d62bf1f5e238f0c67a9d6fad6332bf86d4767a6cf468c225",
+                    "digest": "21fbc463ea16aa4b8f1f2e53bb7f7ee52d0c6cd610994153843b19ff6e71f24a",
                     "missing": false
                 },
                 {
@@ -1084,7 +1092,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Marking.mat",
-                    "digest": "dc9868b1427e27525e87513ed71743b3c98f80ced870a7a4306145fde9ea9246",
+                    "digest": "91454ec607abc04b3b94804fd441541ddaa1144739b9b62152c88c06a77bd496",
                     "missing": false
                 },
                 {
@@ -1104,7 +1112,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/RetroSunnySky.mat",
-                    "digest": "37e474fed0c148b2e1fda13518fa2d2d4f7032644397a2f477ca045d6b734170",
+                    "digest": "c3dcd9bf39cce89e46bd5a55649d99381d8b2d8419b26ec59ecab3fbfc1597ef",
                     "missing": false
                 },
                 {
@@ -1284,7 +1292,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Wall.mat",
-                    "digest": "6d064b3c68440d0d070a840326c2c2a7dcaca290bdcabb47972b5edbf666b31c",
+                    "digest": "07525a0160ddc2785d5fbeb23d146eef81b759149f5c722023a84e77b7da3c99",
                     "missing": false
                 },
                 {
@@ -1374,7 +1382,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "7a839401693dd067fe1e2d56b6d63fd6f2a0f0df765f7d641a06926e68d7169f",
+                    "digest": "6bb4a637fa86fc6a8d4d2d625cd6f22783a5a7020f02b783ead63823f4355bef",
                     "missing": false
                 },
                 {
@@ -1412,12 +1420,12 @@
         {
             "stage": "GameplayScene",
             "schemaVersion": 8,
-            "contractVersion": "gameplay-scene-contract:17;serialized:12",
+            "contractVersion": "gameplay-scene-contract:17;serialized:13",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "a5b40b3eab79cd59b2dc95bb505c1b0b512065d3b4b5540000cdaa1817e8b7bc",
-            "repositoryInputDigest": "38498828d624314085bcf708c64b07bcf9baa58446c61f4fe6acd775d9d88634",
-            "dependencyDigest": "2e71808dc6602c6608278d2d604ab3387461d97480e7676f20d9c712759c9aae",
-            "outputDigest": "4c4d55c3abb216f8d8fa8277fc7faa0c03d81a2079a62b4266974ffccfee0051",
+            "inputDigest": "a841cd384212f437188f6383517d582c8991b049bd4509c307bd263f07f30c30",
+            "repositoryInputDigest": "7b6e337d476fa6deae62cd64ab684ff0206d67531f4dd7c1e68ffb1b6ea97c2c",
+            "dependencyDigest": "0f226afe05939e3135b7dd9b5fa13238c64da5f6e3207551da55c5576e34f50f",
+            "outputDigest": "aa6ce9c1f6489de3d13a8995c0493f46722d25f62b53ecf01b04aaacc1020dfe",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1426,7 +1434,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "72d932e7928db9379d1e7006fc60cbc80f337fba9b396ad049f88445a0873be3",
+                    "digest": "1364b961e94441782f302c2edfc5be0388b4464f2af565d12697c49e04d2fc5f",
                     "missing": false
                 },
                 {
@@ -1543,8 +1551,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:7",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "2e5924e3fb04e7f420fb22bfcf861254a288ae0de68cf34da7ec9887409ebfbe",
-            "repositoryInputDigest": "2e5924e3fb04e7f420fb22bfcf861254a288ae0de68cf34da7ec9887409ebfbe",
+            "inputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
+            "repositoryInputDigest": "00b772328a5c57ecbfe834d6e94a40183720a5537e53954adda866fd79c9fdc3",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14",
             "predecessorDigests": [],
@@ -1588,12 +1596,12 @@
         {
             "stage": "BakedOutput",
             "schemaVersion": 8,
-            "contractVersion": "baked-output-contract:7",
+            "contractVersion": "baked-output-contract:8",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "c79b5c8684295662985a09cb7d1ac3f5a89f1e3decd301fe3e8451d951220a3d",
-            "repositoryInputDigest": "6cd11145017f2d02a6301e3da57d9550d5692ef4a46912588a72b6d90a90ad0b",
+            "inputDigest": "32fff5503f6af7cc76769c8733d904a1012461ddd660dd49eb53a44e04877045",
+            "repositoryInputDigest": "6ee2be2160794f4e33625dab64d2760724e5b59a0eba16286e9031bee2ff3974",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "9e48052774258b45cbb8d257d4a58f7896f58f5c8a0a24543faeeed7f04cdb50",
+            "outputDigest": "a3a93015f1ef50efc448dcd02517e62bf89aa28ef52cdb0a4001d763a45d9ca6",
             "predecessorDigests": [
                 "Lighting:b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14"
             ],
@@ -1604,7 +1612,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Lighting/MovementLabLightingManifest.json",
-                    "digest": "18b3fdcec3f9fd5ef818080f28d5108f1cdbf6e84da8b2aadddf8d1e1d446396",
+                    "digest": "9255f9059721d7e2ac0f232c321c7fbd9fb8253ef22a54b4e50d81191821adc4",
                     "missing": false
                 },
                 {
@@ -1624,7 +1632,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/LightingData.asset",
-                    "digest": "3bde158cd2bb10b900e83273746b28ad3bd25638a2e17052fba517cf1d2f36bd",
+                    "digest": "16b2cac6559121a26ab257d41514f1dceaaaeaba40b576e2325a351e287c4269",
                     "missing": false
                 },
                 {
@@ -1634,7 +1642,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png",
-                    "digest": "bce09411b07626c8df516b2ae7625c073be87545ddc5830edc7412e4e82225bd",
+                    "digest": "a4f25dda419241ceab45607a5f1b8cb9650c217dab2d2cc75152a7e2131cbbb4",
                     "missing": false
                 },
                 {
@@ -1644,7 +1652,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr",
-                    "digest": "a7bb7e669906d77c91e72034a3bd36593c1c527b449976019cdb3ba8b022a995",
+                    "digest": "f36c339de4410a57ff68bdb30cb1cf55e9a67264f4899402c2dc085aaad37e57",
                     "missing": false
                 },
                 {
@@ -1654,7 +1662,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png",
-                    "digest": "063a08bd0611b6a00187fd005fd58d4feb8bc0653923d3afdd1828c5a5e27d65",
+                    "digest": "3c514be5ca3da67777da7d19efb59e9e4fe3e53c9847dad8ccbe70300720bdbc",
                     "missing": false
                 },
                 {
@@ -1664,7 +1672,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png",
-                    "digest": "47d4386e167f60ced02f47ffae02ad071f8c19413a34b0d14cd20e41d45131a4",
+                    "digest": "10c6a65fb7a6c23398b45881558b0b0edad700cd28b90289fec9c9b3c618a97b",
                     "missing": false
                 },
                 {
@@ -1674,7 +1682,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr",
-                    "digest": "49fb99521e72118ea31ae06e5a57e982199d267f61f9d3af1410beef493fc87b",
+                    "digest": "133971d7ae8f4c44bbecd5432bde655dd15052f3a2e2f236121a8a693db9b113",
                     "missing": false
                 },
                 {
@@ -1684,7 +1692,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png",
-                    "digest": "d3416fb34c037270ed8c46f7b37e1744f2e3fb13c1ba73875e8442239306faf2",
+                    "digest": "a84cc40f09fe30ffc21f11196fe8777a8d66ed468bd41dbd199e82d70804a5de",
                     "missing": false
                 },
                 {
@@ -1694,7 +1702,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png",
-                    "digest": "41793e37f733033c3d5f0d75739a6e35ba1a0b461518f6f45feee7416dd2e686",
+                    "digest": "74540f5962cee8349e8560564d6d20af7a48c64617a40ad44cf763b109214ce5",
                     "missing": false
                 },
                 {
@@ -1704,7 +1712,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr",
-                    "digest": "9ac67fd97e0ba0ff55fd41310aba3ccb079d76fba7e9f13d60a5c3fa85f15ad5",
+                    "digest": "8d50b42d4e48da3340d4c212908fb6300397d0bf12a57ff97a13076e9752079f",
                     "missing": false
                 },
                 {
@@ -1714,7 +1722,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png",
-                    "digest": "69af37c38359802acdf23e2040d4807b262221de551a1ebf6f487ebce1800088",
+                    "digest": "46d1fdae9d04bf18fe7b7a4e2ee522b2922a851b55af4c673809638026d6d21f",
                     "missing": false
                 },
                 {
@@ -1724,7 +1732,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png",
-                    "digest": "abb872598260451d0a0a5f41a7735918a67344619a8e67d745a5def346c3c9e9",
+                    "digest": "4021510ffbeb31c6a58d73614570902a11e72da6e796a2ae31a7c23a9a972e72",
                     "missing": false
                 },
                 {
@@ -1734,7 +1742,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr",
-                    "digest": "a66ad818544fb69d6372a92052f7ed1057b25a27cc490036b09eb20135aa8996",
+                    "digest": "a8586c20134ab09037733ebae90ed080683fa2d4fa350a2f7abc7d79f8c51f3b",
                     "missing": false
                 },
                 {
@@ -1744,7 +1752,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png",
-                    "digest": "a5b7262263a7f6dfa1ff422f4907c31a173ff84b66b81f8b6d11f50391bc608c",
+                    "digest": "8490787fce1c1008394219bc1ef77c0d3ba660bb6875268dfa87eff2d943cb73",
                     "missing": false
                 },
                 {
@@ -1753,8 +1761,38 @@
                     "missing": false
                 },
                 {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png",
+                    "digest": "dc5e50993a66d9f3ae4ac660b9d962f0365928a2993cb89de1f10becc50091d4",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png.meta",
+                    "digest": "714e50bfc28a43e44aabf2173b408aca",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr",
+                    "digest": "e49d04a60f33beaf5eea3bccb6807cfe040f1f8e0401fc280185a745e37d7cb3",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr.meta",
+                    "digest": "e7d89a4de0c2b3e4c9714801a3b657b7",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png",
+                    "digest": "b90d3fdc75c0f969d3cbf7162d8fcb7495b96659ec24032a95456af7b65a15be",
+                    "missing": false
+                },
+                {
+                    "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png.meta",
+                    "digest": "9e3ed7cf9e3f93a4bbcbd8791f48f21a",
+                    "missing": false
+                },
+                {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr",
-                    "digest": "8a85f62204dead9ce013e1e220a3d1eab62aedf872e471be594ef24577891fcf",
+                    "digest": "be0bf40075eaf5330da7b56556f5f96b5faa8fcea15fc057b880970246e04106",
                     "missing": false
                 },
                 {
@@ -1764,7 +1802,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr",
-                    "digest": "5bc455633390f28d9be54d6a83b190943bcf80303dab438cbd78faa85e2eb718",
+                    "digest": "9b96645a018f24aa3bc34989ae25f51bc229383b8ecde463c58ea42c7db99a10",
                     "missing": false
                 },
                 {
@@ -1774,22 +1812,12 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr",
-                    "digest": "e1b89770f8e41070b95bb4321742f989b28085efc14f58b351699a007b84fbc2",
+                    "digest": "c849e50b9189a682dcc1c3d4921796b132c498bfb5aa7a3dd553a50cf2ff5fab",
                     "missing": false
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr.meta",
                     "digest": "409213d61ad893b498262420b6489218",
-                    "missing": false
-                },
-                {
-                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr",
-                    "digest": "edd872fc7ef0ff123988605c461fcce608f8e0135811535c8e6f3fe672e1fb97",
-                    "missing": false
-                },
-                {
-                    "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr.meta",
-                    "digest": "0c9fe416b986053428f37c80c23cb43e",
                     "missing": false
                 }
             ]

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import ctypes
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -328,56 +329,35 @@ SURFACE_PHASES = {
 }
 
 
-INDUSTRIAL_SURFACE_CONTRACT = {
+NATURAL_SURFACE_CONTRACT = {
     "grass": {
-        "tile_grid": (2, 2),
-        "plate_count": 4,
-        "seam_width": 0.045,
-        "fastener_radius": 0.025,
-        "fasteners_per_plate": 4,
-        "fastener_count": 16,
-        "stain_count": 5,
-        "scratch_count": 8,
-        "palette_u8": ((24, 20, 15), (142, 118, 110)),
-        "minimum_luminance_contrast": 0.16,
-        "metallic": (0.25, 0.55),
-        "smoothness": (0.28, 0.50),
-        "seam_ao": 0.55,
-        "interior_ao": 0.88,
-    },
-    "wall": {
-        "tile_grid": (4, 2),
-        "slab_count": 8,
-        "seam_width": 0.035,
-        "rib_width": 0.055,
-        "rib_count": 4,
-        "stain_count": 4,
-        "scratch_count": 6,
-        "palette_u8": ((40, 26, 12), (202, 150, 82)),
-        "minimum_luminance_contrast": 0.18,
+        "construction": "continuous-periodic-field",
+        "palette_u8": ((72, 92, 15), (94, 122, 26)),
+        "mean_rgb_u8": ((80.0, 103.0, 17.0), (86.0, 111.0, 24.0)),
+        "green_dominance_fraction": 0.99,
+        "near_white_threshold_u8": 236,
+        "maximum_directional_coherence": 0.12,
+        "maximum_axis_band_fraction": 0.02,
+        "maximum_low_frequency_rms_u8": 0.5,
+        "maximum_luminance_span_u8": 8,
         "metallic": (0.0, 0.0),
-        "smoothness": (0.30, 0.52),
-        "seam_ao": 0.50,
-        "interior_ao": 0.86,
-    },
-}
-
-
-_INDUSTRIAL_WEAR = {
-    "grass": {
-        "stains": ((0.17, 0.23, 0.085, 0.050), (0.42, 0.77, 0.060, 0.095), (0.68, 0.18, 0.105, 0.055), (0.79, 0.62, 0.075, 0.045), (0.23, 0.52, 0.050, 0.070)),
-        "scratches": ((0.08, 0.14, 0.19, 0.20, 0.0035), (0.28, 0.32, 0.41, 0.29, 0.0025), (0.57, 0.11, 0.72, 0.16, 0.0030), (0.76, 0.37, 0.91, 0.31, 0.0025), (0.10, 0.71, 0.22, 0.65, 0.0030), (0.36, 0.89, 0.49, 0.82, 0.0025), (0.58, 0.61, 0.69, 0.69, 0.0035), (0.81, 0.84, 0.93, 0.79, 0.0025)),
+        "smoothness": (0.12, 0.26),
+        "ao": (0.88, 1.0),
+        "motif_inventory": (),
     },
     "wall": {
-        "stains": ((0.12, 0.27, 0.070, 0.110), (0.39, 0.72, 0.050, 0.080), (0.66, 0.38, 0.075, 0.060), (0.87, 0.81, 0.045, 0.085)),
-        "scratches": ((0.07, 0.18, 0.18, 0.22, 0.0025), (0.30, 0.63, 0.43, 0.57, 0.0030), (0.53, 0.16, 0.62, 0.23, 0.0025), (0.69, 0.78, 0.81, 0.72, 0.0025), (0.82, 0.43, 0.93, 0.48, 0.0030), (0.15, 0.88, 0.25, 0.83, 0.0025)),
+        "construction": "continuous-periodic-field",
+        "palette_u8": ((82, 82, 82), (220, 220, 220)),
+        "rgb_spread_max": 0.08,
+        "metallic": (0.0, 0.0),
+        "smoothness": (0.18, 0.32),
+        "ao": (0.90, 1.0),
+        "effective_tile": (13, 2),
+        "maximum_diagonal_spectral_fraction": 0.40,
+        "maximum_diagonal_autocorrelation": 0.72,
+        "motif_inventory": (),
     },
 }
-
-
-def _periodic_grid_distance(values, cell_size):
-    local = np.mod(values, cell_size)
-    return np.minimum(local, cell_size - local)
 
 
 def _periodic_ellipse_mask(u, v, centre_u, centre_v, radius_u, radius_v):
@@ -396,77 +376,146 @@ def _segment_mask(u, v, segment):
     return dx * dx + dy * dy <= width * width
 
 
-def _industrial_surface_fields(kind: str, u, v, n, n01):
-    """Derive every industrial PBR channel from one explicit motif mask set."""
-    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
-    columns, rows = contract["tile_grid"]
-    cell_width, cell_height = 1.0 / columns, 1.0 / rows
-    distance_x = _periodic_grid_distance(u, cell_width)
-    distance_y = _periodic_grid_distance(v, cell_height)
-    seam = np.logical_or(distance_x <= contract["seam_width"] * 0.5, distance_y <= contract["seam_width"] * 0.5)
-    cell_x = np.floor(np.minimum(u, np.nextafter(1.0, 0.0)) * columns).astype(np.int64)
-    cell_y = np.floor(np.minimum(v, np.nextafter(1.0, 0.0)) * rows).astype(np.int64)
-    plate_variant = ((cell_x + cell_y * 2) % 4).astype(np.float64) / 3.0
+def _balanced_toroidal_field(u, v, layers, u_frequency_scale=1.0):
+    """Sum symmetric lattice directions so no layer owns one dominant ridge."""
+    shape = np.broadcast_shapes(np.shape(u), np.shape(v))
+    field = np.zeros(shape, dtype=np.float64)
+    total_weight = 0.0
+    phase_offsets = (0.0, 1.71, 3.83, 5.37)
+    for frequency_u, frequency_v, phase, amplitude in layers:
+        directions = (
+            (u_frequency_scale * frequency_u, frequency_v),
+            (u_frequency_scale * frequency_v, -frequency_u),
+            (u_frequency_scale * frequency_u, -frequency_v),
+            (u_frequency_scale * frequency_v, frequency_u),
+        )
+        symmetric_layer = np.zeros(shape, dtype=np.float64)
+        for (direction_u, direction_v), phase_offset in zip(directions, phase_offsets):
+            symmetric_layer += np.sin(
+                np.float64(math.tau) * (direction_u * u + direction_v * v) + phase + phase_offset
+            )
+        field += amplitude * symmetric_layer * np.float64(0.25)
+        total_weight += amplitude
+    return field / np.float64(total_weight)
 
-    stains = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=bool)
-    for stain in _INDUSTRIAL_WEAR[kind]["stains"]:
-        stains |= _periodic_ellipse_mask(u, v, *stain)
-    scratches = np.zeros_like(stains)
-    for scratch in _INDUSTRIAL_WEAR[kind]["scratches"]:
-        scratches |= _segment_mask(u, v, scratch)
+
+def _irregular_periodic_mottle(u, v, layers, warp_layers):
+    """Build an irregular continuous torus by warping several periodic modes."""
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    shape = np.broadcast_shapes(u.shape, v.shape)
+    warp_u = np.zeros(shape, dtype=np.float64)
+    warp_v = np.zeros(shape, dtype=np.float64)
+    for frequency_u, frequency_v, phase, amplitude in warp_layers:
+        angle = np.float64(math.tau) * (frequency_u * u + frequency_v * v) + phase
+        warp_u += np.sin(angle) * np.float64(amplitude)
+        warp_v += np.cos(angle) * np.float64(amplitude * 0.83)
+    warped_u = u + warp_u
+    warped_v = v + warp_v
+    field = np.zeros(shape, dtype=np.float64)
+    total_weight = 0.0
+    for frequency_u, frequency_v, phase, amplitude in layers:
+        angle = np.float64(math.tau) * (frequency_u * warped_u + frequency_v * warped_v) + phase
+        field += np.sin(angle) * np.float64(amplitude)
+        total_weight += amplitude
+    return field / np.float64(total_weight)
+
+
+def _natural_surface_layers(kind: str, u, v):
+    """Return deterministic multi-scale periodic values for a natural surface."""
+    if kind not in NATURAL_SURFACE_CONTRACT:
+        raise ValueError(f"Unknown natural surface kind: {kind}")
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    if kind == "grass":
+        layers = (
+            (2.0, 1.0, 0.37, 0.52),
+            (4.0, 3.0, 2.11, 0.28),
+            (8.0, 5.0, 4.03, 0.14),
+            (16.0, 9.0, 1.47, 0.06),
+        )
+        detail_layers = ((12.0, 3.0, 0.93, 0.60), (24.0, 7.0, 3.31, 0.40))
+    else:
+        layers = (
+            (3.0, 8.0, 1.17, 0.30),
+            (8.0, 3.0, 3.09, 0.30),
+            (5.0, -14.0, 5.11, 0.176),
+            (-14.0, 5.0, 2.63, 0.176),
+            (7.0, 19.0, 0.87, 0.13),
+            (19.0, 7.0, 4.31, 0.13),
+            (11.0, -23.0, 2.21, 0.094),
+            (-23.0, 11.0, 5.07, 0.094),
+        )
+        detail_layers = (
+            (17.0, 5.0, 0.41, 0.23), (5.0, 17.0, 2.59, 0.23),
+            (13.0, -31.0, 4.27, 0.14), (-31.0, 13.0, 1.18, 0.14),
+            (23.0, 47.0, 2.08, 0.10), (47.0, 23.0, 5.33, 0.10),
+            (19.0, -61.0, 3.12, 0.06), (-61.0, 19.0, 0.72, 0.06),
+        )
 
     if kind == "grass":
-        local_u, local_v = np.mod(u, cell_width), np.mod(v, cell_height)
-        inset = 0.070
-        fastener_dx = np.minimum(np.abs(local_u - inset), np.abs(local_u - (cell_width - inset)))
-        fastener_dy = np.minimum(np.abs(local_v - inset), np.abs(local_v - (cell_height - inset)))
-        fasteners = fastener_dx * fastener_dx + fastener_dy * fastener_dy <= contract["fastener_radius"] ** 2
-        gunmetal = ((cell_x + cell_y) % 2).astype(np.float64)
-        brown = np.stack((0.30 + n01 * 0.13, 0.235 + n01 * 0.105, 0.16 + n01 * 0.085), axis=-1)
-        steel = np.stack((0.25 + n01 * 0.13, 0.27 + n01 * 0.12, 0.275 + n01 * 0.115), axis=-1)
-        colour = brown * (1.0 - gunmetal[..., None] * 0.72) + steel * (gunmetal[..., None] * 0.72)
-        colour *= (0.93 + plate_variant[..., None] * 0.08)
-        colour = np.where(seam[..., None], np.array((0.135, 0.122, 0.106)), colour)
-        colour = np.where(stains[..., None], colour * np.array((0.72, 0.67, 0.60)), colour)
-        colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.24 + 0.035), colour)
-        colour = np.where(fasteners[..., None], np.array((0.49, 0.38, 0.20)), colour)
-        height = 0.55 + n * 0.025 - seam * 0.14 - stains * 0.018 - scratches * 0.045 + fasteners * 0.075
-        metallic = 0.28 + gunmetal * 0.16 + n01 * 0.06
-        metallic = np.where(seam, 0.25, metallic)
-        metallic = np.where(fasteners, 0.55, metallic)
-        smoothness = 0.28 + n01 * 0.22
-        smoothness = np.where(seam, 0.30, smoothness)
-        smoothness = np.where(scratches, 0.28, smoothness)
-        ao = 0.86 + n01 * 0.04
-        ao = np.where(stains, 0.78, ao)
-        ao = np.where(scratches, 0.68, ao)
-        ao = np.where(fasteners, 0.80, ao)
-        ao = np.where(seam, contract["seam_ao"], ao)
-        masks = {"seam": seam, "fasteners": fasteners, "stains": stains, "scratches": scratches}
-        return colour, height, metallic, smoothness, ao, masks
+        broad = _balanced_toroidal_field(u, v, layers)
+        detail = _balanced_toroidal_field(u, v, detail_layers)
+    else:
+        warp_layers = (
+            (2.0, 5.0, 0.73, 0.018), (5.0, 2.0, 3.41, 0.018),
+            (3.0, -11.0, 5.19, 0.011), (-11.0, 3.0, 1.83, 0.011),
+        )
+        broad = _irregular_periodic_mottle(u, v, layers, warp_layers)
+        detail = _irregular_periodic_mottle(u, v, detail_layers, warp_layers)
+    return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail
 
-    vertical_seam = distance_x <= contract["seam_width"] * 0.5
-    horizontal_seam = distance_y <= contract["seam_width"] * 0.5
-    ribs = distance_x <= contract["rib_width"] * 0.5
-    raised_rib = ribs & ~vertical_seam
-    warm = np.stack((0.48 + n01 * 0.20, 0.34 + n01 * 0.16, 0.16 + n01 * 0.10), axis=-1)
-    colour = warm * (0.94 + plate_variant[..., None] * 0.07)
-    colour = np.where(raised_rib[..., None], np.minimum(1.0, colour * np.array((1.06, 1.02, 0.91)) + 0.025), colour)
-    colour = np.where(seam[..., None], np.array((0.21, 0.15, 0.086)), colour)
-    colour = np.where(stains[..., None], colour * np.array((0.76, 0.70, 0.59)), colour)
-    colour = np.where(scratches[..., None], np.minimum(1.0, colour * 1.18 + 0.025), colour)
-    height = 0.53 + n * 0.025 - seam * 0.13 + raised_rib * 0.095 - stains * 0.016 - scratches * 0.040
-    metallic = np.zeros_like(n)
-    smoothness = 0.30 + n01 * 0.22
-    smoothness = np.where(seam, 0.30, smoothness)
-    smoothness = np.where(scratches, 0.31, smoothness)
-    ao = 0.84 + n01 * 0.04
-    ao = np.where(stains, 0.76, ao)
-    ao = np.where(scratches, 0.66, ao)
-    ao = np.where(raised_rib, 0.82, ao)
-    ao = np.where(seam, contract["seam_ao"], ao)
-    masks = {"seam": seam, "ribs": ribs, "stains": stains, "scratches": scratches, "horizontal_seam": horizontal_seam}
-    return colour, height, metallic, smoothness, ao, masks
+
+def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
+    """Derive natural PBR fields from continuous periodic noise without hard masks."""
+    if kind not in NATURAL_SURFACE_CONTRACT:
+        raise ValueError(f"Unknown natural surface kind: {kind}")
+    u = np.asarray(u, dtype=np.float64)
+    v = np.asarray(v, dtype=np.float64)
+    if n is None or n01 is None:
+        n, n01, detail = _natural_surface_layers(kind, u, v)
+    else:
+        _unused_n, _unused_n01, detail = _natural_surface_layers(kind, u, v)
+        n = np.asarray(n, dtype=np.float64)
+        n01 = np.asarray(n01, dtype=np.float64)
+    tone = np.clip(n01, 0.0, 1.0)
+    shape = np.broadcast_shapes(u.shape, v.shape)
+    zero = np.zeros(shape, dtype=np.float64)
+    if kind == "grass":
+        micro = np.clip(0.5 + 0.10 * detail, 0.0, 1.0)
+        colour = np.stack(
+            (
+                np.clip(0.270 + 0.110 * micro, 0.0, 1.0),
+                np.clip(0.340 + 0.160 * micro, 0.0, 1.0),
+                np.clip(0.055 + 0.050 * micro, 0.0, 1.0),
+            ),
+            axis=-1,
+        )
+        height = 0.50 + 0.012 * detail
+        response = micro
+        smoothness = np.clip(0.12 + 0.14 * response, 0.12, 0.26)
+        ao = np.clip(0.88 + 0.12 * micro, 0.88, 1.0)
+    else:
+        aggregate = np.clip(0.5 + n * 0.5, 0.0, 1.0)
+        pore_tone = np.clip(0.5 + detail * 0.5, 0.0, 1.0)
+        neutral = 0.56 + 0.11 * aggregate + 0.008 * (pore_tone - 0.5)
+        tint = np.stack((-0.010 + 0.003 * detail, 0.001 * detail, 0.010 - 0.003 * detail), axis=-1)
+        colour = np.clip(neutral[..., None] + tint, 0.0, 1.0)
+        height = 0.50 + 0.018 * n + 0.006 * detail
+        response = np.clip(0.5 + n * 0.22 + detail * 0.04, 0.0, 1.0)
+        smoothness = np.clip(0.22 + 0.08 * response, 0.18, 0.32)
+        ao = np.clip(0.93 + 0.05 * np.clip(0.5 + n * 0.25 + detail * 0.05, 0.0, 1.0), 0.90, 1.0)
+    return colour, height, zero, smoothness, ao, {}
+
+
+def _natural_surface_height(kind: str, u, v):
+    """Return the authored height field before normal encoding."""
+    n, _n01, detail = _natural_surface_layers(kind, u, v)
+    if kind == "grass":
+        return 0.50 + 0.012 * detail
+    if kind == "wall":
+        return 0.50 + 0.018 * n + 0.006 * detail
+    raise ValueError(f"Unknown natural surface kind: {kind}")
 
 
 # Weapon maps are authored from explicit readability targets so the scalar
@@ -649,19 +698,16 @@ def _surface_fields(kind: str, u: float, v: float):
     """Return base RGB, height, metallic, smoothness, AO for one tiled material."""
     u %= 1.0
     v %= 1.0
+    if kind in NATURAL_SURFACE_CONTRACT:
+        u_array = np.asarray(u, dtype=np.float64)
+        v_array = np.asarray(v, dtype=np.float64)
+        n, n01, _detail = _natural_surface_layers(kind, u_array, v_array)
+        values = _natural_surface_fields(kind, u_array, v_array, n, n01)
+        base, height, metallic, smoothness, ao, _masks = values
+        return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
     phases = SURFACE_PHASES[kind]
     n = periodic_noise(u, v, phases)
     n01 = clamp01(0.5 + n * 0.50)
-    if kind in INDUSTRIAL_SURFACE_CONTRACT:
-        values = _industrial_surface_fields(
-            kind,
-            np.asarray(u, dtype=np.float64),
-            np.asarray(v, dtype=np.float64),
-            np.asarray(n, dtype=np.float64),
-            np.asarray(n01, dtype=np.float64),
-        )
-        base, height, metallic, smoothness, ao, _masks = values
-        return tuple(float(value) for value in base), float(height), float(metallic), float(smoothness), float(ao)
     if kind == "trim":
         stripe = (u * 12.0 + v * 12.0) % 1.0
         edge = 1.0 if stripe < 0.12 else 0.0
@@ -689,6 +735,17 @@ def _surface_fields(kind: str, u: float, v: float):
 
 
 def _surface_normal(kind: str, u: float, v: float):
+    if kind in NATURAL_SURFACE_CONTRACT:
+        delta = 1.0 / 2048.0
+        height_u0 = float(_natural_surface_height(kind, u - delta, v))
+        height_u1 = float(_natural_surface_height(kind, u + delta, v))
+        height_v0 = float(_natural_surface_height(kind, u, v - delta))
+        height_v1 = float(_natural_surface_height(kind, u, v + delta))
+        slope_u = (height_u1 - height_u0) / (2.0 * delta)
+        slope_v = (height_v1 - height_v0) / (2.0 * delta)
+        tangent = np.asarray((-0.075 * slope_u, -0.075 * slope_v, 1.0), dtype=np.float64)
+        tangent /= np.linalg.norm(tangent)
+        return tuple(float(value * 0.5 + 0.5) for value in tangent)
     # Analytic, periodic slopes.  Every edge has the same tangent frame.
     frequency = {"grass": 8.0, "wall": 16.0, "trim": 12.0, "hazard": 10.0, "metal": 16.0, "dark": 16.0, "accent": 16.0}[kind]
     dx = 0.055 * math.cos(math.tau * frequency * u + 0.37) + 0.022 * math.sin(math.tau * (frequency * 0.5 * v + u))
@@ -704,13 +761,14 @@ def _surface_fields_array(kind: str, u, v):
     """Vectorized surface fields for one bounded row chunk."""
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    if kind in NATURAL_SURFACE_CONTRACT:
+        n, n01, _detail = _natural_surface_layers(kind, u, v)
+        base, height, metallic, smoothness, ao, _masks = _natural_surface_fields(kind, u, v, n, n01)
+        return base, height, metallic, smoothness, ao
     n = _periodic_noise_array(kind, u, v)
     n01 = np.clip(0.5 + n * 0.50, 0.0, 1.0)
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
-    if kind in INDUSTRIAL_SURFACE_CONTRACT:
-        base, height, metallic, smoothness, ao, _masks = _industrial_surface_fields(kind, u, v, n, n01)
-        return base, height, metallic, smoothness, ao
     if kind == "trim":
         stripe = np.mod(u * 12.0 + v * 12.0, 1.0)
         edge = (stripe < 0.12).astype(np.float64)
@@ -733,7 +791,64 @@ def _surface_fields_array(kind: str, u, v):
     raise ValueError(f"Unknown surface kind: {kind}")
 
 
+def _wrapped_central_differences(field, spacing_u, spacing_v):
+    """Calculate central differences on a two-dimensional torus."""
+    field = np.asarray(field, dtype=np.float64)
+    gradient_u = (np.roll(field, -1, axis=1) - np.roll(field, 1, axis=1)) / (2.0 * spacing_u)
+    gradient_v = (np.roll(field, -1, axis=0) - np.roll(field, 1, axis=0)) / (2.0 * spacing_v)
+    return gradient_u, gradient_v
+
+
+def _generate_natural_surface_maps(kind: str, width: int, height: int):
+    """Build four maps from one unique toroidal height field, then close edges."""
+    if width < 3 or height < 3:
+        raise ValueError("Natural surfaces require dimensions of at least 3x3")
+    unique_width, unique_height = width - 1, height - 1
+    u_values = np.arange(unique_width, dtype=np.float64) / float(unique_width)
+    v_values = np.arange(unique_height, dtype=np.float64) / float(unique_height)
+    u = u_values[None, :]
+    authored_height = np.empty((unique_height, unique_width), dtype=np.float64)
+    chunk_rows = max(1, min(unique_height, 64))
+
+    # The height field is the source of truth for the normal map.  It is fully
+    # authored on the unique torus before any output map receives its seam row.
+    for start in range(0, unique_height, chunk_rows):
+        stop = min(unique_height, start + chunk_rows)
+        v = v_values[start:stop, None]
+        authored_height[start:stop, :] = _natural_surface_height(kind, u, v)
+
+    spacing_u, spacing_v = 1.0 / float(unique_width), 1.0 / float(unique_height)
+    slope_u, slope_v = _wrapped_central_differences(authored_height, spacing_u, spacing_v)
+    vector_u = -0.075 * slope_u
+    vector_v = -0.075 * slope_v
+    vector_w = np.ones_like(authored_height)
+    lengths = np.sqrt(vector_u * vector_u + vector_v * vector_v + vector_w * vector_w)
+    encoded_normal = np.stack(
+        (vector_u / lengths * 0.5 + 0.5, vector_v / lengths * 0.5 + 0.5, vector_w / lengths * 0.5 + 0.5),
+        axis=-1,
+    )
+
+    base = _rgba_array(width, height)
+    normal = _rgba_array(width, height)
+    metallic = _rgba_array(width, height)
+    occlusion = _rgba_array(width, height)
+    normal[:unique_height, :unique_width, :3] = _u8_array(encoded_normal)
+    for start in range(0, unique_height, chunk_rows):
+        stop = min(unique_height, start + chunk_rows)
+        v = v_values[start:stop, None]
+        colour, _height, metal, smooth, ao = _surface_fields_array(kind, u, v)
+        base[start:stop, :unique_width, :3] = _u8_array(colour)
+        metallic[start:stop, :unique_width, 0] = _u8_array(metal)
+        metallic[start:stop, :unique_width, 3] = _u8_array(smooth)
+        occlusion[start:stop, :unique_width, :3] = _u8_array(np.repeat(ao[..., None], 3, axis=-1))
+    for buffer in (base, normal, metallic, occlusion):
+        close_repeat_edges(buffer, width, height)
+    return base, normal, metallic, occlusion
+
+
 def generate_surface_maps(kind: str, width: int, height: int):
+    if kind in NATURAL_SURFACE_CONTRACT:
+        return _generate_natural_surface_maps(kind, width, height)
     # Author at 1024, then deterministic nearest-upsample weapon maps to 2048.
     # This preserves the approved source resolution while keeping background
     # Blender generation practical on laptops.
@@ -743,7 +858,7 @@ def generate_surface_maps(kind: str, width: int, height: int):
     normal = _rgba_array(source_width, source_height)
     metallic = _rgba_array(source_width, source_height)
     occlusion = _rgba_array(source_width, source_height)
-    authored_height = np.empty((source_height, source_width), dtype=np.float64) if kind in INDUSTRIAL_SURFACE_CONTRACT or kind in ("metal", "dark", "accent") else None
+    authored_height = np.empty((source_height, source_width), dtype=np.float64) if kind in ("metal", "dark", "accent") else None
     x_values = np.arange(source_width, dtype=np.float64) / float(source_width - 1)
     chunk_rows = max(1, min(source_height, 64))
     frequency = {"grass": 8.0, "wall": 16.0, "trim": 12.0, "hazard": 10.0, "metal": 16.0, "dark": 16.0, "accent": 16.0}[kind]
@@ -1164,27 +1279,36 @@ def generate_rocket_maps(width=1024, height=1024):
 
 def generate_shield(width=128, height=128):
     buffer = _rgba_array(width, height)
-    x = (np.arange(width, dtype=np.float64) + 0.5) / 16.0
-    y = (np.arange(height, dtype=np.float64) + 0.5)[:, None] / 16.0
-    u = x[None, :]
-    v = y
-    fu = u - np.floor(u)
-    fv_a = (v + u * 0.58) - np.floor(v + u * 0.58)
-    fv_b = (v - u * 0.58) - np.floor(v - u * 0.58)
-    line_distance = np.minimum.reduce(np.broadcast_arrays(fu, 1.0 - fu, fv_a, 1.0 - fv_a, fv_b, 1.0 - fv_b))
-    line = 1.0 - _smoothstep_array(0.015, 0.105, line_distance)
-    pulse = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 0.13 + v * 0.17))
-    alpha = np.clip(0.035 + line * (0.76 + 0.18 * pulse), 0.0, 1.0)
+    u = (np.arange(width, dtype=np.float64) + 0.5) / float(width)
+    v = (np.arange(height, dtype=np.float64) + 0.5)[:, None] / float(height)
+    u = u[None, :]
+    # Several soft, irregular periodic modes keep the mask continuous while
+    # leaving the shader's animated scan line as the only deliberate scan cue.
+    mottle_layers = (
+        (2.0, 5.0, 0.37, 0.42),
+        (5.0, 2.0, 2.11, 0.29),
+        (3.0, -7.0, 4.03, 0.19),
+        (-7.0, 3.0, 1.47, 0.10),
+    )
+    warp_layers = ((1.0, 3.0, 0.71, 0.028), (3.0, 1.0, 3.27, 0.017))
+    mottle = _irregular_periodic_mottle(u, v, mottle_layers, warp_layers)
+    pulse = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 1.0 + v * 4.0) + 0.59)
+    density = np.clip(0.5 + 0.5 * (0.78 * mottle + 0.22 * (2.0 * pulse - 1.0)), 0.0, 1.0)
+    density = (density - np.min(density)) / np.float64(np.max(density) - np.min(density))
+    alpha = 0.063 + 0.80 * density
     colour = np.stack(
         (
-            np.clip(0.44 + 0.18 * pulse + 0.22 * line, 0.0, 1.0),
-            np.clip(0.82 + 0.12 * pulse, 0.0, 1.0),
-            np.clip(0.92 + 0.08 * line, 0.0, 1.0),
+            np.clip(0.40 + 0.12 * pulse + 0.08 * density, 0.0, 1.0),
+            np.clip(0.76 + 0.12 * pulse + 0.06 * density, 0.0, 1.0),
+            np.clip(0.88 + 0.08 * pulse + 0.06 * density, 0.0, 1.0),
             alpha,
         ),
         axis=-1,
     )
     buffer[:, :, :] = _u8_array(colour)
+    # Keep the VFX source compatible with the generator's repeat-edge audit;
+    # the runtime importer still uses Clamp wrapping for this mask.
+    buffer[:, -1, :] = buffer[:, 0, :]
     return buffer
 
 
@@ -1235,27 +1359,52 @@ def generate_sprite_sheet(kind: str, width=128, height=128):
     return buffer
 
 
+_SKY_CLOUD_BROAD_LAYERS = (
+    (1.0, 2.0, 0.53, 0.55),
+    (2.0, 3.0, 2.71, 0.30),
+    (4.0, 5.0, 4.19, 0.15),
+)
+_SKY_CLOUD_DETAIL_LAYERS = (
+    (6.0, 9.0, 1.07, 0.58),
+    (11.0, 13.0, 3.83, 0.27),
+    (19.0, 23.0, 5.10, 0.15),
+)
+
+
+def _sky_cloud_density(u, v):
+    """Return scattered cloud masses on an exact U-periodic panorama."""
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.asarray(v, dtype=np.float64)
+    # A 2:1 panorama needs twice as many U cycles for square-pixel symmetry.
+    broad = _balanced_toroidal_field(u, v, _SKY_CLOUD_BROAD_LAYERS, u_frequency_scale=2.0)
+    detail = _balanced_toroidal_field(u, v, _SKY_CLOUD_DETAIL_LAYERS, u_frequency_scale=2.0)
+    density = _smoothstep_array(0.52, 0.68, 0.5 + broad * 0.95 + detail * 0.30)
+    pole_fade = _smoothstep_array(0.0, 0.08, v) * _smoothstep_array(0.0, 0.08, 1.0 - v)
+    return np.clip(density * pole_fade, 0.0, 1.0)
+
+
 def generate_sky(width=2048, height=1024):
+    if width < 3 or height < 2:
+        raise ValueError("Sky panorama requires dimensions of at least 3x2")
     buffer = _rgba_array(width, height)
-    cloud_centres = ((0.16, 0.68, 0.095, 0.060), (0.34, 0.76, 0.120, 0.055), (0.58, 0.64, 0.085, 0.065), (0.79, 0.78, 0.115, 0.050), (0.91, 0.60, 0.070, 0.050))
-    x = np.arange(width, dtype=np.float64) / float(width - 1)
+    unique_width = width - 1
+    x = np.arange(unique_width, dtype=np.float64) / float(unique_width)
+    horizon = np.array((185.0, 220.0, 242.0), dtype=np.float64) / 255.0
+    zenith = np.array((76.0, 145.0, 216.0), dtype=np.float64) / 255.0
+    cloud_colour = np.array((245.0, 243.0, 232.0), dtype=np.float64) / 255.0
     chunk_rows = max(1, min(height, 64))
     for start in range(0, height, chunk_rows):
         stop = min(height, start + chunk_rows)
         u = x[None, :]
         v = (np.arange(start, stop, dtype=np.float64) / float(height - 1))[:, None]
         sky_t = _smoothstep_array(0.0, 1.0, v)
-        sky = np.stack((0.73 + (0.30 - 0.73) * sky_t, 0.86 + (0.58 - 0.86) * sky_t, 0.95 + (0.86 - 0.95) * sky_t), axis=-1)
-        coverage = np.zeros((stop - start, width), dtype=np.float64)
-        for cx, cy, sx, sy in cloud_centres:
-            du = np.abs(u - cx)
-            du = np.minimum(du, 1.0 - du)
-            coverage = np.maximum(coverage, np.exp(-((du / sx) ** 2 + ((v - cy) / sy) ** 2) * 1.7))
-        coverage *= 0.22
-        cloud_mix = _smoothstep_array(0.02, 0.20, coverage)
-        colour = sky * (1.0 - cloud_mix[..., None]) + np.array((0.96, 0.95, 0.89), dtype=np.float64) * cloud_mix[..., None]
-        buffer[start:stop, :, :3] = _u8_array(colour)
-    # U-repeat only; horizon and zenith remain distinct.
+        sky = horizon + (zenith - horizon) * sky_t[..., None]
+        density = _sky_cloud_density(u, v)
+        cloud_mix = np.clip(density * 0.68, 0.0, 0.72)
+        colour = sky * (1.0 - cloud_mix[..., None]) + cloud_colour * cloud_mix[..., None]
+        buffer[start:stop, :unique_width, :3] = _u8_array(colour)
+        buffer[start:stop, :unique_width, 3] = _u8_array(density)
+    # The final column is an exact copy, not a second floating-point sample.
     buffer[:, -1, :] = buffer[:, 0, :]
     return buffer
 
@@ -1387,6 +1536,63 @@ def _seam_errors(rgba, width, height, check_v=False, check_poles=False):
     if check_poles:
         poles = int(max(np.max(np.abs(array[row, :, :].astype(np.int16) - array[row, 0, :].astype(np.int16))) for row in (0, height - 1)))
     return seam_u, seam_v, poles
+
+
+def _wrapped_boundary_continuity(rgba, width, height):
+    """Audit seam neighborhoods and first-derivative continuity on unique texels."""
+    image = _rgba_view(rgba, width, height).astype(np.float64)
+    unique = image[:-1, :-1, :]
+    if unique.shape[0] < 4 or unique.shape[1] < 4:
+        return {
+            "pass": False,
+            "finite": False,
+            "axes": {},
+            "reason": "wrapped continuity requires at least four unique samples per axis",
+        }
+    finite = bool(np.isfinite(unique).all())
+    axes = {}
+    for axis, label in ((1, "u"), (0, "v")):
+        forward = np.roll(unique, -1, axis=axis) - unique
+        seam_step = np.take(forward, -1, axis=axis)
+        first_step = np.take(forward, 0, axis=axis)
+        previous_step = np.take(forward, -2, axis=axis)
+        interior_steps = np.delete(np.abs(forward), -1, axis=axis)
+        interior_step_p999 = float(np.percentile(interior_steps, 99.9))
+        seam_step_max = float(np.max(np.abs(seam_step)))
+        seam_spike_limit = max(3.0, interior_step_p999 + 2.0)
+        seam_spike = seam_step_max <= seam_spike_limit
+
+        # A C1 torus has matching forward steps at both sides of the seam.
+        seam_second_difference = np.maximum(np.abs(seam_step - first_step), np.abs(seam_step - previous_step))
+        interior_second_difference = np.abs(np.diff(forward, axis=axis))
+        interior_second_p999 = float(np.percentile(interior_second_difference, 99.9))
+        seam_second_max = float(np.max(seam_second_difference))
+        neighborhood_limit = max(3.0, interior_second_p999 + 2.0)
+        neighborhood_continuous = seam_second_max <= neighborhood_limit
+
+        central = (np.roll(unique, -1, axis=axis) - np.roll(unique, 1, axis=axis)) * 0.5
+        boundary_derivative_error = np.take(central, 0, axis=axis) - np.take(central, -1, axis=axis)
+        interior_derivative_difference = np.abs(np.diff(central, axis=axis))
+        interior_derivative_p999 = float(np.percentile(interior_derivative_difference, 99.9))
+        derivative_error_max = float(np.max(np.abs(boundary_derivative_error)))
+        derivative_limit = max(3.0, interior_derivative_p999 + 2.0)
+        derivative_continuous = derivative_error_max <= derivative_limit
+        axes[label] = {
+            "seam_step_max_u8": seam_step_max,
+            "interior_step_p999_u8": interior_step_p999,
+            "seam_spike_limit_u8": seam_spike_limit,
+            "seam_spike": seam_spike,
+            "seam_second_difference_max_u8": seam_second_max,
+            "interior_second_difference_p999_u8": interior_second_p999,
+            "neighborhood_limit_u8": neighborhood_limit,
+            "neighborhood_continuous": neighborhood_continuous,
+            "boundary_derivative_error_max_u8": derivative_error_max,
+            "interior_derivative_difference_p999_u8": interior_derivative_p999,
+            "derivative_limit_u8": derivative_limit,
+            "derivative_continuous": derivative_continuous,
+            "pass": seam_spike and neighborhood_continuous and derivative_continuous,
+        }
+    return {"pass": finite and all(axis["pass"] for axis in axes.values()), "finite": finite, "axes": axes}
 
 
 def _normal_map_audit(rgba, width, height):
@@ -1669,6 +1875,46 @@ def audit_explosion_semantics(rgba, width=128, height=128):
     }
 
 
+def audit_shield_semantics(rgba, width=128, height=128):
+    """Check the soft team mask and reject the former diagonal line lattice."""
+    array = _rgba_view(rgba, width, height)
+    alpha = array[:, :, 3].astype(np.float64)
+    rgb = array[:, :, :3].astype(np.float64)
+    luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
+    centred = alpha - float(np.mean(alpha))
+    spectrum = np.abs(np.fft.fftshift(np.fft.fft2(centred))) ** 2
+    frequency_v = np.fft.fftshift(np.fft.fftfreq(height)) * np.float64(height)
+    frequency_u = np.fft.fftshift(np.fft.fftfreq(width)) * np.float64(width)
+    v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+    non_dc = (u_grid != 0.0) | (v_grid != 0.0)
+    maximum_frequency = np.maximum(np.abs(u_grid), np.abs(v_grid))
+    minimum_frequency = np.minimum(np.abs(u_grid), np.abs(v_grid))
+    ratio = np.divide(minimum_frequency, maximum_frequency, out=np.zeros_like(maximum_frequency), where=maximum_frequency > 0.0)
+    diagonal_line_band = non_dc & (ratio >= 0.50) & (ratio <= 2.0)
+    total_energy = float(np.sum(spectrum[non_dc]))
+    diagonal_energy = float(np.sum(spectrum[diagonal_line_band]))
+    diagonal_fraction = diagonal_energy / total_energy if total_energy > np.finfo(np.float64).eps else 1.0
+    alpha_range = [int(np.min(alpha)), int(np.max(alpha))]
+    gates = {
+        "dimensions": bool(array.shape == (height, width, 4)),
+        "alpha_range": bool(alpha_range[0] >= 16 and alpha_range[1] <= 220),
+        "soft_alpha_mask": bool(alpha_range[1] - alpha_range[0] >= 96 and np.count_nonzero(alpha > 24) < alpha.size),
+        "team_tint": bool(float(np.mean(rgb[:, :, 1])) > float(np.mean(rgb[:, :, 0])) and float(np.mean(rgb[:, :, 2])) > float(np.mean(rgb[:, :, 1]))),
+        "no_diagonal_line_lattice": bool(np.isfinite(diagonal_fraction) and diagonal_fraction <= 0.30),
+    }
+    return {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "alpha_range_u8": alpha_range,
+        "mean_rgb_u8": [float(np.mean(rgb[:, :, channel])) for channel in range(3)],
+        "luminance_range_u8": [float(np.min(luminance)), float(np.max(luminance))],
+        "diagonal_lattice_spectral_fraction": float(diagonal_fraction),
+        "diagonal_lattice_spectral_limit": 0.30,
+        "spectral_energy": total_energy,
+        "diagonal_lattice_spectral_energy": diagonal_energy,
+    }
+
+
 def _weapon_readability_family_audit(kind, generated):
     """Check palette, PBR channel ranges, dimensions, and base luminance."""
     family_id = "weapon-" + kind
@@ -1785,36 +2031,230 @@ def audit_weapon_readability(generated, selected_families=None):
     }
 
 
-def audit_industrial_surface(kind, generated):
-    """Audit motif inventory, palette readability, and the shared PBR masks."""
-    contract = INDUSTRIAL_SURFACE_CONTRACT[kind]
+_NATURAL_FORBIDDEN_SOURCE_TOKENS = (
+    "_periodic_grid_distance",
+    "_periodic_ellipse_mask",
+    "_segment_mask",
+    "plate",
+    "slab",
+    "fastener",
+    "rib",
+    "stain",
+    "scratch",
+    "mowing",
+)
+
+
+def _directional_structure_audit(field, maximum_coherence):
+    """Measure global ridge bias from the wrapped luminance/density tensor."""
+    values = np.asarray(field, dtype=np.float64)
+    gradient_x = (np.roll(values, -1, axis=1) - np.roll(values, 1, axis=1)) * np.float64(0.5)
+    gradient_y = (np.roll(values, -1, axis=0) - np.roll(values, 1, axis=0)) * np.float64(0.5)
+    tensor_xx = float(np.mean(gradient_x * gradient_x))
+    tensor_yy = float(np.mean(gradient_y * gradient_y))
+    tensor_xy = float(np.mean(gradient_x * gradient_y))
+    energy = tensor_xx + tensor_yy
+    coherence = 1.0 if energy <= np.finfo(np.float64).eps else math.sqrt(
+        (tensor_xx - tensor_yy) ** 2 + 4.0 * tensor_xy * tensor_xy
+    ) / energy
+    return {
+        "pass": bool(np.isfinite(coherence) and coherence <= maximum_coherence),
+        "coherence": float(coherence),
+        "maximum": float(maximum_coherence),
+        "tensor": {"xx": tensor_xx, "yy": tensor_yy, "xy": tensor_xy},
+    }
+
+
+def _axis_periodic_band_audit(field, maximum_axis_fraction):
+    """Reject horizontal/vertical periodic energy hidden inside a tiled field."""
+    values = np.asarray(field, dtype=np.float64)
+    centred = values - float(np.mean(values))
+    total_variance = float(np.mean(centred * centred))
+
+    def profile_metrics(profile):
+        profile = np.asarray(profile, dtype=np.float64)
+        variance_fraction = 0.0 if total_variance <= np.finfo(np.float64).eps else float(np.mean(profile * profile) / total_variance)
+        spectrum = np.abs(np.fft.rfft(profile)) ** 2
+        if spectrum.size:
+            spectrum[0] = 0.0
+        dominant_cycle = int(np.argmax(spectrum)) if spectrum.size else 0
+        spectral_energy = float(np.sum(spectrum))
+        peak_fraction = 0.0 if spectral_energy <= np.finfo(np.float64).eps else float(spectrum[dominant_cycle] / spectral_energy)
+        return {
+            "variance_fraction": variance_fraction,
+            "dominant_cycle": dominant_cycle,
+            "peak_fraction": peak_fraction,
+        }
+
+    horizontal = profile_metrics(np.mean(centred, axis=1))
+    vertical = profile_metrics(np.mean(centred, axis=0))
+    maximum_observed = max(horizontal["variance_fraction"], vertical["variance_fraction"])
+    return {
+        "pass": bool(np.isfinite(maximum_observed) and maximum_observed <= maximum_axis_fraction),
+        "maximum_observed": maximum_observed,
+        "maximum": float(maximum_axis_fraction),
+        "horizontal": horizontal,
+        "vertical": vertical,
+    }
+
+
+def _quantized_audit_field(field, normalized=False):
+    """Convert authored or output fields to the same u8 domain used by the PNG."""
+    values = np.asarray(field, dtype=np.float64)
+    if values.ndim != 2:
+        raise ValueError("spectral audit fields must be two-dimensional")
+    return _u8_array(values) if normalized else np.rint(np.clip(values, 0.0, 255.0)).astype(np.uint8)
+
+
+def _radial_low_frequency_audit(fields, radius=6, maximum_rms_u8=0.5):
+    """Report non-DC FFT RMS in the low radial band of quantized fields."""
+    reports = {}
+    for name, (field, normalized) in fields.items():
+        quantized = _quantized_audit_field(field, normalized)
+        values = quantized.astype(np.float64)
+        centred = values - float(np.mean(values))
+        height, width = values.shape
+        spectrum = np.fft.fft2(centred) / np.float64(values.size)
+        frequency_v = np.fft.fftfreq(height) * np.float64(height)
+        frequency_u = np.fft.fftfreq(width) * np.float64(width)
+        v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+        radial_squared = u_grid * u_grid + v_grid * v_grid
+        low_mask = (radial_squared > 0.0) & (radial_squared <= np.float64(radius * radius))
+        rms_u8 = float(np.sqrt(np.sum(np.abs(spectrum[low_mask]) ** 2)))
+        full_rms_u8 = float(np.sqrt(np.sum(np.abs(spectrum) ** 2)))
+        reports[name] = {
+            "shape": [int(height), int(width)],
+            "quantized_range_u8": [int(np.min(quantized)), int(np.max(quantized))],
+            "low_frequency_radius": int(radius),
+            "low_frequency_rms_u8": rms_u8,
+            "full_rms_u8": full_rms_u8,
+            "low_frequency_energy_fraction": float((rms_u8 / full_rms_u8) ** 2) if full_rms_u8 > np.finfo(np.float64).eps else 0.0,
+            "pass": bool(np.isfinite(rms_u8) and rms_u8 <= maximum_rms_u8),
+        }
+    maximum_observed = max((report["low_frequency_rms_u8"] for report in reports.values()), default=float("inf"))
+    return {
+        "pass": bool(reports) and all(report["pass"] for report in reports.values()),
+        "maximum_observed_rms_u8": float(maximum_observed),
+        "maximum_rms_u8": float(maximum_rms_u8),
+        "radius": int(radius),
+        "fields": reports,
+    }
+
+
+def _effective_tiled_field(field, tile_u=13, tile_v=2, sample_size=127):
+    """Downsample one unique torus, then apply the arena's effective 13x2 tiling."""
+    values = np.asarray(field, dtype=np.float64)
+    if values.ndim != 2 or min(values.shape) < 4:
+        raise ValueError("wall tiling audit requires a two-dimensional field")
+    count_u = min(int(sample_size), values.shape[1])
+    count_v = min(int(sample_size), values.shape[0])
+    indices_u = np.linspace(0, values.shape[1] - 1, count_u).round().astype(np.int64)
+    indices_v = np.linspace(0, values.shape[0] - 1, count_v).round().astype(np.int64)
+    sampled = values[np.ix_(indices_v, indices_u)]
+    return np.tile(sampled, (int(tile_v), int(tile_u)))
+
+
+def _wall_diagonal_pattern_audit(field, tile_u=13, tile_v=2, maximum_diagonal_fraction=0.40, maximum_autocorrelation_limit=0.60):
+    """Reject texture-space diagonal lattice energy and long diagonal repeats."""
+    effective = _effective_tiled_field(field, tile_u, tile_v)
+    centred = effective - float(np.mean(effective))
+    spectrum = np.abs(np.fft.fftshift(np.fft.fft2(centred))) ** 2
+    height, width = effective.shape
+    frequency_v = np.fft.fftshift(np.fft.fftfreq(height)) * np.float64(height) / np.float64(tile_v)
+    frequency_u = np.fft.fftshift(np.fft.fftfreq(width)) * np.float64(width) / np.float64(tile_u)
+    v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+    non_dc = (u_grid != 0.0) | (v_grid != 0.0)
+    maximum_frequency = np.maximum(np.abs(u_grid), np.abs(v_grid))
+    minimum_frequency = np.minimum(np.abs(u_grid), np.abs(v_grid))
+    ratio = np.divide(minimum_frequency, maximum_frequency, out=np.zeros_like(maximum_frequency), where=maximum_frequency > 0.0)
+    diagonal_band = non_dc & (ratio >= 0.60) & (ratio <= 1.0 / 0.60)
+    total_energy = float(np.sum(spectrum[non_dc]))
+    diagonal_energy = float(np.sum(spectrum[diagonal_band]))
+    diagonal_fraction = diagonal_energy / total_energy if total_energy > np.finfo(np.float64).eps else 1.0
+
+    variance = float(np.sum(centred * centred))
+    autocorrelations = []
+    # Exclude the repeated tile period itself; the diagonal lag window stays
+    # within one source tile while still covering non-local pattern repeats.
+    maximum_lag = min(effective.shape[0] // int(tile_v), effective.shape[1] // int(tile_u)) // 2
+    for lag in range(4, maximum_lag):
+        correlation = float(np.sum(centred * np.roll(centred, (lag, lag), axis=(0, 1))) / variance) if variance > np.finfo(np.float64).eps else 1.0
+        autocorrelations.append({"lag": int(lag), "correlation": correlation})
+    maximum_autocorrelation = max((abs(item["correlation"]) for item in autocorrelations), default=float("inf"))
+    gates = {
+        "diagonal_spectrum": bool(np.isfinite(diagonal_fraction) and diagonal_fraction <= maximum_diagonal_fraction),
+        "diagonal_autocorrelation": bool(np.isfinite(maximum_autocorrelation) and maximum_autocorrelation <= maximum_autocorrelation_limit),
+    }
+    return {
+        "pass": all(gates.values()),
+        "effective_tiling": {"u": int(tile_u), "v": int(tile_v), "sample_shape": [int(effective.shape[0] // tile_v), int(effective.shape[1] // tile_u)]},
+        "diagonal_spectral_fraction": float(diagonal_fraction),
+        "diagonal_spectral_limit": float(maximum_diagonal_fraction),
+        "diagonal_autocorrelation_max": float(maximum_autocorrelation),
+        "diagonal_autocorrelation_limit": float(maximum_autocorrelation_limit),
+        "diagonal_autocorrelation": autocorrelations,
+        "spectral_energy": total_energy,
+        "diagonal_spectral_energy": diagonal_energy,
+        "gates": gates,
+    }
+
+
+def _natural_surface_source_guard():
+    """Keep the grass/concrete call path free of discrete motif helpers."""
+    path_functions = (
+        _balanced_toroidal_field,
+        _irregular_periodic_mottle,
+        _natural_surface_layers,
+        _natural_surface_fields,
+        _natural_surface_height,
+        _surface_fields,
+        _surface_fields_array,
+        _wrapped_central_differences,
+        _generate_natural_surface_maps,
+    )
+    try:
+        source = "\n".join(inspect.getsource(function) for function in path_functions).lower()
+    except (OSError, TypeError):
+        return {"pass": False, "forbidden_tokens": ["<source-unavailable>"], "path_functions": [function.__name__ for function in path_functions]}
+    forbidden = sorted(token for token in _NATURAL_FORBIDDEN_SOURCE_TOKENS if token in source)
+    return {"pass": not forbidden, "forbidden_tokens": forbidden, "path_functions": [function.__name__ for function in path_functions]}
+
+
+def audit_continuous_surface(kind, generated):
+    """Audit natural surface inventory, toroidal seams, fields, and PBR bounds."""
+    contract = NATURAL_SURFACE_CONTRACT[kind]
     prefix = "Retro" + kind.capitalize()
     expected_names = tuple(FAMILY_REGISTRY[kind]["outputs"])
     entries = {name: generated.get(name) for name in expected_names}
     complete = all(entry is not None for entry in entries.values())
     dimensions_ok = complete and all(entry["dimensions"] == [1024, 1024] for entry in entries.values())
+    family_names = {name for name in generated if name.startswith(prefix)}
+    inventory_ok = tuple(entries) == expected_names and family_names == set(expected_names)
     if not complete:
-        return {"pass": False, "gates": {"inventory": False, "dimensions": False}, "expected": list(expected_names)}
+        return {"pass": False, "gates": {"inventory": inventory_ok, "dimensions": dimensions_ok}, "expected": list(expected_names)}
 
     width, height = entries[prefix]["dimensions"]
     base = _rgba_view(entries[prefix]["buffer"], width, height)
     normal = _rgba_view(entries[prefix + "_Normal"]["buffer"], width, height)
     metallic = _rgba_view(entries[prefix + "_MetallicSmoothness"]["buffer"], width, height)
     occlusion = _rgba_view(entries[prefix + "_Occlusion"]["buffer"], width, height)
-
-    x_values = np.arange(width, dtype=np.float64) / float(width - 1)
-    y_values = np.arange(height, dtype=np.float64) / float(height - 1)
-    u, v = x_values[None, :], y_values[:, None]
-    noise = _periodic_noise_array(kind, u, v)
-    noise01 = np.clip(0.5 + noise * 0.50, 0.0, 1.0)
-    _colour, _height, _metal, _smooth, _ao, masks = _industrial_surface_fields(kind, u, v, noise, noise01)
+    maps = {"base": base, "normal": normal, "metallic_smoothness": metallic, "occlusion": occlusion}
+    edge_errors = {}
+    for map_name, image in maps.items():
+        edge_errors[map_name] = {
+            "u": int(np.count_nonzero(image[:, 0, :] != image[:, -1, :])),
+            "v": int(np.count_nonzero(image[0, :, :] != image[-1, :, :])),
+        }
+    edges_ok = all(error["u"] == 0 and error["v"] == 0 for error in edge_errors.values())
+    wrapped_continuity = {map_name: _wrapped_boundary_continuity(image, width, height) for map_name, image in maps.items()}
+    wrapped_continuity_ok = all(result["pass"] for result in wrapped_continuity.values())
 
     rgb = base[:, :, :3].astype(np.float64) / 255.0
     luminance = rgb[:, :, 0] * 0.2126 + rgb[:, :, 1] * 0.7152 + rgb[:, :, 2] * 0.0722
     palette_ranges = [[int(np.min(base[:, :, channel])), int(np.max(base[:, :, channel]))] for channel in range(3)]
     palette_floor, palette_ceiling = contract["palette_u8"]
     palette_ok = all(palette_ranges[channel][0] >= palette_floor[channel] - 1 and palette_ranges[channel][1] <= palette_ceiling[channel] + 1 for channel in range(3))
-    contrast = float(np.max(luminance) - np.min(luminance))
+    luminance_span = float(np.max(luminance) - np.min(luminance))
 
     metal_values = metallic[:, :, 0].astype(np.float64) / 255.0
     smooth_values = metallic[:, :, 3].astype(np.float64) / 255.0
@@ -1822,61 +2262,156 @@ def audit_industrial_surface(kind, generated):
     tolerance = (1.0 / 255.0) + 1e-6
     metallic_range = [float(np.min(metal_values)), float(np.max(metal_values))]
     smoothness_range = [float(np.min(smooth_values)), float(np.max(smooth_values))]
+    ao_range = [float(np.min(ao_values)), float(np.max(ao_values))]
     metallic_ok = metallic_range[0] >= contract["metallic"][0] - tolerance and metallic_range[1] <= contract["metallic"][1] + tolerance
     smoothness_ok = smoothness_range[0] >= contract["smoothness"][0] - tolerance and smoothness_range[1] <= contract["smoothness"][1] + tolerance
-
-    seam_values = ao_values[masks["seam"]]
-    excluded = masks["seam"] | masks["stains"] | masks["scratches"]
-    excluded |= masks.get("fasteners", np.zeros_like(excluded))
-    excluded |= masks.get("ribs", np.zeros_like(excluded))
-    interior_values = ao_values[~excluded]
-    seam_ao = float(np.mean(seam_values))
-    interior_ao = float(np.mean(interior_values))
-    ao_ok = abs(seam_ao - contract["seam_ao"]) <= tolerance and abs(interior_ao - contract["interior_ao"]) <= 0.025
-
-    columns, rows = contract["tile_grid"]
-    motif_counts = {
-        "tile_cells": columns * rows,
-        "stains": len(_INDUSTRIAL_WEAR[kind]["stains"]),
-        "scratches": len(_INDUSTRIAL_WEAR[kind]["scratches"]),
-    }
-    motif_gates = {
-        "tile_cells": motif_counts["tile_cells"] == contract["plate_count" if kind == "grass" else "slab_count"],
-        "stains": motif_counts["stains"] == contract["stain_count"],
-        "scratches": motif_counts["scratches"] == contract["scratch_count"],
-    }
-    if kind == "grass":
-        motif_counts["fasteners"] = columns * rows * contract["fasteners_per_plate"]
-        motif_gates["fasteners"] = motif_counts["fasteners"] == contract["fastener_count"]
-    else:
-        motif_counts["ribs"] = columns
-        motif_gates["ribs"] = motif_counts["ribs"] == contract["rib_count"]
+    ao_ok = ao_range[0] >= contract["ao"][0] - tolerance and ao_range[1] <= contract["ao"][1] + tolerance
 
     normal_audit = _normal_map_audit(normal, width, height)
+    decoded_normal = normal[:, :, :3].astype(np.float64) / 127.5 - 1.0
+    normal_lengths = np.sqrt(np.sum(decoded_normal * decoded_normal, axis=-1))
+    unit_error = float(np.max(np.abs(normal_lengths - 1.0)))
     normal_xy_ranges = [[int(np.min(normal[:, :, channel])), int(np.max(normal[:, :, channel]))] for channel in range(2)]
-    normal_nonflat = normal_audit["valid"] and all(maximum - minimum >= 8 for minimum, maximum in normal_xy_ranges)
+    normal_nonflat = normal_audit["valid"] and unit_error <= 0.02 and all(maximum - minimum >= 8 for minimum, maximum in normal_xy_ranges)
+
+    unique_width, unique_height = width - 1, height - 1
+    x_values = np.arange(unique_width, dtype=np.float64) / float(unique_width)
+    y_values = np.arange(unique_height, dtype=np.float64) / float(unique_height)
+    height_field = _natural_surface_height(kind, x_values[None, :], y_values[:, None])
+    slope_u, slope_v = _wrapped_central_differences(height_field, 1.0 / unique_width, 1.0 / unique_height)
+    finite_gradients = bool(np.isfinite(height_field).all() and np.isfinite(slope_u).all() and np.isfinite(slope_v).all())
+    directional = _directional_structure_audit(height_field, contract.get("maximum_directional_coherence", 0.12))
+    radial_low_frequency = None
+    luminance_span_u8 = None
+    wall_pattern = None
+
+    if kind == "grass":
+        green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
+        green_fraction = float(np.mean(green_dominant))
+        near_white = int(np.count_nonzero(np.all(base[:, :, :3] >= contract["near_white_threshold_u8"], axis=-1)))
+        palette_semantics = green_fraction >= contract["green_dominance_fraction"] and near_white == 0
+        palette_mean = [float(np.mean(base[:, :, channel])) for channel in range(3)]
+        mean_floor, mean_ceiling = contract["mean_rgb_u8"]
+        palette_mean_ok = all(mean_floor[channel] <= palette_mean[channel] <= mean_ceiling[channel] for channel in range(3))
+        directional_fields = {
+            "albedo_luminance": _directional_structure_audit(luminance[:-1, :-1], contract["maximum_directional_coherence"]),
+            "height": directional,
+            "smoothness": _directional_structure_audit(smooth_values[:-1, :-1], contract["maximum_directional_coherence"]),
+        }
+        axis_bands = {
+            "albedo_luminance": _axis_periodic_band_audit(luminance[:-1, :-1], contract["maximum_axis_band_fraction"]),
+            "height": _axis_periodic_band_audit(height_field, contract["maximum_axis_band_fraction"]),
+            "smoothness": _axis_periodic_band_audit(smooth_values[:-1, :-1], contract["maximum_axis_band_fraction"]),
+        }
+        directional_ok = all(result["pass"] for result in directional_fields.values())
+        axis_bands_ok = all(result["pass"] for result in axis_bands.values())
+        radial_low_frequency = _radial_low_frequency_audit(
+            {
+                "albedo_luminance": (luminance[:-1, :-1], True),
+                "height": (height_field, True),
+                "smoothness": (smooth_values[:-1, :-1], True),
+                "ao": (ao_values[:-1, :-1], True),
+            },
+            radius=6,
+            maximum_rms_u8=contract["maximum_low_frequency_rms_u8"],
+        )
+        luminance_u8 = _quantized_audit_field(luminance[:-1, :-1], normalized=True)
+        luminance_span_u8 = int(np.max(luminance_u8) - np.min(luminance_u8))
+        surface_spread = None
+    else:
+        surface_spread = np.max(rgb, axis=-1) - np.min(rgb, axis=-1)
+        palette_semantics = bool(float(np.max(surface_spread)) <= contract["rgb_spread_max"] + tolerance)
+        directional_ok = directional["pass"]
+        wall_pattern = _wall_diagonal_pattern_audit(
+            luminance[:-1, :-1],
+            tile_u=contract["effective_tile"][0],
+            tile_v=contract["effective_tile"][1],
+            maximum_diagonal_fraction=contract["maximum_diagonal_spectral_fraction"],
+            maximum_autocorrelation_limit=contract["maximum_diagonal_autocorrelation"],
+        )
+        green_fraction = None
+        near_white = None
+    source_guard = _natural_surface_source_guard()
+    motif_inventory = list(contract["motif_inventory"])
     gates = {
-        "inventory": tuple(entries) == expected_names,
+        "inventory": inventory_ok,
         "dimensions": dimensions_ok,
-        "motif_counts": all(motif_gates.values()),
+        "edge_bytes": edges_ok,
+        "wrapped_continuity": wrapped_continuity_ok,
         "palette_bounds": palette_ok,
-        "palette_contrast": contrast >= contract["minimum_luminance_contrast"],
+        "palette_semantics": palette_semantics,
         "normal_nonflat": normal_nonflat,
         "metallic_range": metallic_ok,
         "smoothness_range": smoothness_ok,
-        "ao_masks": ao_ok,
-        "wall_nonmetallic": kind != "wall" or metallic_range == [0.0, 0.0],
+        "ao_range": ao_ok,
+        "finite_gradients": finite_gradients,
+        "directional_balance": directional_ok,
+        "construction": contract["construction"] == "continuous-periodic-field",
+        "motif_inventory": not motif_inventory,
+        "source_guard": source_guard["pass"],
+        "wall_nonmetallic": kind != "wall" or metallic_range[1] <= tolerance,
+    }
+    if kind == "grass":
+        gates["low_frequency_detail"] = radial_low_frequency["pass"]
+        gates["luminance_span"] = luminance_span_u8 <= contract["maximum_luminance_span_u8"]
+    else:
+        gates["wall_diagonal_pattern"] = wall_pattern["pass"]
+    result = {
+        "pass": all(gates.values()),
+        "gates": gates,
+        "contract": contract,
+        "construction": contract["construction"],
+        "motifs": {"inventory": motif_inventory, "counts": {}},
+        "edges": edge_errors,
+        "wrapped_continuity": wrapped_continuity,
+        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "green_dominant_fraction": green_fraction, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
+        "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges, "unit_error": unit_error},
+        "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
+        "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
+        "ao": {"range": ao_range, "target": list(contract["ao"])},
+        "gradients": {"finite": finite_gradients, "u_range": [float(np.min(slope_u)), float(np.max(slope_u))], "v_range": [float(np.min(slope_v)), float(np.max(slope_v))]},
+        "directional_balance": directional,
+        "source_guard": source_guard,
+    }
+    if kind == "grass":
+        gates["palette_mean"] = palette_mean_ok
+        gates["periodic_bands"] = axis_bands_ok
+        result["palette"].update({"mean_rgb_u8": palette_mean, "mean_bounds_u8": [list(bound) for bound in contract["mean_rgb_u8"]]})
+        result["directional_balance"] = {"pass": directional_ok, "fields": directional_fields}
+        result["periodic_bands"] = {"pass": axis_bands_ok, "fields": axis_bands}
+        result["radial_low_frequency"] = radial_low_frequency
+        result["ao_spectral"] = radial_low_frequency["fields"]["ao"]
+        result["palette"].update({"luminance_span_u8": luminance_span_u8, "maximum_luminance_span_u8": contract["maximum_luminance_span_u8"]})
+        result["pass"] = all(gates.values())
+    else:
+        result["wall_diagonal_pattern"] = wall_pattern
+        result["pass"] = all(gates.values())
+    return result
+
+
+def audit_sky_clouds(generated):
+    """Audit the panorama seam, pole fade, scattered coverage, and ridge bias."""
+    entry = generated.get("RetroSunnySky")
+    if entry is None:
+        return {"pass": False, "gates": {"inventory": False}}
+    width, height = entry["dimensions"]
+    image = _rgba_view(entry["buffer"], width, height)
+    density = image[:, :-1, 3].astype(np.float64) / 255.0
+    directional = _directional_structure_audit(density, 0.12)
+    coverage = float(np.mean(density >= 0.20))
+    gates = {
+        "inventory": width == 2048 and height == 1024,
+        "exact_u_seam": bool(np.array_equal(image[:, 0, :], image[:, -1, :])),
+        "pole_fade": bool(np.count_nonzero(image[0, :, 3]) == 0 and np.count_nonzero(image[-1, :, 3]) == 0),
+        "scattered_coverage": 0.10 <= coverage <= 0.60,
+        "directional_balance": directional["pass"],
     }
     return {
         "pass": all(gates.values()),
         "gates": gates,
-        "contract": contract,
-        "motifs": {"counts": motif_counts, "gates": motif_gates},
-        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_contrast": contrast},
-        "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges},
-        "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
-        "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
-        "ao": {"seam_mean": seam_ao, "seam_target": contract["seam_ao"], "interior_mean": interior_ao, "interior_target": contract["interior_ao"]},
+        "coverage_at_0_20": coverage,
+        "density_range": [float(np.min(density)), float(np.max(density))],
+        "directional_balance": directional,
     }
 
 
@@ -2044,9 +2579,13 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         )
     if "explosion" in selected and "RetroExplosion" in generated:
         checks["explosion"] = audit_explosion_semantics(generated["RetroExplosion"]["buffer"])
+    if "shield" in selected and "RetroShield" in generated:
+        checks["shield"] = audit_shield_semantics(generated["RetroShield"]["buffer"])
     for kind in ("grass", "wall"):
         if kind in selected:
-            checks[kind] = audit_industrial_surface(kind, generated)
+            checks[kind] = audit_continuous_surface(kind, generated)
+    if "sky" in selected:
+        checks["sky"] = audit_sky_clouds(generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
         checks["weapon_readability"] = audit_weapon_readability(generated, selected)
         checks["cross_channel_wear"] = audit_cross_channel_weapon_wear(generated, selected)
@@ -2237,7 +2776,7 @@ def _family_buffers(family_id):
     elif family_id == "shield":
         record("RetroShield", 128, 128, generate_shield(), "vfx", alpha_range=(16, 220))
     elif family_id == "sky":
-        record("RetroSunnySky", 2048, 1024, generate_sky(), "sky", True, False)
+        record("RetroSunnySky", 2048, 1024, generate_sky(), "sky", True, False, True)
     else:
         raise ValueError(f"Unknown texture family: {family_id}")
     return records, frames

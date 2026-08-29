@@ -450,7 +450,7 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("scene/render", "gameplay-camera", () =>
                 {
                     var camera = context.Camera;
-                    if (camera.clearFlags != CameraClearFlags.SolidColor || Mathf.Abs(camera.backgroundColor.r - 0.72f) > 0.001f ||
+                    if (camera.clearFlags != CameraClearFlags.Skybox || Mathf.Abs(camera.backgroundColor.r - 0.72f) > 0.001f ||
                         Mathf.Abs(camera.backgroundColor.g - 0.88f) > 0.001f || Mathf.Abs(camera.backgroundColor.b - 0.96f) > 0.001f ||
                         Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.farClipPlane - 180f) > 0.01f)
                         throw new InvalidOperationException("Gameplay camera bright-scene contract invalid.");

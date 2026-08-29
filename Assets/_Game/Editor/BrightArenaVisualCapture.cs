@@ -333,6 +333,10 @@ namespace RocketFooxball.Editor
                         {
                             captureCamera = gameplayCamera;
                             RestoreCameraState(gameplayCamera, gameplayState);
+                            gameplayCamera.transform.SetPositionAndRotation(
+                                view.Position,
+                                Quaternion.LookRotation(view.Target - view.Position, Vector3.up));
+                            gameplayCamera.fieldOfView = view.FieldOfView;
                             gameplayCamera.targetTexture = renderTarget;
                             gameplayCamera.aspect = (float)Width / Height;
                             viewmodels.SetActive(true);
@@ -350,7 +354,7 @@ namespace RocketFooxball.Editor
                                 externalCamera.hideFlags = HideFlags.HideAndDontSave;
                                 externalCamera.enabled = false;
                                 externalCamera.targetTexture = renderTarget;
-                                externalCamera.clearFlags = CameraClearFlags.SolidColor;
+                                externalCamera.clearFlags = CameraClearFlags.Skybox;
                                 externalCamera.backgroundColor = gameplayCamera.backgroundColor;
                                 externalCamera.nearClipPlane = 0.05f;
                                 externalCamera.farClipPlane = gameplayCamera.farClipPlane;
@@ -621,9 +625,9 @@ namespace RocketFooxball.Editor
         {
             return new[]
             {
-                new ViewDefinition("FirstPersonRocket", "01_FirstPersonRocket.png", ViewMode.Rocket, Vector3.zero, Vector3.zero, 75f),
-                new ViewDefinition("FirstPersonShotgun", "02_FirstPersonShotgun.png", ViewMode.Shotgun, Vector3.zero, Vector3.zero, 75f),
-                new ViewDefinition("ShadowSideNorthWall", "03_ShadowSideNorthWall.png", ViewMode.External, new Vector3(18f, 8f, 8f), new Vector3(-8f, 4f, -44f), 58f)
+                new ViewDefinition("FirstPersonRocket", "01_FirstPersonRocket.png", ViewMode.Rocket, new Vector3(10f, 3.1f, 24f), new Vector3(-67f, 3.5f, 0f), 75f),
+                new ViewDefinition("FirstPersonShotgun", "02_FirstPersonShotgun.png", ViewMode.Shotgun, new Vector3(-10f, 3.1f, -24f), new Vector3(67f, 3.5f, 0f), 75f),
+                new ViewDefinition("ShadowSideNorthWall", "03_ShadowSideNorthWall.png", ViewMode.External, new Vector3(0f, 58f, 56f), new Vector3(0f, 1.5f, 0f), 70f)
             };
         }
 

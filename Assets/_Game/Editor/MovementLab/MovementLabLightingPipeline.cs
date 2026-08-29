@@ -33,14 +33,21 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                internal static readonly Color ProductionAmbientSkyColor = new Color(0.42f, 0.41f, 0.40f, 1f);
-                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.38f, 0.32f, 0.24f, 1f);
-                internal static readonly Color ProductionAmbientGroundColor = new Color(0.17f, 0.14f, 0.12f, 1f);
+                internal static readonly Color ProductionAmbientSkyColor = new Color(0.55f, 0.65f, 0.75f, 1f);
+                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.48f, 0.50f, 0.48f, 1f);
+                internal static readonly Color ProductionAmbientGroundColor = new Color(0.28f, 0.28f, 0.25f, 1f);
+                internal static readonly Color ProductionSunColor = new Color(1f, 0.95f, 0.86f, 1f);
                 internal static readonly Vector3 ProductionSunEuler = new Vector3(50f, 330f, 0f);
-                internal const float ProductionAmbientIntensity = 0.90f;
+                internal const float ProductionAmbientIntensity = 0.95f;
                 internal const float FastAmbientIntensity = 1.15f;
-                internal const float ProductionSunIntensity = 2.4f;
+                internal const float ProductionSunIntensity = 1.6f;
                 internal const float ProductionSunShadowStrength = 0.25f;
+                internal const float SunnySkyCloudCoverage = 0.26f;
+                internal const float SunnySkyCloudSoftness = 0.72f;
+                internal const float SunnySkySunAngularRadius = 0.012f;
+                internal const float SunnySkySunIntensity = 3f;
+                internal const float SunnySkyFogHorizonHeight = 0.02f;
+                internal const float SunnySkyFogHorizonWidth = 0.28f;
                 internal const float TonemappingPostExposure = 0.35f;
                 internal const float ColorAdjustmentsContrast = 2f;
                 internal const float ColorAdjustmentsSaturation = 2f;
@@ -64,7 +71,7 @@ namespace RocketFooxball.Editor
                     sun.GetUniversalAdditionalLightData();
 
                     sun.type = LightType.Directional;
-                    sun.color = SunColor;
+                    sun.color = ProductionSunColor;
                     sun.intensity = ProductionSunIntensity;
                     sun.transform.rotation = Quaternion.Euler(ProductionSunEuler);
                     sun.lightmapBakeType = LightmapBakeType.Mixed;
@@ -108,10 +115,63 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Lighting-owned sky material is missing: " + SkyMaterialPath);
                     }
 
-                    skyMaterial.SetVector("_SunDirection", sunDirection);
-                    EditorUtility.SetDirty(skyMaterial);
-                    AssetDatabase.SaveAssetIfDirty(skyMaterial);
+                    var panorama = LoadTexture(SkyTexturePath);
+                    var changed = false;
+                    changed |= SetTextureIfDifferent(skyMaterial, "_Panorama", panorama);
+                    changed |= SetColorIfDifferent(skyMaterial, "_HorizonColor", SkyHorizonColor);
+                    changed |= SetColorIfDifferent(skyMaterial, "_ZenithColor", SkyZenithColor);
+                    changed |= SetColorIfDifferent(skyMaterial, "_CloudTint", SkyCloudColor);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_CloudCoverage", SunnySkyCloudCoverage);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_CloudSoftness", SunnySkyCloudSoftness);
+                    changed |= SetVectorIfDifferent(skyMaterial, "_SunDirection", new Vector4(sunDirection.x, sunDirection.y, sunDirection.z, 0f));
+                    changed |= SetColorIfDifferent(skyMaterial, "_SunColor", ProductionSunColor);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_SunAngularRadius", SunnySkySunAngularRadius);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_SunIntensity", SunnySkySunIntensity);
+                    changed |= SetColorIfDifferent(skyMaterial, "_FogHorizonColor", SkyHorizonColor);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_FogHorizonHeight", SunnySkyFogHorizonHeight);
+                    changed |= SetFloatIfDifferent(skyMaterial, "_FogHorizonWidth", SunnySkyFogHorizonWidth);
+                    if (changed)
+                    {
+                        EditorUtility.SetDirty(skyMaterial);
+                        AssetDatabase.SaveAssetIfDirty(skyMaterial);
+                    }
                     return skyMaterial;
+                }
+
+                private static bool SetTextureIfDifferent(Material material, string propertyName, Texture expected)
+                {
+                    if (material.GetTexture(propertyName) == expected) return false;
+                    material.SetTexture(propertyName, expected);
+                    return true;
+                }
+
+                private static bool SetColorIfDifferent(Material material, string propertyName, Color expected)
+                {
+                    if (ColorsApproximately(material.GetColor(propertyName), expected)) return false;
+                    material.SetColor(propertyName, expected);
+                    return true;
+                }
+
+                private static bool SetFloatIfDifferent(Material material, string propertyName, float expected)
+                {
+                    if (Mathf.Abs(material.GetFloat(propertyName) - expected) <= 0.000001f) return false;
+                    material.SetFloat(propertyName, expected);
+                    return true;
+                }
+
+                private static bool SetVectorIfDifferent(Material material, string propertyName, Vector4 expected)
+                {
+                    if (Vector4.Distance(material.GetVector(propertyName), expected) <= 0.000001f) return false;
+                    material.SetVector(propertyName, expected);
+                    return true;
+                }
+
+                private static bool ColorsApproximately(Color actual, Color expected)
+                {
+                    return Mathf.Abs(actual.r - expected.r) <= 0.000001f &&
+                           Mathf.Abs(actual.g - expected.g) <= 0.000001f &&
+                           Mathf.Abs(actual.b - expected.b) <= 0.000001f &&
+                           Mathf.Abs(actual.a - expected.a) <= 0.000001f;
                 }
 
                 private static void BindExistingGlobalVolume(Transform parent)
@@ -428,8 +488,11 @@ namespace RocketFooxball.Editor
                         if (!baked)
                             throw new InvalidOperationException("Lightmapping.Bake returned false for MovementLab.");
 
-                        if (profile == MovementLabLightingProfiles.ProfileId.Development)
-                            ValidateBakedLightmapTopology(MovementLabContract.DevelopmentLightmapCount);
+                        var expectedLightmapCount = profile == MovementLabLightingProfiles.ProfileId.Development
+                            ? MovementLabContract.DevelopmentLightmapCount
+                            : MovementLabContract.ExpectedLightmapCount;
+                        ValidateBakedLightmapTopology(expectedLightmapCount);
+                        DeleteRetiredReflectionProbeBake();
                     }
                     catch (Exception exception)
                     {
@@ -517,6 +580,24 @@ namespace RocketFooxball.Editor
                     }
                 }
 
+                private static void DeleteRetiredReflectionProbeBake()
+                {
+                    const string retiredAssetPath = "Assets/_Game/Scenes/MovementLab/ReflectionProbe-3.exr";
+                    var projectRoot = ResolveProjectRoot();
+                    var absoluteAssetPath = GetAbsoluteProjectPath(projectRoot, retiredAssetPath);
+                    var assetExists = File.Exists(absoluteAssetPath);
+                    var metaExists = File.Exists(absoluteAssetPath + ".meta");
+                    if (assetExists != metaExists)
+                        throw new InvalidOperationException("Retired MovementLab reflection probe bake has an incomplete asset/meta pair: " + retiredAssetPath);
+                    if (!assetExists) return;
+
+                    ValidateAssetMetaGuid(retiredAssetPath);
+                    if (!AssetDatabase.DeleteAsset(retiredAssetPath))
+                        throw new InvalidOperationException("Failed to delete retired MovementLab reflection probe bake: " + retiredAssetPath);
+                    if (File.Exists(absoluteAssetPath) || File.Exists(absoluteAssetPath + ".meta"))
+                        throw new InvalidOperationException("Retired MovementLab reflection probe bake asset/meta pair remains after deletion: " + retiredAssetPath);
+                }
+
                 private readonly struct PreservedBakedOutput
                 {
                     internal readonly string AbsolutePath;
@@ -536,7 +617,7 @@ namespace RocketFooxball.Editor
                     if (sun == null || sunData == null || sun.type != LightType.Directional || sun.lightmapBakeType != LightmapBakeType.Mixed ||
                         sun.shadows != LightShadows.Soft || Mathf.Abs(sun.intensity - ProductionSunIntensity) > 0.001f ||
                         Vector3.Distance(sun.transform.eulerAngles, ProductionSunEuler) > 0.1f ||
-                        sun.color != SunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
+                        sun.color != ProductionSunColor || Mathf.Abs(sun.shadowStrength - ProductionSunShadowStrength) > 0.001f ||
                         sun.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask ||
                         Mathf.Abs(sun.shadowBias - 0.05f) > 0.001f || Mathf.Abs(sun.shadowNormalBias - 0.4f) > 0.001f)
                     {
@@ -558,11 +639,14 @@ namespace RocketFooxball.Editor
                     if (sky == null || sky.shader == null || sky.shader.name != "RocketFooxball/SunnyArenaSky" ||
                         sky.GetTexture("_Panorama") != LoadTexture(SkyTexturePath) ||
                         sky.GetColor("_HorizonColor") != SkyHorizonColor || sky.GetColor("_ZenithColor") != SkyZenithColor ||
-                        sky.GetColor("_CloudTint") != SkyCloudColor || Mathf.Abs(sky.GetFloat("_CloudCoverage") - 0.22f) > 0.001f ||
-                        Mathf.Abs(sky.GetFloat("_CloudSoftness") - 0.65f) > 0.001f ||
+                        sky.GetColor("_CloudTint") != SkyCloudColor || Mathf.Abs(sky.GetFloat("_CloudCoverage") - SunnySkyCloudCoverage) > 0.001f ||
+                        Mathf.Abs(sky.GetFloat("_CloudSoftness") - SunnySkyCloudSoftness) > 0.001f ||
                         Vector3.Distance(sky.GetVector("_SunDirection"), -sun.transform.forward) > 0.001f ||
-                        sky.GetColor("_SunColor") != SunColor || Mathf.Abs(sky.GetFloat("_SunAngularRadius") - 0.012f) > 0.001f ||
-                        Mathf.Abs(sky.GetFloat("_SunIntensity") - 3f) > 0.001f)
+                        sky.GetColor("_SunColor") != ProductionSunColor || Mathf.Abs(sky.GetFloat("_SunAngularRadius") - SunnySkySunAngularRadius) > 0.001f ||
+                        Mathf.Abs(sky.GetFloat("_SunIntensity") - SunnySkySunIntensity) > 0.001f ||
+                        sky.GetColor("_FogHorizonColor") != SkyHorizonColor ||
+                        Mathf.Abs(sky.GetFloat("_FogHorizonHeight") - SunnySkyFogHorizonHeight) > 0.001f ||
+                        Mathf.Abs(sky.GetFloat("_FogHorizonWidth") - SunnySkyFogHorizonWidth) > 0.001f)
                     {
                         throw new InvalidOperationException("Sunny sky material contract invalid.");
                     }
@@ -605,6 +689,8 @@ namespace RocketFooxball.Editor
                     if (probeGroup == null || probeGroup.probePositions == null)
                         throw new InvalidOperationException("Light probe lattice is missing.");
                     var probes = GameObject.FindObjectsByType<ReflectionProbe>(FindObjectsInactive.Include, FindObjectsSortMode.InstanceID);
+                    if (ExpectedReflectionProbeBakeCount != ReflectionProbeContract.Length)
+                        throw new InvalidOperationException("Reflection probe bake count contract does not match the scene probe contract.");
                     if (probes.Length != ReflectionProbeContract.Length) throw new InvalidOperationException("Reflection probe count invalid.");
                     var expectedLightingProfile = ResolveReadOnlyValidationProfile(includeBakedLighting, probeGroup.probePositions.Length, probes);
                     ValidateLightingManifest(includeBakedLighting, expectedLightingProfile);

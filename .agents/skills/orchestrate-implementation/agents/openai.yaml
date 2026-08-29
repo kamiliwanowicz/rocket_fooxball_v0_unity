@@ -4,4 +4,4 @@ interface:
   default_prompt: "Use $orchestrate-implementation to execute this coding plan through delegated workers and reviewers."
 
 policy:
-  allow_implicit_invocation: false
+  allow_implicit_invocation: true

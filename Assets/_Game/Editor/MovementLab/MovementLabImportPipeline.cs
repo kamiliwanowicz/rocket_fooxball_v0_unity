@@ -631,20 +631,152 @@ namespace RocketFooxball.Editor
                 {
                     var importer = AssetImporter.GetAtPath(ArenaKitModelPath) as ModelImporter;
                     if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f) throw new InvalidOperationException("ArenaKit importer contract invalid.");
+                    ValidateArenaKitSourceMaterials(importer);
                     ValidatePbrModelImporter(importer, true, "ArenaKit");
-                    var expected = new[] { "ArenaGoalShell", "ArenaRampRails", "ArenaWallPylon", "ArenaPerimeterTruss", "ArenaScoreboard" };
                     var assets = AssetDatabase.LoadAllAssetsAtPath(ArenaKitModelPath);
-                    for (var i = 0; i < expected.Length; i++)
+                    var meshes = new List<Mesh>();
+                    for (var i = 0; i < assets.Length; i++)
+                    {
+                        if (assets[i] is Mesh mesh && AssetDatabase.GetAssetPath(mesh) == ArenaKitModelPath)
+                        {
+                            meshes.Add(mesh);
+                        }
+                    }
+                    var expectedNames = new[] { MovementLabContract.ArenaGoalRecessMesh, MovementLabContract.ArenaWallSconceMesh };
+                    var expectedSubMeshCounts = new[] { 4, 2 };
+                    var expectedBoundsMin = new[] { MovementLabContract.ArenaGoalRecessBoundsMin, MovementLabContract.ArenaWallSconceBoundsMin };
+                    var expectedBoundsMax = new[] { MovementLabContract.ArenaGoalRecessBoundsMax, MovementLabContract.ArenaWallSconceBoundsMax };
+                    var expectedMaterialSlots = new[]
+                    {
+                        MovementLabContract.ArenaGoalRecessMaterialSlots,
+                        MovementLabContract.ArenaWallSconceMaterialSlots
+                    };
+                    if (meshes.Count != expectedNames.Length)
+                    {
+                        throw new InvalidOperationException("ArenaKit imported mesh set must contain exactly ArenaGoalRecessMesh and ArenaWallSconceMesh.");
+                    }
+                    var importedRoot = AssetDatabase.LoadAssetAtPath<GameObject>(ArenaKitModelPath);
+                    if (importedRoot == null)
+                    {
+                        throw new InvalidOperationException("ArenaKit imported model root is missing; expected a main GameObject at " + ArenaKitModelPath + ".");
+                    }
+                    var importedRoots = new List<GameObject> { importedRoot };
+                    ValidateArenaKitRendererOnly(importedRoots);
+                    for (var i = 0; i < expectedNames.Length; i++)
                     {
                         Mesh found = null;
-                        for (var j = 0; j < assets.Length; j++) if (assets[j] is Mesh mesh && mesh.name == expected[i]) found = mesh;
-                        if (found == null || AssetDatabase.GetAssetPath(found) != ArenaKitModelPath || found.subMeshCount < 1)
+                        for (var j = 0; j < meshes.Count; j++)
+                        {
+                            if (string.Equals(meshes[j].name, expectedNames[i], StringComparison.Ordinal))
+                            {
+                                if (found != null) throw new InvalidOperationException("ArenaKit imported mesh name is duplicated: " + expectedNames[i]);
+                                found = meshes[j];
+                            }
+                        }
+                        if (found == null || AssetDatabase.GetAssetPath(found) != ArenaKitModelPath || found.subMeshCount != expectedSubMeshCounts[i])
                         {
                             var importedNames = new List<string>();
                             for (var k = 0; k < assets.Length; k++) if (assets[k] != null) importedNames.Add(assets[k].name + "[" + assets[k].GetType().Name + "]");
-                            throw new InvalidOperationException("ArenaKit named mesh missing/provenance invalid: " + expected[i] + "; imported assets=" + string.Join(",", importedNames.ToArray()));
+                            throw new InvalidOperationException("ArenaKit named mesh missing/provenance/submesh invalid: " + expectedNames[i] + "; imported assets=" + string.Join(",", importedNames.ToArray()));
                         }
-                        ValidateMeshPbrChannels(found, true, "ArenaKit/" + expected[i]);
+                        ValidateMeshPbrChannels(found, true, "ArenaKit/" + expectedNames[i]);
+                        if (Vector3.Distance(found.bounds.min, expectedBoundsMin[i]) > 0.001f || Vector3.Distance(found.bounds.max, expectedBoundsMax[i]) > 0.001f)
+                        {
+                            throw new InvalidOperationException("ArenaKit mesh bounds contract invalid: " + expectedNames[i] + "; expected " + expectedBoundsMin[i] + ".." + expectedBoundsMax[i] + ", actual " + found.bounds.min + ".." + found.bounds.max);
+                        }
+                        ValidateImportedMaterialSlotCount(importedRoots, found, expectedMaterialSlots[i].Length, expectedNames[i]);
+                    }
+                }
+
+                private static void ValidateArenaKitSourceMaterials(ModelImporter importer)
+                {
+                    var sourceMaterialsProperty = typeof(ModelImporter).GetProperty(
+                        "sourceMaterials",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                    var expectedPropertyType = typeof(AssetImporter.SourceAssetIdentifier[]);
+                    if (sourceMaterialsProperty == null || sourceMaterialsProperty.PropertyType != expectedPropertyType)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer sourceMaterials property is missing or has an unexpected type; expected SourceAssetIdentifier[].");
+                    }
+
+                    var sourceMaterials = sourceMaterialsProperty.GetValue(importer, null) as AssetImporter.SourceAssetIdentifier[];
+                    if (sourceMaterials == null)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer sourceMaterials value is null.");
+                    }
+
+                    var expectedNames = MovementLabContract.ArenaGoalRecessMaterialSlots;
+                    if (sourceMaterials.Length != 4)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer source material count invalid; expected 4, actual " + sourceMaterials.Length + ".");
+                    }
+
+                    var seenNames = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < sourceMaterials.Length; i++)
+                    {
+                        var sourceMaterial = sourceMaterials[i];
+                        if (sourceMaterial.type != typeof(Material) || Array.IndexOf(expectedNames, sourceMaterial.name) < 0)
+                        {
+                            throw new InvalidOperationException("ArenaKit importer source material invalid at index " + i + "; expected a unique Material from ArenaGoalRecessMaterialSlots, actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
+                        }
+                        if (!seenNames.Add(sourceMaterial.name))
+                        {
+                            throw new InvalidOperationException("ArenaKit importer source material is duplicated at index " + i + ": " + sourceMaterial.name + ".");
+                        }
+                    }
+
+                    var externalObjectMap = importer.GetExternalObjectMap();
+                    if (externalObjectMap == null || externalObjectMap.Count != 0)
+                    {
+                        throw new InvalidOperationException("ArenaKit importer must not contain external object remaps; actual count " + (externalObjectMap == null ? "null" : externalObjectMap.Count.ToString()) + ".");
+                    }
+                }
+
+                private static void ValidateArenaKitRendererOnly(List<GameObject> importedRoots)
+                {
+                    var rendererCount = 0;
+                    for (var i = 0; i < importedRoots.Count; i++)
+                    {
+                        var root = importedRoots[i];
+                        if (root == null) continue;
+                        if (root.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                            root.GetComponentsInChildren<Rigidbody>(true).Length != 0 ||
+                            root.GetComponentsInChildren<MonoBehaviour>(true).Length != 0)
+                        {
+                            throw new InvalidOperationException("ArenaKit imported objects must remain renderer-only: " + root.name);
+                        }
+                        rendererCount += root.GetComponentsInChildren<MeshRenderer>(true).Length;
+                    }
+                    if (rendererCount != 2)
+                    {
+                        throw new InvalidOperationException("ArenaKit imported renderer set must contain exactly two MeshRenderers.");
+                    }
+                }
+
+                private static void ValidateImportedMaterialSlotCount(List<GameObject> importedRoots, Mesh mesh, int expectedSlotCount, string label)
+                {
+                    MeshRenderer target = null;
+                    for (var i = 0; i < importedRoots.Count && target == null; i++)
+                    {
+                        var renderers = importedRoots[i].GetComponentsInChildren<MeshRenderer>(true);
+                        for (var j = 0; j < renderers.Length; j++)
+                        {
+                            var filter = renderers[j].GetComponent<MeshFilter>();
+                            if (filter != null && filter.sharedMesh == mesh)
+                            {
+                                target = renderers[j];
+                                break;
+                            }
+                        }
+                    }
+                    if (target == null)
+                    {
+                        throw new InvalidOperationException("ArenaKit imported mesh renderer missing: " + label);
+                    }
+                    var materials = target.sharedMaterials;
+                    if (materials == null || materials.Length != expectedSlotCount)
+                    {
+                        throw new InvalidOperationException("ArenaKit material slot count invalid: " + label + "; expected " + expectedSlotCount + ", actual " + (materials == null ? "null" : materials.Length.ToString()) + ".");
                     }
                 }
 

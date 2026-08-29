@@ -132,7 +132,7 @@ namespace RocketFooxball.Editor
                     camera.fieldOfView = 75f;
                     camera.nearClipPlane = 0.03f;
                     camera.farClipPlane = 180f;
-                    camera.clearFlags = CameraClearFlags.SolidColor;
+                    camera.clearFlags = CameraClearFlags.Skybox;
                     camera.backgroundColor = new Color(0.72f, 0.88f, 0.96f, 1f);
                     camera.gameObject.AddComponent<AudioListener>();
                     camera.allowHDR = true;

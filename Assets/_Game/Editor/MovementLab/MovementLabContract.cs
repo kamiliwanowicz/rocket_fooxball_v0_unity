@@ -13,12 +13,12 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 12;
+        internal const int SerializedContractVersion = 13;
         internal const int MaterialPrefabStageContractVersion = 15;
         internal const int GameplaySceneStageContractVersion = 17;
         internal const int QualityStageContractVersion = 5;
         internal const int LightingStageContractVersion = 7;
-        internal const int BakedOutputStageContractVersion = 7;
+        internal const int BakedOutputStageContractVersion = 8;
         internal const string ManifestPath = "Assets/_Game/Generated/MovementLabBuildManifest.json";
         internal const string ScenePath = "Assets/_Game/Scenes/MovementLab.unity";
         internal const string PlayerPrefabPath = "Assets/_Game/Prefabs/Player.prefab";
@@ -44,7 +44,8 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = LightingPath + "/MovementLabLightingSettings.asset";
         internal const string LightingManifestPath = LightingPath + "/MovementLabLightingManifest.json";
         internal const int DevelopmentLightmapCount = 2;
-        internal const int ExpectedLightmapCount = 4;
+        internal const int ExpectedLightmapCount = 5;
+        internal const int ExpectedReflectionProbeBakeCount = 3;
         internal const string BuildMarkerPrefix = "MovementLabGeneratedT9_";
         internal const string EditorBuildSettingsPath = "ProjectSettings/EditorBuildSettings.asset";
         internal const string DynamicsManagerPath = "ProjectSettings/DynamicsManager.asset";
@@ -178,8 +179,12 @@ namespace RocketFooxball.Editor
         internal const float UnderfootUpwardImpulseScale = 1f;
         internal const float UnderfootHighSpeedVerticalRedirect = 1f;
         internal static readonly Vector2 FloorTextureScale = new Vector2(13f, 9f);
-        internal static readonly Vector2 WallTextureScale = new Vector2(4f, 1f);
+        internal static readonly Vector2 WallTextureScale = new Vector2(13f, 2f);
         internal const bool BotsEnabledByDefault = MatchController.DefaultBotsEnabled;
+
+        internal static readonly Color ArenaHazardColor = new Color(233f / 255f, 90f / 255f, 22f / 255f, 1f);
+        internal static readonly Color ArenaGlowColor = new Color(1f, 240f / 255f, 200f / 255f, 1f);
+        internal const float ArenaGlowEmissionStrength = 3f;
 
         internal static readonly Color WeaponAccentShellBaseColor = new Color(0.68f, 0.03f, 0.015f, 0.42f);
         internal const float WeaponAccentShellMetallic = 0f;
@@ -326,17 +331,85 @@ namespace RocketFooxball.Editor
 
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
 
-        internal static readonly string[] ArenaPylonNames =
+        internal const float ArenaPitchHalfLength = 60f;
+        internal const float ArenaPitchHalfWidth = 40f;
+        internal const float ArenaMarkingLineWidth = 0.18f;
+        internal const float ArenaMarkingLineHeight = 0.015f;
+        internal const float ArenaCenterCircleRadius = 9.15f;
+        internal const int ArenaCenterCircleSegments = 96;
+        internal const float ArenaCenterSpotRadius = 0.30f;
+        internal const int ArenaCenterSpotSegments = 32;
+        internal const float ArenaPenaltyAreaDepth = 18f;
+        internal const float ArenaPenaltyAreaHalfWidth = 22f;
+        internal const float ArenaGoalAreaDepth = 6f;
+        internal const float ArenaGoalAreaHalfWidth = 10f;
+        internal const float ArenaUpperWallTop = 12f;
+        internal const float ArenaSconceHeight = 4.2f;
+        internal static readonly float[] ArenaLongWallSconceXs = { -54f, -36f, -18f, 0f, 18f, 36f, 54f };
+        internal static readonly float[] ArenaEndWallSconceZs = { -34f, -26f, 26f, 34f };
+        internal const float ArenaNorthWallSconceZ = -44f;
+        internal const float ArenaSouthWallSconceZ = 44f;
+        internal const float ArenaWestWallSconceX = -64f;
+        internal const float ArenaEastWallSconceX = 64f;
+        internal static readonly Quaternion ArenaNorthWallSconceRotation = Quaternion.identity;
+        internal static readonly Quaternion ArenaSouthWallSconceRotation = Quaternion.Euler(0f, 180f, 0f);
+        internal static readonly Quaternion ArenaWestWallSconceRotation = Quaternion.Euler(0f, 90f, 0f);
+        internal static readonly Quaternion ArenaEastWallSconceRotation = Quaternion.Euler(0f, -90f, 0f);
+
+        internal const string ArenaGoalRecessMesh = "ArenaGoalRecessMesh";
+        internal const string ArenaWallSconceMesh = "ArenaWallSconceMesh";
+        internal static readonly string[] ArenaGoalRecessMaterialSlots =
         {
-            "NorthWallPylon_-48", "NorthWallPylon_-24", "NorthWallPylon_0", "NorthWallPylon_24", "NorthWallPylon_48",
-            "SouthWallPylon_-48", "SouthWallPylon_-24", "SouthWallPylon_0", "SouthWallPylon_24", "SouthWallPylon_48"
+            "ArenaPrimary", "ArenaTrim", "ArenaHazard", "ArenaGlow"
+        };
+        internal static readonly string[] ArenaWallSconceMaterialSlots =
+        {
+            "ArenaTrim", "ArenaGlow"
         };
 
-        internal static readonly float[] ArenaPylonXs = { -48f, -24f, 0f, 24f, 48f };
-        internal const float ArenaNorthWallPylonZ = -44f;
-        internal const float ArenaSouthWallPylonZ = 44f;
-        internal static readonly Quaternion ArenaNorthWallPylonRotation = Quaternion.identity;
-        internal static readonly Quaternion ArenaSouthWallPylonRotation = Quaternion.Euler(0f, 180f, 0f);
+        // Generator bounds are authored in Blender (X width, Y depth, Z height),
+        // while imported Unity meshes use X width, Y height, Z depth. The
+        // expected Unity bounds below therefore apply the export axis mapping.
+        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMin = new Vector3(-21f, -10f, 0f);
+        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMax = new Vector3(21f, 0f, 10f);
+        internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMin = new Vector3(-0.6f, -0.35f, -0.3f);
+        internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMax = new Vector3(0.6f, 0f, 0.3f);
+        internal static readonly Vector3 ArenaGoalRecessBoundsMin = new Vector3(-21f, 0f, 0f);
+        internal static readonly Vector3 ArenaGoalRecessBoundsMax = new Vector3(21f, 10f, 10f);
+        internal static readonly Vector3 ArenaWallSconceBoundsMin = new Vector3(-0.6f, -0.3f, 0f);
+        internal static readonly Vector3 ArenaWallSconceBoundsMax = new Vector3(0.6f, 0.3f, 0.35f);
+
+        internal readonly struct ArenaArchitectureSpecification
+        {
+            internal readonly string Name;
+            internal readonly Vector3 Position;
+            internal readonly Vector3 Scale;
+            internal readonly Quaternion Rotation;
+
+            internal ArenaArchitectureSpecification(string name, Vector3 position, Vector3 scale, Quaternion rotation)
+            {
+                Name = name;
+                Position = position;
+                Scale = scale;
+                Rotation = rotation;
+            }
+        }
+
+        internal static readonly ArenaArchitectureSpecification[] ArenaUpperWallSpecifications =
+        {
+            new ArenaArchitectureSpecification("NorthUpperWall", new Vector3(0f, 10f, -44.5f), new Vector3(130f, 4f, 1f), Quaternion.identity),
+            new ArenaArchitectureSpecification("SouthUpperWall", new Vector3(0f, 10f, 44.5f), new Vector3(130f, 4f, 1f), Quaternion.identity),
+            new ArenaArchitectureSpecification("WestUpperWallNorth", new Vector3(-64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), Quaternion.identity),
+            new ArenaArchitectureSpecification("WestUpperWallSouth", new Vector3(-64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), Quaternion.identity),
+            new ArenaArchitectureSpecification("EastUpperWallNorth", new Vector3(64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), Quaternion.identity),
+            new ArenaArchitectureSpecification("EastUpperWallSouth", new Vector3(64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), Quaternion.identity)
+        };
+
+        internal static readonly ArenaArchitectureSpecification[] ArenaGoalOpeningLintelSpecifications =
+        {
+            new ArenaArchitectureSpecification("WestGoalOpeningLintel", new Vector3(-64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), Quaternion.identity),
+            new ArenaArchitectureSpecification("EastGoalOpeningLintel", new Vector3(64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), Quaternion.identity)
+        };
 
         internal readonly struct CollisionGeometrySpecification
         {
@@ -484,16 +557,14 @@ namespace RocketFooxball.Editor
         private static string[] CreateBakedOutputPaths()
         {
             var lightmapPaths = BakedLightmapPaths(ExpectedLightmapCount);
-            var paths = new string[2 + lightmapPaths.Length + 5];
+            var paths = new string[3 + lightmapPaths.Length + ExpectedReflectionProbeBakeCount];
             paths[0] = ScenePath;
             paths[1] = BakedLightingPath + "/LightingData.asset";
             Array.Copy(lightmapPaths, 0, paths, 2, lightmapPaths.Length);
             var reflectionOffset = 2 + lightmapPaths.Length;
-            paths[reflectionOffset] = BakedLightingPath + "/ReflectionProbe-0.exr";
-            paths[reflectionOffset + 1] = BakedLightingPath + "/ReflectionProbe-1.exr";
-            paths[reflectionOffset + 2] = BakedLightingPath + "/ReflectionProbe-2.exr";
-            paths[reflectionOffset + 3] = BakedLightingPath + "/ReflectionProbe-3.exr";
-            paths[reflectionOffset + 4] = LightingManifestPath;
+            for (var i = 0; i < ExpectedReflectionProbeBakeCount; i++)
+                paths[reflectionOffset + i] = BakedLightingPath + "/ReflectionProbe-" + i + ".exr";
+            paths[reflectionOffset + ExpectedReflectionProbeBakeCount] = LightingManifestPath;
             return paths;
         }
 
