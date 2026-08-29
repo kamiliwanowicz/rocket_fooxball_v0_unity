@@ -43,11 +43,15 @@ namespace RocketFooxball.Editor
         internal const string ShotgunPickupPrefabPath = MovementLabContract.ShotgunPickupPrefabPath;
         internal const string AmmoPickupPrefabPath = MovementLabContract.AmmoPickupPrefabPath;
         internal const string AmmoShellMaterialPath = MovementLabContract.AmmoShellMaterialPath;
+        internal const string ShotgunPelletMaterialPath = MovementLabContract.ShotgunPelletMaterialPath;
+        internal const string WeaponImpactMarkMaterialPath = MovementLabContract.WeaponImpactMarkMaterialPath;
         internal const string HealthPickupsRootName = MovementLabContract.HealthPickupsRootName;
         internal const string HealthPickupWestNorthName = MovementLabContract.HealthPickupWestNorthName;
         internal const string HealthPickupEastSouthName = MovementLabContract.HealthPickupEastSouthName;
         internal const string ShotgunPickupsRootName = MovementLabContract.ShotgunPickupsRootName;
         internal const string AmmoPickupsRootName = MovementLabContract.AmmoPickupsRootName;
+        internal const string ShotgunPickupNorthName = MovementLabContract.ShotgunPickupNorthName;
+        internal const string ShotgunPickupSouthName = MovementLabContract.ShotgunPickupSouthName;
         internal const string ShotgunPickupName = MovementLabContract.ShotgunPickupName;
         internal const string AmmoPickupWestNorthName = MovementLabContract.AmmoPickupWestNorthName;
         internal const string AmmoPickupEastSouthName = MovementLabContract.AmmoPickupEastSouthName;
@@ -139,7 +143,8 @@ namespace RocketFooxball.Editor
 
         internal static readonly ShotgunPickupSpawnDefinition[] ShotgunPickupSpawns =
         {
-            new ShotgunPickupSpawnDefinition(ShotgunPickupName, MovementLabContract.ShotgunPickupPosition, MovementLabContract.ShotgunPickupRotation)
+            new ShotgunPickupSpawnDefinition(ShotgunPickupNorthName, MovementLabContract.ShotgunPickupNorthPosition, MovementLabContract.ShotgunPickupNorthRotation),
+            new ShotgunPickupSpawnDefinition(ShotgunPickupSouthName, MovementLabContract.ShotgunPickupSouthPosition, MovementLabContract.ShotgunPickupSouthRotation)
         };
 
         internal static readonly AmmoPickupSpawnDefinition[] AmmoPickupSpawns =
@@ -151,12 +156,12 @@ namespace RocketFooxball.Editor
         // Stable six-slot composition. Blue owns positive-X/South goal; Red owns negative-X/North goal.
         internal static readonly ParticipantSlotDefinition[] ParticipantSlots =
         {
-            Slot(0, "Player", ParticipantTeam.Blue, true, new Vector3(12f, 0f, 0f), Vector3.left),
-            Slot(1, "Bolt", ParticipantTeam.Blue, false, new Vector3(12f, 0f, -10f), Vector3.left),
-            Slot(2, "Echo", ParticipantTeam.Blue, false, new Vector3(12f, 0f, 10f), Vector3.left),
-            Slot(3, "Rook", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 0f), Vector3.right),
-            Slot(4, "Nova", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 10f), Vector3.right),
-            Slot(5, "Vex", ParticipantTeam.Red, false, new Vector3(-12f, 0f, -10f), Vector3.right)
+            Slot(0, "Player", ParticipantTeam.Blue, true, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 0f), Vector3.left),
+            Slot(1, "Bolt", ParticipantTeam.Blue, false, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, -10f), Vector3.left),
+            Slot(2, "Echo", ParticipantTeam.Blue, false, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 10f), Vector3.left),
+            Slot(3, "Rook", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 0f), Vector3.right),
+            Slot(4, "Nova", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 10f), Vector3.right),
+            Slot(5, "Vex", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, -10f), Vector3.right)
         };
 
         private static ParticipantSlotDefinition Slot(int id, string name, ParticipantTeam team, bool local, Vector3 position, Vector3 forward)
@@ -290,6 +295,20 @@ namespace RocketFooxball.Editor
         internal static readonly Color RocketEmissionColor = MovementLabContract.RocketEmissionColor;
         internal const float RocketEmissionStrength = MovementLabContract.RocketEmissionStrength;
         internal static readonly Color RocketBaseColor = MovementLabContract.RocketBaseColor;
+        internal const float WeaponImpactFeedbackEpsilon = MovementLabContract.WeaponImpactFeedbackEpsilon;
+        internal const float WeaponImpactTracerOriginOffset = MovementLabContract.WeaponImpactTracerOriginOffset;
+        internal const float WeaponImpactTracerSpeed = MovementLabContract.WeaponImpactTracerSpeed;
+        internal const float WeaponImpactMinimumTracerLifetime = MovementLabContract.WeaponImpactMinimumTracerLifetime;
+        internal const float WeaponImpactMarkSurfaceOffset = MovementLabContract.WeaponImpactMarkSurfaceOffset;
+        internal const float WeaponImpactMarkLifetime = MovementLabContract.WeaponImpactMarkLifetime;
+        internal const float ShotgunImpactMarkSize = MovementLabContract.ShotgunImpactMarkSize;
+        internal const float RocketImpactMarkSize = MovementLabContract.RocketImpactMarkSize;
+        internal const int ShotgunPelletMaxParticles = MovementLabContract.ShotgunPelletMaxParticles;
+        internal const int WeaponImpactMarkMaxParticles = MovementLabContract.WeaponImpactMarkMaxParticles;
+        internal const float PlayerCollisionRetentionFraction = MovementLabContract.PlayerCollisionRetentionFraction;
+        internal const float PlayerCollisionTransferFraction = MovementLabContract.PlayerCollisionTransferFraction;
+        internal const float BallContactAssistPerContactCap = MovementLabContract.BallContactAssistPerContactCap;
+        internal const float BallContactAssistAggregateCap = MovementLabContract.BallContactAssistAggregateCap;
         internal static readonly Color WeaponMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
         internal static readonly Color WeaponDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
         internal static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
@@ -363,7 +382,7 @@ namespace RocketFooxball.Editor
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
             PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, ScenePath,
-            HealthPickupMaterialPath, AmmoShellMaterialPath,
+            HealthPickupMaterialPath, AmmoShellMaterialPath, ShotgunPelletMaterialPath, WeaponImpactMarkMaterialPath,
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", RocketHotMaterialPath,
             ProjectileGlowMaterialPath, MaterialsPath + "/GoalFrame.mat", MaterialsPath + "/Shield.mat", MaterialsPath + "/ShieldBlue.mat",
