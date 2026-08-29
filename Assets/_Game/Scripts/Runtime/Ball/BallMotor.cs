@@ -444,10 +444,6 @@ namespace RocketFooxball.Runtime.Ball
 
             var entityId = participant.GetEntityId();
             var participantId = EntityId.ToULong(entityId);
-            if (!entityId.IsValid())
-            {
-                participantId = unchecked((ulong)(uint)participant.GetInstanceID());
-            }
             if (!BallMotionRules.ShouldAcceptParticipantContact(contactAssistParticipantIds, participantId))
             {
                 return;
