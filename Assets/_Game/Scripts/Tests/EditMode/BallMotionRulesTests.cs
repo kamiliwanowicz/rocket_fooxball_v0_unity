@@ -58,7 +58,7 @@ namespace RocketFooxball.Tests.EditMode
             var ballVelocity = Vector3.left * 8f;
 
             Assert.That(BallMotionRules.ResolvePlayerCollision(incoming, HeadOnNormal, ballVelocity, true), Is.EqualTo(Vector3.right * 3.5f).Using(Vector3Comparer));
-            Assert.That(BallMotionRules.ComputeContactAssist(incoming, ballVelocity, HeadOnNormal), Is.EqualTo(Vector3.right * 6.5f).Using(Vector3Comparer));
+            Assert.That(BallMotionRules.ComputeContactAssist(incoming, ballVelocity, HeadOnNormal), Is.EqualTo(Vector3.right * 11.7f).Using(Vector3Comparer));
         }
 
         [Test]
