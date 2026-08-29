@@ -121,7 +121,7 @@ namespace RocketFooxball.Runtime.Feedback
                 velocity = Vector3.zero,
                 startLifetime = MarkLifetime,
                 startSize = size,
-                rotation3D = Quaternion.LookRotation(normalizedNormal).eulerAngles
+                rotation3D = Quaternion.Inverse(Quaternion.LookRotation(normalizedNormal)).eulerAngles
             };
             impactMarks.Emit(emitParams, 1);
         }
