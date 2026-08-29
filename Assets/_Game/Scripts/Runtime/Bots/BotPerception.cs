@@ -14,7 +14,7 @@ namespace RocketFooxball.Runtime.Bots
     public sealed class BotPerception : MonoBehaviour
     {
         private const int RosterSize = 6;
-        private const int PickupCount = 5;
+        private const int PickupCount = 6;
         public const float ExpectedSightDistance = 75f;
         public const float ExpectedFieldOfViewDegrees = 130f;
         public const float ExpectedMemorySeconds = 1.5f;
@@ -151,7 +151,7 @@ namespace RocketFooxball.Runtime.Bots
 
         public bool TryGetPickupObservation(int stablePickupId, out BotPickupObservation observation)
         {
-            if (pickups != null && stablePickupId >= 0 && stablePickupId < pickups.Length)
+            if (pickups != null && pickups.Length == PickupCount && stablePickupId >= 0 && stablePickupId < PickupCount)
             {
                 observation = pickupObservations[stablePickupId];
                 if (observation.HasObservation)
@@ -433,7 +433,7 @@ namespace RocketFooxball.Runtime.Bots
             if (self == null || match == null || ball == null || head == null || ownGoal == null || enemyGoal == null ||
                 roster == null || roster.Length != RosterSize || pickups == null || pickups.Length != PickupCount)
             {
-                Debug.LogError("BotPerception requires serialized references: self, match, ball, head, six roster participants, five ordered pickups, ownGoal, enemyGoal.", this);
+                Debug.LogError("BotPerception requires serialized references: self, match, ball, head, six roster participants, six ordered pickups, ownGoal, enemyGoal.", this);
                 return false;
             }
 
@@ -486,14 +486,14 @@ namespace RocketFooxball.Runtime.Bots
                 var pickup = pickups[i];
                 if (pickup == null || !pickupSet.Add(pickup) || !TryGetPickupKind(pickup, out var kind))
                 {
-                    Debug.LogError("BotPerception requires five non-null pickups of Health, Shotgun, and Ammo types.", this);
+                    Debug.LogError("BotPerception requires six non-null pickups of Health, Shotgun, and Ammo types.", this);
                     return false;
                 }
 
                 var expected = ExpectedPickupKind(i);
                 if (kind != expected)
                 {
-                    Debug.LogError("BotPerception pickup order must be health west, health east, shotgun center, ammo west, ammo east.", this);
+                    Debug.LogError("BotPerception pickup order must be health IDs 0-1, shotgun IDs 2-3, and ammo IDs 4-5.", this);
                     return false;
                 }
 
@@ -518,7 +518,7 @@ namespace RocketFooxball.Runtime.Bots
             {
                 return BotPickupKind.Health;
             }
-            if (index == 2)
+            if (index < 4)
             {
                 return BotPickupKind.Shotgun;
             }

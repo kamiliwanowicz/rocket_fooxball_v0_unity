@@ -12,6 +12,7 @@ namespace RocketFooxball.Runtime.Bots
     public sealed class BotTeamRoleCoordinator : MonoBehaviour
     {
         private const int TeamRosterSize = 3;
+        private const int PickupCount = 6;
         public const float ExpectedEvaluationInterval = 0.5f;
         public const float ExpectedRoleHoldSeconds = 2f;
         public const float ExpectedSwitchMargin = 0.15f;
@@ -381,8 +382,8 @@ namespace RocketFooxball.Runtime.Bots
                 return new BotTargetCandidate[0];
             }
 
-            var candidates = new List<BotTargetCandidate>(5);
-            for (var stableId = 0; stableId < 5; stableId++)
+            var candidates = new List<BotTargetCandidate>(PickupCount);
+            for (var stableId = 0; stableId < PickupCount; stableId++)
             {
                 if (!perception.TryGetPickupObservation(stableId, out var pickup) ||
                     !pickup.HasObservation || !pickup.IsAvailable || !CanUsePickup(observer, pickup))
@@ -503,12 +504,12 @@ namespace RocketFooxball.Runtime.Bots
                         ? new BotTargetKey(BotTargetKind.HealthPickup, pickup.StableId)
                         : new BotTargetKey(BotTargetKind.None, 0);
                 case BotPickupKind.Shotgun:
-                    return pickup.StableId == 2
-                        ? new BotTargetKey(BotTargetKind.ShotgunPickup, 0)
+                    return pickup.StableId >= 2 && pickup.StableId <= 3
+                        ? new BotTargetKey(BotTargetKind.ShotgunPickup, pickup.StableId - 2)
                         : new BotTargetKey(BotTargetKind.None, 0);
                 case BotPickupKind.Ammo:
-                    return pickup.StableId >= 3 && pickup.StableId <= 4
-                        ? new BotTargetKey(BotTargetKind.AmmoPickup, pickup.StableId - 3)
+                    return pickup.StableId >= 4 && pickup.StableId <= 5
+                        ? new BotTargetKey(BotTargetKind.AmmoPickup, pickup.StableId - 4)
                         : new BotTargetKey(BotTargetKind.None, 0);
                 default:
                     return new BotTargetKey(BotTargetKind.None, 0);
