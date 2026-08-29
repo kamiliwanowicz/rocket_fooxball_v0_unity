@@ -610,8 +610,8 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < triangles.Length; i++)
                 if (meshTriangles[i] != triangles[i])
                     throw new InvalidOperationException("Ramp prism triangle winding mismatch: " + i);
-            var expectedBounds = new Bounds(Vector3.zero, new Vector3(MovementLabContract.ArenaRampLength,
-                MovementLabContract.ArenaRampHeight, MovementLabContract.ArenaRampWidth));
+            var expectedBounds = new Bounds(new Vector3(0f, height * 0.5f, 0f),
+                new Vector3(MovementLabContract.ArenaRampLength, height, MovementLabContract.ArenaRampWidth));
             if (Vector3.Distance(mesh.bounds.min, expectedBounds.min) > TransformTolerance ||
                 Vector3.Distance(mesh.bounds.max, expectedBounds.max) > TransformTolerance)
                 throw new InvalidOperationException("Ramp prism bounds contract invalid.");
