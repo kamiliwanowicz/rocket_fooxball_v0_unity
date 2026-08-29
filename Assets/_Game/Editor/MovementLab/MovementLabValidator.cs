@@ -207,6 +207,7 @@ namespace RocketFooxball.Editor
             internal PlayerInputReader Input;
             internal PlayerLook Look;
             internal PlayerCameraFeedback CameraFeedback;
+            internal WeaponImpactFeedback ImpactFeedback;
             internal RocketLauncher Launcher;
             internal ShotgunWeapon Shotgun;
             internal BallKick Kick;
@@ -264,12 +265,13 @@ namespace RocketFooxball.Editor
             {
                 accumulator.Capture("bots", "composition", () =>
                 {
-                    var pickups = new ArenaPickup[5];
+                    var pickups = new ArenaPickup[6];
                     pickups[0] = context.HealthPickups?.FirstOrDefault(item => item != null && item.name == HealthPickupWestNorthName);
                     pickups[1] = context.HealthPickups?.FirstOrDefault(item => item != null && item.name == HealthPickupEastSouthName);
-                    pickups[2] = context.ShotgunPickups?.FirstOrDefault(item => item != null && item.name == ShotgunPickupName);
-                    pickups[3] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupWestNorthName);
-                    pickups[4] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupEastSouthName);
+                    pickups[2] = context.ShotgunPickups?.FirstOrDefault(item => item != null && item.name == ShotgunPickupNorthName);
+                    pickups[3] = context.ShotgunPickups?.FirstOrDefault(item => item != null && item.name == ShotgunPickupSouthName);
+                    pickups[4] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupWestNorthName);
+                    pickups[5] = context.AmmoPickups?.FirstOrDefault(item => item != null && item.name == AmmoPickupEastSouthName);
                     MovementLabBotPipeline.ValidateScene(context.Scene, context.Participants, context.Match, context.BallMotor, pickups,
                         context.North, context.South, context.NorthShield, context.SouthShield);
                 });
@@ -306,6 +308,7 @@ namespace RocketFooxball.Editor
                 PowerGridShaderPath, ShieldShaderPath, WallTexturePath, TrimTexturePath, HazardTexturePath,
                 ShieldTexturePath, WorldControllerPath, FpsControllerPath, ExplosionPrefabPath, ScenePath, BallSurfacePath,
                 HealthPickupPrefabPath, HealthPickupMaterialPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, AmmoShellMaterialPath,
+                ShotgunPelletMaterialPath, WeaponImpactMarkMaterialPath,
                 RocketHotMaterialPath, ProjectileGlowMaterialPath, ExplosionAdditiveMaterialPath, ExplosionSparksMaterialPath,
                 GridCeilingMaterialPath, GridLongWallMaterialPath, GridEndWallMaterialPath, SkyMaterialPath,
                  VolumeProfilePath, LightingSettingsPath, MovementLabLightingProfiles.DevelopmentSettingsPath, LightingManifestPath,
@@ -375,7 +378,7 @@ namespace RocketFooxball.Editor
             context.ShotgunPickups = UnityEngine.Object.FindObjectsByType<ShotgunPickup>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             accumulator.Capture("scene/shotgun-pickups", "component-count", () =>
             {
-                if (context.ShotgunPickups.Length != ShotgunPickupSpawns.Length) throw new InvalidOperationException("MovementLab must contain exactly one ShotgunPickup component, including inactive instances.");
+                if (context.ShotgunPickups.Length != ShotgunPickupSpawns.Length) throw new InvalidOperationException("MovementLab must contain exactly two ShotgunPickup components, including inactive instances.");
             });
             if (context.ShotgunPickupsRoot != null && context.Arena != null)
                 accumulator.Capture("scene/shotgun-pickups", "root-parent", () =>
@@ -424,6 +427,7 @@ namespace RocketFooxball.Editor
                 context.Input = CaptureRequired(accumulator, "scene/player-components", "PlayerInputReader", context.Player.GetComponent<PlayerInputReader>(), "PlayerInputReader");
                 context.Look = CaptureRequired(accumulator, "scene/player-components", "PlayerLook", context.Player.GetComponent<PlayerLook>(), "PlayerLook");
                 context.CameraFeedback = CaptureRequired(accumulator, "scene/player-components", "PlayerCameraFeedback", context.Player.GetComponent<PlayerCameraFeedback>(), "PlayerCameraFeedback");
+                context.ImpactFeedback = CaptureRequired(accumulator, "scene/player-components", "WeaponImpactFeedback", context.Player.GetComponentInChildren<WeaponImpactFeedback>(true), "WeaponImpactFeedback");
                 context.Launcher = CaptureRequired(accumulator, "scene/player-components", "RocketLauncher", context.Player.GetComponent<RocketLauncher>(), "RocketLauncher");
                 context.Shotgun = CaptureRequired(accumulator, "scene/player-components", "ShotgunWeapon", context.Player.GetComponent<ShotgunWeapon>(), "ShotgunWeapon");
                 context.Kick = CaptureRequired(accumulator, "scene/player-components", "BallKick", context.Player.GetComponent<BallKick>(), "BallKick");
@@ -433,7 +437,7 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("scene/player-components", "character-controller", () => Require(context.Player.GetComponent<CharacterController>(), "Player CharacterController"));
                 accumulator.Capture("scene/player-contract", "spawn", () =>
                 {
-                    if (Vector3.Distance(context.Player.transform.position, new Vector3(PlayerSpawnOffset, 0f, 0f)) > 0.001f ||
+                    if (Vector3.Distance(context.Player.transform.position, ParticipantSlots[0].Position) > 0.001f ||
                         Vector3.Dot(context.Player.transform.forward, Vector3.left) < 0.999f)
                         throw new InvalidOperationException("Player spawn must be neutral midfield offset on goal axis facing centered ball.");
                 });
@@ -585,13 +589,17 @@ namespace RocketFooxball.Editor
             accumulator.Capture("input", "match-table-binding", ValidateMatchTableInputAsset);
             accumulator.Capture("gameplay/contract", "dash-public-surface", ValidateDashPublicSurface);
             accumulator.Capture("gameplay/contract", "shotgun-public-surface", ValidateShotgunRuntimeSurface);
+            accumulator.Capture("gameplay/contract", "weapon-impact-feedback-constants", ValidateWeaponImpactFeedbackRuntimeConstants);
             if (context.BallMotor != null)
             {
                 accumulator.Capture("gameplay/contract", "BallMotor.touch-roster", ValidateBallTouchRosterContract);
+                accumulator.Capture("gameplay/contract", "BallMotor.execution-order", ValidateBallMotorExecutionOrder);
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.body", context.BallMotor, "body", context.BallBody);
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.ballCollider", context.BallMotor, "ballCollider", context.BallCollider);
                 CaptureObjectArray(accumulator, "gameplay/wiring", "BallMotor.participants", context.BallMotor, "participants", context.Participants.Cast<UnityEngine.Object>().ToArray());
                 CaptureReference(accumulator, "gameplay/wiring", "BallMotor.goalShieldSet", context.BallMotor, "goalShieldSet", context.GoalShieldSet);
+                CaptureSerialized(accumulator, "gameplay/serialized", "BallMotor.contactAssistStrength", context.BallMotor, "contactAssistStrength", GamePhysicsSettings.PlayerCollisionTransferFraction);
+                CaptureSerialized(accumulator, "gameplay/serialized", "BallMotor.contactAssistImpulseCap", context.BallMotor, "contactAssistImpulseCap", GamePhysicsSettings.BallContactAssistPerContactCap);
                 CaptureSerialized(accumulator, "gameplay/serialized", "BallMotor.meaningfulContactSpeedThreshold", context.BallMotor, "meaningfulContactSpeedThreshold", 1f);
             }
             if (context.Participants != null)
@@ -600,8 +608,16 @@ namespace RocketFooxball.Editor
                 {
                     var participant = context.Participants[participantIndex];
                     if (participant == null) continue;
+                    var participantImpactFeedback = participant.GetComponentInChildren<WeaponImpactFeedback>(true);
                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.explosionResolver", participant.Launcher, "explosionResolver", context.Resolver);
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.projectilePrefab", participant.Launcher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath));
+                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Launcher.impactFeedback", participant.Launcher, "impactFeedback", participantImpactFeedback);
+                     CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.impactFeedback", participant.Shotgun, "impactFeedback", participantImpactFeedback);
+                     accumulator.Capture("gameplay/wiring", "Participant[" + participantIndex + "].impactFeedback-provenance", () =>
+                     {
+                         ValidatePrefabReference(participant.Launcher, "impactFeedback", PrefabPath, "Participant[" + participantIndex + "].Launcher.impactFeedback");
+                         ValidatePrefabReference(participant.Shotgun, "impactFeedback", PrefabPath, "Participant[" + participantIndex + "].Shotgun.impactFeedback");
+                     });
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Kick.ball", participant.Kick, "ball", context.BallMotor);
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Kick.ownerParticipant", participant.Kick, "ownerParticipant", participant);
                      CaptureReference(accumulator, "gameplay/wiring", "Participant[" + participantIndex + "].Shotgun.ball", participant.Shotgun, "ball", context.BallMotor);
@@ -636,6 +652,28 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "RocketLauncher.spawnPoint", context.Launcher, "spawnPoint", context.RocketMuzzle);
                 CaptureReference(accumulator, "gameplay/wiring", "RocketLauncher.projectilePrefab", context.Launcher, "projectilePrefab", AssetDatabase.LoadAssetAtPath<RocketProjectile>(RocketPrefabPath));
                 CaptureReference(accumulator, "gameplay/wiring", "RocketLauncher.explosionResolver", context.Launcher, "explosionResolver", context.Resolver);
+                CaptureReference(accumulator, "gameplay/wiring", "RocketLauncher.impactFeedback", context.Launcher, "impactFeedback", context.ImpactFeedback);
+                accumulator.Capture("gameplay/wiring", "RocketLauncher.impactFeedback-provenance", () =>
+                    ValidatePrefabReference(context.Launcher, "impactFeedback", PrefabPath, "RocketLauncher.impactFeedback"));
+            }
+            if (context.ImpactFeedback != null)
+            {
+                var feedbackRoot = context.ImpactFeedback.transform;
+                var shotgunPellets = feedbackRoot.Find("ShotgunPellets")?.GetComponent<ParticleSystem>();
+                var impactMarks = feedbackRoot.Find("ImpactMarks")?.GetComponent<ParticleSystem>();
+                CaptureReference(accumulator, "gameplay/wiring", "WeaponImpactFeedback.shotgunPellets", context.ImpactFeedback,
+                    "shotgunPellets", shotgunPellets);
+                CaptureReference(accumulator, "gameplay/wiring", "WeaponImpactFeedback.impactMarks", context.ImpactFeedback,
+                    "impactMarks", impactMarks);
+                accumulator.Capture("gameplay/wiring", "WeaponImpactFeedback.prefab-provenance", () =>
+                {
+                    var source = PrefabUtility.GetCorrespondingObjectFromSource(context.ImpactFeedback);
+                    if (source == null || AssetDatabase.GetAssetPath(source) != PrefabPath)
+                        throw new InvalidOperationException("WeaponImpactFeedback must remain sourced from Player.prefab.");
+                    ValidatePersistentIdentity(source, "WeaponImpactFeedback prefab source");
+                });
+                accumulator.Capture("gameplay/serialized", "WeaponImpactFeedback.particle-contract", () =>
+                    ValidateWeaponImpactParticles(shotgunPellets, impactMarks));
             }
             if (context.CameraFeedback != null)
             {
@@ -671,6 +709,9 @@ namespace RocketFooxball.Editor
                  CaptureReference(accumulator, "gameplay/wiring", "ShotgunWeapon.aimCamera", context.Shotgun, "aimCamera", context.Camera);
                  CaptureReference(accumulator, "gameplay/wiring", "ShotgunWeapon.ownerParticipant", context.Shotgun, "ownerParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
                  CaptureReference(accumulator, "gameplay/wiring", "ShotgunWeapon.ball", context.Shotgun, "ball", context.BallMotor);
+                 CaptureReference(accumulator, "gameplay/wiring", "ShotgunWeapon.impactFeedback", context.Shotgun, "impactFeedback", context.ImpactFeedback);
+                 accumulator.Capture("gameplay/wiring", "ShotgunWeapon.impactFeedback-provenance", () =>
+                     ValidatePrefabReference(context.Shotgun, "impactFeedback", PrefabPath, "ShotgunWeapon.impactFeedback"));
                  var projectilesLayer = LayerMask.NameToLayer(MovementLabContract.ProjectilesLayerName);
                  accumulator.Capture("gameplay/wiring", "ShotgunWeapon.hitMask", () =>
                  {
@@ -904,7 +945,20 @@ namespace RocketFooxball.Editor
             accumulator.Capture("scene/shotgun-pickups", "root-children", () =>
             {
                 if (context.ShotgunPickupsRoot.transform.childCount != ShotgunPickupSpawns.Length)
-                    throw new InvalidOperationException("ShotgunPickups root must contain exactly one pickup instance.");
+                    throw new InvalidOperationException("ShotgunPickups root must contain exactly two pickup instances.");
+            });
+            accumulator.Capture("scene/shotgun-pickups", "ordered-instances", () =>
+            {
+                for (var childIndex = 0; childIndex < ShotgunPickupSpawns.Length; childIndex++)
+                {
+                    var definition = ShotgunPickupSpawns[childIndex];
+                    var child = context.ShotgunPickupsRoot.transform.GetChild(childIndex);
+                    var pickup = child != null ? child.GetComponent<ShotgunPickup>() : null;
+                    if (child == null || pickup == null || child.name != definition.Name ||
+                        Vector3.Distance(child.position, definition.Position) > 0.001f ||
+                        Quaternion.Angle(child.rotation, definition.Rotation) > 0.1f)
+                        throw new InvalidOperationException("Shotgun pickup order/transform mismatch at index " + childIndex + ".");
+                }
             });
             var expected = new HashSet<string>(ShotgunPickupSpawns.Select(definition => definition.Name), StringComparer.Ordinal);
             var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -1123,6 +1177,33 @@ namespace RocketFooxball.Editor
             var touchProperty = ballType.GetProperty(nameof(BallMotor.LastTouchParticipant), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public);
             if (rosterProperty == null || !rosterProperty.CanRead || touchProperty == null || !touchProperty.CanRead)
                 throw new InvalidOperationException("BallMotor must expose participant roster and last-touch read references.");
+        }
+
+        private static void ValidateBallMotorExecutionOrder()
+        {
+            var attributes = typeof(BallMotor).GetCustomAttributes(typeof(DefaultExecutionOrder), false);
+            if (attributes.Length != 1 || ((DefaultExecutionOrder)attributes[0]).order != 100)
+                throw new InvalidOperationException("BallMotor must use DefaultExecutionOrder(100).");
+        }
+
+        private static void ValidateWeaponImpactFeedbackRuntimeConstants()
+        {
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "Epsilon", WeaponImpactFeedbackEpsilon);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "TracerOriginOffset", WeaponImpactTracerOriginOffset);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "TracerSpeed", WeaponImpactTracerSpeed);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "MinimumTracerLifetime", WeaponImpactMinimumTracerLifetime);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "MarkSurfaceOffset", WeaponImpactMarkSurfaceOffset);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "MarkLifetime", WeaponImpactMarkLifetime);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "ShotgunMarkSize", ShotgunImpactMarkSize);
+            ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "RocketMarkSize", RocketImpactMarkSize);
+        }
+
+        private static void ValidatePrivateFloatConstant(Type type, string fieldName, float expected)
+        {
+            var field = type.GetField(fieldName, System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            if (field == null || !field.IsLiteral || field.FieldType != typeof(float) ||
+                Mathf.Abs((float)field.GetRawConstantValue() - expected) > 0.000001f)
+                throw new InvalidOperationException(type.Name + "." + fieldName + " constant mismatch.");
         }
 
         private static void ValidateDashKickInputAsset()
@@ -1707,6 +1788,21 @@ namespace RocketFooxball.Editor
          private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
         {
             var spawnSet = context.SpawnSet;
+            var arenaCollisionMask = 0;
+            var arenaCollisionSet = new HashSet<Collider>();
+            if (context.Arena != null)
+            {
+                var arenaColliders = context.Arena.GetComponentsInChildren<Collider>(true);
+                for (var colliderIndex = 0; colliderIndex < arenaColliders.Length; colliderIndex++)
+                {
+                    var arenaCollider = arenaColliders[colliderIndex];
+                    if (arenaCollider != null && !arenaCollider.isTrigger)
+                    {
+                        arenaCollisionMask |= 1 << arenaCollider.gameObject.layer;
+                        arenaCollisionSet.Add(arenaCollider);
+                    }
+                }
+            }
             accumulator.Capture("scene/spawn-set", "arrays", () =>
             {
                 if (spawnSet.BlueCandidates == null || spawnSet.BlueCandidates.Count != 3 || spawnSet.RedCandidates == null || spawnSet.RedCandidates.Count != 3)
@@ -1716,8 +1812,8 @@ namespace RocketFooxball.Editor
                     if (spawnSet.BlueCandidates[i] == null || spawnSet.RedCandidates[i] == null) throw new InvalidOperationException("ParticipantSpawnSet candidate is null.");
                     if (Vector3.Distance(spawnSet.BlueCandidates[i].position, ParticipantSlots[i].Position) > 0.01f || Vector3.Distance(spawnSet.RedCandidates[i].position, ParticipantSlots[i + 3].Position) > 0.01f)
                         throw new InvalidOperationException("ParticipantSpawnSet candidate transform mismatch.");
-                    ValidateRecoverySpawnGeometry(spawnSet.BlueCandidates[i], "BlueSpawn_" + i);
-                    ValidateRecoverySpawnGeometry(spawnSet.RedCandidates[i], "RedSpawn_" + i);
+                    ValidateRecoverySpawnGeometry(spawnSet.BlueCandidates[i], "BlueSpawn_" + i, arenaCollisionMask, arenaCollisionSet);
+                    ValidateRecoverySpawnGeometry(spawnSet.RedCandidates[i], "RedSpawn_" + i, arenaCollisionMask, arenaCollisionSet);
                     var blueCue = spawnSet.BlueCandidates[i].Find("BlueCircleCue");
                     var redCue = spawnSet.RedCandidates[i].Find("RedTriangleCue");
                     if (blueCue == null || redCue == null || blueCue.GetComponent<MeshFilter>()?.sharedMesh == null || redCue.GetComponent<MeshFilter>()?.sharedMesh == null || AssetDatabase.GetAssetPath(blueCue.GetComponent<MeshFilter>().sharedMesh) != BlueCircleCueMeshPath || AssetDatabase.GetAssetPath(redCue.GetComponent<MeshFilter>().sharedMesh) != RedTriangleCueMeshPath)
@@ -1741,18 +1837,37 @@ namespace RocketFooxball.Editor
             CaptureSerialized(accumulator, "scene/spawn-set", "enemyDistanceCap", spawnSet, "enemyDistanceCap", ParticipantSpawnSet.ExpectedEnemyDistanceCap);
         }
 
-        private static void ValidateRecoverySpawnGeometry(Transform candidate, string label)
+        private static void ValidateRecoverySpawnGeometry(Transform candidate, string label, int arenaCollisionMask,
+            ISet<Collider> arenaCollisionSet)
         {
             if (candidate == null || !ParticipantRecoveryRules.IsValidDestination(candidate.position, ParticipantRecoveryThreshold))
                 throw new InvalidOperationException("Participant recovery spawn is below the configured threshold: " + label);
 
             var capsuleBottom = candidate.position.y + PlayerControllerCenter.y - PlayerControllerHeight * 0.5f;
             var capsuleTop = candidate.position.y + PlayerControllerCenter.y + PlayerControllerHeight * 0.5f;
-            if (capsuleBottom < PlayableFloorTop - PlayerControllerSkinWidth || capsuleTop <= capsuleBottom ||
+            if (capsuleBottom < PlayableFloorTop || capsuleTop <= capsuleBottom ||
                 Mathf.Abs(candidate.position.x) + PlayerControllerRadius > 65f - PlayerControllerSkinWidth ||
                 Mathf.Abs(candidate.position.z) + PlayerControllerRadius > 45f - PlayerControllerSkinWidth)
             {
                 throw new InvalidOperationException("Participant recovery spawn capsule clearance invalid: " + label);
+            }
+
+            if (arenaCollisionMask == 0)
+                throw new InvalidOperationException("Arena collision layers are unavailable for spawn clearance: " + label);
+            var capsuleCenter = candidate.position + PlayerControllerCenter;
+            var capsuleHalfSegment = Mathf.Max(0f, PlayerControllerHeight * 0.5f - PlayerControllerRadius);
+            var overlapBottom = capsuleCenter - Vector3.up * capsuleHalfSegment;
+            var overlapTop = capsuleCenter + Vector3.up * capsuleHalfSegment;
+            var overlaps = new Collider[32];
+            var overlapCount = UnityEngine.Physics.OverlapCapsuleNonAlloc(overlapBottom, overlapTop, PlayerControllerRadius,
+                overlaps, arenaCollisionMask, QueryTriggerInteraction.Ignore);
+            if (overlapCount >= overlaps.Length)
+                throw new InvalidOperationException("Arena spawn clearance query exceeded its fixed buffer: " + label);
+            for (var overlapIndex = 0; overlapIndex < overlapCount; overlapIndex++)
+            {
+                var overlap = overlaps[overlapIndex];
+                if (overlap == null || arenaCollisionSet == null || !arenaCollisionSet.Contains(overlap)) continue;
+                throw new InvalidOperationException("Participant recovery spawn capsule overlaps arena collision geometry: " + label + " -> " + overlap.name);
             }
         }
 
@@ -1893,7 +2008,10 @@ namespace RocketFooxball.Editor
             MovementLabValidationAccumulator accumulator, ISet<string> availableAssets)
         {
             if (availableAssets != null && availableAssets.Contains(PrefabPath))
+            {
                 accumulator.Capture("prefab", "Player", () => MovementLabPrefabPipeline.ValidatePrefab(PrefabPath, "Player", false, context?.BallSurface));
+                accumulator.Capture("prefab", "Player.weapon-impact-feedback", ValidatePlayerWeaponImpactFeedbackPrefab);
+            }
             if (availableAssets != null && availableAssets.Contains(BallPrefabPath))
                 accumulator.Capture("prefab", "Ball", () => MovementLabPrefabPipeline.ValidatePrefab(BallPrefabPath, "Ball", true, context?.BallSurface));
             if (availableAssets != null && availableAssets.Contains(RocketPrefabPath))
@@ -1917,6 +2035,81 @@ namespace RocketFooxball.Editor
             accumulator.Capture("material", "team-references", ValidateTeamMaterialContracts);
             if (context?.SceneReady == true)
                 accumulator.Capture("render", "pipeline-settings", () => MovementLabSceneComposer.ValidateRenderPipelineSettings());
+        }
+
+        private static void ValidatePlayerWeaponImpactFeedbackPrefab()
+        {
+            var prefabRoot = Require(AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath), "Player prefab asset");
+            var feedback = Require(prefabRoot.GetComponentInChildren<WeaponImpactFeedback>(true), "Player prefab WeaponImpactFeedback");
+            var launcher = Require(prefabRoot.GetComponent<RocketLauncher>(), "Player prefab RocketLauncher");
+            var shotgun = Require(prefabRoot.GetComponent<ShotgunWeapon>(), "Player prefab ShotgunWeapon");
+            var shotgunPellets = feedback.transform.Find("ShotgunPellets")?.GetComponent<ParticleSystem>();
+            var impactMarks = feedback.transform.Find("ImpactMarks")?.GetComponent<ParticleSystem>();
+
+            ValidateReference(launcher, "impactFeedback", feedback, "Player prefab RocketLauncher.impactFeedback");
+            ValidateReference(shotgun, "impactFeedback", feedback, "Player prefab ShotgunWeapon.impactFeedback");
+            ValidateReference(feedback, "shotgunPellets", shotgunPellets, "Player prefab WeaponImpactFeedback.shotgunPellets");
+            ValidateReference(feedback, "impactMarks", impactMarks, "Player prefab WeaponImpactFeedback.impactMarks");
+            ValidateWeaponImpactParticles(shotgunPellets, impactMarks);
+        }
+
+        private static void ValidateWeaponImpactParticles(ParticleSystem shotgunPellets, ParticleSystem impactMarks)
+        {
+            var expectedPelletMaterial = AssetDatabase.LoadAssetAtPath<Material>(ShotgunPelletMaterialPath);
+            var expectedMarkMaterial = AssetDatabase.LoadAssetAtPath<Material>(WeaponImpactMarkMaterialPath);
+            var expectedMarkMesh = AssetDatabase.LoadAssetAtPath<Mesh>(BlueCircleCueMeshPath);
+            if (expectedPelletMaterial == null || expectedMarkMaterial == null || expectedMarkMesh == null)
+                throw new InvalidOperationException("Weapon impact particle material/mesh assets are missing.");
+
+            var pelletRenderer = shotgunPellets != null ? shotgunPellets.GetComponent<ParticleSystemRenderer>() : null;
+            var pelletMain = shotgunPellets != null ? shotgunPellets.main : default(ParticleSystem.MainModule);
+            var pelletEmission = shotgunPellets != null ? shotgunPellets.emission : default(ParticleSystem.EmissionModule);
+            var pelletShape = shotgunPellets != null ? shotgunPellets.shape : default(ParticleSystem.ShapeModule);
+            if (shotgunPellets == null || pelletRenderer == null ||
+                pelletMain.loop || pelletMain.playOnAwake ||
+                Mathf.Abs(pelletMain.duration - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
+                pelletMain.simulationSpace != ParticleSystemSimulationSpace.World || pelletMain.useUnscaledTime ||
+                Mathf.Abs(pelletMain.startLifetime.constantMin - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
+                Mathf.Abs(pelletMain.startLifetime.constantMax - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
+                Mathf.Abs(pelletMain.startSize.constantMax - 0.06f) > 0.001f ||
+                Mathf.Abs(pelletMain.startSpeed.constantMax - MovementLabContractCatalog.WeaponImpactTracerSpeed) > 0.001f ||
+                pelletMain.maxParticles != MovementLabContractCatalog.ShotgunPelletMaxParticles ||
+                !pelletEmission.enabled || Mathf.Abs(pelletEmission.rateOverTime.constantMax) > 0.001f ||
+                Mathf.Abs(pelletEmission.rateOverDistance.constantMax) > 0.001f || pelletShape.enabled ||
+                pelletRenderer.renderMode != ParticleSystemRenderMode.Stretch ||
+                pelletRenderer.alignment != ParticleSystemRenderSpace.View ||
+                Mathf.Abs(pelletRenderer.velocityScale - 0.01f) > 0.001f ||
+                Mathf.Abs(pelletRenderer.lengthScale - 1f) > 0.001f ||
+                Mathf.Abs(pelletRenderer.cameraVelocityScale) > 0.001f ||
+                pelletRenderer.shadowCastingMode != ShadowCastingMode.Off || pelletRenderer.receiveShadows ||
+                pelletRenderer.lightProbeUsage != LightProbeUsage.Off || pelletRenderer.reflectionProbeUsage != ReflectionProbeUsage.Off ||
+                pelletRenderer.sharedMaterial != expectedPelletMaterial)
+            {
+                throw new InvalidOperationException("Shotgun pellet particle contract invalid.");
+            }
+
+            var markRenderer = impactMarks != null ? impactMarks.GetComponent<ParticleSystemRenderer>() : null;
+            var markMain = impactMarks != null ? impactMarks.main : default(ParticleSystem.MainModule);
+            var markEmission = impactMarks != null ? impactMarks.emission : default(ParticleSystem.EmissionModule);
+            var markShape = impactMarks != null ? impactMarks.shape : default(ParticleSystem.ShapeModule);
+            if (impactMarks == null || markRenderer == null ||
+                markMain.loop || markMain.playOnAwake ||
+                Mathf.Abs(markMain.duration - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
+                markMain.simulationSpace != ParticleSystemSimulationSpace.World || markMain.useUnscaledTime ||
+                Mathf.Abs(markMain.startLifetime.constantMin - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
+                Mathf.Abs(markMain.startLifetime.constantMax - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
+                Mathf.Abs(markMain.startSize.constantMax - MovementLabContractCatalog.ShotgunImpactMarkSize) > 0.001f ||
+                Mathf.Abs(markMain.startSpeed.constantMax) > 0.001f ||
+                markMain.maxParticles != MovementLabContractCatalog.WeaponImpactMarkMaxParticles ||
+                !markEmission.enabled || Mathf.Abs(markEmission.rateOverTime.constantMax) > 0.001f ||
+                Mathf.Abs(markEmission.rateOverDistance.constantMax) > 0.001f || markShape.enabled ||
+                markRenderer.renderMode != ParticleSystemRenderMode.Mesh || markRenderer.mesh != expectedMarkMesh ||
+                markRenderer.shadowCastingMode != ShadowCastingMode.Off || markRenderer.receiveShadows ||
+                markRenderer.lightProbeUsage != LightProbeUsage.Off || markRenderer.reflectionProbeUsage != ReflectionProbeUsage.Off ||
+                markRenderer.sharedMaterial != expectedMarkMaterial)
+            {
+                throw new InvalidOperationException("Impact mark particle contract invalid.");
+            }
         }
 
         private static void ValidateArenaContracts(ValidationContext context, MovementLabValidationAccumulator accumulator)
@@ -2020,6 +2213,10 @@ namespace RocketFooxball.Editor
                 null, Type.EmptyTypes, null);
             if (fire == null || reset == null || weaponType.GetEvent(nameof(ShotgunWeapon.ShotFired)) == null || weaponType.GetEvent(nameof(ShotgunWeapon.HitConfirmed)) == null)
                 throw new InvalidOperationException("ShotgunWeapon public request/reset/event surface is missing.");
+            var ammoPresentation = typeof(PlayerPresentation).GetMethod(nameof(PlayerPresentation.SetShotgunAmmoAvailable),
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public, null, new[] { typeof(bool) }, null);
+            if (ammoPresentation == null || ammoPresentation.ReturnType != typeof(void))
+                throw new InvalidOperationException("PlayerPresentation shotgun ammo visibility surface is missing.");
         }
 
         private static void ValidateShotgunInputAsset()
