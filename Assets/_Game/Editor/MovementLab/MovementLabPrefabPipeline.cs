@@ -579,8 +579,8 @@ namespace RocketFooxball.Editor
                     SetFloat(motor, "speedCapMultiplier", 4f);
                     SetFloat(motor, "rollingResistance", 1.25f);
                     SetFloat(motor, "restSpeed", 0.08f);
-                    SetFloat(motor, "contactAssistStrength", 0.35f);
-                    SetFloat(motor, "contactAssistImpulseCap", 5f);
+                    SetFloat(motor, "contactAssistStrength", GamePhysicsSettings.PlayerCollisionTransferFraction);
+                    SetFloat(motor, "contactAssistImpulseCap", GamePhysicsSettings.BallContactAssistPerContactCap);
                     SetFloat(motor, "meaningfulContactSpeedThreshold", 1f);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, BallPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
