@@ -209,8 +209,7 @@ namespace RocketFooxball.Runtime.Weapons
             state = ProjectileState.Detonated;
             simulationEnabled = false;
             var explosionPosition = hasHitPoint ? hitPoint : (body != null ? body.position : transform.position);
-            if (impactFeedback != null && hitCollider != null && !hitCollider.isTrigger &&
-                hitCollider.attachedRigidbody == null && hasHitPoint)
+            if (impactFeedback != null && ShouldEmitRocketMark(hitCollider, hasHitPoint))
             {
                 impactFeedback.EmitRocketMark(hitPoint, hitNormal);
             }
@@ -301,6 +300,14 @@ namespace RocketFooxball.Runtime.Weapons
 
             var participant = other.GetComponentInParent<ParticipantState>();
             return participant != null && (!participant.IsAlive || participant.IsImmune);
+        }
+
+        private static bool ShouldEmitRocketMark(Collider collider, bool hasHitPoint)
+        {
+            return hasHitPoint && collider != null && !collider.isTrigger &&
+                   collider.attachedRigidbody == null &&
+                   collider.GetComponentInParent<CharacterController>() == null &&
+                   collider.GetComponentInParent<ParticipantState>() == null;
         }
 
         private bool TryGetNearestValidHit(Vector3 origin, Vector3 direction, float distance, out RaycastHit nearest)
