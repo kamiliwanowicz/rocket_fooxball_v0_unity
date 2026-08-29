@@ -36,7 +36,7 @@ namespace RocketFooxball.Editor
         private static readonly Vector3 RampLowLocalPosition = new Vector3(10f, 0f, 0f);
         private static readonly Vector3 RampHighLocalPosition = new Vector3(-8f, 0.9f * MovementLabContract.ArenaRampHeight, 0f);
 
-        private static readonly float[] LaneXs = { -52f, -12f, 0f, 12f, 52f };
+        private static readonly float[] LaneXs = { -52f, -MovementLabContract.PlayerSpawnOffset, 0f, MovementLabContract.PlayerSpawnOffset, 52f };
         private static readonly float[] LaneZs = { -28f, 0f, 28f };
 
         internal static void ComposeScene(
@@ -203,8 +203,8 @@ namespace RocketFooxball.Editor
             ValidateGraphGeometry(graph, rampWest, rampEast, redShield, blueShield);
             ValidateNodeClearance(graph);
             ValidateProductionRecesses(graph, redShield, blueShield);
-            if (Vector3.Distance(roster[0].transform.position, graph.GetNode(10).Position) > 0.001f ||
-                Vector3.Distance(roster[3].transform.position, graph.GetNode(4).Position) > 0.001f)
+            if (Vector3.Distance(roster[0].transform.position, graph.GetNode(10).Position + Vector3.up * MovementLabContract.PlayerControllerSkinWidth) > 0.001f ||
+                Vector3.Distance(roster[3].transform.position, graph.GetNode(4).Position + Vector3.up * MovementLabContract.PlayerControllerSkinWidth) > 0.001f)
                 throw new InvalidOperationException("Local Blue slot 0 and first Red slot 3 must reuse graph spawn nodes 10 and 4.");
 
             var inputAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.InputSystem.InputActionAsset>(MovementLabContract.InputActionsPath);
@@ -304,10 +304,10 @@ namespace RocketFooxball.Editor
                     nodes.Add(new BotNavigationNodeRecord(id++, new Vector3(LaneXs[x], 0f, LaneZs[z]), BotNavigationArea.Floor, 4f));
                 }
             }
-            nodes.Add(new BotNavigationNodeRecord(15, new Vector3(12f, 0f, -10f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(16, new Vector3(12f, 0f, 10f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(17, new Vector3(-12f, 0f, 10f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(18, new Vector3(-12f, 0f, -10f), BotNavigationArea.Floor, 2f));
+            nodes.Add(new BotNavigationNodeRecord(15, new Vector3(MovementLabContract.PlayerSpawnOffset, 0f, -10f), BotNavigationArea.Floor, 2f));
+            nodes.Add(new BotNavigationNodeRecord(16, new Vector3(MovementLabContract.PlayerSpawnOffset, 0f, 10f), BotNavigationArea.Floor, 2f));
+            nodes.Add(new BotNavigationNodeRecord(17, new Vector3(-MovementLabContract.PlayerSpawnOffset, 0f, 10f), BotNavigationArea.Floor, 2f));
+            nodes.Add(new BotNavigationNodeRecord(18, new Vector3(-MovementLabContract.PlayerSpawnOffset, 0f, -10f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(19, new Vector3(-36f, 0f, -28f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(20, new Vector3(36f, 0f, 28f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(21, new Vector3(0f, 0f, 14f), BotNavigationArea.Floor, 2f));
@@ -487,10 +487,10 @@ namespace RocketFooxball.Editor
             for (var column = 0; column < LaneXs.Length; column++)
                 for (var z = 0; z < LaneZs.Length; z++)
                     ValidateNode(graph.GetNode(column * 3 + z), column * 3 + z, new Vector3(LaneXs[column], 0f, LaneZs[z]), BotNavigationArea.Floor, 4f);
-            ValidateNode(graph.GetNode(15), 15, new Vector3(12f, 0f, -10f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(16), 16, new Vector3(12f, 0f, 10f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(17), 17, new Vector3(-12f, 0f, 10f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(18), 18, new Vector3(-12f, 0f, -10f), BotNavigationArea.Floor, 2f);
+            ValidateNode(graph.GetNode(15), 15, new Vector3(MovementLabContract.PlayerSpawnOffset, 0f, -10f), BotNavigationArea.Floor, 2f);
+            ValidateNode(graph.GetNode(16), 16, new Vector3(MovementLabContract.PlayerSpawnOffset, 0f, 10f), BotNavigationArea.Floor, 2f);
+            ValidateNode(graph.GetNode(17), 17, new Vector3(-MovementLabContract.PlayerSpawnOffset, 0f, 10f), BotNavigationArea.Floor, 2f);
+            ValidateNode(graph.GetNode(18), 18, new Vector3(-MovementLabContract.PlayerSpawnOffset, 0f, -10f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(19), 19, new Vector3(-36f, 0f, -28f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(20), 20, new Vector3(36f, 0f, 28f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(21), 21, new Vector3(0f, 0f, 14f), BotNavigationArea.Floor, 2f);
