@@ -91,8 +91,14 @@ namespace RocketFooxball.Runtime.Hud
         private const float ReferenceHeight = 1080f;
         private const float GoDuration = 0.5f;
         private const int TableRowCount = 6;
-        private const float ShotgunIconWidth = 128f;
-        private const float ShotgunIconHeight = 64f;
+        private const float ShotgunIconWidth = 384f;
+        private const float ShotgunIconHeight = 192f;
+        private const float DamageIndicatorCenterX = 960f;
+        private const float DamageIndicatorCenterY = 540f;
+        private const float DamageIndicatorRadius = 64f;
+        private const float DamageIndicatorThickness = 8f;
+        private const float DamageIndicatorArcDegrees = 60f;
+        private const int DamageIndicatorSegmentCount = 12;
 
         private const string BlueMarker = "[O]";
         private const string RedMarker = @"[/\]";
@@ -114,7 +120,7 @@ namespace RocketFooxball.Runtime.Hud
         private ShotgunWeapon localShotgun;
         private float hitMarkerRemaining;
         private float damageIndicatorRemaining;
-        private DamageIndicatorSector damageIndicatorSector;
+        private float damageIndicatorAngle;
         private bool finalCursorOverride;
         private CursorLockMode previousCursorLockState;
         private bool previousCursorVisible;
@@ -142,7 +148,7 @@ namespace RocketFooxball.Runtime.Hud
         private int frameShotgunShells;
         private bool frameHitMarkerVisible;
         private float frameDamageIndicatorRemaining;
-        private DamageIndicatorSector frameDamageIndicatorSector;
+        private float frameDamageIndicatorAngle;
         private bool frameHasGoalSummary;
         private MatchGoalSummary frameGoalSummary;
         private MatchOutcome frameOutcome;
@@ -166,7 +172,7 @@ namespace RocketFooxball.Runtime.Hud
         private GUIStyle tableNumberStyle;
         private GUIStyle buttonStyle;
         private GUIStyle healthFillStyle;
-        private GUIStyle damageIndicatorStyle;
+        private GUIStyle scoreStyle;
         private Texture2D whiteTexture;
 
         private void Awake()
@@ -310,7 +316,7 @@ namespace RocketFooxball.Runtime.Hud
             frameShotgunShells = localParticipant.ShotgunShells;
             frameHitMarkerVisible = hitMarkerRemaining > 0f;
             frameDamageIndicatorRemaining = damageIndicatorRemaining;
-            frameDamageIndicatorSector = damageIndicatorSector;
+            frameDamageIndicatorAngle = damageIndicatorAngle;
             frameHasGoalSummary = match.HasLastGoalSummary;
             frameGoalSummary = match.LastGoalSummary;
             frameOutcome = match.Outcome;
@@ -350,17 +356,16 @@ namespace RocketFooxball.Runtime.Hud
             var camera = cameraFeedback != null ? cameraFeedback.TargetCamera : null;
             var cameraTransform = camera != null ? camera.transform : localParticipant.transform;
             var victimToSource = damage.SourceWorldPosition - damage.Victim.transform.position;
-            if (!DamageIndicatorRules.TryResolveSector(
+            if (!DamageIndicatorRules.TryResolveAngle(
                     victimToSource,
                     cameraTransform.right,
                     cameraTransform.forward,
-                    out var sector))
+                    out var angleDegrees))
             {
-                damageIndicatorRemaining = 0f;
                 return;
             }
 
-            damageIndicatorSector = sector;
+            damageIndicatorAngle = angleDegrees;
             damageIndicatorRemaining = DamageIndicatorRules.VisibleDuration;
         }
 
@@ -458,10 +463,9 @@ namespace RocketFooxball.Runtime.Hud
 
         private void DrawLive()
         {
-            DrawPanel(new Rect(36f, 30f, 610f, 106f));
-            DrawText(new Rect(58f, 45f, 250f, 38f), FormatClock(frameMatchTimeRemaining), titleStyle, Color.white);
-            DrawTeamScore(new Rect(300f, 46f, 160f, 34f), ParticipantTeam.Blue, frameBlueGoals);
-            DrawTeamScore(new Rect(465f, 46f, 160f, 34f), ParticipantTeam.Red, frameRedGoals);
+            DrawText(new Rect(848f, 24f, 96f, 64f), frameBlueGoals.ToString(), scoreStyle, TeamColor(ParticipantTeam.Blue));
+            DrawText(new Rect(944f, 24f, 32f, 64f), ":", scoreStyle, Color.white);
+            DrawText(new Rect(976f, 24f, 96f, 64f), frameRedGoals.ToString(), scoreStyle, TeamColor(ParticipantTeam.Red));
             DrawHealth();
             DrawShotgunWidget();
 
@@ -486,10 +490,10 @@ namespace RocketFooxball.Runtime.Hud
             var color = frameHasShotgun && shells > 0
                 ? Color.white
                 : new Color(0.55f, 0.6f, 0.68f);
-            DrawPanel(new Rect(1370f, 930f, 514f, 112f));
-            DrawShotgunSilhouette(new Rect(1392f, 954f, ShotgunIconWidth, ShotgunIconHeight), color);
-            DrawText(new Rect(1540f, 942f, 320f, 38f), "SHOTGUN", headingStyle, color);
-            DrawText(new Rect(1540f, 985f, 320f, 38f), "SHELLS  " + shells, smallStyle, color);
+            DrawPanel(new Rect(1090f, 822f, 794f, 220f));
+            DrawShotgunSilhouette(new Rect(1112f, 842f, ShotgunIconWidth, ShotgunIconHeight), color);
+            DrawText(new Rect(1516f, 858f, 346f, 38f), "SHOTGUN", headingStyle, color);
+            DrawText(new Rect(1516f, 910f, 346f, 38f), "SHELLS  " + shells, smallStyle, color);
         }
 
         private void DrawShotgunSilhouette(Rect rect, Color color)
@@ -504,10 +508,10 @@ namespace RocketFooxball.Runtime.Hud
             try
             {
                 GUI.color = color;
-                var stock = new Rect(rect.x, rect.y + 27f, 28f, 12f);
-                var body = new Rect(rect.x + 22f, rect.y + 16f, 47f, 29f);
-                var barrel = new Rect(rect.x + 65f, rect.y + 21f, 63f, 11f);
-                var trigger = new Rect(rect.x + 47f, rect.y + 42f, 11f, 16f);
+                var stock = new Rect(rect.x, rect.y + 81f, 84f, 36f);
+                var body = new Rect(rect.x + 66f, rect.y + 48f, 141f, 87f);
+                var barrel = new Rect(rect.x + 195f, rect.y + 63f, 189f, 33f);
+                var trigger = new Rect(rect.x + 141f, rect.y + 126f, 33f, 48f);
                 GUI.DrawTexture(stock, whiteTexture);
                 GUI.DrawTexture(body, whiteTexture);
                 GUI.DrawTexture(barrel, whiteTexture);
@@ -533,38 +537,47 @@ namespace RocketFooxball.Runtime.Hud
                 return;
             }
 
-            var symbol = DamageIndicatorSymbol(frameDamageIndicatorSector);
+            var previousColor = GUI.color;
+            var previousMatrix = GUI.matrix;
             var color = new Color(1f, 0.16f, 0.12f, opacity);
-            DrawText(DamageIndicatorRect(frameDamageIndicatorSector), symbol, damageIndicatorStyle, color);
-        }
+            var segmentDegrees = DamageIndicatorArcDegrees / DamageIndicatorSegmentCount;
+            var halfArc = DamageIndicatorArcDegrees * 0.5f;
+            var center = new Vector2(DamageIndicatorCenterX, DamageIndicatorCenterY);
 
-        private static string DamageIndicatorSymbol(DamageIndicatorSector sector)
-        {
-            switch (sector)
+            try
             {
-                case DamageIndicatorSector.Right:
-                    return ">";
-                case DamageIndicatorSector.Back:
-                    return "⌄";
-                case DamageIndicatorSector.Left:
-                    return "<";
-                default:
-                    return "⌃";
+                GUI.color = color;
+                for (var i = 0; i < DamageIndicatorSegmentCount; i++)
+                {
+                    var startDegrees = frameDamageIndicatorAngle - halfArc + segmentDegrees * i;
+                    var endDegrees = startDegrees + segmentDegrees;
+                    var startRadians = startDegrees * Mathf.Deg2Rad;
+                    var endRadians = endDegrees * Mathf.Deg2Rad;
+                    var start = new Vector2(
+                        center.x + Mathf.Sin(startRadians) * DamageIndicatorRadius,
+                        center.y - Mathf.Cos(startRadians) * DamageIndicatorRadius);
+                    var end = new Vector2(
+                        center.x + Mathf.Sin(endRadians) * DamageIndicatorRadius,
+                        center.y - Mathf.Cos(endRadians) * DamageIndicatorRadius);
+                    var midpoint = (start + end) * 0.5f;
+                    var segmentLength = Vector2.Distance(start, end) + 1f;
+                    var tangentDegrees = Mathf.Atan2(end.y - start.y, end.x - start.x) * Mathf.Rad2Deg;
+
+                    GUI.matrix = previousMatrix;
+                    GUIUtility.RotateAroundPivot(tangentDegrees, midpoint);
+                    GUI.DrawTexture(
+                        new Rect(
+                            midpoint.x - segmentLength * 0.5f,
+                            midpoint.y - DamageIndicatorThickness * 0.5f,
+                            segmentLength,
+                            DamageIndicatorThickness),
+                        whiteTexture);
+                }
             }
-        }
-
-        private static Rect DamageIndicatorRect(DamageIndicatorSector sector)
-        {
-            switch (sector)
+            finally
             {
-                case DamageIndicatorSector.Right:
-                    return new Rect(1812f, 470f, 72f, 140f);
-                case DamageIndicatorSector.Back:
-                    return new Rect(924f, 900f, 72f, 140f);
-                case DamageIndicatorSector.Left:
-                    return new Rect(36f, 470f, 72f, 140f);
-                default:
-                    return new Rect(924f, 40f, 72f, 140f);
+                GUI.matrix = previousMatrix;
+                GUI.color = previousColor;
             }
         }
 
@@ -585,13 +598,6 @@ namespace RocketFooxball.Runtime.Hud
             {
                 GUI.Box(new Rect(barRect.x, barRect.y, barRect.width * ratio, barRect.height), GUIContent.none, healthFillStyle);
             }
-        }
-
-        private void DrawTeamScore(Rect rect, ParticipantTeam team, int goals)
-        {
-            var color = TeamColor(team);
-            var marker = TeamMarker(team);
-            DrawText(rect, marker + " " + (team == ParticipantTeam.Blue ? "BLUE" : "RED") + " " + goals, headingStyle, color);
         }
 
         private void DrawTableHint()
@@ -962,11 +968,13 @@ namespace RocketFooxball.Runtime.Hud
             };
             healthFillStyle = new GUIStyle(GUI.skin.box);
             healthFillStyle.normal.background = MakeSolidTexture(new Color(0.25f, 0.9f, 0.45f, 0.95f));
-            damageIndicatorStyle = new GUIStyle(headingStyle)
+            scoreStyle = new GUIStyle(labelStyle)
             {
-                fontSize = 72,
+                fontSize = 48,
+                fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter
             };
+            whiteTexture = MakeSolidTexture(Color.white);
         }
 
         private static Texture2D MakeSolidTexture(Color color)
@@ -999,12 +1007,6 @@ namespace RocketFooxball.Runtime.Hud
             GUI.color = color;
             GUI.Label(rect, text, style);
             GUI.color = previousColor;
-        }
-
-        private static string FormatClock(float remaining)
-        {
-            var totalSeconds = Mathf.Max(0, Mathf.CeilToInt(remaining));
-            return (totalSeconds / 60).ToString("00") + ":" + (totalSeconds % 60).ToString("00");
         }
 
         private static string FormatCeilSeconds(float remaining)
