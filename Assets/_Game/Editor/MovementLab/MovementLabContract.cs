@@ -188,6 +188,7 @@ namespace RocketFooxball.Editor
         internal const float WeaponImpactFeedbackEpsilon = 0.000001f;
         internal const float WeaponImpactTracerOriginOffset = 0.45f;
         internal const float WeaponImpactTracerSpeed = 120f;
+        internal const float WeaponImpactTracerSystemDuration = 0.05f;
         internal const float WeaponImpactMinimumTracerLifetime = 0.04f;
         internal const float WeaponImpactMarkSurfaceOffset = 0.015f;
         internal const float WeaponImpactMarkLifetime = 30f;

@@ -298,6 +298,7 @@ namespace RocketFooxball.Editor
         internal const float WeaponImpactFeedbackEpsilon = MovementLabContract.WeaponImpactFeedbackEpsilon;
         internal const float WeaponImpactTracerOriginOffset = MovementLabContract.WeaponImpactTracerOriginOffset;
         internal const float WeaponImpactTracerSpeed = MovementLabContract.WeaponImpactTracerSpeed;
+        internal const float WeaponImpactTracerSystemDuration = MovementLabContract.WeaponImpactTracerSystemDuration;
         internal const float WeaponImpactMinimumTracerLifetime = MovementLabContract.WeaponImpactMinimumTracerLifetime;
         internal const float WeaponImpactMarkSurfaceOffset = MovementLabContract.WeaponImpactMarkSurfaceOffset;
         internal const float WeaponImpactMarkLifetime = MovementLabContract.WeaponImpactMarkLifetime;

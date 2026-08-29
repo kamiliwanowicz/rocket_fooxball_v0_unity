@@ -2067,7 +2067,7 @@ namespace RocketFooxball.Editor
             var pelletShape = shotgunPellets != null ? shotgunPellets.shape : default(ParticleSystem.ShapeModule);
             if (shotgunPellets == null || pelletRenderer == null ||
                 pelletMain.loop || pelletMain.playOnAwake ||
-                Mathf.Abs(pelletMain.duration - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
+                Mathf.Abs(pelletMain.duration - MovementLabContractCatalog.WeaponImpactTracerSystemDuration) > 0.001f ||
                 pelletMain.simulationSpace != ParticleSystemSimulationSpace.World || pelletMain.useUnscaledTime ||
                 Mathf.Abs(pelletMain.startLifetime.constantMin - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
                 Mathf.Abs(pelletMain.startLifetime.constantMax - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||

@@ -479,7 +479,7 @@ namespace RocketFooxball.Editor
                     var main = system.main;
                     main.loop = false;
                     main.playOnAwake = false;
-                    main.duration = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
+                    main.duration = MovementLabContractCatalog.WeaponImpactTracerSystemDuration;
                     main.simulationSpace = ParticleSystemSimulationSpace.World;
                     main.startLifetime = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
                     main.startSpeed = MovementLabContractCatalog.WeaponImpactTracerSpeed;
