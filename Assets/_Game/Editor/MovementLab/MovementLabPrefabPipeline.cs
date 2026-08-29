@@ -145,6 +145,16 @@ namespace RocketFooxball.Editor
                     muzzle.SetParent(camera.transform, false);
                     muzzle.localPosition = new Vector3(0f, -0.05f, 0.45f);
 
+                    var weaponImpactFeedbackRoot = new GameObject("WeaponImpactFeedback").transform;
+                    weaponImpactFeedbackRoot.SetParent(root.transform, false);
+                    var weaponImpactFeedback = weaponImpactFeedbackRoot.gameObject.AddComponent<WeaponImpactFeedback>();
+                    var shotgunPelletMaterial = GetOrCreateAdditiveParticleMaterial(
+                        "ShotgunPellet", Color.white, LoadTexture(RocketGlowTexturePath), 2.5f);
+                    var impactMarkMaterial = GetOrCreateParticleMaterial(
+                        "WeaponImpactMark", Color.white, null);
+                    var shotgunPellets = CreateWeaponTracerSystem(weaponImpactFeedbackRoot, shotgunPelletMaterial);
+                    var impactMarks = CreateWeaponImpactMarkSystem(weaponImpactFeedbackRoot, impactMarkMaterial);
+
                     var hiddenLayer = EnsureLocalPlayerHiddenLayer();
                     camera.cullingMask &= ~(1 << hiddenLayer);
                     camera.cullingMask |= MovementLabContractCatalog.ViewmodelLightCullingMask;
@@ -333,17 +343,21 @@ namespace RocketFooxball.Editor
                     SetObjectReference(feedback, "targetCamera", camera);
                     SetObjectReference(feedback, "viewmodels", viewmodels.gameObject);
                     SetObjectReference(feedback, "crosshairCanvas", camera.transform.Find("CrosshairCanvas").gameObject);
+                    SetObjectReference(weaponImpactFeedback, "shotgunPellets", shotgunPellets);
+                    SetObjectReference(weaponImpactFeedback, "impactMarks", impactMarks);
                     SetObjectReference(qualityRuntime, "targetCamera", camera);
                     SetObjectReference(launcher, "input", input);
                     SetObjectReference(launcher, "look", look);
                     SetObjectReference(launcher, "aimCamera", camera);
                     SetObjectReference(launcher, "spawnPoint", muzzle);
                      SetObjectReference(launcher, "projectilePrefab", rocketPrefab.GetComponent<RocketProjectile>());
+                     SetObjectReference(launcher, "impactFeedback", weaponImpactFeedback);
                      SetFloat(launcher, "firingInterval", 0.90f);
                      SetObjectReference(shotgun, "input", input);
                      SetObjectReference(shotgun, "look", look);
                      SetObjectReference(shotgun, "aimCamera", camera);
                      SetObjectReference(shotgun, "ownerParticipant", participant);
+                     SetObjectReference(shotgun, "impactFeedback", weaponImpactFeedback);
                      SetLayerMask(shotgun, "hitMask", ~(1 << projectileLayer));
                      SetFloat(shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
                      SetInteger(shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
@@ -450,6 +464,96 @@ namespace RocketFooxball.Editor
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
                     return prefab;
+                }
+
+                private static ParticleSystem CreateWeaponTracerSystem(Transform parent, Material material)
+                {
+                    if (parent == null || material == null)
+                    {
+                        throw new InvalidOperationException("Weapon tracer particle composition requires a parent and material.");
+                    }
+
+                    var child = new GameObject("ShotgunPellets");
+                    child.transform.SetParent(parent, false);
+                    var system = child.AddComponent<ParticleSystem>();
+                    var main = system.main;
+                    main.loop = false;
+                    main.playOnAwake = false;
+                    main.duration = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
+                    main.simulationSpace = ParticleSystemSimulationSpace.World;
+                    main.startLifetime = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
+                    main.startSpeed = MovementLabContractCatalog.WeaponImpactTracerSpeed;
+                    main.startSize = 0.06f;
+                    main.startColor = Color.white;
+                    main.maxParticles = MovementLabContractCatalog.ShotgunPelletMaxParticles;
+
+                    var emission = system.emission;
+                    emission.enabled = true;
+                    emission.rateOverTime = 0f;
+                    emission.rateOverDistance = 0f;
+                    var shape = system.shape;
+                    shape.enabled = false;
+
+                    system.useAutoRandomSeed = false;
+                    system.randomSeed = 0x51A7u;
+                    var renderer = child.GetComponent<ParticleSystemRenderer>();
+                    renderer.sharedMaterial = material;
+                    renderer.renderMode = ParticleSystemRenderMode.Stretch;
+                    renderer.alignment = ParticleSystemRenderSpace.View;
+                    renderer.velocityScale = 0.01f;
+                    renderer.lengthScale = 1f;
+                    renderer.cameraVelocityScale = 0f;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    renderer.lightProbeUsage = LightProbeUsage.Off;
+                    renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    return system;
+                }
+
+                private static ParticleSystem CreateWeaponImpactMarkSystem(Transform parent, Material material)
+                {
+                    if (parent == null || material == null)
+                    {
+                        throw new InvalidOperationException("Weapon impact mark particle composition requires a parent and material.");
+                    }
+
+                    var child = new GameObject("ImpactMarks");
+                    child.transform.SetParent(parent, false);
+                    var system = child.AddComponent<ParticleSystem>();
+                    var main = system.main;
+                    main.loop = false;
+                    main.playOnAwake = false;
+                    main.duration = MovementLabContractCatalog.WeaponImpactMarkLifetime;
+                    main.simulationSpace = ParticleSystemSimulationSpace.World;
+                    main.startLifetime = MovementLabContractCatalog.WeaponImpactMarkLifetime;
+                    main.startSpeed = 0f;
+                    main.startSize = MovementLabContractCatalog.ShotgunImpactMarkSize;
+                    main.startColor = Color.white;
+                    main.maxParticles = MovementLabContractCatalog.WeaponImpactMarkMaxParticles;
+
+                    var emission = system.emission;
+                    emission.enabled = true;
+                    emission.rateOverTime = 0f;
+                    emission.rateOverDistance = 0f;
+                    var shape = system.shape;
+                    shape.enabled = false;
+
+                    system.useAutoRandomSeed = false;
+                    system.randomSeed = 0x51A8u;
+                    var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(BlueCircleCueMeshPath);
+                    if (mesh == null)
+                    {
+                        mesh = GetOrCreateShapeMesh(false);
+                    }
+                    var renderer = child.GetComponent<ParticleSystemRenderer>();
+                    renderer.sharedMaterial = material;
+                    renderer.renderMode = ParticleSystemRenderMode.Mesh;
+                    renderer.mesh = mesh;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    renderer.lightProbeUsage = LightProbeUsage.Off;
+                    renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    return system;
                 }
 
                 internal static GameObject BuildBallPrefab(Material ballMaterial, PhysicsMaterial ballSurface)
