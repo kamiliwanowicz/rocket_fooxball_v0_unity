@@ -615,6 +615,22 @@ namespace RocketFooxball.Editor
             if (Vector3.Distance(mesh.bounds.min, expectedBounds.min) > TransformTolerance ||
                 Vector3.Distance(mesh.bounds.max, expectedBounds.max) > TransformTolerance)
                 throw new InvalidOperationException("Ramp prism bounds contract invalid.");
+
+            Mesh canonicalMesh = null;
+            try
+            {
+                canonicalMesh = CreateRampPrismMesh();
+                var expectedUv2 = canonicalMesh.uv2;
+                var meshUv2 = mesh.uv2;
+                for (var i = 0; i < expectedUv2.Length; i++)
+                    if (Vector2.Distance(meshUv2[i], expectedUv2[i]) > TransformTolerance)
+                        throw new InvalidOperationException("Ramp prism UV2 mismatch: " + i);
+            }
+            finally
+            {
+                if (canonicalMesh != null)
+                    UnityEngine.Object.DestroyImmediate(canonicalMesh);
+            }
         }
 
         private static void ValidateMarkings(GameObject arena, Material material)
