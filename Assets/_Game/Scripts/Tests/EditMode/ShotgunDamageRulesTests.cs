@@ -12,8 +12,8 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(Falloff(6f), Is.EqualTo(1f).Within(0.0001f));
             Assert.That(Falloff(11f), Is.EqualTo(0.775f).Within(0.0001f));
             Assert.That(Falloff(16f), Is.EqualTo(0.55f).Within(0.0001f));
-            Assert.That(Falloff(23f), Is.EqualTo(0.375f).Within(0.0001f));
-            Assert.That(Falloff(30f), Is.EqualTo(0.20f).Within(0.0001f));
+            Assert.That(Falloff(23f), Is.EqualTo(0.475f).Within(0.0001f));
+            Assert.That(Falloff(30f), Is.EqualTo(0.40f).Within(0.0001f));
             Assert.That(Falloff(30.01f), Is.EqualTo(0f).Within(0.0001f));
         }
 
@@ -39,7 +39,27 @@ namespace RocketFooxball.Tests.EditMode
             Assert.That(
                 ShotgunDamageRules.CalculatePelletDamage(ShotgunDamageRules.DefaultPelletDamage, Falloff(23f)) *
                 ShotgunDamageRules.DefaultPelletCount,
-                Is.EqualTo(40.8f).Within(0.0001f));
+                Is.EqualTo(51.68f).Within(0.0001f));
+            Assert.That(
+                ShotgunDamageRules.CalculatePelletDamage(ShotgunDamageRules.DefaultPelletDamage, Falloff(30f)) *
+                ShotgunDamageRules.DefaultPelletCount,
+                Is.EqualTo(43.52f).Within(0.0001f));
+        }
+
+        [Test]
+        public void DefaultFalloffIsMonotonicAndClampedOutsideConfiguredRange()
+        {
+            var previous = Falloff(0f);
+            for (var distance = 1f; distance <= ShotgunDamageRules.DefaultMaxRange; distance += 1f)
+            {
+                var current = Falloff(distance);
+                Assert.That(current, Is.LessThanOrEqualTo(previous + 0.0001f));
+                Assert.That(current, Is.InRange(0f, 1f));
+                previous = current;
+            }
+
+            Assert.That(Falloff(-1f), Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(Falloff(ShotgunDamageRules.DefaultMaxRange + 0.01f), Is.EqualTo(0f).Within(0.0001f));
         }
 
         [Test]

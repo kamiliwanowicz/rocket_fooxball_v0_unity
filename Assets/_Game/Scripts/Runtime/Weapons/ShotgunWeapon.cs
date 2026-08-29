@@ -1,8 +1,10 @@
 using System;
 using RocketFooxball.Runtime.Ball;
+using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Participants;
+using RocketFooxball.Runtime.Pickups;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
 
@@ -21,6 +23,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private Camera aimCamera;
         [SerializeField] private ParticipantState ownerParticipant;
         [SerializeField] private BallMotor ball;
+        [SerializeField] private WeaponImpactFeedback impactFeedback;
 
         [Header("Hitscan")]
         [SerializeField] private LayerMask hitMask = ~0;
@@ -229,7 +232,27 @@ namespace RocketFooxball.Runtime.Weapons
                 var direction = useProgrammaticRequest
                     ? GetProgrammaticPelletDirection(pelletIndex, forward, right, up, spreadAngleDegrees)
                     : (forward + right * offset.x + up * offset.y).normalized;
-                if (!UnityEngine.Physics.Raycast(origin, direction, out var hit, Mathf.Max(maxRange, 0f), effectiveMask, QueryTriggerInteraction.Ignore))
+                var didHit = UnityEngine.Physics.Raycast(
+                    origin,
+                    direction,
+                    out var hit,
+                    Mathf.Max(maxRange, 0f),
+                    effectiveMask,
+                    QueryTriggerInteraction.Ignore);
+                if (didHit)
+                {
+                    impactFeedback?.EmitTracer(origin, hit.point);
+                    if (ShouldEmitShotgunMark(hit))
+                    {
+                        impactFeedback?.EmitShotgunMark(hit.point, hit.normal);
+                    }
+                }
+                else
+                {
+                    impactFeedback?.EmitTracer(origin, origin + direction * ShotgunDamageRules.DefaultMaxRange);
+                }
+
+                if (!didHit)
                 {
                     continue;
                 }
@@ -306,6 +329,15 @@ namespace RocketFooxball.Runtime.Weapons
             {
                 HitConfirmed?.Invoke();
             }
+        }
+
+        private static bool ShouldEmitShotgunMark(RaycastHit hit)
+        {
+            var collider = hit.collider;
+            return collider != null && !collider.isTrigger && collider.attachedRigidbody == null &&
+                   collider.GetComponentInParent<ParticipantState>() == null &&
+                   collider.GetComponentInParent<BallMotor>() == null &&
+                   collider.GetComponentInParent<ArenaPickup>() == null;
         }
 
         private int FindOrAddParticipant(ParticipantState participant, ref int targetCount)
