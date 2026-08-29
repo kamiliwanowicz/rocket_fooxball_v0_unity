@@ -33,6 +33,8 @@ namespace RocketFooxball.Editor
         private const float DropCost = 1.25f;
         private const float ClearanceQueryRadius = 0.36f;
         private const int ClearanceBufferSize = 32;
+        private static readonly Vector3 RampLowLocalPosition = new Vector3(10f, 0f, 0f);
+        private static readonly Vector3 RampHighLocalPosition = new Vector3(-8f, 0.9f * MovementLabContract.ArenaRampHeight, 0f);
 
         private static readonly float[] LaneXs = { -52f, -12f, 0f, 12f, 52f };
         private static readonly float[] LaneZs = { -28f, 0f, 28f };
@@ -311,10 +313,7 @@ namespace RocketFooxball.Editor
             nodes.Add(new BotNavigationNodeRecord(21, new Vector3(0f, 0f, 14f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(22, new Vector3(-38f, 0f, 18f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(23, new Vector3(38f, 0f, -18f), BotNavigationArea.Floor, 2f));
-            nodes.Add(new BotNavigationNodeRecord(24, rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, -8f), BotNavigationArea.RampDeck, 1.25f));
-            nodes.Add(new BotNavigationNodeRecord(25, rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, 8f), BotNavigationArea.RampDeck, 1.25f));
-            nodes.Add(new BotNavigationNodeRecord(26, rampEast.position + rampEast.rotation * new Vector3(0f, 0.25f, -8f), BotNavigationArea.RampDeck, 1.25f));
-            nodes.Add(new BotNavigationNodeRecord(27, rampEast.position + rampEast.rotation * new Vector3(0f, 0.25f, 8f), BotNavigationArea.RampDeck, 1.25f));
+            nodes.AddRange(BuildRampNodeCatalog(rampWest, rampEast));
             nodes.Add(new BotNavigationNodeRecord(28, new Vector3(-34f, 0f, 2f), BotNavigationArea.Floor, 1.5f));
             nodes.Add(new BotNavigationNodeRecord(29, new Vector3(34f, 0f, -2f), BotNavigationArea.Floor, 1.5f));
             nodes.Add(new BotNavigationNodeRecord(30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f));
@@ -323,6 +322,22 @@ namespace RocketFooxball.Editor
             nodes.Add(new BotNavigationNodeRecord(33, new Vector3(65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
             nodes.Add(new BotNavigationNodeRecord(34, new Vector3(0f, 0f, -14f), BotNavigationArea.Floor, 2f));
             return nodes.ToArray();
+        }
+
+        private static BotNavigationNodeRecord[] BuildRampNodeCatalog(Transform rampWest, Transform rampEast)
+        {
+            return new[]
+            {
+                new BotNavigationNodeRecord(24, TransformRampLocalPosition(rampWest, RampLowLocalPosition), BotNavigationArea.RampDeck, 1.25f),
+                new BotNavigationNodeRecord(25, TransformRampLocalPosition(rampWest, RampHighLocalPosition), BotNavigationArea.RampDeck, 1.25f),
+                new BotNavigationNodeRecord(26, TransformRampLocalPosition(rampEast, RampLowLocalPosition), BotNavigationArea.RampDeck, 1.25f),
+                new BotNavigationNodeRecord(27, TransformRampLocalPosition(rampEast, RampHighLocalPosition), BotNavigationArea.RampDeck, 1.25f)
+            };
+        }
+
+        private static Vector3 TransformRampLocalPosition(Transform ramp, Vector3 localPosition)
+        {
+            return ramp.position + ramp.rotation * localPosition;
         }
 
         private static BotNavigationEdgeRecord[] BuildEdges(Transform rampWest, Transform rampEast, Collider redShield, Collider blueShield)
@@ -481,10 +496,8 @@ namespace RocketFooxball.Editor
             ValidateNode(graph.GetNode(21), 21, new Vector3(0f, 0f, 14f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(22), 22, new Vector3(-38f, 0f, 18f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(23), 23, new Vector3(38f, 0f, -18f), BotNavigationArea.Floor, 2f);
-            ValidateNode(graph.GetNode(24), 24, new Vector3(-14.207888f, 0.270929f, 2f), BotNavigationArea.RampDeck, 1.25f);
-            ValidateNode(graph.GetNode(25), 25, new Vector3(-29.662702f, 4.412034f, 2f), BotNavigationArea.RampDeck, 1.25f);
-            ValidateNode(graph.GetNode(26), 26, new Vector3(14.207888f, 0.270929f, -2f), BotNavigationArea.RampDeck, 1.25f);
-            ValidateNode(graph.GetNode(27), 27, new Vector3(29.662702f, 4.412034f, -2f), BotNavigationArea.RampDeck, 1.25f);
+            foreach (var expectedRampNode in BuildRampNodeCatalog(rampWest, rampEast))
+                ValidateNode(graph.GetNode(expectedRampNode.Id), expectedRampNode.Id, expectedRampNode.Position, expectedRampNode.Area, expectedRampNode.SafeRadius);
             ValidateNode(graph.GetNode(28), 28, new Vector3(-34f, 0f, 2f), BotNavigationArea.Floor, 1.5f);
             ValidateNode(graph.GetNode(29), 29, new Vector3(34f, 0f, -2f), BotNavigationArea.Floor, 1.5f);
             ValidateNode(graph.GetNode(30), 30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f);
@@ -496,13 +509,6 @@ namespace RocketFooxball.Editor
                 Mathf.Abs(graph.ArenaBounds.HalfLength - BotNavigationGraph.ExpectedArenaHalfLength) > 0.001f ||
                 Mathf.Abs(graph.ArenaBounds.HalfWidth - BotNavigationGraph.ExpectedArenaHalfWidth) > 0.001f)
                 throw new InvalidOperationException("Bot arena bounds must match the authored 65 by 45 field.");
-            var expectedWestLow = rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, -8f);
-            var expectedWestHigh = rampWest.position + rampWest.rotation * new Vector3(0f, 0.25f, 8f);
-            var expectedEastLow = rampEast.position + rampEast.rotation * new Vector3(0f, 0.25f, -8f);
-            var expectedEastHigh = rampEast.position + rampEast.rotation * new Vector3(0f, 0.25f, 8f);
-            if (Vector3.Distance(graph.GetNode(24).Position, expectedWestLow) > 0.001f || Vector3.Distance(graph.GetNode(25).Position, expectedWestHigh) > 0.001f ||
-                Vector3.Distance(graph.GetNode(26).Position, expectedEastLow) > 0.001f || Vector3.Distance(graph.GetNode(27).Position, expectedEastHigh) > 0.001f)
-                throw new InvalidOperationException("Ramp graph nodes must use authored rotation-relative offsets without scale-multiplying transform offsets.");
             var expectedEdges = BuildEdges(rampWest, rampEast, redShield, blueShield);
             for (var i = 0; i < graph.EdgeCount; i++)
             {
