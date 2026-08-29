@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Scripting.APIUpdating;
+using RocketFooxball.Runtime.Feedback;
 using RocketFooxball.Runtime.Input;
 using RocketFooxball.Runtime.Movement;
 using RocketFooxball.Runtime.Participants;
@@ -18,6 +19,7 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField] private Transform spawnPoint;
         [SerializeField] private RocketProjectile projectilePrefab;
         [SerializeField] private ExplosionResolver explosionResolver;
+        [SerializeField] private WeaponImpactFeedback impactFeedback;
         [SerializeField] private ParticipantState ownerParticipant;
 
         [Header("Firing")]
@@ -147,7 +149,7 @@ namespace RocketFooxball.Runtime.Weapons
             }
 
             var projectile = Object.Instantiate(projectilePrefab, launchPosition, Quaternion.LookRotation(direction, Vector3.up));
-            projectile.Initialize(ownerParticipant, transform, this, explosionResolver, direction);
+            projectile.Initialize(ownerParticipant, transform, this, explosionResolver, impactFeedback, direction);
             RegisterProjectile(projectile);
             cooldownRemaining = Mathf.Max(firingInterval, 0.01f);
             ownerParticipant?.CancelImmunity();
