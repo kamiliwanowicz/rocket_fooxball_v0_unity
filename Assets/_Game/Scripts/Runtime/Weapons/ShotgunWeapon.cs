@@ -16,6 +16,7 @@ namespace RocketFooxball.Runtime.Weapons
     {
         private const float SpreadBasisEpsilon = 0.000001f;
         private const float SpreadReferenceParallelThreshold = 0.999f;
+        private const float VisualTraceRange = 180f;
 
         [Header("References")]
         [SerializeField] private PlayerInputReader input;
@@ -226,6 +227,7 @@ namespace RocketFooxball.Runtime.Weapons
 
             var spreadScale = Mathf.Tan(Mathf.Clamp(spreadAngleDegrees, 0f, 89f) * Mathf.Deg2Rad);
             var count = ShotgunDamageRules.ClampPelletCount(pelletCount);
+            var traceRange = Mathf.Max(VisualTraceRange, Mathf.Max(maxRange, 0f));
             for (var pelletIndex = 0; pelletIndex < count; pelletIndex++)
             {
                 var offset = ShotgunSpreadPattern.GetOffset(pelletIndex) * spreadScale;
@@ -236,7 +238,7 @@ namespace RocketFooxball.Runtime.Weapons
                     origin,
                     direction,
                     out var hit,
-                    Mathf.Max(maxRange, 0f),
+                    traceRange,
                     effectiveMask,
                     QueryTriggerInteraction.Ignore);
                 if (didHit)
@@ -249,7 +251,7 @@ namespace RocketFooxball.Runtime.Weapons
                 }
                 else
                 {
-                    impactFeedback?.EmitTracer(origin, origin + direction * ShotgunDamageRules.DefaultMaxRange);
+                    impactFeedback?.EmitTracer(origin, origin + direction * traceRange);
                 }
 
                 if (!didHit)

@@ -11,10 +11,10 @@ namespace RocketFooxball.Runtime.Feedback
         private const float TracerOriginOffset = 0.45f;
         private const float TracerSpeed = 120f;
         private const float MinimumTracerLifetime = 0.04f;
-        private const float MarkSurfaceOffset = 0.015f;
+        private const float MarkSurfaceOffset = 0.005f;
         private const float MarkLifetime = 30f;
-        private const float ShotgunMarkSize = 0.16f;
-        private const float RocketMarkSize = 1.15f;
+        private const float ShotgunMarkSize = 0.30f;
+        private const float RocketMarkSize = 0.90f;
         private const string CompositionError =
             "WeaponImpactFeedback requires serialized references: shotgunPellets and impactMarks.";
 
@@ -98,7 +98,7 @@ namespace RocketFooxball.Runtime.Feedback
 
         private void EmitMark(Vector3 point, Vector3 normal, float size)
         {
-            if (!IsReady() || !IsFinite(point) || !IsFinite(normal) || normal.sqrMagnitude <= Epsilon)
+            if (!IsReady() || !IsFinite(point) || !WeaponImpactRules.TryResolveMarkRotation(normal, out var rotation))
             {
                 return;
             }
@@ -121,7 +121,7 @@ namespace RocketFooxball.Runtime.Feedback
                 velocity = Vector3.zero,
                 startLifetime = MarkLifetime,
                 startSize = size,
-                rotation3D = Quaternion.Inverse(Quaternion.LookRotation(normalizedNormal)).eulerAngles
+                rotation3D = rotation.eulerAngles
             };
             impactMarks.Emit(emitParams, 1);
         }
