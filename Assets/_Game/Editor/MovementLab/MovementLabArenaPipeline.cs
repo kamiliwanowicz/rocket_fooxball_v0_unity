@@ -80,8 +80,21 @@ namespace RocketFooxball.Editor
             containment.SetParent(arena.transform, false);
             CreateContainment("FloorContainment", containment, new Vector3(0f, -4f, 0f), new Vector3(140f, 1f, 120f), ballSurface);
             CreateContainment("CeilingContainment", containment, new Vector3(0f, 48.5f, 0f), new Vector3(130f, 1f, 90f), ballSurface);
-            CreateContainment("EastContainment", containment, new Vector3(64.5f, 28f, 0f), new Vector3(1f, 42f, 90f), ballSurface);
-            CreateContainment("WestContainment", containment, new Vector3(-64.5f, 28f, 0f), new Vector3(1f, 42f, 90f), ballSurface);
+            var openingDepth = MovementLabContract.ArenaGoalOpeningContainmentDepth;
+            var sideDepth = (90f - openingDepth) * 0.5f;
+            var sideCenterOffset = (openingDepth + sideDepth) * 0.5f;
+            var sideCenterY = 28f;
+            var sideHeight = 42f;
+            var topY = sideCenterY + sideHeight * 0.5f;
+            var upperBottomY = MovementLabContract.ArenaGoalOpeningContainmentHeight;
+            var upperHeight = topY - upperBottomY;
+            var upperCenterY = (upperBottomY + topY) * 0.5f;
+            CreateContainment("EastContainmentNorth", containment, new Vector3(64.5f, sideCenterY, -sideCenterOffset), new Vector3(1f, sideHeight, sideDepth), ballSurface);
+            CreateContainment("EastContainmentSouth", containment, new Vector3(64.5f, sideCenterY, sideCenterOffset), new Vector3(1f, sideHeight, sideDepth), ballSurface);
+            CreateContainment("EastContainmentUpper", containment, new Vector3(64.5f, upperCenterY, 0f), new Vector3(1f, upperHeight, openingDepth), ballSurface);
+            CreateContainment("WestContainmentNorth", containment, new Vector3(-64.5f, sideCenterY, -sideCenterOffset), new Vector3(1f, sideHeight, sideDepth), ballSurface);
+            CreateContainment("WestContainmentSouth", containment, new Vector3(-64.5f, sideCenterY, sideCenterOffset), new Vector3(1f, sideHeight, sideDepth), ballSurface);
+            CreateContainment("WestContainmentUpper", containment, new Vector3(-64.5f, upperCenterY, 0f), new Vector3(1f, upperHeight, openingDepth), ballSurface);
             CreateContainment("NorthContainment", containment, new Vector3(0f, 28f, -44.5f), new Vector3(130f, 42f, 1f), ballSurface);
             CreateContainment("SouthContainment", containment, new Vector3(0f, 28f, 44.5f), new Vector3(130f, 42f, 1f), ballSurface);
             CreateContainment("WestGoalOpeningContainment", containment,
@@ -496,18 +509,35 @@ namespace RocketFooxball.Editor
 
         internal static void ValidateContainment(Transform containment, PhysicsMaterial ballSurface)
         {
-            var names = new[] { "FloorContainment", "CeilingContainment", "NorthContainment", "SouthContainment", "WestContainment", "EastContainment", "WestGoalOpeningContainment", "EastGoalOpeningContainment" };
+            var openingDepth = MovementLabContract.ArenaGoalOpeningContainmentDepth;
+            var sideDepth = (90f - openingDepth) * 0.5f;
+            var sideCenterOffset = (openingDepth + sideDepth) * 0.5f;
+            var sideCenterY = 28f;
+            var sideHeight = 42f;
+            var topY = sideCenterY + sideHeight * 0.5f;
+            var upperBottomY = MovementLabContract.ArenaGoalOpeningContainmentHeight;
+            var upperHeight = topY - upperBottomY;
+            var upperCenterY = (upperBottomY + topY) * 0.5f;
+            var names = new[]
+            {
+                "FloorContainment", "CeilingContainment", "NorthContainment", "SouthContainment",
+                "WestContainmentNorth", "WestContainmentSouth", "WestContainmentUpper",
+                "EastContainmentNorth", "EastContainmentSouth", "EastContainmentUpper",
+                "WestGoalOpeningContainment", "EastGoalOpeningContainment"
+            };
             var positions = new[]
             {
                 new Vector3(0f, -4f, 0f), new Vector3(0f, 48.5f, 0f), new Vector3(0f, 28f, -44.5f), new Vector3(0f, 28f, 44.5f),
-                new Vector3(-64.5f, 28f, 0f), new Vector3(64.5f, 28f, 0f),
+                new Vector3(-64.5f, sideCenterY, -sideCenterOffset), new Vector3(-64.5f, sideCenterY, sideCenterOffset), new Vector3(-64.5f, upperCenterY, 0f),
+                new Vector3(64.5f, sideCenterY, -sideCenterOffset), new Vector3(64.5f, sideCenterY, sideCenterOffset), new Vector3(64.5f, upperCenterY, 0f),
                 new Vector3(-67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f),
                 new Vector3(67f, MovementLabContract.ArenaGoalOpeningCenterY, 0f)
             };
             var sizes = new[]
             {
                 new Vector3(140f, 1f, 120f), new Vector3(130f, 1f, 90f), new Vector3(130f, 42f, 1f), new Vector3(130f, 42f, 1f),
-                new Vector3(1f, 42f, 90f), new Vector3(1f, 42f, 90f),
+                new Vector3(1f, sideHeight, sideDepth), new Vector3(1f, sideHeight, sideDepth), new Vector3(1f, upperHeight, openingDepth),
+                new Vector3(1f, sideHeight, sideDepth), new Vector3(1f, sideHeight, sideDepth), new Vector3(1f, upperHeight, openingDepth),
                 new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth),
                 new Vector3(1f, MovementLabContract.ArenaGoalOpeningContainmentHeight, MovementLabContract.ArenaGoalOpeningContainmentDepth)
             };
