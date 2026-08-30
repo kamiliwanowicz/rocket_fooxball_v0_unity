@@ -14,9 +14,9 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 14;
-        internal const int MaterialPrefabStageContractVersion = 16;
-        internal const int GameplaySceneStageContractVersion = 18;
+        internal const int SerializedContractVersion = 15;
+        internal const int MaterialPrefabStageContractVersion = 17;
+        internal const int GameplaySceneStageContractVersion = 19;
         internal const int QualityStageContractVersion = 5;
         internal const int LightingStageContractVersion = 7;
         internal const int BakedOutputStageContractVersion = 8;
@@ -109,6 +109,7 @@ namespace RocketFooxball.Editor
         internal const int AmmoPickupGrant = 8;
         internal const float ShotgunPickupTriggerRadius = 1.50f;
         internal const float AmmoPickupTriggerRadius = 1.50f;
+        internal const float ShotgunPickupModelScale = 3f;
         internal const int ShotgunShellCapacity = 16;
         internal static readonly Vector3 ShotgunPickupNorthPosition = new Vector3(0f, 1.10f, -14f);
         internal static readonly Vector3 ShotgunPickupSouthPosition = new Vector3(0f, 1.10f, 14f);
@@ -174,7 +175,7 @@ namespace RocketFooxball.Editor
         internal const float PlayerControllerSkinWidth = 0.08f;
         internal const float PlayableFloorTop = 0f;
         internal const float ParticipantRecoveryThreshold = -PlayerControllerSkinWidth;
-        internal const float WorldVisualScale = 2f;
+        internal const float WorldVisualScale = 1.2f;
         internal const float PlayerHeadHeight = 3.1f;
         internal const float TeamCueScaleMultiplier = 2f;
         internal const float ImmunityShieldScaleMultiplier = 2f;
@@ -186,14 +187,17 @@ namespace RocketFooxball.Editor
         internal const float RocketTrailStartSize = 0.70f;
         internal const float RocketEmissionStrength = 3.0f;
         internal const float WeaponImpactFeedbackEpsilon = 0.000001f;
+        internal const float WeaponImpactVisualTraceRange = 180f;
         internal const float WeaponImpactTracerOriginOffset = 0.45f;
         internal const float WeaponImpactTracerSpeed = 120f;
         internal const float WeaponImpactTracerSystemDuration = 0.05f;
         internal const float WeaponImpactMinimumTracerLifetime = 0.04f;
-        internal const float WeaponImpactMarkSurfaceOffset = 0.015f;
+        internal const float WeaponImpactTracerSize = 0.10f;
+        internal const float WeaponImpactMarkSurfaceOffset = 0.005f;
         internal const float WeaponImpactMarkLifetime = 30f;
-        internal const float ShotgunImpactMarkSize = 0.16f;
-        internal const float RocketImpactMarkSize = 1.15f;
+        internal const float ShotgunImpactMarkSize = 0.30f;
+        internal const float RocketImpactMarkSize = 0.90f;
+        internal static readonly Color WeaponImpactMarkColor = new Color(0.055f, 0.04f, 0.03f, 0.88f);
         internal const int ShotgunPelletMaxParticles = 32;
         internal const int WeaponImpactMarkMaxParticles = 512;
         internal const float PlayerCollisionRetentionFraction = GamePhysicsSettings.PlayerCollisionRetentionFraction;
@@ -371,7 +375,7 @@ namespace RocketFooxball.Editor
         internal const float ArenaPenaltyAreaHalfWidth = 22f;
         internal const float ArenaGoalAreaDepth = 6f;
         internal const float ArenaGoalAreaHalfWidth = 10f;
-        internal const float ArenaGoalOpeningHeight = 9f;
+        internal const float ArenaGoalOpeningHeight = 11f;
         internal const float ArenaGoalOpeningWidth = 36f;
         internal const float ArenaGoalOpeningHalfWidth = ArenaGoalOpeningWidth * 0.5f;
         internal const float ArenaGoalOpeningCenterY = ArenaGoalOpeningHeight * 0.5f;
@@ -411,11 +415,11 @@ namespace RocketFooxball.Editor
         // while imported Unity meshes use X width, Y height, Z depth. The
         // expected Unity bounds below therefore apply the export axis mapping.
         internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMin = new Vector3(-21f, -10f, 0f);
-        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMax = new Vector3(21f, 0f, 10f);
+        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMax = new Vector3(21f, 0f, 12f);
         internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMin = new Vector3(-0.6f, -0.35f, -0.3f);
         internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMax = new Vector3(0.6f, 0f, 0.3f);
         internal static readonly Vector3 ArenaGoalRecessBoundsMin = new Vector3(-21f, 0f, 0f);
-        internal static readonly Vector3 ArenaGoalRecessBoundsMax = new Vector3(21f, 10f, 10f);
+        internal static readonly Vector3 ArenaGoalRecessBoundsMax = new Vector3(21f, 12f, 10f);
         internal static readonly Vector3 ArenaWallSconceBoundsMin = new Vector3(-0.6f, -0.3f, 0f);
         internal static readonly Vector3 ArenaWallSconceBoundsMax = new Vector3(0.6f, 0.3f, 0.35f);
 
@@ -447,8 +451,8 @@ namespace RocketFooxball.Editor
 
         internal static readonly ArenaArchitectureSpecification[] ArenaGoalOpeningLintelSpecifications =
         {
-            new ArenaArchitectureSpecification("WestGoalOpeningLintel", new Vector3(-64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), Quaternion.identity),
-            new ArenaArchitectureSpecification("EastGoalOpeningLintel", new Vector3(64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), Quaternion.identity)
+            new ArenaArchitectureSpecification("WestUpperLintel", new Vector3(-64.5f, 11.5f, 0f), new Vector3(1f, 1f, 37f), Quaternion.identity),
+            new ArenaArchitectureSpecification("EastUpperLintel", new Vector3(64.5f, 11.5f, 0f), new Vector3(1f, 1f, 37f), Quaternion.identity)
         };
 
         internal readonly struct CollisionGeometrySpecification
@@ -484,8 +488,8 @@ namespace RocketFooxball.Editor
         internal const float ArenaRampLength = 20f;
         internal const float ArenaRampWidth = 18f;
         internal const float ArenaRampHeight = 5.358984f;
-        internal static readonly Vector3 ArenaRampWestCenter = new Vector3(-30f, 0f, 2f);
-        internal static readonly Vector3 ArenaRampEastCenter = new Vector3(30f, 0f, -2f);
+        internal static readonly Vector3 ArenaRampWestCenter = new Vector3(-30f, 0f, 6f);
+        internal static readonly Vector3 ArenaRampEastCenter = new Vector3(30f, 0f, -6f);
         internal static readonly Quaternion ArenaRampWestRotation = Quaternion.identity;
         internal static readonly Quaternion ArenaRampEastRotation = Quaternion.Euler(0f, 180f, 0f);
         internal static readonly RampGeometrySpecification[] ArenaRampSpecifications =
