@@ -32,6 +32,7 @@ Shader "RocketFooxball/RetroParticle"
             #pragma vertex RetroParticleVertex
             #pragma fragment RetroParticleFragment
             #pragma multi_compile_instancing
+            #pragma shader_feature_local _SCORCH_MARK
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
@@ -79,6 +80,15 @@ Shader "RocketFooxball/RetroParticle"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
                 half4 sprite = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv);
+#if defined(_SCORCH_MARK)
+                float2 p = input.uv * 2.0 - 1.0;
+                float r = length(p);
+                float a = atan2(p.y, p.x);
+                float irregularRadius = 0.78 + 0.08 * sin(7.0 * a + 0.4) + 0.05 * sin(13.0 * a - 1.1);
+                float edge = 1.0 - smoothstep(irregularRadius - 0.18, irregularRadius, r);
+                float mottle = saturate(0.65 + 0.20 * sin(31.0 * p.x + 17.0 * p.y) + 0.15 * sin(19.0 * p.x - 29.0 * p.y));
+                sprite.a *= edge * mottle;
+#endif
                 return sprite * _BaseColor * input.color;
             }
             ENDHLSL

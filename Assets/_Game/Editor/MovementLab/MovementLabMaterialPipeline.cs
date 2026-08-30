@@ -373,9 +373,20 @@ namespace RocketFooxball.Editor
                     {
                         material.shader = shader;
                     }
+                    material.DisableKeyword("_SCORCH_MARK");
                     material.SetColor("_BaseColor", color);
                     material.SetTexture("_BaseMap", texture != null ? texture : Texture2D.whiteTexture);
                     material.SetTextureScale("_BaseMap", Vector2.one);
+                    EditorUtility.SetDirty(material);
+                    return material;
+                }
+
+                internal static Material GetOrCreateWeaponImpactMarkMaterial()
+                {
+                    var material = GetOrCreateParticleMaterial(
+                        "WeaponImpactMark", MovementLabContractCatalog.WeaponImpactMarkColor, Texture2D.whiteTexture);
+                    material.EnableKeyword("_SCORCH_MARK");
+                    material.renderQueue = (int)RenderQueue.Transparent;
                     EditorUtility.SetDirty(material);
                     return material;
                 }

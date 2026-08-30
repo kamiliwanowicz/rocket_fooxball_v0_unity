@@ -150,8 +150,7 @@ namespace RocketFooxball.Editor
                     var weaponImpactFeedback = weaponImpactFeedbackRoot.gameObject.AddComponent<WeaponImpactFeedback>();
                     var shotgunPelletMaterial = GetOrCreateAdditiveParticleMaterial(
                         "ShotgunPellet", Color.white, LoadTexture(RocketGlowTexturePath), 2.5f);
-                    var impactMarkMaterial = GetOrCreateParticleMaterial(
-                        "WeaponImpactMark", Color.white, null);
+                    var impactMarkMaterial = GetOrCreateWeaponImpactMarkMaterial();
                     var shotgunPellets = CreateWeaponTracerSystem(weaponImpactFeedbackRoot, shotgunPelletMaterial);
                     var impactMarks = CreateWeaponImpactMarkSystem(weaponImpactFeedbackRoot, impactMarkMaterial);
 
@@ -483,7 +482,7 @@ namespace RocketFooxball.Editor
                     main.simulationSpace = ParticleSystemSimulationSpace.World;
                     main.startLifetime = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
                     main.startSpeed = MovementLabContractCatalog.WeaponImpactTracerSpeed;
-                    main.startSize = 0.06f;
+                    main.startSize = MovementLabContractCatalog.WeaponImpactTracerSize;
                     main.startColor = Color.white;
                     main.maxParticles = MovementLabContractCatalog.ShotgunPelletMaxParticles;
 
@@ -527,6 +526,7 @@ namespace RocketFooxball.Editor
                     main.simulationSpace = ParticleSystemSimulationSpace.World;
                     main.startLifetime = MovementLabContractCatalog.WeaponImpactMarkLifetime;
                     main.startSpeed = 0f;
+                    main.startRotation3D = true;
                     main.startSize = MovementLabContractCatalog.ShotgunImpactMarkSize;
                     main.startColor = Color.white;
                     main.maxParticles = MovementLabContractCatalog.WeaponImpactMarkMaxParticles;
@@ -548,6 +548,7 @@ namespace RocketFooxball.Editor
                     var renderer = child.GetComponent<ParticleSystemRenderer>();
                     renderer.sharedMaterial = material;
                     renderer.renderMode = ParticleSystemRenderMode.Mesh;
+                    renderer.alignment = ParticleSystemRenderSpace.World;
                     renderer.mesh = mesh;
                     renderer.shadowCastingMode = ShadowCastingMode.Off;
                     renderer.receiveShadows = false;
@@ -671,7 +672,8 @@ namespace RocketFooxball.Editor
 
                     var visualRoot = new GameObject("VisualRoot");
                     visualRoot.transform.SetParent(root.transform, false);
-                    var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity, Vector3.one);
+                    var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity,
+                        Vector3.one * MovementLabContractCatalog.ShotgunPickupModelScale);
                     AssignImportedMaterials(shotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
                     RemovePhysicsAndAnimators(shotgunVisual);
                     var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, MovementLabContract.PickupCueBluePosition);
