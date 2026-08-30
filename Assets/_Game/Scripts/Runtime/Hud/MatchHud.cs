@@ -91,14 +91,18 @@ namespace RocketFooxball.Runtime.Hud
         private const float ReferenceHeight = 1080f;
         private const float GoDuration = 0.5f;
         private const int TableRowCount = 6;
-        private const float ShotgunIconWidth = 384f;
-        private const float ShotgunIconHeight = 192f;
         private const float DamageIndicatorCenterX = 960f;
         private const float DamageIndicatorCenterY = 540f;
         private const float DamageIndicatorRadius = 64f;
         private const float DamageIndicatorThickness = 8f;
         private const float DamageIndicatorArcDegrees = 60f;
         private const int DamageIndicatorSegmentCount = 12;
+
+        public static readonly Rect HealthPanelRect = new Rect(36f, 930f, 530f, 112f);
+        public static readonly Rect ShotgunPanelRect = new Rect(1354f, 930f, 530f, 112f);
+        public static readonly Rect ShotgunIconRect = new Rect(1376f, 938f, 192f, 96f);
+        public static readonly Rect ShotgunTitleRect = new Rect(1588f, 946f, 274f, 30f);
+        public static readonly Rect ShotgunShellsRect = new Rect(1588f, 988f, 274f, 26f);
 
         private const string BlueMarker = "[O]";
         private const string RedMarker = @"[/\]";
@@ -490,10 +494,10 @@ namespace RocketFooxball.Runtime.Hud
             var color = frameHasShotgun && shells > 0
                 ? Color.white
                 : new Color(0.55f, 0.6f, 0.68f);
-            DrawPanel(new Rect(1090f, 822f, 794f, 220f));
-            DrawShotgunSilhouette(new Rect(1112f, 842f, ShotgunIconWidth, ShotgunIconHeight), color);
-            DrawText(new Rect(1516f, 858f, 346f, 38f), "SHOTGUN", headingStyle, color);
-            DrawText(new Rect(1516f, 910f, 346f, 38f), "SHELLS  " + shells, smallStyle, color);
+            DrawPanel(ShotgunPanelRect);
+            DrawShotgunSilhouette(ShotgunIconRect, color);
+            DrawText(ShotgunTitleRect, "SHOTGUN", headingStyle, color);
+            DrawText(ShotgunShellsRect, "SHELLS  " + shells, smallStyle, color);
         }
 
         private void DrawShotgunSilhouette(Rect rect, Color color)
@@ -508,10 +512,26 @@ namespace RocketFooxball.Runtime.Hud
             try
             {
                 GUI.color = color;
-                var stock = new Rect(rect.x, rect.y + 81f, 84f, 36f);
-                var body = new Rect(rect.x + 66f, rect.y + 48f, 141f, 87f);
-                var barrel = new Rect(rect.x + 195f, rect.y + 63f, 189f, 33f);
-                var trigger = new Rect(rect.x + 141f, rect.y + 126f, 33f, 48f);
+                var stock = new Rect(
+                    rect.x + rect.width * 0f,
+                    rect.y + rect.height * 0.421875f,
+                    rect.width * 0.21875f,
+                    rect.height * 0.1875f);
+                var body = new Rect(
+                    rect.x + rect.width * 0.171875f,
+                    rect.y + rect.height * 0.25f,
+                    rect.width * 0.3671875f,
+                    rect.height * 0.453125f);
+                var barrel = new Rect(
+                    rect.x + rect.width * 0.5078125f,
+                    rect.y + rect.height * 0.328125f,
+                    rect.width * 0.4921875f,
+                    rect.height * 0.171875f);
+                var trigger = new Rect(
+                    rect.x + rect.width * 0.3671875f,
+                    rect.y + rect.height * 0.65625f,
+                    rect.width * 0.0859375f,
+                    rect.height * 0.25f);
                 GUI.DrawTexture(stock, whiteTexture);
                 GUI.DrawTexture(body, whiteTexture);
                 GUI.DrawTexture(barrel, whiteTexture);
@@ -583,7 +603,7 @@ namespace RocketFooxball.Runtime.Hud
 
         private void DrawHealth()
         {
-            DrawPanel(new Rect(36f, 930f, 530f, 112f));
+            DrawPanel(HealthPanelRect);
             var health = Mathf.Max(0f, frameHealth);
             var maxHealth = Mathf.Max(frameMaxHealth, 1f);
             var ratio = Mathf.Clamp01(health / maxHealth);
