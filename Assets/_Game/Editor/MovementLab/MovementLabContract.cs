@@ -435,7 +435,7 @@ namespace RocketFooxball.Editor
             new ArenaSubmeshSlotSpecification("ArenaPrimary", 708, 132,
                 new Vector3(-21f, 0f, 0f), new Vector3(21f, 12f, 10f)),
             new ArenaSubmeshSlotSpecification("ArenaTrim", 24, 6,
-                new Vector3(7f, 5.45f, 9.4f), new Vector3(10f, 6.55f, 10f)),
+                new Vector3(-10f, 5.45f, 9.4f), new Vector3(-7f, 6.55f, 10f)),
             new ArenaSubmeshSlotSpecification("ArenaHazard", 132, 24,
                 new Vector3(-4f, 0.58f, 9.54f), new Vector3(4f, 0.92f, 9.62f)),
             new ArenaSubmeshSlotSpecification("ArenaGlow", 132, 24,
