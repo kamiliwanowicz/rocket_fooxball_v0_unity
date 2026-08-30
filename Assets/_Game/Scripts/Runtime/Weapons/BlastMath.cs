@@ -22,32 +22,24 @@ namespace RocketFooxball.Runtime.Weapons
             return IsFinite(value.x) && IsFinite(value.y);
         }
 
-        /// <summary>Resolves local movement intent into a normalized XZ direction relative to player facing.</summary>
-        public static Vector3 ResolvePlanarDirection(Vector3 playerForward, Vector2 moveIntent)
+        /// <summary>Resolves actual player travel into a normalized XZ direction, with a facing fallback.</summary>
+        public static Vector3 ResolvePlanarTravelDirection(Vector3 playerVelocity, Vector3 fallbackForward)
         {
-            var forward = new Vector3(playerForward.x, 0f, playerForward.z);
-            if (!IsFinite(forward) || forward.sqrMagnitude <= Epsilon)
+            var travel = new Vector3(playerVelocity.x, 0f, playerVelocity.z);
+            if (IsFinite(travel) && travel.sqrMagnitude > Epsilon)
             {
-                forward = Vector3.forward;
-            }
-            else
-            {
-                forward.Normalize();
+                travel.Normalize();
+                return travel;
             }
 
-            if (!IsFinite(moveIntent) || moveIntent.sqrMagnitude <= Epsilon)
+            var fallback = new Vector3(fallbackForward.x, 0f, fallbackForward.z);
+            if (IsFinite(fallback) && fallback.sqrMagnitude > Epsilon)
             {
-                return forward;
+                fallback.Normalize();
+                return fallback;
             }
 
-            var right = Vector3.Cross(Vector3.up, forward);
-            var direction = right * moveIntent.x + forward * moveIntent.y;
-            if (!IsFinite(direction) || direction.sqrMagnitude <= Epsilon)
-            {
-                return forward;
-            }
-
-            return direction.normalized;
+            return Vector3.forward;
         }
 
         public static float ComputeFalloff(float surfaceDistance, float blastRadius)
@@ -100,14 +92,28 @@ namespace RocketFooxball.Runtime.Weapons
                 return radialDirection * strength;
             }
 
+            var normalizedTravel = new Vector3(underfootFacing.x, 0f, underfootFacing.z);
+            if (!IsFinite(normalizedTravel) || normalizedTravel.sqrMagnitude <= Epsilon)
+            {
+                if (radialDirection.y < 0.25f)
+                {
+                    radialDirection = (radialDirection + Vector3.up * playerUpBias).normalized;
+                }
+
+                return radialDirection * strength;
+            }
+
+            normalizedTravel.Normalize();
             var speedT = Mathf.Clamp01((horizontalSpeed - baseSpeed) / Mathf.Max(softCap - baseSpeed, Epsilon));
             var redirectT = speedT * Mathf.Clamp01(underfootHighSpeedVerticalRedirect);
-            var baseForwardScale = underfootForwardImpulseScale;
-            var baseUpwardScale = underfootUpwardImpulseScale;
-            var forwardScale = baseForwardScale * (1f - redirectT);
-            var upwardScale = baseUpwardScale + baseForwardScale * redirectT;
-            var underfootImpulse = underfootFacing.normalized * forwardScale + Vector3.up * upwardScale;
-            return underfootImpulse.sqrMagnitude <= Epsilon ? Vector3.up * strength : underfootImpulse * strength;
+            var forwardBoost = strength * underfootForwardImpulseScale * (1f - redirectT);
+            var redirectBudget = Mathf.Max(strength, 0f) * underfootForwardImpulseScale * redirectT;
+            var excessSpeed = Mathf.Max(horizontalSpeed - baseSpeed, 0f);
+            var brake = Mathf.Min(excessSpeed, redirectBudget);
+            var planarImpulse = normalizedTravel * (forwardBoost - brake);
+            var upwardImpulse = Vector3.up * strength *
+                (underfootUpwardImpulseScale + underfootForwardImpulseScale * redirectT);
+            return planarImpulse + upwardImpulse;
         }
 
         public static bool TryGetUnderfootFacing(
