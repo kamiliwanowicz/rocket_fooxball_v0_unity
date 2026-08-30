@@ -43,11 +43,11 @@ MODULE_CONTRACTS = OrderedDict(
             "ArenaGoalRecess",
             {
                 "minimum": (-21.0, -10.0, 0.0),
-                "maximum": (21.0, 0.0, 10.0),
+                "maximum": (21.0, 0.0, 12.0),
                 "pivot": "opening-plane ground center",
                 "slots": MATERIAL_ORDER,
                 "triangle_review_target": 20000,
-                "opening": {"half_width": 18.0, "height": 7.0, "plane_y": 0.0},
+                "opening": {"half_width": 18.0, "height": 11.0, "plane_y": 0.0},
                 "recess_depth": 10.0,
             },
         ),
@@ -188,23 +188,23 @@ def create_goal_recess(materials):
     depth = snap(10.0)
     add_box(
         "GoalCheekLeft",
-        (-19.5, -depth * 0.5, 3.505),
-        (3.0, depth, 7.01),
+        (-19.5, -depth * 0.5, 5.505),
+        (3.0, depth, 11.01),
         materials["ArenaPrimary"],
         parts,
         0.04,
     )
     add_box(
         "GoalCheekRight",
-        (19.5, -depth * 0.5, 3.505),
-        (3.0, depth, 7.01),
+        (19.5, -depth * 0.5, 5.505),
+        (3.0, depth, 11.01),
         materials["ArenaPrimary"],
         parts,
         0.04,
     )
     add_triangular_prism(
         "GoalShoulderLeft",
-        ((-21.0, 7.0), (-18.0, 7.0), (-18.0, 10.0)),
+        ((-21.0, 11.0), (-18.0, 11.0), (-18.0, 12.0)),
         -depth,
         0.0,
         materials["ArenaPrimary"],
@@ -212,7 +212,7 @@ def create_goal_recess(materials):
     )
     add_triangular_prism(
         "GoalShoulderRight",
-        ((18.0, 7.0), (21.0, 7.0), (18.0, 10.0)),
+        ((18.0, 11.0), (21.0, 11.0), (18.0, 12.0)),
         -depth,
         0.0,
         materials["ArenaPrimary"],
@@ -220,16 +220,16 @@ def create_goal_recess(materials):
     )
     add_box(
         "GoalLintel",
-        (0.0, -depth * 0.5, 8.5),
-        (36.02, depth, 3.0),
+        (0.0, -depth * 0.5, 11.5),
+        (36.02, depth, 1.0),
         materials["ArenaPrimary"],
         parts,
         0.035,
     )
     add_box(
         "GoalBackWall",
-        (0.0, -9.8, 3.505),
-        (36.02, 0.4, 7.01),
+        (0.0, -9.8, 5.505),
+        (36.02, 0.4, 11.01),
         materials["ArenaPrimary"],
         parts,
         0.025,
@@ -253,7 +253,7 @@ def create_goal_recess(materials):
     )
     add_box(
         "GoalGlowStrip",
-        (0.0, -9.58, 6.0),
+        (0.0, -9.58, 10.0),
         (12.0, 0.08, 0.3),
         materials["ArenaGlow"],
         parts,
@@ -517,6 +517,7 @@ def audit_goal_opening(part_bounds):
     half_width = contract["opening"]["half_width"]
     height = contract["opening"]["height"]
     plane_y = contract["opening"]["plane_y"]
+    opening_width = half_width * 2.0
     blockers = []
     for name, (minimum, maximum) in part_bounds.items():
         touches_plane = minimum.y - 1e-6 <= plane_y <= maximum.y + 1e-6
@@ -525,7 +526,10 @@ def audit_goal_opening(part_bounds):
         if touches_plane and overlaps_width and overlaps_height:
             blockers.append(name)
     if blockers:
-        raise RuntimeError(f"Goal opening 36x7m obstructed at Y=0 by {blockers}")
+        raise RuntimeError(
+            f"Goal opening {opening_width:g}x{height:g}m obstructed "
+            f"at Y={plane_y:g} by {blockers}"
+        )
     marker_minimum, marker_maximum = part_bounds["GoalRearMarker"]
     if abs(marker_minimum.y + 10.0) > 1e-6 or abs(marker_maximum.y + 9.4) > 1e-6:
         raise RuntimeError(
@@ -533,7 +537,10 @@ def audit_goal_opening(part_bounds):
         )
     if abs(contract["recess_depth"] - (plane_y - marker_minimum.y)) > 1e-6:
         raise RuntimeError("Goal recess depth contract failed")
-    print("AUDIT goal opening: 36.000000x7.000000 m clear at Y=0")
+    print(
+        f"AUDIT goal opening: {opening_width:.6f}x{height:.6f} m clear "
+        f"at Y={plane_y:g}"
+    )
     print("AUDIT rear marker: asymmetric tip Blender Y=-10.000000 -> Unity local +Z")
 
 
@@ -611,6 +618,18 @@ def audit_module(obj, expected_components):
         "triangle_review_target": contract["triangle_review_target"],
         "components": component_count,
         "component_signed_volumes": component_volumes,
+        "finite_vertices": True,
+        "topology": {
+            "zero_length_edges": zero_edges,
+            "zero_area_faces": zero_faces,
+            "non_manifold_edges": non_manifold,
+            "loose_vertices": loose_vertices,
+        },
+        "transform": {
+            "location": [round(value, 6) for value in obj.location],
+            "rotation_euler": [round(value, 6) for value in obj.rotation_euler],
+            "scale": [round(value, 6) for value in obj.scale],
+        },
         "slots": list(contract["slots"]),
         "uv_layers": list(UV_LAYER_NAMES),
         "uv_audits": uv_audits,
