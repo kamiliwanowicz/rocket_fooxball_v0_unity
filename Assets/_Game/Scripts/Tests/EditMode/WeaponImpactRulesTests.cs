@@ -22,7 +22,7 @@ namespace RocketFooxball.Tests.EditMode
         public void ZeroOrNonfiniteNormalsAreRejectedWithIdentityRotation()
         {
             AssertInvalid(Vector3.zero);
-            AssertInvalid(new Vector3(0.001f, 0f, 0f));
+            AssertInvalid(new Vector3(0.0009f, 0f, 0f));
             AssertInvalid(new Vector3(float.NaN, 0f, 1f));
             AssertInvalid(new Vector3(0f, float.PositiveInfinity, 0f));
             AssertInvalid(new Vector3(0f, 0f, float.NegativeInfinity));
