@@ -684,7 +684,7 @@ namespace RocketFooxball.Editor
                         {
                             throw new InvalidOperationException("ArenaKit mesh bounds contract invalid: " + expectedNames[i] + "; expected " + expectedBoundsMin[i] + ".." + expectedBoundsMax[i] + ", actual " + found.bounds.min + ".." + found.bounds.max);
                         }
-                        ValidateImportedMaterialSlotCount(importedRoots, found, expectedMaterialSlots[i].Length, expectedNames[i]);
+                        ValidateImportedMaterialSlotOrder(importedRoots, found, expectedMaterialSlots[i], expectedNames[i]);
                     }
                 }
 
@@ -711,17 +711,25 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("ArenaKit importer source material count invalid; expected " + expectedNames.Length + ", actual " + sourceMaterials.Length + ".");
                     }
 
+                    var expectedNameSet = new HashSet<string>(expectedNames, StringComparer.Ordinal);
                     var seenNames = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < sourceMaterials.Length; i++)
                     {
                         var sourceMaterial = sourceMaterials[i];
-                        if (sourceMaterial.type != typeof(Material) || sourceMaterial.name != expectedNames[i])
+                        if (sourceMaterial.type != typeof(Material) || !expectedNameSet.Contains(sourceMaterial.name))
                         {
-                            throw new InvalidOperationException("ArenaKit importer source material order invalid at index " + i + "; expected Material/" + expectedNames[i] + ", actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
+                            throw new InvalidOperationException("ArenaKit importer source material identifier invalid at index " + i + "; expected Material with one of [" + string.Join(",", expectedNames) + "], actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
                         }
                         if (!seenNames.Add(sourceMaterial.name))
                         {
                             throw new InvalidOperationException("ArenaKit importer source material is duplicated at index " + i + ": " + sourceMaterial.name + ".");
+                        }
+                    }
+                    for (var i = 0; i < expectedNames.Length; i++)
+                    {
+                        if (!seenNames.Contains(expectedNames[i]))
+                        {
+                            throw new InvalidOperationException("ArenaKit importer source material is missing: " + expectedNames[i] + ".");
                         }
                     }
 
@@ -763,11 +771,16 @@ namespace RocketFooxball.Editor
                     }
                 }
 
-                private static void ValidateImportedMaterialSlotCount(List<GameObject> importedRoots, Mesh mesh, int expectedSlotCount, string label)
+                private static void ValidateImportedMaterialSlotOrder(List<GameObject> importedRoots, Mesh mesh, string[] expectedMaterialNames, string label)
                 {
+                    if (expectedMaterialNames == null)
+                    {
+                        throw new InvalidOperationException("ArenaKit expected material slot names are missing: " + label);
+                    }
+
                     MeshRenderer target = null;
                     var matchCount = 0;
-                    for (var i = 0; i < importedRoots.Count && target == null; i++)
+                    for (var i = 0; i < importedRoots.Count; i++)
                     {
                         var renderers = importedRoots[i].GetComponentsInChildren<MeshRenderer>(true);
                         for (var j = 0; j < renderers.Length; j++)
@@ -789,9 +802,17 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("ArenaKit imported mesh renderer hierarchy must bind exactly one renderer to " + label + "; actual " + matchCount + ".");
                     }
                     var materials = target.sharedMaterials;
-                    if (materials == null || materials.Length != expectedSlotCount)
+                    if (materials == null || materials.Length != expectedMaterialNames.Length)
                     {
-                        throw new InvalidOperationException("ArenaKit material slot count invalid: " + label + "; expected " + expectedSlotCount + ", actual " + (materials == null ? "null" : materials.Length.ToString()) + ".");
+                        throw new InvalidOperationException("ArenaKit material slot count invalid: " + label + "; expected " + expectedMaterialNames.Length + ", actual " + (materials == null ? "null" : materials.Length.ToString()) + ".");
+                    }
+                    for (var i = 0; i < expectedMaterialNames.Length; i++)
+                    {
+                        var material = materials[i];
+                        if (material == null || !string.Equals(material.name, expectedMaterialNames[i], StringComparison.Ordinal))
+                        {
+                            throw new InvalidOperationException("ArenaKit material slot order invalid: " + label + "[" + i + "]; expected " + expectedMaterialNames[i] + ", actual " + (material == null ? "null" : material.name) + ".");
+                        }
                     }
                 }
 
