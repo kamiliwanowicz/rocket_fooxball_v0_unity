@@ -1712,8 +1712,11 @@ namespace RocketFooxball.Editor
                     ValidateNoPhysics(model.gameObject, "Shotgun pickup imported model");
                     ValidateNoAnimators(model.gameObject, "Shotgun pickup imported model");
                     ValidateImportedVisualForward(model, "Shotgun pickup imported model");
-                    if (model.localRotation != Quaternion.identity || model.localScale != Vector3.one)
-                        throw new InvalidOperationException("Shotgun pickup imported model must use identity +Z mounting.");
+                    if (Vector3.Distance(model.localPosition, Vector3.zero) > 0.001f ||
+                        Quaternion.Angle(model.localRotation, Quaternion.identity) > 0.1f ||
+                        Vector3.Distance(model.localScale, Vector3.one * MovementLabContractCatalog.ShotgunPickupModelScale) > 0.001f)
+                        throw new InvalidOperationException("Shotgun pickup imported model transform must be zero/identity at scale " +
+                            MovementLabContractCatalog.ShotgunPickupModelScale + ".");
                     ValidatePickupCuePair(visualRoot, "Shotgun pickup");
                     ValidateDynamicHierarchy(root, "Shotgun pickup");
                 }
