@@ -492,7 +492,7 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("scene/ball-contract", "spawn", () =>
                 {
                     if (Vector3.Distance(context.Ball.transform.position, new Vector3(0f, BallSpawnHeight, 0f)) > 0.001f)
-                        throw new InvalidOperationException("Ball spawn/reset height must match the enlarged ball radius.");
+                        throw new InvalidOperationException("Ball spawn/reset height must match the authored ball-radius contract.");
                 });
             }
 
@@ -590,6 +590,7 @@ namespace RocketFooxball.Editor
             accumulator.Capture("gameplay/contract", "dash-public-surface", ValidateDashPublicSurface);
             accumulator.Capture("gameplay/contract", "shotgun-public-surface", ValidateShotgunRuntimeSurface);
             accumulator.Capture("gameplay/contract", "weapon-impact-feedback-constants", ValidateWeaponImpactFeedbackRuntimeConstants);
+            accumulator.Capture("gameplay/contract", "weapon-impact-rules-surface", ValidateWeaponImpactRulesSurface);
             if (context.BallMotor != null)
             {
                 accumulator.Capture("gameplay/contract", "BallMotor.touch-roster", ValidateBallTouchRosterContract);
@@ -800,6 +801,7 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "gameplay/wiring", "MatchHUD.localParticipant", context.MatchHud, "localParticipant", context.Participants != null && context.Participants.Length > 0 ? context.Participants[0] : null);
                 CaptureReference(accumulator, "gameplay/wiring", "MatchHUD.input", context.MatchHud, "input", context.Input);
                 accumulator.Capture("gameplay/contract", "MatchHUD.serialized-surface", ValidateMatchHudSerializedSurface);
+                accumulator.Capture("gameplay/contract", "MatchHUD.rect-surface", ValidateMatchHudRectSurface);
                 accumulator.Capture("gameplay/contract", "MatchHUD.screen-policy", ValidateMatchHudScreenPolicy);
             }
             accumulator.Capture("gameplay/contract", "health-pickup-runtime-surface", ValidateHealthPickupRuntimeSurface);
@@ -1026,6 +1028,10 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException(pickup.name + " visual hierarchy contract invalid.");
                     var model = visualRoot.Find("ShotgunModel");
                     if (model == null) throw new InvalidOperationException(pickup.name + " imported shotgun model is missing.");
+                    if (Vector3.Distance(model.localPosition, Vector3.zero) > 0.001f ||
+                        Quaternion.Angle(model.localRotation, Quaternion.identity) > 0.1f ||
+                        Vector3.Distance(model.localScale, Vector3.one * ShotgunPickupModelScale) > 0.001f)
+                        throw new InvalidOperationException(pickup.name + " imported shotgun model transform must be zero/identity at scale " + ShotgunPickupModelScale + ".");
                     MovementLabMaterialPipeline.ValidateShotgunMaterials(model.gameObject);
                     MovementLabPrefabPipeline.ValidateImportedVisual(model.gameObject, ShotgunModelPath, pickup.name + " imported shotgun model");
                     MovementLabPrefabPipeline.ValidateWeaponVisualContract(model.gameObject, pickup.name + " imported shotgun model", WorldShotgunBoundsMin, WorldShotgunBoundsMax);
@@ -1189,6 +1195,7 @@ namespace RocketFooxball.Editor
         private static void ValidateWeaponImpactFeedbackRuntimeConstants()
         {
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "Epsilon", WeaponImpactFeedbackEpsilon);
+            ValidatePrivateFloatConstant(typeof(ShotgunWeapon), "VisualTraceRange", WeaponImpactVisualTraceRange);
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "TracerOriginOffset", WeaponImpactTracerOriginOffset);
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "TracerSpeed", WeaponImpactTracerSpeed);
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "MinimumTracerLifetime", WeaponImpactMinimumTracerLifetime);
@@ -1196,6 +1203,18 @@ namespace RocketFooxball.Editor
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "MarkLifetime", WeaponImpactMarkLifetime);
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "ShotgunMarkSize", ShotgunImpactMarkSize);
             ValidatePrivateFloatConstant(typeof(WeaponImpactFeedback), "RocketMarkSize", RocketImpactMarkSize);
+        }
+
+        private static void ValidateWeaponImpactRulesSurface()
+        {
+            var method = typeof(WeaponImpactRules).GetMethod(
+                nameof(WeaponImpactRules.TryResolveMarkRotation),
+                System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public,
+                null,
+                new[] { typeof(Vector3), typeof(Quaternion).MakeByRefType() },
+                null);
+            if (method == null || method.ReturnType != typeof(bool))
+                throw new InvalidOperationException("WeaponImpactRules.TryResolveMarkRotation public method is missing or changed.");
         }
 
         private static void ValidatePrivateFloatConstant(Type type, string fieldName, float expected)
@@ -1300,6 +1319,46 @@ namespace RocketFooxball.Editor
                 if (!expected.TryGetValue(field.Name, out var expectedType) || field.FieldType != expectedType)
                     throw new InvalidOperationException("MatchHud has an unexpected serialized dependency: " + field.Name + ".");
             }
+        }
+
+        private static void ValidateMatchHudRectSurface()
+        {
+            ValidateRect(MatchHud.HealthPanelRect, new Rect(36f, 930f, 530f, 112f), "HealthPanelRect");
+            ValidateRect(MatchHud.ShotgunPanelRect, new Rect(1354f, 930f, 530f, 112f), "ShotgunPanelRect");
+            ValidateRect(MatchHud.ShotgunIconRect, new Rect(1376f, 938f, 192f, 96f), "ShotgunIconRect");
+            ValidateRect(MatchHud.ShotgunTitleRect, new Rect(1588f, 946f, 274f, 30f), "ShotgunTitleRect");
+            ValidateRect(MatchHud.ShotgunShellsRect, new Rect(1588f, 988f, 274f, 26f), "ShotgunShellsRect");
+
+            var healthPanel = MatchHud.HealthPanelRect;
+            var shotgunPanel = MatchHud.ShotgunPanelRect;
+            if (Mathf.Abs(healthPanel.width - shotgunPanel.width) > 0.001f ||
+                Mathf.Abs(healthPanel.height - shotgunPanel.height) > 0.001f ||
+                Mathf.Abs(healthPanel.y - shotgunPanel.y) > 0.001f ||
+                Mathf.Abs(healthPanel.xMin - 36f) > 0.001f ||
+                Mathf.Abs(1920f - shotgunPanel.xMax - 36f) > 0.001f)
+                throw new InvalidOperationException("MatchHud panels must have equal size/Y and 36px horizontal margins.");
+
+            if (!ContainsRect(shotgunPanel, MatchHud.ShotgunIconRect) ||
+                !ContainsRect(shotgunPanel, MatchHud.ShotgunTitleRect) ||
+                !ContainsRect(shotgunPanel, MatchHud.ShotgunShellsRect) ||
+                MatchHud.ShotgunIconRect.xMax > MatchHud.ShotgunTitleRect.xMin + 0.001f ||
+                MatchHud.ShotgunTitleRect.yMax > MatchHud.ShotgunShellsRect.yMin + 0.001f)
+                throw new InvalidOperationException("MatchHud shotgun icon/title/shell rectangles must be contained without overlap.");
+        }
+
+        private static void ValidateRect(Rect actual, Rect expected, string label)
+        {
+            if (Mathf.Abs(actual.x - expected.x) > 0.001f ||
+                Mathf.Abs(actual.y - expected.y) > 0.001f ||
+                Mathf.Abs(actual.width - expected.width) > 0.001f ||
+                Mathf.Abs(actual.height - expected.height) > 0.001f)
+                throw new InvalidOperationException("MatchHud " + label + " contract mismatch.");
+        }
+
+        private static bool ContainsRect(Rect outer, Rect inner)
+        {
+            return inner.xMin >= outer.xMin - 0.001f && inner.yMin >= outer.yMin - 0.001f &&
+                inner.xMax <= outer.xMax + 0.001f && inner.yMax <= outer.yMax + 0.001f;
         }
 
         private static void ValidateMatchHudScreenPolicy()
@@ -1490,7 +1549,8 @@ namespace RocketFooxball.Editor
                     ValidatePersistentIdentity(participant, expected.DisplayName);
                     if (participant.SlotId != expected.SlotId || participant.DisplayName != expected.DisplayName || participant.Team != expected.Team || participant.IsLocalParticipant != expected.IsLocal)
                         throw new InvalidOperationException("Participant slot identity mismatch: " + expected.SlotId);
-                    if (Vector3.Distance(participant.transform.position, expected.Position) > 0.01f || Vector3.Dot(participant.transform.forward, expected.Rotation * Vector3.forward) < 0.999f)
+                    if (Vector3.Distance(participant.transform.position, expected.Position) > 0.01f ||
+                        Quaternion.Angle(participant.transform.rotation, expected.Rotation) > 0.1f)
                         throw new InvalidOperationException("Participant authored transform mismatch: " + expected.DisplayName);
                     if (participantLayer < 0 || participant.gameObject.layer != participantLayer)
                         throw new InvalidOperationException("Participant root must use Participants layer: " + expected.DisplayName);
@@ -1586,11 +1646,13 @@ namespace RocketFooxball.Editor
              }
          }
 
-         private static void ValidateSceneParticipantComposition(ParticipantState participant,
+        private static void ValidateSceneParticipantComposition(ParticipantState participant,
              ParticipantState localParticipant, MatchController match, Camera localCamera, string label)
          {
              if (participant == null || localParticipant == null || match == null || localCamera == null || participant.Presentation == null)
                  throw new InvalidOperationException(label + " presentation composition dependencies are missing.");
+
+             ValidatePlayerStaticComposition(participant.gameObject, label, participant.DisplayName);
 
              if (Vector3.Distance(participant.transform.localScale, Vector3.one) > 0.001f)
                  throw new InvalidOperationException(label + " root scale must remain unit scale.");
@@ -1605,9 +1667,9 @@ namespace RocketFooxball.Editor
              var head = participant.transform.Find("Head");
              var worldVisual = participant.transform.Find("WorldVisual");
              if (head == null || Vector3.Distance(head.localPosition, new Vector3(0f, PlayerHeadHeight, 0f)) > 0.001f)
-                 throw new InvalidOperationException(label + " Head height must match the enlarged player contract.");
+                 throw new InvalidOperationException(label + " Head height must match the authored player contract.");
              if (worldVisual == null || Vector3.Distance(worldVisual.localScale, Vector3.one * WorldVisualScale) > 0.001f)
-                 throw new InvalidOperationException(label + " WorldVisual scale must be doubled.");
+                 throw new InvalidOperationException(label + " WorldVisual scale must match the authored player contract.");
 
              var blueCue = participant.transform.Find("BlueCircleCue");
              var redCue = participant.transform.Find("RedTriangleCue");
@@ -1648,6 +1710,103 @@ namespace RocketFooxball.Editor
                  corpseLifetime == null || corpseLifetime.propertyType != SerializedPropertyType.Float || Mathf.Abs(corpseLifetime.floatValue - 30f) > 0.001f ||
                  nameplate.gameObject.activeSelf != isEnemy)
                  throw new InvalidOperationException(label + " nickname/corpse enemy-only policy mismatch.");
+         }
+
+         private static void ValidatePlayerPrefabComposition()
+         {
+             GameObject prefabRoot = null;
+             try
+             {
+                 prefabRoot = PrefabUtility.LoadPrefabContents(PrefabPath);
+                 if (prefabRoot == null)
+                     throw new InvalidOperationException("Player prefab could not be opened.");
+                 if (Vector3.Distance(prefabRoot.transform.localPosition, Vector3.zero) > 0.001f ||
+                     Quaternion.Angle(prefabRoot.transform.localRotation, Quaternion.identity) > 0.1f)
+                     throw new InvalidOperationException("Player prefab root transform must remain at zero/identity.");
+                 ValidatePlayerStaticComposition(prefabRoot, "Player prefab", "Participant");
+             }
+             finally
+             {
+                 if (prefabRoot != null)
+                     PrefabUtility.UnloadPrefabContents(prefabRoot);
+             }
+         }
+
+         private static void ValidatePlayerStaticComposition(GameObject player, string label, string expectedNameplateText)
+         {
+             if (player == null) throw new InvalidOperationException(label + " root is missing.");
+             var root = player.transform;
+             if (Vector3.Distance(root.localScale, Vector3.one) > 0.001f)
+                 throw new InvalidOperationException(label + " root scale must remain unit scale.");
+
+             var controller = player.GetComponent<CharacterController>();
+             if (controller == null || player.GetComponents<Collider>().Length != 1 || player.GetComponents<Rigidbody>().Length != 0 ||
+                 Mathf.Abs(controller.radius - PlayerControllerRadius) > 0.001f ||
+                 Mathf.Abs(controller.height - PlayerControllerHeight) > 0.001f ||
+                 Vector3.Distance(controller.center, PlayerControllerCenter) > 0.001f ||
+                 Mathf.Abs(controller.skinWidth - PlayerControllerSkinWidth) > 0.001f ||
+                 Mathf.Abs(controller.slopeLimit - 60f) > 0.001f || Mathf.Abs(controller.stepOffset - 0.3f) > 0.001f)
+                 throw new InvalidOperationException(label + " CharacterController composition mismatch.");
+
+             var head = root.Find("Head");
+             if (head == null || Vector3.Distance(head.localPosition, new Vector3(0f, PlayerHeadHeight, 0f)) > 0.001f ||
+                 Quaternion.Angle(head.localRotation, Quaternion.identity) > 0.1f || Vector3.Distance(head.localScale, Vector3.one) > 0.001f)
+                 throw new InvalidOperationException(label + " Head transform contract invalid.");
+
+             var worldVisual = root.Find("WorldVisual");
+             if (worldVisual == null || Vector3.Distance(worldVisual.localPosition, Vector3.zero) > 0.001f ||
+                 Quaternion.Angle(worldVisual.localRotation, Quaternion.identity) > 0.1f ||
+                 Vector3.Distance(worldVisual.localScale, Vector3.one * WorldVisualScale) > 0.001f)
+                 throw new InvalidOperationException(label + " WorldVisual transform contract invalid.");
+             for (var childIndex = 0; childIndex < root.childCount; childIndex++)
+             {
+                 var child = root.GetChild(childIndex);
+                 if (child != worldVisual && Vector3.Distance(child.localScale, Vector3.one * WorldVisualScale) <= 0.001f)
+                     throw new InvalidOperationException(label + " only WorldVisual may use scale " + WorldVisualScale + ".");
+             }
+
+             var blueCue = root.Find("BlueCircleCue");
+             var redCue = root.Find("RedTriangleCue");
+             if (blueCue == null || redCue == null ||
+                 Vector3.Distance(blueCue.localPosition, new Vector3(0f, 1.12f, -0.32f)) > 0.001f ||
+                 Vector3.Distance(redCue.localPosition, new Vector3(0f, 1.12f, -0.32f)) > 0.001f ||
+                 Quaternion.Angle(blueCue.localRotation, Quaternion.Euler(90f, 0f, 0f)) > 0.1f ||
+                 Quaternion.Angle(redCue.localRotation, Quaternion.Euler(90f, 0f, 0f)) > 0.1f ||
+                 Vector3.Distance(blueCue.localScale, new Vector3(0.84f, 0.84f, 2f)) > 0.001f ||
+                 Vector3.Distance(redCue.localScale, Vector3.one * 2f) > 0.001f)
+                 throw new InvalidOperationException(label + " team cue transform contract invalid.");
+             MovementLabPrefabPipeline.ValidateShapeCue(blueCue, BlueCircleCueMeshPath, label + " BlueCircleCue");
+             MovementLabPrefabPipeline.ValidateShapeCue(redCue, RedTriangleCueMeshPath, label + " RedTriangleCue");
+             if (blueCue.GetComponent<MeshRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(TeamBlueMaterialPath) ||
+                 redCue.GetComponent<MeshRenderer>().sharedMaterial != AssetDatabase.LoadAssetAtPath<Material>(TeamRedMaterialPath))
+                 throw new InvalidOperationException(label + " team cue material contract invalid.");
+
+             var immunityShield = root.Find("ImmunityShield");
+             var blueShield = root.Find("ImmunityShield/BlueImmunityShield");
+             var redShield = root.Find("ImmunityShield/RedImmunityShield");
+             if (immunityShield == null || blueShield == null || redShield == null ||
+                 Vector3.Distance(immunityShield.localPosition, Vector3.zero) > 0.001f ||
+                 Quaternion.Angle(immunityShield.localRotation, Quaternion.identity) > 0.1f ||
+                 Vector3.Distance(immunityShield.localScale, Vector3.one) > 0.001f ||
+                 Vector3.Distance(blueShield.localPosition, new Vector3(0f, 0.9f, 0f)) > 0.001f ||
+                 Vector3.Distance(redShield.localPosition, new Vector3(0f, 0.9f, 0f)) > 0.001f ||
+                 Quaternion.Angle(blueShield.localRotation, Quaternion.identity) > 0.1f ||
+                 Quaternion.Angle(redShield.localRotation, Quaternion.identity) > 0.1f ||
+                 Vector3.Distance(blueShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f ||
+                 Vector3.Distance(redShield.localScale, new Vector3(2.4f, 4f, 2.4f)) > 0.001f)
+                 throw new InvalidOperationException(label + " immunity shield transform contract invalid.");
+             MovementLabPrefabPipeline.ValidateImmunityShield(blueShield, AssetDatabase.LoadAssetAtPath<Material>(TeamBlueShieldMaterialPath), label + " BlueImmunityShield");
+             MovementLabPrefabPipeline.ValidateImmunityShield(redShield, AssetDatabase.LoadAssetAtPath<Material>(TeamRedShieldMaterialPath), label + " RedImmunityShield");
+
+             var nameplate = root.Find("Nameplate");
+             var nameplateText = nameplate != null ? nameplate.GetComponent<TextMesh>() : null;
+             if (nameplate == null || nameplateText == null ||
+                 Vector3.Distance(nameplate.localPosition, new Vector3(0f, NameplateHeight, 0f)) > 0.001f ||
+                 Quaternion.Angle(nameplate.localRotation, Quaternion.identity) > 0.1f ||
+                 Vector3.Distance(nameplate.localScale, Vector3.one) > 0.001f ||
+                 nameplate.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                 (expectedNameplateText != null && nameplateText.text != expectedNameplateText))
+                 throw new InvalidOperationException(label + " Nameplate transform/text contract invalid.");
          }
 
           private static void ValidatePersistedGameplayLayerTable()
@@ -2010,6 +2169,7 @@ namespace RocketFooxball.Editor
             if (availableAssets != null && availableAssets.Contains(PrefabPath))
             {
                 accumulator.Capture("prefab", "Player", () => MovementLabPrefabPipeline.ValidatePrefab(PrefabPath, "Player", false, context?.BallSurface));
+                accumulator.Capture("prefab", "Player.static-composition", ValidatePlayerPrefabComposition);
                 accumulator.Capture("prefab", "Player.weapon-impact-feedback", ValidatePlayerWeaponImpactFeedbackPrefab);
             }
             if (availableAssets != null && availableAssets.Contains(BallPrefabPath))
@@ -2019,7 +2179,10 @@ namespace RocketFooxball.Editor
             if (availableAssets != null && availableAssets.Contains(HealthPickupPrefabPath))
                 accumulator.Capture("prefab", "HealthPickup", () => MovementLabPrefabPipeline.ValidatePrefab(HealthPickupPrefabPath, "HealthPickup", false, null));
             if (availableAssets != null && availableAssets.Contains(ShotgunPickupPrefabPath))
+            {
                 accumulator.Capture("prefab", "ShotgunPickup", () => MovementLabPrefabPipeline.ValidatePrefab(ShotgunPickupPrefabPath, "ShotgunPickup", false, null));
+                accumulator.Capture("prefab", "ShotgunPickup.model-transform", ValidateShotgunPickupPrefabModelTransform);
+            }
             if (availableAssets != null && availableAssets.Contains(AmmoPickupPrefabPath))
                 accumulator.Capture("prefab", "AmmoPickup", () => MovementLabPrefabPipeline.ValidatePrefab(AmmoPickupPrefabPath, "AmmoPickup", false, null));
             if (availableAssets != null && availableAssets.Contains(PrefabPath) &&
@@ -2035,6 +2198,28 @@ namespace RocketFooxball.Editor
             accumulator.Capture("material", "team-references", ValidateTeamMaterialContracts);
             if (context?.SceneReady == true)
                 accumulator.Capture("render", "pipeline-settings", () => MovementLabSceneComposer.ValidateRenderPipelineSettings());
+        }
+
+        private static void ValidateShotgunPickupPrefabModelTransform()
+        {
+            GameObject prefabRoot = null;
+            try
+            {
+                prefabRoot = PrefabUtility.LoadPrefabContents(ShotgunPickupPrefabPath);
+                if (prefabRoot == null)
+                    throw new InvalidOperationException("ShotgunPickup prefab could not be opened.");
+
+                var model = prefabRoot.transform.Find("VisualRoot/ShotgunModel");
+                if (model == null || Vector3.Distance(model.localPosition, Vector3.zero) > 0.001f ||
+                    Quaternion.Angle(model.localRotation, Quaternion.identity) > 0.1f ||
+                    Vector3.Distance(model.localScale, Vector3.one * ShotgunPickupModelScale) > 0.001f)
+                    throw new InvalidOperationException("ShotgunPickup prefab imported model transform must be zero/identity at scale " + ShotgunPickupModelScale + ".");
+            }
+            finally
+            {
+                if (prefabRoot != null)
+                    PrefabUtility.UnloadPrefabContents(prefabRoot);
+            }
         }
 
         private static void ValidatePlayerWeaponImpactFeedbackPrefab()
@@ -2071,7 +2256,9 @@ namespace RocketFooxball.Editor
                 pelletMain.simulationSpace != ParticleSystemSimulationSpace.World || pelletMain.useUnscaledTime ||
                 pelletMain.startLifetime.mode != ParticleSystemCurveMode.Constant ||
                 Mathf.Abs(pelletMain.startLifetime.constant - MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime) > 0.001f ||
-                Mathf.Abs(pelletMain.startSize.constantMax - 0.06f) > 0.001f ||
+                pelletMain.startSize.mode != ParticleSystemCurveMode.Constant ||
+                Mathf.Abs(pelletMain.startSize.constantMax - MovementLabContractCatalog.WeaponImpactTracerSize) > 0.001f ||
+                pelletMain.startSpeed.mode != ParticleSystemCurveMode.Constant ||
                 Mathf.Abs(pelletMain.startSpeed.constantMax - MovementLabContractCatalog.WeaponImpactTracerSpeed) > 0.001f ||
                 pelletMain.maxParticles != MovementLabContractCatalog.ShotgunPelletMaxParticles ||
                 !pelletEmission.enabled || Mathf.Abs(pelletEmission.rateOverTime.constantMax) > 0.001f ||
@@ -2096,19 +2283,51 @@ namespace RocketFooxball.Editor
                 markMain.loop || markMain.playOnAwake ||
                 Mathf.Abs(markMain.duration - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
                 markMain.simulationSpace != ParticleSystemSimulationSpace.World || markMain.useUnscaledTime ||
+                !markMain.startRotation3D ||
                 markMain.startLifetime.mode != ParticleSystemCurveMode.Constant ||
                 Mathf.Abs(markMain.startLifetime.constant - MovementLabContractCatalog.WeaponImpactMarkLifetime) > 0.001f ||
+                markMain.startSize.mode != ParticleSystemCurveMode.Constant ||
                 Mathf.Abs(markMain.startSize.constantMax - MovementLabContractCatalog.ShotgunImpactMarkSize) > 0.001f ||
+                markMain.startSpeed.mode != ParticleSystemCurveMode.Constant ||
                 Mathf.Abs(markMain.startSpeed.constantMax) > 0.001f ||
                 markMain.maxParticles != MovementLabContractCatalog.WeaponImpactMarkMaxParticles ||
                 !markEmission.enabled || Mathf.Abs(markEmission.rateOverTime.constantMax) > 0.001f ||
                 Mathf.Abs(markEmission.rateOverDistance.constantMax) > 0.001f || markShape.enabled ||
                 markRenderer.renderMode != ParticleSystemRenderMode.Mesh || markRenderer.mesh != expectedMarkMesh ||
+                markRenderer.alignment != ParticleSystemRenderSpace.World ||
                 markRenderer.shadowCastingMode != ShadowCastingMode.Off || markRenderer.receiveShadows ||
                 markRenderer.lightProbeUsage != LightProbeUsage.Off || markRenderer.reflectionProbeUsage != ReflectionProbeUsage.Off ||
                 markRenderer.sharedMaterial != expectedMarkMaterial)
             {
                 throw new InvalidOperationException("Impact mark particle contract invalid.");
+            }
+
+            ValidateWeaponImpactMaterialContracts(expectedPelletMaterial, expectedMarkMaterial);
+        }
+
+        private static void ValidateWeaponImpactMaterialContracts(Material expectedPelletMaterial, Material expectedMarkMaterial)
+        {
+            if (expectedMarkMaterial == null || expectedMarkMaterial.shader == null ||
+                expectedMarkMaterial.shader.name != "RocketFooxball/RetroParticle" ||
+                expectedMarkMaterial.renderQueue != (int)RenderQueue.Transparent ||
+                !expectedMarkMaterial.HasProperty("_BaseColor") ||
+                Vector4.Distance(expectedMarkMaterial.GetColor("_BaseColor"), WeaponImpactMarkColor) > 0.001f ||
+                !expectedMarkMaterial.HasProperty("_BaseMap") ||
+                expectedMarkMaterial.GetTexture("_BaseMap") != Texture2D.whiteTexture ||
+                !expectedMarkMaterial.IsKeywordEnabled("_SCORCH_MARK") ||
+                AssetDatabase.GetAssetPath(expectedMarkMaterial) != WeaponImpactMarkMaterialPath)
+                throw new InvalidOperationException("Weapon impact mark material must be the dark white-textured RetroParticle scorch material.");
+
+            if (expectedPelletMaterial == null || expectedPelletMaterial.IsKeywordEnabled("_SCORCH_MARK"))
+                throw new InvalidOperationException("Shotgun pellet material must not enable _SCORCH_MARK.");
+
+            var materialGuids = AssetDatabase.FindAssets("t:Material");
+            for (var i = 0; i < materialGuids.Length; i++)
+            {
+                var materialPath = AssetDatabase.GUIDToAssetPath(materialGuids[i]);
+                var material = AssetDatabase.LoadAssetAtPath<Material>(materialPath);
+                if (material != null && material.IsKeywordEnabled("_SCORCH_MARK") && material != expectedMarkMaterial)
+                    throw new InvalidOperationException("_SCORCH_MARK may only be enabled on " + WeaponImpactMarkMaterialPath + ".");
             }
         }
 
