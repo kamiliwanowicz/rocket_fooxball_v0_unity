@@ -413,6 +413,7 @@ namespace RocketFooxball.Editor
                         if (instance == null) throw new InvalidOperationException("Unable to instantiate Player prefab for slot " + slot.SlotId + ".");
                         instance.name = slot.DisplayName;
                         instance.transform.SetPositionAndRotation(slot.Position, slot.Rotation);
+                        instance.transform.localScale = slot.IsLocal ? Vector3.one : Vector3.one * BotScale;
                         var state = instance.GetComponent<ParticipantState>();
                         if (state == null) throw new InvalidOperationException("Player prefab missing ParticipantState for slot " + slot.SlotId + ".");
 

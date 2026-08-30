@@ -133,25 +133,26 @@ namespace RocketFooxball.Runtime.Bots
     [DisallowMultipleComponent]
     public sealed class BotNavigationGraph : MonoBehaviour
     {
-        public const float ExpectedControllerRadius = 0.8f;
-        public const float ExpectedControllerHeight = 3.6f;
+        public const float ExpectedBotScale = 1.2f;
+        public const float ExpectedControllerRadius = 0.8f * ExpectedBotScale;
+        public const float ExpectedControllerHeight = 3.6f * ExpectedBotScale;
         public const float ExpectedControllerSlopeLimit = 60f;
-        public const float ExpectedControllerStepOffset = 0.3f;
-        public const float ExpectedControllerSkinWidth = 0.08f;
+        public const float ExpectedControllerStepOffset = 0.3f * ExpectedBotScale;
+        public const float ExpectedControllerSkinWidth = 0.08f * ExpectedBotScale;
         public const float ExpectedControllerEffectiveRadius = ExpectedControllerRadius - ExpectedControllerSkinWidth;
         public const float ExpectedControllerClearance = ExpectedControllerEffectiveRadius;
         public const float ExpectedRocketJumpGroundProbeDistance = 8f;
         public const float ExpectedGoalRecessSafeRadius = 1f;
         public const float ExpectedArenaHalfLength = 65f;
         public const float ExpectedArenaHalfWidth = 45f;
-        public static readonly Vector3 ExpectedControllerCenter = new Vector3(0f, 1.8f, 0f);
+        public static readonly Vector3 ExpectedControllerCenter = new Vector3(0f, 1.8f * ExpectedBotScale, 0f);
         public static readonly Vector3 ExpectedArenaCenter = Vector3.zero;
 
         [SerializeField] private BotNavigationNodeRecord[] nodes = new BotNavigationNodeRecord[0];
         [SerializeField] private BotNavigationEdgeRecord[] edges = new BotNavigationEdgeRecord[0];
         [SerializeField] private BotArenaBounds arenaBounds = new BotArenaBounds();
 
-        [Header("Player CharacterController facts")]
+        [Header("Bot world-space CharacterController facts")]
         [SerializeField] private float controllerRadius = ExpectedControllerRadius;
         [SerializeField] private float controllerHeight = ExpectedControllerHeight;
         [SerializeField] private Vector3 controllerCenter = ExpectedControllerCenter;
@@ -202,7 +203,7 @@ namespace RocketFooxball.Runtime.Bots
                 Mathf.Abs(controllerStepOffset - ExpectedControllerStepOffset) > 0.001f ||
                 Mathf.Abs(controllerSkinWidth - ExpectedControllerSkinWidth) > 0.001f)
             {
-                reason = "controller facts do not match the Player CharacterController contract";
+                reason = "controller facts do not match the bot world-space CharacterController contract";
                 return false;
             }
 

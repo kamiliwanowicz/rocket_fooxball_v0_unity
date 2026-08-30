@@ -320,6 +320,7 @@ namespace RocketFooxball.Editor
         internal const float PlayerControllerSkinWidth = MovementLabContract.PlayerControllerSkinWidth;
         internal const float PlayableFloorTop = MovementLabContract.PlayableFloorTop;
         internal const float ParticipantRecoveryThreshold = MovementLabContract.ParticipantRecoveryThreshold;
+        internal const float BotScale = MovementLabContract.BotScale;
         internal const float WorldVisualScale = MovementLabContract.WorldVisualScale;
         internal const float PlayerHeadHeight = MovementLabContract.PlayerHeadHeight;
         internal const float TeamCueScaleMultiplier = MovementLabContract.TeamCueScaleMultiplier;

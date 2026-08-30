@@ -74,106 +74,49 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void UnderfootRedirectProducesExpectedPostImpulseTravelAtFullStrength()
+        public void UnderfootDefaultLaunchIsVerticalAndPreservesPlanarTravel()
         {
-            var speeds = new[] { 10f, 17.5f, 25f, 30f };
-            var expectedPlanar = new[] { 23.5f, 17.5f, 11.5f, 16.5f };
-            var expectedUpward = new[] { 24f, 30.75f, 37.5f, 37.5f };
-
-            for (var i = 0; i < speeds.Length; i++)
+            var startVelocities = new[]
             {
-                var startVelocity = Vector3.forward * speeds[i];
+                Vector3.zero,
+                Vector3.forward * 25f,
+                Vector3.back * 25f,
+                new Vector3(15f, 0f, 20f)
+            };
+
+            for (var i = 0; i < startVelocities.Length; i++)
+            {
+                var startVelocity = startVelocities[i];
+                var planarStartVelocity = new Vector3(startVelocity.x, 0f, startVelocity.z);
                 var impulse = BlastMath.ComputePlayerImpulse(
                     Vector3.zero,
                     Vector3.down,
-                    24f,
-                    0.18f,
+                    ExplosionResolver.DefaultPlayerImpulseStrength,
+                    ExplosionResolver.DefaultPlayerUpBias,
                     true,
                     BlastMath.ResolvePlanarTravelDirection(startVelocity, Vector3.right),
-                    speeds[i],
+                    planarStartVelocity.magnitude,
                     10f,
                     25f,
-                    0.5625f,
-                    1f,
-                    1f);
+                    ExplosionResolver.DefaultUnderfootForwardImpulseScale,
+                    ExplosionResolver.DefaultUnderfootUpwardImpulseScale,
+                    ExplosionResolver.DefaultUnderfootHighSpeedVerticalRedirect);
                 var postImpulse = startVelocity + impulse;
 
-                Assert.That(postImpulse.z, Is.EqualTo(expectedPlanar[i]).Within(0.0001f));
-                Assert.That(postImpulse.y, Is.EqualTo(expectedUpward[i]).Within(0.0001f));
+                Assert.That(impulse.x, Is.EqualTo(0f).Within(0.0001f));
+                Assert.That(impulse.z, Is.EqualTo(0f).Within(0.0001f));
+                Assert.That(impulse.y, Is.EqualTo(ExplosionResolver.DefaultPlayerImpulseStrength).Within(0.0001f));
+                Assert.That(postImpulse.x, Is.EqualTo(planarStartVelocity.x).Within(0.0001f));
+                Assert.That(postImpulse.z, Is.EqualTo(planarStartVelocity.z).Within(0.0001f));
             }
         }
 
         [Test]
-        public void UnderfootRedirectMirrorsBackwardTravelAndBrakesWithoutReversal()
+        public void UnderfootDefaultScalesMatchVerticalLaunchContract()
         {
-            var startVelocity = Vector3.back * 25f;
-            var impulse = BlastMath.ComputePlayerImpulse(
-                Vector3.zero,
-                Vector3.down,
-                24f,
-                0.18f,
-                true,
-                BlastMath.ResolvePlanarTravelDirection(startVelocity, Vector3.forward),
-                25f,
-                10f,
-                25f,
-                0.5625f,
-                1f,
-                1f);
-
-            var postImpulse = startVelocity + impulse;
-            Assert.That(postImpulse.z, Is.EqualTo(-11.5f).Within(0.0001f));
-            Assert.That(postImpulse.y, Is.EqualTo(37.5f).Within(0.0001f));
-            Assert.That(Mathf.Sign(postImpulse.z), Is.EqualTo(Mathf.Sign(startVelocity.z)));
-        }
-
-        [Test]
-        public void UnderfootRedirectBrakingScalesWithAvailableImpulseStrength()
-        {
-            var startVelocity = Vector3.forward * 25f;
-            var impulse = BlastMath.ComputePlayerImpulse(
-                Vector3.zero,
-                Vector3.down,
-                12f,
-                0.18f,
-                true,
-                Vector3.forward,
-                25f,
-                10f,
-                25f,
-                0.5625f,
-                1f,
-                1f);
-
-            var postImpulse = startVelocity + impulse;
-            Assert.That(postImpulse.z, Is.EqualTo(18.25f).Within(0.0001f));
-            Assert.That(postImpulse.y, Is.EqualTo(18.75f).Within(0.0001f));
-        }
-
-        [Test]
-        public void UnderfootRedirectPreservesDiagonalTravelDirection()
-        {
-            var startVelocity = new Vector3(10f, 0f, 10f);
-            var travel = BlastMath.ResolvePlanarTravelDirection(startVelocity, Vector3.back);
-            var impulse = BlastMath.ComputePlayerImpulse(
-                Vector3.zero,
-                Vector3.down,
-                24f,
-                0.18f,
-                true,
-                travel,
-                startVelocity.magnitude,
-                10f,
-                25f,
-                0.5625f,
-                1f,
-                1f);
-
-            var planarPostImpulse = new Vector3(startVelocity.x + impulse.x, 0f, startVelocity.z + impulse.z);
-            Assert.That(Vector3.Dot(planarPostImpulse, travel), Is.GreaterThan(0f));
-            var normalizedPostImpulse = planarPostImpulse.normalized;
-            Assert.That(normalizedPostImpulse.x, Is.EqualTo(travel.x).Within(0.0001f));
-            Assert.That(normalizedPostImpulse.z, Is.EqualTo(travel.z).Within(0.0001f));
+            Assert.That(ExplosionResolver.DefaultUnderfootForwardImpulseScale, Is.EqualTo(0f));
+            Assert.That(ExplosionResolver.DefaultUnderfootUpwardImpulseScale, Is.EqualTo(1f));
+            Assert.That(ExplosionResolver.DefaultUnderfootHighSpeedVerticalRedirect, Is.EqualTo(0f));
         }
 
         [Test]

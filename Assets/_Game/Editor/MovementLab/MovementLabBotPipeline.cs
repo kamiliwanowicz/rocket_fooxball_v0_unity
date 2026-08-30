@@ -31,7 +31,6 @@ namespace RocketFooxball.Editor
         private const float ShieldWidth = 16f;
         private const float RampCost = 1.15f;
         private const float DropCost = 1.25f;
-        private const float ClearanceQueryRadius = 0.36f;
         private const int ClearanceBufferSize = 32;
         private static readonly Vector3 RampLowLocalPosition = new Vector3(10f, 0f, 0f);
         private static readonly Vector3 RampHighLocalPosition = new Vector3(-8f, 0.9f * MovementLabContract.ArenaRampHeight, 0f);
@@ -549,7 +548,13 @@ namespace RocketFooxball.Editor
                 var node = graph.GetNode(i);
                 var center = node.Position + BotNavigationGraph.ExpectedControllerCenter;
                 var half = graph.ControllerHeight * 0.5f - graph.ControllerRadius;
-                var count = UnityEngine.Physics.OverlapCapsuleNonAlloc(center - Vector3.up * half, center + Vector3.up * half, ClearanceQueryRadius, hits, 1, QueryTriggerInteraction.Ignore);
+                var count = UnityEngine.Physics.OverlapCapsuleNonAlloc(
+                    center - Vector3.up * half,
+                    center + Vector3.up * half,
+                    graph.EffectiveControllerRadius,
+                    hits,
+                    1,
+                    QueryTriggerInteraction.Ignore);
                 if (count >= hits.Length) throw new InvalidOperationException("Bot node " + node.Id + " capsule clearance query overflowed its fixed buffer.");
                 for (var hitIndex = 0; hitIndex < count; hitIndex++)
                 {

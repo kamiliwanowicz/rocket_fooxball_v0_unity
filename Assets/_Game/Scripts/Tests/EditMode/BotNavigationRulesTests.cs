@@ -87,12 +87,12 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void FindPathAllowsSameAreaWalkWithinControllerStepLimit()
+        public void FindPathAllowsSameAreaWalkWithinScaledControllerStepLimit()
         {
             var nodes = new[]
             {
                 new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                new BotNavigationNodeRecord(1, new Vector3(1f, 0.38f, 0f), BotNavigationArea.Floor, 1f)
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.45f, 0f), BotNavigationArea.Floor, 1f)
             };
             var edges = new[] { Edge(0, 0, 1, 2f) };
 
@@ -103,12 +103,12 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void FindPathRejectsSameAreaWalkAboveControllerStepLimit()
+        public void FindPathRejectsSameAreaWalkAboveScaledControllerStepLimit()
         {
             var nodes = new[]
             {
                 new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                new BotNavigationNodeRecord(1, new Vector3(1f, 0.39f, 0f), BotNavigationArea.Floor, 1f)
+                new BotNavigationNodeRecord(1, new Vector3(1f, 0.46f, 0f), BotNavigationArea.Floor, 1f)
             };
             var edges = new[] { Edge(0, 0, 1, 2f) };
 
@@ -125,7 +125,7 @@ namespace RocketFooxball.Tests.EditMode
                 SetPrivateField(graph, "nodes", new[]
                 {
                     new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.39f, 0f), BotNavigationArea.Floor, 1f)
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.46f, 0f), BotNavigationArea.Floor, 1f)
                 });
                 SetPrivateField(graph, "edges", new[] { Edge(0, 0, 1, 2f) });
 
@@ -134,7 +134,7 @@ namespace RocketFooxball.Tests.EditMode
                 SetPrivateField(graph, "nodes", new[]
                 {
                     new BotNavigationNodeRecord(0, new Vector3(0f, 0f, 0f), BotNavigationArea.Floor, 1f),
-                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.38f, 0f), BotNavigationArea.Floor, 1f)
+                    new BotNavigationNodeRecord(1, new Vector3(1f, 0.45f, 0f), BotNavigationArea.Floor, 1f)
                 });
 
                 Assert.That(graph.TryValidate(out _), Is.True);
@@ -153,12 +153,12 @@ namespace RocketFooxball.Tests.EditMode
             {
                 var nodes = new[]
                 {
-                    new BotNavigationNodeRecord(0, Vector3.zero, BotNavigationArea.Floor, 0.72f),
-                    new BotNavigationNodeRecord(1, new Vector3(0.5f, 0f, 0f), BotNavigationArea.Floor, 0.72f)
+                    new BotNavigationNodeRecord(0, Vector3.zero, BotNavigationArea.Floor, 0.864f),
+                    new BotNavigationNodeRecord(1, new Vector3(0.5f, 0f, 0f), BotNavigationArea.Floor, 0.864f)
                 };
                 var edges = new[]
                 {
-                    new BotNavigationEdgeRecord(0, 0, 1, BotNavigationTraversal.Walk, 0.5f, 0.72f, null)
+                    new BotNavigationEdgeRecord(0, 0, 1, BotNavigationTraversal.Walk, 0.5f, 0.864f, null)
                 };
                 var graph = graphObject.AddComponent<BotNavigationGraph>();
                 SetPrivateField(graph, "nodes", nodes);
@@ -178,13 +178,15 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
-        public void DoubledControllerAndArenaContractsExposeExactGeometry()
+        public void ScaledControllerAndArenaContractsExposeExactGeometry()
         {
-            Assert.That(BotNavigationGraph.ExpectedControllerRadius, Is.EqualTo(0.8f));
-            Assert.That(BotNavigationGraph.ExpectedControllerHeight, Is.EqualTo(3.6f));
-            Assert.That(BotNavigationGraph.ExpectedControllerCenter, Is.EqualTo(new Vector3(0f, 1.8f, 0f)));
-            Assert.That(BotNavigationGraph.ExpectedControllerSkinWidth, Is.EqualTo(0.08f));
-            Assert.That(BotNavigationGraph.ExpectedControllerEffectiveRadius, Is.EqualTo(0.72f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedBotScale, Is.EqualTo(1.2f));
+            Assert.That(BotNavigationGraph.ExpectedControllerRadius, Is.EqualTo(0.96f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedControllerHeight, Is.EqualTo(4.32f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedControllerCenter, Is.EqualTo(new Vector3(0f, 2.16f, 0f)));
+            Assert.That(BotNavigationGraph.ExpectedControllerStepOffset, Is.EqualTo(0.36f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedControllerSkinWidth, Is.EqualTo(0.096f).Within(0.0001f));
+            Assert.That(BotNavigationGraph.ExpectedControllerEffectiveRadius, Is.EqualTo(0.864f).Within(0.0001f));
             Assert.That(BotNavigationGraph.ExpectedRocketJumpGroundProbeDistance, Is.EqualTo(8f));
             Assert.That(BotNavigationGraph.ExpectedGoalRecessSafeRadius, Is.EqualTo(1f));
 
@@ -218,7 +220,7 @@ namespace RocketFooxball.Tests.EditMode
                 SetPrivateField(graph, "edges", new BotNavigationEdgeRecord[0]);
 
                 Assert.That(graph.TryValidate(out var reason), Is.True, reason);
-                Assert.That(graph.EffectiveControllerRadius, Is.EqualTo(0.72f).Within(0.0001f));
+                Assert.That(graph.EffectiveControllerRadius, Is.EqualTo(0.864f).Within(0.0001f));
             }
             finally
             {
@@ -287,7 +289,7 @@ namespace RocketFooxball.Tests.EditMode
                 var method = typeof(BotNavigator).GetMethod("SafeCorridorHalfWidth", BindingFlags.Instance | BindingFlags.NonPublic);
                 Assert.That(method, Is.Not.Null);
                 var edge = new BotNavigationEdgeRecord(0, 0, 0, BotNavigationTraversal.Walk, 1f, 3f, null);
-                Assert.That((float)method.Invoke(navigator, new object[] { edge }), Is.EqualTo(2.28f).Within(0.0001f));
+                Assert.That((float)method.Invoke(navigator, new object[] { edge }), Is.EqualTo(2.136f).Within(0.0001f));
             }
             finally
             {

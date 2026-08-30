@@ -6,6 +6,8 @@ using RocketFooxball.Runtime.Match;
 using RocketFooxball.Runtime.Participants;
 using RocketFooxball.Runtime.Physics;
 using RocketFooxball.Runtime.Pickups;
+using RocketFooxball.Runtime.Bots;
+using RocketFooxball.Runtime.Weapons;
 
 namespace RocketFooxball.Editor
 {
@@ -175,6 +177,7 @@ namespace RocketFooxball.Editor
         internal const float PlayerControllerSkinWidth = 0.08f;
         internal const float PlayableFloorTop = 0f;
         internal const float ParticipantRecoveryThreshold = -PlayerControllerSkinWidth;
+        internal const float BotScale = BotNavigationGraph.ExpectedBotScale;
         internal const float WorldVisualScale = 1.2f;
         internal const float PlayerHeadHeight = 3.1f;
         internal const float TeamCueScaleMultiplier = 2f;
@@ -205,9 +208,9 @@ namespace RocketFooxball.Editor
         internal const float BallContactAssistPerContactCap = GamePhysicsSettings.BallContactAssistPerContactCap;
         internal const float BallContactAssistAggregateCap = GamePhysicsSettings.BallContactAssistAggregateCap;
         internal const float JumpVelocity = 4.80f;
-        internal const float UnderfootForwardImpulseScale = 0.5625f;
-        internal const float UnderfootUpwardImpulseScale = 1f;
-        internal const float UnderfootHighSpeedVerticalRedirect = 1f;
+        internal const float UnderfootForwardImpulseScale = ExplosionResolver.DefaultUnderfootForwardImpulseScale;
+        internal const float UnderfootUpwardImpulseScale = ExplosionResolver.DefaultUnderfootUpwardImpulseScale;
+        internal const float UnderfootHighSpeedVerticalRedirect = ExplosionResolver.DefaultUnderfootHighSpeedVerticalRedirect;
         internal static readonly Vector2 FloorTextureScale = new Vector2(13f, 9f);
         internal static readonly Vector2 WallTextureScale = new Vector2(13f, 2f);
         internal const bool BotsEnabledByDefault = MatchController.DefaultBotsEnabled;

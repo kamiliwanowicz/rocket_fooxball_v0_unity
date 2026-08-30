@@ -1581,7 +1581,7 @@ namespace RocketFooxball.Editor
                       ValidateReference(participant.Presentation, "fpsShotgunVisual", participantFpsShotgun, expected.DisplayName + ".presentation.fpsShotgunVisual");
                       ValidateReference(participant.Presentation, "worldShotgunVisual", participantWorldShotgun, expected.DisplayName + ".presentation.worldShotgunVisual");
                       ValidateReference(participant.Presentation, "shotgun", participant.Shotgun, expected.DisplayName + ".presentation.shotgun");
-                      ValidateSceneParticipantComposition(participant, localParticipant, sceneMatch, localCamera, expected.DisplayName);
+                       ValidateSceneParticipantComposition(participant, localParticipant, sceneMatch, localCamera, expected.DisplayName);
                      MovementLabPrefabPipeline.ValidateViewmodelVisualTransform(participantLauncherVisual, participant.transform.Find("Head/Camera/Viewmodels"), participantCamera,
                          LauncherViewmodelPosition, expected.DisplayName + ".WeaponVisual");
                       MovementLabPrefabPipeline.ValidateImportedVisual(participantFpsShotgun.gameObject, FpsShotgunModelPath, expected.DisplayName + ".FpsShotgunVisual");
@@ -1652,10 +1652,9 @@ namespace RocketFooxball.Editor
              if (participant == null || localParticipant == null || match == null || localCamera == null || participant.Presentation == null)
                  throw new InvalidOperationException(label + " presentation composition dependencies are missing.");
 
-             ValidatePlayerStaticComposition(participant.gameObject, label, participant.DisplayName);
-
-             if (Vector3.Distance(participant.transform.localScale, Vector3.one) > 0.001f)
-                 throw new InvalidOperationException(label + " root scale must remain unit scale.");
+             var expectedRootScale = participant.IsLocalParticipant ? 1f : BotScale;
+             ValidatePlayerStaticComposition(participant.gameObject, label, participant.DisplayName, expectedRootScale);
+             ValidateBotWorldScale(participant, expectedRootScale, label);
 
              var controller = participant.GetComponent<CharacterController>();
              if (controller == null || Mathf.Abs(controller.radius - PlayerControllerRadius) > 0.001f ||
@@ -1732,12 +1731,13 @@ namespace RocketFooxball.Editor
              }
          }
 
-         private static void ValidatePlayerStaticComposition(GameObject player, string label, string expectedNameplateText)
+         private static void ValidatePlayerStaticComposition(GameObject player, string label, string expectedNameplateText,
+             float expectedRootScale = 1f)
          {
              if (player == null) throw new InvalidOperationException(label + " root is missing.");
              var root = player.transform;
-             if (Vector3.Distance(root.localScale, Vector3.one) > 0.001f)
-                 throw new InvalidOperationException(label + " root scale must remain unit scale.");
+             if (Vector3.Distance(root.localScale, Vector3.one * expectedRootScale) > 0.001f)
+                 throw new InvalidOperationException(label + " root scale must match its authored participant scale.");
 
              var controller = player.GetComponent<CharacterController>();
              if (controller == null || player.GetComponents<Collider>().Length != 1 || player.GetComponents<Rigidbody>().Length != 0 ||
@@ -1808,6 +1808,41 @@ namespace RocketFooxball.Editor
                  (expectedNameplateText != null && nameplateText.text != expectedNameplateText))
                  throw new InvalidOperationException(label + " Nameplate transform/text contract invalid.");
          }
+
+          private static void ValidateBotWorldScale(ParticipantState participant, float expectedRootScale, string label)
+          {
+              if (participant == null)
+                  throw new InvalidOperationException(label + " participant is missing.");
+
+              var expectedScale = Vector3.one * expectedRootScale;
+              if (Vector3.Distance(participant.transform.lossyScale, expectedScale) > 0.001f)
+                  throw new InvalidOperationException(label + " world scale must match its authored participant scale.");
+
+              if (participant.IsLocalParticipant)
+                  return;
+
+              var controller = participant.CharacterController;
+              if (controller == null)
+                  throw new InvalidOperationException(label + " bot CharacterController is missing.");
+
+              var worldScale = participant.transform.lossyScale;
+              var absoluteScale = new Vector3(Mathf.Abs(worldScale.x), Mathf.Abs(worldScale.y), Mathf.Abs(worldScale.z));
+              var worldRadius = controller.radius * absoluteScale.x;
+              var worldHeight = controller.height * absoluteScale.y;
+              var worldCenter = Vector3.Scale(controller.center, absoluteScale);
+              var worldStepOffset = controller.stepOffset * absoluteScale.y;
+              var worldSkinWidth = controller.skinWidth * absoluteScale.x;
+              if (Mathf.Abs(worldRadius - BotNavigationGraph.ExpectedControllerRadius) > 0.001f ||
+                  Mathf.Abs(worldHeight - BotNavigationGraph.ExpectedControllerHeight) > 0.001f ||
+                  Vector3.Distance(worldCenter, BotNavigationGraph.ExpectedControllerCenter) > 0.001f ||
+                  Mathf.Abs(controller.slopeLimit - BotNavigationGraph.ExpectedControllerSlopeLimit) > 0.001f ||
+                  Mathf.Abs(worldStepOffset - BotNavigationGraph.ExpectedControllerStepOffset) > 0.001f ||
+                  Mathf.Abs(worldSkinWidth - BotNavigationGraph.ExpectedControllerSkinWidth) > 0.001f ||
+                  Mathf.Abs(worldRadius - worldSkinWidth - BotNavigationGraph.ExpectedControllerClearance) > 0.001f)
+              {
+                  throw new InvalidOperationException(label + " bot world-space CharacterController facts must match the navigation contract.");
+              }
+          }
 
           private static void ValidatePersistedGameplayLayerTable()
           {
@@ -2002,23 +2037,30 @@ namespace RocketFooxball.Editor
             if (candidate == null || !ParticipantRecoveryRules.IsValidDestination(candidate.position, ParticipantRecoveryThreshold))
                 throw new InvalidOperationException("Participant recovery spawn is below the configured threshold: " + label);
 
-            var capsuleBottom = candidate.position.y + PlayerControllerCenter.y - PlayerControllerHeight * 0.5f;
-            var capsuleTop = candidate.position.y + PlayerControllerCenter.y + PlayerControllerHeight * 0.5f;
+            var capsuleBottom = candidate.position.y + BotNavigationGraph.ExpectedControllerCenter.y -
+                BotNavigationGraph.ExpectedControllerHeight * 0.5f;
+            var capsuleTop = candidate.position.y + BotNavigationGraph.ExpectedControllerCenter.y +
+                BotNavigationGraph.ExpectedControllerHeight * 0.5f;
             if (capsuleBottom < PlayableFloorTop || capsuleTop <= capsuleBottom ||
-                Mathf.Abs(candidate.position.x) + PlayerControllerRadius > 65f - PlayerControllerSkinWidth ||
-                Mathf.Abs(candidate.position.z) + PlayerControllerRadius > 45f - PlayerControllerSkinWidth)
+                Mathf.Abs(candidate.position.x) + BotNavigationGraph.ExpectedControllerRadius >
+                BotNavigationGraph.ExpectedArenaHalfLength - BotNavigationGraph.ExpectedControllerSkinWidth ||
+                Mathf.Abs(candidate.position.z) + BotNavigationGraph.ExpectedControllerRadius >
+                BotNavigationGraph.ExpectedArenaHalfWidth - BotNavigationGraph.ExpectedControllerSkinWidth)
             {
                 throw new InvalidOperationException("Participant recovery spawn capsule clearance invalid: " + label);
             }
 
             if (arenaCollisionMask == 0)
                 throw new InvalidOperationException("Arena collision layers are unavailable for spawn clearance: " + label);
-            var capsuleCenter = candidate.position + PlayerControllerCenter;
-            var capsuleHalfSegment = Mathf.Max(0f, PlayerControllerHeight * 0.5f - PlayerControllerRadius);
+            var capsuleCenter = candidate.position + BotNavigationGraph.ExpectedControllerCenter;
+            var capsuleHalfSegment = Mathf.Max(
+                0f,
+                BotNavigationGraph.ExpectedControllerHeight * 0.5f - BotNavigationGraph.ExpectedControllerRadius);
             var overlapBottom = capsuleCenter - Vector3.up * capsuleHalfSegment;
             var overlapTop = capsuleCenter + Vector3.up * capsuleHalfSegment;
             var overlaps = new Collider[32];
-            var overlapCount = UnityEngine.Physics.OverlapCapsuleNonAlloc(overlapBottom, overlapTop, PlayerControllerRadius,
+            var overlapCount = UnityEngine.Physics.OverlapCapsuleNonAlloc(overlapBottom, overlapTop,
+                BotNavigationGraph.ExpectedControllerRadius,
                 overlaps, arenaCollisionMask, QueryTriggerInteraction.Ignore);
             if (overlapCount >= overlaps.Length)
                 throw new InvalidOperationException("Arena spawn clearance query exceeded its fixed buffer: " + label);
