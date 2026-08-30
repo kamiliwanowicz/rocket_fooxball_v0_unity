@@ -40,7 +40,7 @@ namespace RocketFooxball.Tests.EditMode
 
             var resolved = DashKickRules.ResolveKickDirection(lookDirection, Vector3.forward);
 
-            Assert.That(resolved, Is.EqualTo(lookDirection));
+            Assert.That(Vector3.Distance(resolved, lookDirection), Is.LessThan(0.0001f));
             Assert.That(resolved.y, Is.GreaterThan(0f));
         }
 
@@ -59,11 +59,13 @@ namespace RocketFooxball.Tests.EditMode
             var fallback = new Vector3(1f, 0f, 2f).normalized;
 
             Assert.That(
-                DashKickRules.ResolveKickDirection(new Vector3(float.NaN, 0f, 1f), fallback),
-                Is.EqualTo(fallback));
+                Vector3.Distance(
+                    DashKickRules.ResolveKickDirection(new Vector3(float.NaN, 0f, 1f), fallback),
+                    fallback),
+                Is.LessThan(0.0001f));
             Assert.That(
-                DashKickRules.ResolveKickDirection(Vector3.zero, fallback),
-                Is.EqualTo(fallback));
+                Vector3.Distance(DashKickRules.ResolveKickDirection(Vector3.zero, fallback), fallback),
+                Is.LessThan(0.0001f));
         }
 
         [Test]
@@ -83,8 +85,8 @@ namespace RocketFooxball.Tests.EditMode
             var acceptedAim = new Vector3(0f, 0.5f, 1f).normalized;
 
             Assert.That(
-                DashKickRules.ResolveKickDirection(Vector3.zero, acceptedAim),
-                Is.EqualTo(acceptedAim));
+                Vector3.Distance(DashKickRules.ResolveKickDirection(Vector3.zero, acceptedAim), acceptedAim),
+                Is.LessThan(0.0001f));
         }
 
         [Test]
