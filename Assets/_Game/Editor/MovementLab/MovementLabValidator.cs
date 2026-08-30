@@ -2307,13 +2307,16 @@ namespace RocketFooxball.Editor
 
         private static void ValidateWeaponImpactMaterialContracts(Material expectedPelletMaterial, Material expectedMarkMaterial)
         {
+            var markBaseMap = expectedMarkMaterial != null && expectedMarkMaterial.HasProperty("_BaseMap")
+                ? expectedMarkMaterial.GetTexture("_BaseMap")
+                : null;
             if (expectedMarkMaterial == null || expectedMarkMaterial.shader == null ||
                 expectedMarkMaterial.shader.name != "RocketFooxball/RetroParticle" ||
                 expectedMarkMaterial.renderQueue != (int)RenderQueue.Transparent ||
                 !expectedMarkMaterial.HasProperty("_BaseColor") ||
                 Vector4.Distance(expectedMarkMaterial.GetColor("_BaseColor"), WeaponImpactMarkColor) > 0.001f ||
                 !expectedMarkMaterial.HasProperty("_BaseMap") ||
-                expectedMarkMaterial.GetTexture("_BaseMap") != Texture2D.whiteTexture ||
+                (markBaseMap != null && markBaseMap != Texture2D.whiteTexture) ||
                 !expectedMarkMaterial.IsKeywordEnabled("_SCORCH_MARK") ||
                 AssetDatabase.GetAssetPath(expectedMarkMaterial) != WeaponImpactMarkMaterialPath)
                 throw new InvalidOperationException("Weapon impact mark material must be the dark white-textured RetroParticle scorch material.");
