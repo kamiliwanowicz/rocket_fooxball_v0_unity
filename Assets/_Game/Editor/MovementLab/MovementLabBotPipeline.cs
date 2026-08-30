@@ -314,8 +314,8 @@ namespace RocketFooxball.Editor
             nodes.Add(new BotNavigationNodeRecord(22, new Vector3(-38f, 0f, 18f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(23, new Vector3(38f, 0f, -18f), BotNavigationArea.Floor, 2f));
             nodes.AddRange(BuildRampNodeCatalog(rampWest, rampEast));
-            nodes.Add(new BotNavigationNodeRecord(28, new Vector3(-42f, 0f, 2f), BotNavigationArea.Floor, 1.5f));
-            nodes.Add(new BotNavigationNodeRecord(29, new Vector3(42f, 0f, -2f), BotNavigationArea.Floor, 1.5f));
+            nodes.Add(new BotNavigationNodeRecord(28, new Vector3(-42f, 0f, TransformRampLocalPosition(rampWest, Vector3.zero).z), BotNavigationArea.Floor, 1.5f));
+            nodes.Add(new BotNavigationNodeRecord(29, new Vector3(42f, 0f, TransformRampLocalPosition(rampEast, Vector3.zero).z), BotNavigationArea.Floor, 1.5f));
             nodes.Add(new BotNavigationNodeRecord(30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f));
             nodes.Add(new BotNavigationNodeRecord(31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius));
             nodes.Add(new BotNavigationNodeRecord(32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f));
@@ -498,8 +498,8 @@ namespace RocketFooxball.Editor
             ValidateNode(graph.GetNode(23), 23, new Vector3(38f, 0f, -18f), BotNavigationArea.Floor, 2f);
             foreach (var expectedRampNode in BuildRampNodeCatalog(rampWest, rampEast))
                 ValidateNode(graph.GetNode(expectedRampNode.Id), expectedRampNode.Id, expectedRampNode.Position, expectedRampNode.Area, expectedRampNode.SafeRadius);
-            ValidateNode(graph.GetNode(28), 28, new Vector3(-42f, 0f, 2f), BotNavigationArea.Floor, 1.5f);
-            ValidateNode(graph.GetNode(29), 29, new Vector3(42f, 0f, -2f), BotNavigationArea.Floor, 1.5f);
+            ValidateNode(graph.GetNode(28), 28, new Vector3(-42f, 0f, TransformRampLocalPosition(rampWest, Vector3.zero).z), BotNavigationArea.Floor, 1.5f);
+            ValidateNode(graph.GetNode(29), 29, new Vector3(42f, 0f, TransformRampLocalPosition(rampEast, Vector3.zero).z), BotNavigationArea.Floor, 1.5f);
             ValidateNode(graph.GetNode(30), 30, new Vector3(-62f, 0f, 0f), BotNavigationArea.Floor, 2f);
             ValidateNode(graph.GetNode(31), 31, new Vector3(-65.5f, 0f, 0f), BotNavigationArea.GoalRecess, BotNavigationGraph.ExpectedGoalRecessSafeRadius);
             ValidateNode(graph.GetNode(32), 32, new Vector3(62f, 0f, 0f), BotNavigationArea.Floor, 2f);

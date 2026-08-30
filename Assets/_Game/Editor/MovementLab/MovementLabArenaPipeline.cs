@@ -347,14 +347,18 @@ namespace RocketFooxball.Editor
             CreatePresentationSolid("SouthApron", root, new Vector3(0f, 0.01f, 42.25f), new Vector3(130f, 0.02f, 4.5f), material);
             CreatePresentationSolid("WestApron", root, new Vector3(-62.25f, 0.01f, 0f), new Vector3(4.5f, 0.02f, 80f), material);
             CreatePresentationSolid("EastApron", root, new Vector3(62.25f, 0.01f, 0f), new Vector3(4.5f, 0.02f, 80f), material);
-            CreatePresentationSolid("NorthUpperWall", root, new Vector3(0f, 10f, -44.5f), new Vector3(130f, 4f, 1f), material);
-            CreatePresentationSolid("SouthUpperWall", root, new Vector3(0f, 10f, 44.5f), new Vector3(130f, 4f, 1f), material);
-            CreatePresentationSolid("WestUpperWallNorth", root, new Vector3(-64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), material);
-            CreatePresentationSolid("WestUpperWallSouth", root, new Vector3(-64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), material);
-            CreatePresentationSolid("EastUpperWallNorth", root, new Vector3(64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), material);
-            CreatePresentationSolid("EastUpperWallSouth", root, new Vector3(64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), material);
-            CreatePresentationSolid("WestUpperLintel", root, new Vector3(-64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), material);
-            CreatePresentationSolid("EastUpperLintel", root, new Vector3(64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), material);
+            var upperWalls = MovementLabContract.ArenaUpperWallSpecifications;
+            for (var i = 0; i < upperWalls.Length; i++)
+            {
+                var specification = upperWalls[i];
+                CreatePresentationSolid(specification.Name, root, specification.Position, specification.Scale, material, specification.Rotation);
+            }
+            var goalLintels = MovementLabContract.ArenaGoalOpeningLintelSpecifications;
+            for (var i = 0; i < goalLintels.Length; i++)
+            {
+                var specification = goalLintels[i];
+                CreatePresentationSolid(specification.Name, root, specification.Position, specification.Scale, material, specification.Rotation);
+            }
         }
 
         internal static GameObject CreateArenaKitVisual(Transform parent, string name, string meshName, Vector3 position, Quaternion rotation, Material[] materials)
@@ -412,12 +416,14 @@ namespace RocketFooxball.Editor
             collider.sharedMaterial = ballSurface;
         }
 
-        private static void CreatePresentationSolid(string name, Transform parent, Vector3 position, Vector3 size, Material material)
+        private static void CreatePresentationSolid(string name, Transform parent, Vector3 position, Vector3 size, Material material,
+            Quaternion rotation = default)
         {
             var visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
             visual.name = name;
             visual.transform.SetParent(parent, false);
             visual.transform.localPosition = position;
+            visual.transform.localRotation = rotation == default ? Quaternion.identity : rotation;
             visual.transform.localScale = size;
             UnityEngine.Object.DestroyImmediate(visual.GetComponent<Collider>());
             visual.GetComponent<MeshRenderer>().sharedMaterial = material;
@@ -748,23 +754,28 @@ namespace RocketFooxball.Editor
             ValidatePresentationSolid(root, "SouthApron", new Vector3(0f, 0.01f, 42.25f), new Vector3(130f, 0.02f, 4.5f), material);
             ValidatePresentationSolid(root, "WestApron", new Vector3(-62.25f, 0.01f, 0f), new Vector3(4.5f, 0.02f, 80f), material);
             ValidatePresentationSolid(root, "EastApron", new Vector3(62.25f, 0.01f, 0f), new Vector3(4.5f, 0.02f, 80f), material);
-            ValidatePresentationSolid(root, "NorthUpperWall", new Vector3(0f, 10f, -44.5f), new Vector3(130f, 4f, 1f), material);
-            ValidatePresentationSolid(root, "SouthUpperWall", new Vector3(0f, 10f, 44.5f), new Vector3(130f, 4f, 1f), material);
-            ValidatePresentationSolid(root, "WestUpperWallNorth", new Vector3(-64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), material);
-            ValidatePresentationSolid(root, "WestUpperWallSouth", new Vector3(-64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), material);
-            ValidatePresentationSolid(root, "EastUpperWallNorth", new Vector3(64.5f, 10f, -31.75f), new Vector3(1f, 4f, 26.5f), material);
-            ValidatePresentationSolid(root, "EastUpperWallSouth", new Vector3(64.5f, 10f, 31.75f), new Vector3(1f, 4f, 26.5f), material);
-            ValidatePresentationSolid(root, "WestUpperLintel", new Vector3(-64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), material);
-            ValidatePresentationSolid(root, "EastUpperLintel", new Vector3(64.5f, 10f, 0f), new Vector3(1f, 4f, 37f), material);
+            var upperWalls = MovementLabContract.ArenaUpperWallSpecifications;
+            for (var i = 0; i < upperWalls.Length; i++)
+                ValidatePresentationSolid(root, upperWalls[i], material);
+            var goalLintels = MovementLabContract.ArenaGoalOpeningLintelSpecifications;
+            for (var i = 0; i < goalLintels.Length; i++)
+                ValidatePresentationSolid(root, goalLintels[i], material);
         }
 
-        private static void ValidatePresentationSolid(Transform root, string name, Vector3 position, Vector3 scale, Material material)
+        private static void ValidatePresentationSolid(Transform root,
+            MovementLabContract.ArenaArchitectureSpecification specification, Material material)
+        {
+            ValidatePresentationSolid(root, specification.Name, specification.Position, specification.Scale, material, specification.Rotation);
+        }
+
+        private static void ValidatePresentationSolid(Transform root, string name, Vector3 position, Vector3 scale, Material material,
+            Quaternion rotation = default)
         {
             var item = Require(root.Find(name), "Architecture " + name);
             var renderer = Require(item.GetComponent<MeshRenderer>(), name + " renderer");
             var mesh = Require(item.GetComponent<MeshFilter>()?.sharedMesh, name + " mesh");
             if (Vector3.Distance(item.localPosition, position) > TransformTolerance ||
-                Quaternion.Angle(item.localRotation, Quaternion.identity) > RotationTolerance ||
+                Quaternion.Angle(item.localRotation, rotation == default ? Quaternion.identity : rotation) > RotationTolerance ||
                 Vector3.Distance(item.localScale, scale) > TransformTolerance || renderer.sharedMaterial != material || mesh.name != "Cube" ||
                 !item.gameObject.isStatic || item.GetComponents<Component>().Length != 3)
                 throw new InvalidOperationException("Architecture solid contract invalid: " + name);

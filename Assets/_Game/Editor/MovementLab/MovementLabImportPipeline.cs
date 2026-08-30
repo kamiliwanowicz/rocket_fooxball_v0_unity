@@ -706,18 +706,18 @@ namespace RocketFooxball.Editor
                     }
 
                     var expectedNames = MovementLabContract.ArenaGoalRecessMaterialSlots;
-                    if (sourceMaterials.Length != 4)
+                    if (sourceMaterials.Length != expectedNames.Length)
                     {
-                        throw new InvalidOperationException("ArenaKit importer source material count invalid; expected 4, actual " + sourceMaterials.Length + ".");
+                        throw new InvalidOperationException("ArenaKit importer source material count invalid; expected " + expectedNames.Length + ", actual " + sourceMaterials.Length + ".");
                     }
 
                     var seenNames = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < sourceMaterials.Length; i++)
                     {
                         var sourceMaterial = sourceMaterials[i];
-                        if (sourceMaterial.type != typeof(Material) || Array.IndexOf(expectedNames, sourceMaterial.name) < 0)
+                        if (sourceMaterial.type != typeof(Material) || sourceMaterial.name != expectedNames[i])
                         {
-                            throw new InvalidOperationException("ArenaKit importer source material invalid at index " + i + "; expected a unique Material from ArenaGoalRecessMaterialSlots, actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
+                            throw new InvalidOperationException("ArenaKit importer source material order invalid at index " + i + "; expected Material/" + expectedNames[i] + ", actual " + sourceMaterial.type + "/" + sourceMaterial.name + ".");
                         }
                         if (!seenNames.Add(sourceMaterial.name))
                         {
@@ -735,6 +735,7 @@ namespace RocketFooxball.Editor
                 private static void ValidateArenaKitRendererOnly(List<GameObject> importedRoots)
                 {
                     var rendererCount = 0;
+                    var meshFilterCount = 0;
                     for (var i = 0; i < importedRoots.Count; i++)
                     {
                         var root = importedRoots[i];
@@ -745,17 +746,27 @@ namespace RocketFooxball.Editor
                         {
                             throw new InvalidOperationException("ArenaKit imported objects must remain renderer-only: " + root.name);
                         }
-                        rendererCount += root.GetComponentsInChildren<MeshRenderer>(true).Length;
+                        var renderers = root.GetComponentsInChildren<MeshRenderer>(true);
+                        var filters = root.GetComponentsInChildren<MeshFilter>(true);
+                        rendererCount += renderers.Length;
+                        meshFilterCount += filters.Length;
+                        for (var j = 0; j < renderers.Length; j++)
+                        {
+                            var filter = renderers[j].GetComponent<MeshFilter>();
+                            if (filter == null || filter.sharedMesh == null || AssetDatabase.GetAssetPath(filter.sharedMesh) != ArenaKitModelPath)
+                                throw new InvalidOperationException("ArenaKit imported renderer hierarchy must bind each renderer to one ArenaKit mesh: " + renderers[j].name);
+                        }
                     }
-                    if (rendererCount != 2)
+                    if (rendererCount != 2 || meshFilterCount != rendererCount)
                     {
-                        throw new InvalidOperationException("ArenaKit imported renderer set must contain exactly two MeshRenderers.");
+                        throw new InvalidOperationException("ArenaKit imported renderer hierarchy must contain exactly two MeshRenderers and matching MeshFilters.");
                     }
                 }
 
                 private static void ValidateImportedMaterialSlotCount(List<GameObject> importedRoots, Mesh mesh, int expectedSlotCount, string label)
                 {
                     MeshRenderer target = null;
+                    var matchCount = 0;
                     for (var i = 0; i < importedRoots.Count && target == null; i++)
                     {
                         var renderers = importedRoots[i].GetComponentsInChildren<MeshRenderer>(true);
@@ -764,14 +775,18 @@ namespace RocketFooxball.Editor
                             var filter = renderers[j].GetComponent<MeshFilter>();
                             if (filter != null && filter.sharedMesh == mesh)
                             {
+                                matchCount++;
                                 target = renderers[j];
-                                break;
                             }
                         }
                     }
                     if (target == null)
                     {
                         throw new InvalidOperationException("ArenaKit imported mesh renderer missing: " + label);
+                    }
+                    if (matchCount != 1)
+                    {
+                        throw new InvalidOperationException("ArenaKit imported mesh renderer hierarchy must bind exactly one renderer to " + label + "; actual " + matchCount + ".");
                     }
                     var materials = target.sharedMaterials;
                     if (materials == null || materials.Length != expectedSlotCount)
