@@ -34,6 +34,60 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void KickDirectionPrefersFullPitchedLookOverPlanarDashDirection()
+        {
+            var lookDirection = new Vector3(0.2f, 0.6f, 0.8f).normalized;
+
+            var resolved = DashKickRules.ResolveKickDirection(lookDirection, Vector3.forward);
+
+            Assert.That(resolved, Is.EqualTo(lookDirection));
+            Assert.That(resolved.y, Is.GreaterThan(0f));
+        }
+
+        [Test]
+        public void KickDirectionKeepsHorizontalLookHorizontal()
+        {
+            var resolved = DashKickRules.ResolveKickDirection(new Vector3(2f, 0f, 1f), Vector3.up);
+
+            Assert.That(resolved.y, Is.EqualTo(0f).Within(0.0001f));
+            Assert.That(resolved.sqrMagnitude, Is.EqualTo(1f).Within(0.0001f));
+        }
+
+        [Test]
+        public void KickDirectionFallsBackToDashDirectionWhenLookIsInvalid()
+        {
+            var fallback = new Vector3(1f, 0f, 2f).normalized;
+
+            Assert.That(
+                DashKickRules.ResolveKickDirection(new Vector3(float.NaN, 0f, 1f), fallback),
+                Is.EqualTo(fallback));
+            Assert.That(
+                DashKickRules.ResolveKickDirection(Vector3.zero, fallback),
+                Is.EqualTo(fallback));
+        }
+
+        [Test]
+        public void KickDirectionRejectsInvalidLookAndFallback()
+        {
+            Assert.That(
+                DashKickRules.ResolveKickDirection(Vector3.zero, new Vector3(float.PositiveInfinity, 0f, 0f)),
+                Is.EqualTo(Vector3.zero));
+            Assert.That(
+                DashKickRules.ResolveKickDirection(new Vector3(0f, 0f, float.NaN), Vector3.zero),
+                Is.EqualTo(Vector3.zero));
+        }
+
+        [Test]
+        public void MissingLaterProgrammaticAimRetainsAcceptedAimAsFallback()
+        {
+            var acceptedAim = new Vector3(0f, 0.5f, 1f).normalized;
+
+            Assert.That(
+                DashKickRules.ResolveKickDirection(Vector3.zero, acceptedAim),
+                Is.EqualTo(acceptedAim));
+        }
+
+        [Test]
         public void AirDashExhaustionRejectsOnlyAirborneActivation()
         {
             Assert.That(DashKickRules.CanActivate(true, Vector3.forward, false, 0f, false, false), Is.False);

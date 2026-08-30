@@ -101,6 +101,21 @@ namespace RocketFooxball.Tests.EditMode
         }
 
         [Test]
+        public void HorizontalLookDoesNotTurnUpwardPlayerVelocityIntoVerticalKick()
+        {
+            var result = BallMotionRules.ApplyKick(
+                Vector3.zero,
+                Vector3.forward,
+                Vector3.up * 20f,
+                30f,
+                0.5f,
+                0.20f);
+
+            Assert.That(result.z, Is.GreaterThan(0f));
+            Assert.That(result.y, Is.EqualTo(0f).Within(0.0001f));
+        }
+
+        [Test]
         public void ContactTransferHasPerContactAndAggregateCaps()
         {
             var candidate = BallMotionRules.ComputeContactAssist(Vector3.right * 30f, Vector3.zero, HeadOnNormal);

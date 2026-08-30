@@ -43,6 +43,7 @@ namespace RocketFooxball.Runtime.Ball
         private bool collisionSubscribed;
         private bool requestPending;
         private Vector3 requestedAim;
+        private Vector3 activeKickAim;
 
         public float CooldownRemaining => Mathf.Max(cooldownRemaining, 0f);
         public bool SimulationEnabled => simulationEnabled;
@@ -75,6 +76,7 @@ namespace RocketFooxball.Runtime.Ball
             UnsubscribeCollision();
             paused = false;
             ClearProgrammaticRequest();
+            ClearActiveKickAim();
         }
 
         private void FixedUpdate()
@@ -87,6 +89,7 @@ namespace RocketFooxball.Runtime.Ball
             if (!simulationEnabled || player == null)
             {
                 ClearProgrammaticRequest();
+                ClearActiveKickAim();
                 return;
             }
 
@@ -97,8 +100,15 @@ namespace RocketFooxball.Runtime.Ball
             var localRequest = input != null && input.ConsumeKickPressed();
             var hasRequest = useProgrammaticRequest || localRequest;
             var aim = useProgrammaticRequest ? programmaticAim : GetAimDirection();
+
+            if (!player.IsDashing)
+            {
+                ClearActiveKickAim();
+            }
+
             if (player.IsDashing)
             {
+                RefreshActiveKickAim(useProgrammaticRequest, programmaticAim);
                 player.SetDashAim(aim);
             }
 
@@ -115,13 +125,14 @@ namespace RocketFooxball.Runtime.Ball
                 cooldownRemaining = cooldown;
                 contactedBalls.Clear();
                 contactedParticipants.Clear();
+                activeKickAim = DashKickRules.ResolveKickDirection(aim, player.DashDirection);
                 DashStarted?.Invoke();
             }
 
             if (player.IsDashing)
             {
                 player.SetDashAim(aim);
-                TryProcessContacts();
+                TryProcessContacts(activeKickAim);
             }
         }
 
@@ -148,6 +159,7 @@ namespace RocketFooxball.Runtime.Ball
                 contactedBalls.Clear();
                 contactedParticipants.Clear();
                 ClearProgrammaticRequest();
+                ClearActiveKickAim();
             }
         }
 
@@ -174,6 +186,7 @@ namespace RocketFooxball.Runtime.Ball
             contactedBalls.Clear();
             contactedParticipants.Clear();
             ClearProgrammaticRequest();
+            ClearActiveKickAim();
         }
 
         private void ClearProgrammaticRequest()
@@ -182,7 +195,26 @@ namespace RocketFooxball.Runtime.Ball
             requestedAim = Vector3.zero;
         }
 
-        private void TryProcessContacts()
+        private void RefreshActiveKickAim(bool useProgrammaticRequest, Vector3 programmaticAim)
+        {
+            if (useProgrammaticRequest)
+            {
+                activeKickAim = DashKickRules.ResolveKickDirection(programmaticAim, player.DashDirection);
+                return;
+            }
+
+            if (input != null && input.isActiveAndEnabled)
+            {
+                activeKickAim = DashKickRules.ResolveKickDirection(GetAimDirection(), player.DashDirection);
+            }
+        }
+
+        private void ClearActiveKickAim()
+        {
+            activeKickAim = Vector3.zero;
+        }
+
+        private void TryProcessContacts(Vector3 kickAim)
         {
             if (paused || controller == null || !DashKickRules.IsContactActive(player.DashElapsed, dashContactStartDelay))
             {
@@ -243,7 +275,8 @@ namespace RocketFooxball.Runtime.Ball
             if (contactedBall != null)
             {
                 contactedBalls.Add(contactedBall);
-                if (contactedBall.ApplyKick(dashDirection, player.Velocity, speedFraction, playerMomentumShare))
+                var kickDirection = DashKickRules.ResolveKickDirection(kickAim, dashDirection);
+                if (contactedBall.ApplyKick(kickDirection, player.Velocity, speedFraction, playerMomentumShare))
                 {
                     KickSucceeded?.Invoke();
                 }
@@ -272,6 +305,7 @@ namespace RocketFooxball.Runtime.Ball
                 nearestParticipant.Motor?.AddExternalImpulse(shoveDirection.normalized * enemyShoveImpulse);
             }
             player.EndDash(DashEndReason.EnemyContact, enemyDashRetention);
+            ClearActiveKickAim();
         }
 
         private void OnPlayerCollision(ControllerColliderHit hit)
@@ -294,6 +328,7 @@ namespace RocketFooxball.Runtime.Ball
             if (Vector3.Dot(player.DashDirection, hit.normal) < -Epsilon)
             {
                 player.EndDash(DashEndReason.Wall, 0f);
+                ClearActiveKickAim();
             }
         }
 
