@@ -411,6 +411,45 @@ namespace RocketFooxball.Editor
             "ArenaTrim", "ArenaGlow"
         };
 
+        internal readonly struct ArenaSubmeshSlotSpecification
+        {
+            internal readonly string LogicalMaterialName;
+            internal readonly int IndexCount;
+            internal readonly int UniqueQuantizedPositionCount;
+            internal readonly Vector3 BoundsMin;
+            internal readonly Vector3 BoundsMax;
+
+            internal ArenaSubmeshSlotSpecification(string logicalMaterialName, int indexCount,
+                int uniqueQuantizedPositionCount, Vector3 boundsMin, Vector3 boundsMax)
+            {
+                LogicalMaterialName = logicalMaterialName;
+                IndexCount = indexCount;
+                UniqueQuantizedPositionCount = uniqueQuantizedPositionCount;
+                BoundsMin = boundsMin;
+                BoundsMax = boundsMax;
+            }
+        }
+
+        internal static readonly ArenaSubmeshSlotSpecification[] ArenaGoalRecessSubmeshSlotSpecifications =
+        {
+            new ArenaSubmeshSlotSpecification("ArenaPrimary", 708, 132,
+                new Vector3(-21f, 0f, 0f), new Vector3(21f, 12f, 10f)),
+            new ArenaSubmeshSlotSpecification("ArenaTrim", 24, 6,
+                new Vector3(7f, 5.45f, 9.4f), new Vector3(10f, 6.55f, 10f)),
+            new ArenaSubmeshSlotSpecification("ArenaHazard", 132, 24,
+                new Vector3(-4f, 0.58f, 9.54f), new Vector3(4f, 0.92f, 9.62f)),
+            new ArenaSubmeshSlotSpecification("ArenaGlow", 132, 24,
+                new Vector3(-6f, 9.85f, 9.54f), new Vector3(6f, 10.15f, 9.62f))
+        };
+
+        internal static readonly ArenaSubmeshSlotSpecification[] ArenaWallSconceSubmeshSlotSpecifications =
+        {
+            new ArenaSubmeshSlotSpecification("ArenaTrim", 264, 48,
+                new Vector3(-0.6f, -0.3f, 0f), new Vector3(0.6f, 0.3f, 0.23f)),
+            new ArenaSubmeshSlotSpecification("ArenaGlow", 132, 24,
+                new Vector3(-0.42f, -0.22f, 0.2f), new Vector3(0.42f, 0.22f, 0.35f))
+        };
+
         // Generator bounds are authored in Blender (X width, Y depth, Z height),
         // while imported Unity meshes use X width, Y height, Z depth. The
         // expected Unity bounds below therefore apply the export axis mapping.
