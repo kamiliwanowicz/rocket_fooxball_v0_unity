@@ -436,7 +436,8 @@ namespace RocketFooxball.Editor
             visual.name = name;
             visual.transform.SetParent(parent, false);
             visual.transform.localPosition = position;
-            visual.transform.localRotation = rotation == default ? Quaternion.identity : rotation;
+            var resolvedRotation = rotation.Equals(default(Quaternion)) ? Quaternion.identity : rotation;
+            visual.transform.localRotation = resolvedRotation;
             visual.transform.localScale = size;
             UnityEngine.Object.DestroyImmediate(visual.GetComponent<Collider>());
             visual.GetComponent<MeshRenderer>().sharedMaterial = material;
@@ -804,8 +805,9 @@ namespace RocketFooxball.Editor
             var item = Require(root.Find(name), "Architecture " + name);
             var renderer = Require(item.GetComponent<MeshRenderer>(), name + " renderer");
             var mesh = Require(item.GetComponent<MeshFilter>()?.sharedMesh, name + " mesh");
+            var resolvedRotation = rotation.Equals(default(Quaternion)) ? Quaternion.identity : rotation;
             if (Vector3.Distance(item.localPosition, position) > TransformTolerance ||
-                Quaternion.Angle(item.localRotation, rotation == default ? Quaternion.identity : rotation) > RotationTolerance ||
+                Quaternion.Angle(item.localRotation, resolvedRotation) > RotationTolerance ||
                 Vector3.Distance(item.localScale, scale) > TransformTolerance || renderer.sharedMaterial != material || mesh.name != "Cube" ||
                 !item.gameObject.isStatic || item.GetComponents<Component>().Length != 3)
                 throw new InvalidOperationException("Architecture solid contract invalid: " + name);
