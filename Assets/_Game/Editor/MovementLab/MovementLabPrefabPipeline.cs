@@ -38,6 +38,19 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabPrefabPipeline
     {
+        private static readonly Vector3 CharacterSourceBoundsMin = new Vector3(-0.37514f, 0f, -0.19600f);
+        private static readonly Vector3 CharacterSourceBoundsMax = new Vector3(0.37268f, 1.72080f, 0.25290f);
+        private static readonly Vector3 FpsKickSourceBoundsMin = new Vector3(-0.12351f, -0.35000f, -0.03700f);
+        private static readonly Vector3 FpsKickSourceBoundsMax = new Vector3(0.12351f, 0.17300f, 0.33900f);
+        private const float CharacterBoundsTolerance = 0.02f;
+        private const float FpsKickBoundsTolerance = 0.02f;
+        private const float CharacterFeetTolerance = 0.015f;
+        private const float ForwardFacingTolerance = 0.001f;
+        private static readonly string[] ForbiddenCharacterTransformTokens =
+        {
+            "jet", "thruster", "flame", "fire", "plume", "propulsion"
+        };
+
         internal static void Validate()
         {
             RequireComponent<RocketFooxball.Runtime.Movement.PlayerMotor>(MovementLabContract.PlayerPrefabPath, "PlayerMotor");
@@ -158,10 +171,22 @@ namespace RocketFooxball.Editor
                     camera.cullingMask &= ~(1 << hiddenLayer);
                     camera.cullingMask |= MovementLabContractCatalog.ViewmodelLightCullingMask;
 
-                    var characterRed = GetOrCreateRetroMaterial("CharacterRed", new Color(0.56f, 0.025f, 0.035f), null, Vector2.one);
-                    var characterBlack = GetOrCreateRetroMaterial("CharacterBlack", new Color(0.018f, 0.014f, 0.018f), null, Vector2.one);
-                    var characterCream = GetOrCreateRetroMaterial("CharacterCream", new Color(0.78f, 0.67f, 0.50f), null, Vector2.one);
-                    var characterEye = GetOrCreateRetroMaterial("CharacterEye", new Color(0.96f, 0.04f, 0.02f), null, Vector2.one);
+                    var characterRed = GetOrCreateCharacterMaterial(new PbrMaterialSpecification(
+                        "CharacterRed", null, null, null, null, null, null, Vector2.one,
+                        new Color(0.29f, 0.31f, 0.20f, 1f), Color.clear, 0f,
+                        0.55f, 0.28f, 1f, 1f));
+                    var characterBlack = GetOrCreateCharacterMaterial(new PbrMaterialSpecification(
+                        "CharacterBlack", null, null, null, null, null, null, Vector2.one,
+                        new Color(0.08f, 0.09f, 0.08f, 1f), Color.clear, 0f,
+                        0.85f, 0.35f, 1f, 1f));
+                    var characterCream = GetOrCreateCharacterMaterial(new PbrMaterialSpecification(
+                        "CharacterCream", null, null, null, null, null, null, Vector2.one,
+                        new Color(0.39f, 0.31f, 0.20f, 1f), Color.clear, 0f,
+                        0.35f, 0.22f, 1f, 1f));
+                    var characterEye = GetOrCreateCharacterMaterial(new PbrMaterialSpecification(
+                        "CharacterEye", null, null, null, null, null, null, Vector2.one,
+                        new Color(0.40f, 0.01f, 0.005f, 1f), new Color(1f, 0.03f, 0.01f, 1f), 2f,
+                        0.20f, 0.50f, 1f, 1f));
                     var teamBlueMaterial = GetOrCreateRetroMaterial("TeamBlue", new Color(0.08f, 0.35f, 1.00f, 1f), null, Vector2.one);
                     var teamRedMaterial = GetOrCreateRetroMaterial("TeamRed", new Color(1.00f, 0.12f, 0.10f, 1f), null, Vector2.one);
                     var teamBlueShieldMaterial = GetOrCreateShieldMaterial("TeamBlueShield", new Color(0.10f, 0.50f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
@@ -407,8 +432,10 @@ namespace RocketFooxball.Editor
                     SetObjectReference(presentation, "viewmodelLight", viewmodelLight);
                     SetObjectReference(presentation, "audioListener", camera.GetComponent<AudioListener>());
                     SetObjectReference(presentation, "participant", participant);
-                    SetObjectArray(presentation, "teamTintRenderers", worldVisual.GetComponentsInChildren<Renderer>(true)
-                        .Where(renderer => !renderer.transform.IsChildOf(worldShotgunMount)).Cast<UnityEngine.Object>().ToArray());
+                    SetObjectArray(presentation, "teamTintRenderers", new UnityEngine.Object[]
+                    {
+                        FindRendererByName(worldVisual, "CharacterArmor")
+                    });
                     SetObjectReference(presentation, "blueTeamCue", blueCue);
                     SetObjectReference(presentation, "redTeamCue", redCue);
                     SetObjectReference(presentation, "immunityShield", immunityShield);
@@ -1074,11 +1101,21 @@ namespace RocketFooxball.Editor
                     {
                         var renderer = renderers[i];
                         var slots = renderer.sharedMaterials;
+                        var characterMaterialIndex = GetCharacterMaterialIndex(renderer.name);
+                        var isCharacterRenderer = characterMaterialIndex >= 0;
+                        var expectedCharacterSlotCount = string.Equals(renderer.name, "FpsKickMesh", StringComparison.Ordinal) ? 3 : 1;
+                        if (isCharacterRenderer && (slots == null || slots.Length != expectedCharacterSlotCount))
+                        {
+                            throw new InvalidOperationException("Character renderer must have exactly " + expectedCharacterSlotCount +
+                                " material slot(s): " + renderer.name + ".");
+                        }
                         if (slots == null || slots.Length == 0) slots = new Material[1];
                         for (var j = 0; j < slots.Length; j++)
                         {
                             var weaponGroup = GetWeaponRendererGroup(renderer.name);
-                            var materialIndex = weaponGroup == null ? GetCharacterMaterialIndex(renderer.name) : GetWeaponMaterialIndex(weaponGroup);
+                            var materialIndex = weaponGroup == null
+                                ? (string.Equals(renderer.name, "FpsKickMesh", StringComparison.Ordinal) ? j : characterMaterialIndex)
+                                : GetWeaponMaterialIndex(weaponGroup);
                             if (materialIndex < 0)
                                 throw new InvalidOperationException("Imported renderer has unknown material group: " + renderer.name + ".");
                             if (materialIndex >= materials.Length || materials[materialIndex] == null)
@@ -1508,9 +1545,10 @@ namespace RocketFooxball.Editor
                                 prefabViewmodelLight.cullingMask != MovementLabContractCatalog.ViewmodelLightCullingMask ||
                                 prefabViewmodelLight.cookie != null || prefabViewmodelLight.enabled)
                                 throw new InvalidOperationException("Player prefab ViewmodelLight contract invalid.");
-                            if ((prefabCamera.cullingMask & MovementLabContractCatalog.ViewmodelLightCullingMask) != MovementLabContractCatalog.ViewmodelLightCullingMask)
-                                throw new InvalidOperationException("Player prefab Camera must include Viewmodels layer.");
-                            var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
+                             if ((prefabCamera.cullingMask & MovementLabContractCatalog.ViewmodelLightCullingMask) != MovementLabContractCatalog.ViewmodelLightCullingMask)
+                                 throw new InvalidOperationException("Player prefab Camera must include Viewmodels layer.");
+                             ValidateCharacterMaterialAssets();
+                             var prefabWeaponVisual = Require(root.transform.Find("Head/Camera/Viewmodels/WeaponVisual"), "Player prefab WeaponVisual");
                              ValidateWeaponMaterials(prefabWeaponVisual.gameObject);
                              ValidateImportedVisual(prefabWeaponVisual.gameObject, WeaponModelPath, "Player prefab WeaponVisual");
                              ValidateWeaponVisualContract(prefabWeaponVisual.gameObject, "Player prefab WeaponVisual",
@@ -1528,8 +1566,10 @@ namespace RocketFooxball.Editor
                                  ShotgunViewmodelPosition, "Player prefab FpsShotgunVisual");
                              ValidateNoPhysics(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
                              ValidateNoAnimators(prefabFpsShotgunVisual.gameObject, "Player prefab FpsShotgunVisual");
-                             ValidateNoPhysics(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual").gameObject, "Player prefab FpsKickVisual");
+                             var prefabFpsVisual = Require(root.transform.Find("Head/Camera/Viewmodels/FpsKickVisual"), "Player prefab FpsKickVisual");
+                             ValidateFpsKickVisualContract(prefabFpsVisual.gameObject, "Player prefab FpsKickVisual");
                              var worldVisual = prefabWorldVisual;
+                             ValidateWorldCharacterVisualContract(worldVisual.gameObject, "Player prefab WorldVisual");
                              ValidateLayerRecursively(worldVisual.gameObject, 0, "Player prefab WorldVisual");
                              if (prefabWorldShotgunMount == null || prefabWorldShotgunMount.parent == null || prefabWorldShotgunMount.parent.name != "Hand.R")
                                  throw new InvalidOperationException("Player prefab WorldShotgunMount must be parented to imported Hand.R.");
@@ -2008,11 +2048,11 @@ namespace RocketFooxball.Editor
 
                 private static int GetCharacterMaterialIndex(string rendererName)
                 {
-                    if (string.Equals(rendererName, "FpsKickMesh", StringComparison.Ordinal)) return 0;
                     if (string.Equals(rendererName, "CharacterArmor", StringComparison.Ordinal)) return 0;
-                    if (string.Equals(rendererName, "CharacterHead", StringComparison.Ordinal)) return 1;
-                    if (string.Equals(rendererName, "CharacterBody", StringComparison.Ordinal)) return 2;
+                    if (string.Equals(rendererName, "CharacterBody", StringComparison.Ordinal)) return 1;
+                    if (string.Equals(rendererName, "CharacterHead", StringComparison.Ordinal)) return 2;
                     if (string.Equals(rendererName, "CharacterEye", StringComparison.Ordinal)) return 3;
+                    if (string.Equals(rendererName, "FpsKickMesh", StringComparison.Ordinal)) return 0;
                     return -1;
                 }
 
@@ -2321,27 +2361,314 @@ namespace RocketFooxball.Editor
                     }
                 }
 
+                internal static void ValidateWorldCharacterVisualContract(GameObject visual, string label)
+                {
+                    if (visual == null) throw new InvalidOperationException(label + " visual is missing.");
+                    if (visual.transform.localPosition != Vector3.zero ||
+                        Quaternion.Angle(visual.transform.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(visual.transform.localScale, Vector3.one * WorldVisualScale) > 0.001f)
+                    {
+                        throw new InvalidOperationException(label + " must preserve the zero/identity world mount and scale " + WorldVisualScale + ".");
+                    }
+
+                    ValidateForbiddenCharacterTransforms(visual.transform, label);
+                    ValidateCharacterPresentationComponents(visual, label);
+
+                    var renderers = visual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                    if (renderers.Length != 4)
+                        throw new InvalidOperationException(label + " must contain exactly four source-FBX SkinnedMeshRenderers.");
+                    var expectedMaterials = LoadCharacterMaterials();
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    for (var i = 0; i < renderers.Length; i++)
+                    {
+                        var renderer = renderers[i];
+                        var materialIndex = GetCharacterMaterialIndex(renderer.name);
+                        if (materialIndex < 0 || string.Equals(renderer.name, "FpsKickMesh", StringComparison.Ordinal) || !seen.Add(renderer.name))
+                            throw new InvalidOperationException(label + " renderer names must be exactly CharacterArmor, CharacterBody, CharacterHead, and CharacterEye.");
+                        if (renderer.sharedMesh == null || AssetDatabase.GetAssetPath(renderer.sharedMesh) != CharacterModelPath ||
+                            renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 1 ||
+                            renderer.sharedMaterials[0] != expectedMaterials[materialIndex])
+                        {
+                            throw new InvalidOperationException(label + " source renderer/material provenance mismatch: " + renderer.name + ".");
+                        }
+                    }
+                    if (seen.Count != 4 || !seen.Contains("CharacterArmor") || !seen.Contains("CharacterBody") ||
+                        !seen.Contains("CharacterHead") || !seen.Contains("CharacterEye"))
+                    {
+                        throw new InvalidOperationException(label + " renderer inventory is incomplete.");
+                    }
+
+                    ValidateCharacterBoneHierarchy(visual.transform, label);
+                    var aggregate = AggregateSkinnedMeshBounds(visual.transform, renderers, out var hasBounds);
+                    if (!hasBounds || !WithinBoundsTolerance(aggregate.min, CharacterSourceBoundsMin, CharacterBoundsTolerance) ||
+                        !WithinBoundsTolerance(aggregate.max, CharacterSourceBoundsMax, CharacterBoundsTolerance) ||
+                        aggregate.min.y < -CharacterFeetTolerance || aggregate.min.y > CharacterFeetTolerance ||
+                        aggregate.max.y < CharacterSourceBoundsMax.y - CharacterBoundsTolerance)
+                    {
+                        throw new InvalidOperationException(label + " source envelope/feet/origin contract mismatch: " +
+                            aggregate.min + ".." + aggregate.max + ".");
+                    }
+                    if (aggregate.max.z <= ForwardFacingTolerance || aggregate.max.z <= -aggregate.min.z)
+                        throw new InvalidOperationException(label + " must face Unity local +Z.");
+
+                    var eye = FindUniqueRendererByName(renderers, "CharacterEye", label);
+                    var eyeBounds = AggregateSkinnedMeshBounds(visual.transform, new[] { eye }, out var hasEyeBounds);
+                    if (!hasEyeBounds || eyeBounds.min.x <= ForwardFacingTolerance || eyeBounds.min.z <= ForwardFacingTolerance ||
+                        eyeBounds.max.z <= eyeBounds.min.z)
+                    {
+                        throw new InvalidOperationException(label + " eye/camera pod must be asymmetric and front-facing on Unity +Z.");
+                    }
+
+                    var animators = visual.GetComponentsInChildren<Animator>(true);
+                    var animator = visual.GetComponent<Animator>();
+                    if (animators.Length != 1 || animator == null || animators[0] != animator || animator.applyRootMotion)
+                        throw new InvalidOperationException(label + " must contain exactly one root Animator with root motion disabled.");
+                    ValidateWorldAnimatorController(animator, WorldControllerPath, CharacterModelPath);
+                }
+
+                internal static void ValidateWorldCharacterVisualContract(Transform visual, string label)
+                {
+                    ValidateWorldCharacterVisualContract(visual != null ? visual.gameObject : null, label);
+                }
+
+                internal static void ValidateFpsKickVisualContract(GameObject visual, string label)
+                {
+                    if (visual == null) throw new InvalidOperationException(label + " visual is missing.");
+                    if (visual.transform.parent == null || visual.transform.parent.name != MovementLabContractCatalog.ViewmodelsRootName ||
+                        visual.transform.localPosition != new Vector3(0.12f, -0.42f, 0.30f) ||
+                        Quaternion.Angle(visual.transform.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(visual.transform.localScale, Vector3.one) > 0.001f)
+                    {
+                        throw new InvalidOperationException(label + " must preserve the authored FPS mount (0.12,-0.42,0.30).");
+                    }
+
+                    ValidateForbiddenCharacterTransforms(visual.transform, label);
+                    ValidateCharacterPresentationComponents(visual, label);
+
+                    var renderers = visual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                    if (renderers.Length != 1 || !string.Equals(renderers[0].name, "FpsKickMesh", StringComparison.Ordinal))
+                        throw new InvalidOperationException(label + " must contain exactly one source-FBX SkinnedMeshRenderer named FpsKickMesh.");
+                    var renderer = renderers[0];
+                    var expectedMaterials = LoadCharacterMaterials();
+                    if (renderer.sharedMesh == null || AssetDatabase.GetAssetPath(renderer.sharedMesh) != FpsKickModelPath ||
+                        renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 3 ||
+                        renderer.sharedMaterials[0] != expectedMaterials[0] || renderer.sharedMaterials[1] != expectedMaterials[1] ||
+                        renderer.sharedMaterials[2] != expectedMaterials[2])
+                    {
+                        throw new InvalidOperationException(label + " FpsKickMesh must preserve the exact armor/body/head material order.");
+                    }
+
+                    ValidateFpsKickBoneHierarchy(visual.transform, label);
+                    var aggregate = AggregateSkinnedMeshBounds(visual.transform, renderers, out var hasBounds);
+                    if (!hasBounds || !WithinBoundsTolerance(aggregate.min, FpsKickSourceBoundsMin, FpsKickBoundsTolerance) ||
+                        !WithinBoundsTolerance(aggregate.max, FpsKickSourceBoundsMax, FpsKickBoundsTolerance) ||
+                        aggregate.max.z <= ForwardFacingTolerance || aggregate.max.z <= -aggregate.min.z)
+                    {
+                        throw new InvalidOperationException(label + " source bounds/forward contract mismatch: " + aggregate.min + ".." + aggregate.max + ".");
+                    }
+
+                    var camera = visual.GetComponentInParent<Camera>();
+                    if (camera == null || Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.nearClipPlane - 0.03f) > 0.001f ||
+                        Vector3.Dot(visual.forward, camera.transform.forward) < 0.999f)
+                    {
+                        throw new InvalidOperationException(label + " must face the gameplay camera at 75-degree FOV with a 0.03 near plane.");
+                    }
+                    var cameraCenter = camera.transform.InverseTransformPoint(visual.transform.TransformPoint(aggregate.center));
+                    var minimumCameraZ = camera.transform.InverseTransformPoint(visual.transform.TransformPoint(new Vector3(aggregate.min.x, aggregate.min.y, aggregate.min.z))).z;
+                    var halfVerticalTangent = Mathf.Tan(camera.fieldOfView * Mathf.Deg2Rad * 0.5f);
+                    if (minimumCameraZ <= camera.nearClipPlane || cameraCenter.z <= camera.nearClipPlane ||
+                        cameraCenter.y / (cameraCenter.z * halfVerticalTangent) >= -1.10f)
+                    {
+                        throw new InvalidOperationException(label + " idle silhouette must remain below the camera and clear the near plane.");
+                    }
+
+                    var animators = visual.GetComponentsInChildren<Animator>(true);
+                    var animator = visual.GetComponent<Animator>();
+                    if (animators.Length != 1 || animator == null || animators[0] != animator || animator.applyRootMotion)
+                        throw new InvalidOperationException(label + " must contain exactly one root Animator with root motion disabled.");
+                    ValidateFpsAnimatorController(animator, FpsControllerPath, FpsKickModelPath);
+                }
+
+                internal static void ValidateFpsKickVisualContract(Transform visual, string label)
+                {
+                    ValidateFpsKickVisualContract(visual != null ? visual.gameObject : null, label);
+                }
+
+                private static Material[] LoadCharacterMaterials()
+                {
+                    return new[]
+                    {
+                        AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/CharacterRed.mat"),
+                        AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/CharacterBlack.mat"),
+                        AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/CharacterCream.mat"),
+                        AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/CharacterEye.mat")
+                    };
+                }
+
+                private static void ValidateCharacterPresentationComponents(GameObject visual, string label)
+                {
+                    if (visual.GetComponentsInChildren<Collider>(true).Length != 0 ||
+                        visual.GetComponentsInChildren<Rigidbody>(true).Length != 0 ||
+                        visual.GetComponentsInChildren<ParticleSystem>(true).Length != 0 ||
+                        visual.GetComponentsInChildren<Light>(true).Length != 0 ||
+                        visual.GetComponentsInChildren<TrailRenderer>(true).Length != 0)
+                    {
+                        throw new InvalidOperationException(label + " must not contain physics or VFX components.");
+                    }
+                }
+
+                private static void ValidateForbiddenCharacterTransforms(Transform root, string label)
+                {
+                    var transforms = root.GetComponentsInChildren<Transform>(true);
+                    for (var i = 0; i < transforms.Length; i++)
+                    {
+                        var name = transforms[i].name ?? string.Empty;
+                        for (var tokenIndex = 0; tokenIndex < ForbiddenCharacterTransformTokens.Length; tokenIndex++)
+                        {
+                            if (name.IndexOf(ForbiddenCharacterTransformTokens[tokenIndex], StringComparison.OrdinalIgnoreCase) >= 0)
+                                throw new InvalidOperationException(label + " contains forbidden propulsion-named transform: " + name + ".");
+                        }
+                    }
+                }
+
+                private static void ValidateCharacterBoneHierarchy(Transform visualRoot, string label)
+                {
+                    var expectedNames = new[]
+                    {
+                        "Root", "Pelvis", "Spine", "Chest", "Neck", "Head",
+                        "UpperArm.R", "Forearm.R", "Hand.R", "UpperArm.L", "Forearm.L", "Hand.L",
+                        "Thigh.R", "Shin.R", "Foot.R", "Thigh.L", "Shin.L", "Foot.L"
+                    };
+                    var expectedParents = new[]
+                    {
+                        "CharacterRig", "Root", "Pelvis", "Spine", "Chest", "Neck",
+                        "Chest", "UpperArm.R", "Forearm.R", "Chest", "UpperArm.L", "Forearm.L",
+                        "Pelvis", "Thigh.R", "Shin.R", "Pelvis", "Thigh.L", "Shin.L"
+                    };
+                    var rootBone = FindUniqueNamedTransform(visualRoot, "Root", label);
+                    if (rootBone.parent == null || !string.Equals(rootBone.parent.name, expectedParents[0], StringComparison.Ordinal))
+                        throw new InvalidOperationException(label + " Root must be parented by CharacterRig.");
+                    if (rootBone.localPosition != Vector3.zero ||
+                        Quaternion.Angle(rootBone.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(rootBone.localScale, Vector3.one) > 0.001f)
+                        throw new InvalidOperationException(label + " Root bone must preserve the imported origin transform.");
+                    var hierarchy = rootBone.GetComponentsInChildren<Transform>(true);
+                    if (hierarchy.Length != expectedNames.Length)
+                        throw new InvalidOperationException(label + " must contain exactly 18 imported bones.");
+                    for (var i = 0; i < expectedNames.Length; i++)
+                    {
+                        var bone = FindUniqueNamedTransform(rootBone, expectedNames[i], label);
+                        if (i == 0) continue;
+                        var expectedParent = FindUniqueNamedTransform(rootBone, expectedParents[i], label);
+                        if (bone.parent != expectedParent)
+                            throw new InvalidOperationException(label + " bone parent mismatch: " + expectedNames[i] + ".");
+                    }
+                }
+
+                private static void ValidateFpsKickBoneHierarchy(Transform visualRoot, string label)
+                {
+                    var rootBone = FindUniqueNamedTransform(visualRoot, "Root", label);
+                    if (rootBone.parent == null || !string.Equals(rootBone.parent.name, "FpsKickRig", StringComparison.Ordinal))
+                        throw new InvalidOperationException(label + " Root must be parented by FpsKickRig.");
+                    if (rootBone.localPosition != Vector3.zero ||
+                        Quaternion.Angle(rootBone.localRotation, Quaternion.identity) > 0.001f ||
+                        Vector3.Distance(rootBone.localScale, Vector3.one) > 0.001f)
+                        throw new InvalidOperationException(label + " Root bone must preserve the imported origin transform.");
+                    var hierarchy = rootBone.GetComponentsInChildren<Transform>(true);
+                    if (hierarchy.Length != 3)
+                        throw new InvalidOperationException(label + " must contain exactly Root, Shin.R, and Foot.R bones.");
+                    var shin = FindUniqueNamedTransform(rootBone, "Shin.R", label);
+                    var foot = FindUniqueNamedTransform(rootBone, "Foot.R", label);
+                    if (shin.parent != rootBone || foot.parent != shin)
+                        throw new InvalidOperationException(label + " bone parent hierarchy must be Root -> Shin.R -> Foot.R.");
+                }
+
+                private static Transform FindUniqueNamedTransform(Transform root, string name, string label)
+                {
+                    var matches = root == null
+                        ? Array.Empty<Transform>()
+                        : root.GetComponentsInChildren<Transform>(true)
+                            .Where(transform => transform != null && string.Equals(transform.name, name, StringComparison.Ordinal))
+                            .ToArray();
+                    if (matches.Length != 1)
+                        throw new InvalidOperationException(label + " must contain exactly one transform named " + name + ".");
+                    return matches[0];
+                }
+
+                private static SkinnedMeshRenderer FindUniqueRendererByName(SkinnedMeshRenderer[] renderers, string name, string label)
+                {
+                    var matches = renderers == null
+                        ? Array.Empty<SkinnedMeshRenderer>()
+                        : renderers.Where(renderer => renderer != null && string.Equals(renderer.name, name, StringComparison.Ordinal)).ToArray();
+                    if (matches.Length != 1)
+                        throw new InvalidOperationException(label + " must contain exactly one renderer named " + name + ".");
+                    return matches[0];
+                }
+
+                private static Bounds AggregateSkinnedMeshBounds(Transform visualRoot, SkinnedMeshRenderer[] renderers, out bool hasBounds)
+                {
+                    var aggregate = new Bounds();
+                    hasBounds = false;
+                    if (visualRoot == null || renderers == null) return aggregate;
+                    for (var i = 0; i < renderers.Length; i++)
+                    {
+                        var renderer = renderers[i];
+                        var mesh = renderer != null ? renderer.sharedMesh : null;
+                        if (mesh == null) continue;
+                        var center = mesh.bounds.center;
+                        var extents = mesh.bounds.extents;
+                        for (var x = -1; x <= 1; x += 2)
+                        for (var y = -1; y <= 1; y += 2)
+                        for (var z = -1; z <= 1; z += 2)
+                        {
+                            var point = visualRoot.InverseTransformPoint(renderer.transform.TransformPoint(
+                                center + Vector3.Scale(extents, new Vector3(x, y, z))));
+                            if (hasBounds) aggregate.Encapsulate(point);
+                            else
+                            {
+                                aggregate = new Bounds(point, Vector3.zero);
+                                hasBounds = true;
+                            }
+                        }
+                    }
+                    return aggregate;
+                }
+
+                private static bool WithinBoundsTolerance(Vector3 actual, Vector3 expected, float tolerance)
+                {
+                    return Mathf.Abs(actual.x - expected.x) <= tolerance &&
+                           Mathf.Abs(actual.y - expected.y) <= tolerance &&
+                           Mathf.Abs(actual.z - expected.z) <= tolerance;
+                }
+
                 internal static void ValidateTeamTintRenderers(PlayerPresentation presentation, Transform worldVisual,
                     Transform worldShotgunMount, Renderer worldShotgunAccent, Renderer worldShotgunAccentCore, string label)
                 {
                     if (presentation == null || worldVisual == null || worldShotgunMount == null || worldShotgunAccent == null || worldShotgunAccentCore == null)
                         throw new InvalidOperationException(label + " references are incomplete.");
-                    var expected = worldVisual.GetComponentsInChildren<Renderer>(true)
-                        .Where(renderer => !renderer.transform.IsChildOf(worldShotgunMount)).ToArray();
+                    var armor = FindUniqueRendererByName(worldVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true), "CharacterArmor", label);
+                    var characterRenderers = worldVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                    if (characterRenderers.Length != 4)
+                        throw new InvalidOperationException(label + " requires exactly four world character renderers.");
                     var serialized = new SerializedObject(presentation);
                     var property = serialized.FindProperty("teamTintRenderers");
-                    if (property == null || !property.isArray || property.arraySize != expected.Length)
-                        throw new InvalidOperationException(label + " must contain world character renderers and exclude both shotgun accent renderers.");
-                    for (var i = 0; i < expected.Length; i++)
+                    if (property == null || !property.isArray || property.arraySize != 1 ||
+                        property.GetArrayElementAtIndex(0).objectReferenceValue != armor)
                     {
-                        if (property.GetArrayElementAtIndex(i).objectReferenceValue != expected[i])
-                            throw new InvalidOperationException(label + " renderer routing mismatch at index " + i + ".");
+                        throw new InvalidOperationException(label + " must serialize only CharacterArmor for runtime team tinting.");
                     }
                     for (var i = 0; i < property.arraySize; i++)
                     {
-                        var value = property.GetArrayElementAtIndex(i).objectReferenceValue;
-                        if (value == worldShotgunAccent || value == worldShotgunAccentCore)
-                            throw new InvalidOperationException(label + " must exclude WorldShotgunVisual WeaponAccent and WeaponAccentCore.");
+                        var value = property.GetArrayElementAtIndex(i).objectReferenceValue as Renderer;
+                        if (value == null || value == worldShotgunAccent || value == worldShotgunAccentCore ||
+                            string.Equals(value.name, "CharacterBody", StringComparison.Ordinal) ||
+                            string.Equals(value.name, "CharacterHead", StringComparison.Ordinal) ||
+                            string.Equals(value.name, "CharacterEye", StringComparison.Ordinal) ||
+                            value.transform.IsChildOf(worldShotgunMount) ||
+                            string.Equals(value.name, "FpsKickMesh", StringComparison.Ordinal))
+                        {
+                            throw new InvalidOperationException(label + " must exclude dark mechanisms, tan housings, eye, FPS, and shotgun renderers.");
+                        }
                     }
                 }
 
@@ -2394,35 +2721,33 @@ namespace RocketFooxball.Editor
                     if (fpsImporter == null || worldImporter == null)
                         throw new InvalidOperationException("Dash animation importers are missing.");
 
-                    ModelImporterClipAnimation fpsKickSettings = null;
-                    for (var i = 0; fpsImporter.clipAnimations != null && i < fpsImporter.clipAnimations.Length; i++)
-                    {
-                        if (fpsImporter.clipAnimations[i].name == "Kick")
-                        {
-                            fpsKickSettings = fpsImporter.clipAnimations[i];
-                            break;
-                        }
-                    }
-                    if (fpsKickSettings == null || Mathf.Abs(fpsKickSettings.firstFrame - 1f) > 0.001f || Mathf.Abs(fpsKickSettings.lastFrame - 11f) > 0.001f)
-                        throw new InvalidOperationException("FPS Kick import must use frames 1..11.");
-
-                    ModelImporterClipAnimation worldKickSettings = null;
-                    for (var i = 0; worldImporter.clipAnimations != null && i < worldImporter.clipAnimations.Length; i++)
-                    {
-                        if (worldImporter.clipAnimations[i].name == "Kick")
-                        {
-                            worldKickSettings = worldImporter.clipAnimations[i];
-                            break;
-                        }
-                    }
-                    if (worldKickSettings == null || Mathf.Abs(worldKickSettings.firstFrame - 1f) > 0.001f || Mathf.Abs(worldKickSettings.lastFrame - 12f) > 0.001f)
-                        throw new InvalidOperationException("World Kick import must use distinct frames 1..12.");
+                    var fpsKickSettings = FindImportedKickSettings(fpsImporter);
+                    var worldKickSettings = FindImportedKickSettings(worldImporter);
+                    ValidateKickImporterSettings(fpsKickSettings, "FPS Kick");
+                    ValidateKickImporterSettings(worldKickSettings, "World Kick");
 
                     var fpsKickClip = FindImportedClip(FpsKickModelPath, "Kick");
                     var worldKickClip = FindImportedClip(CharacterModelPath, "Kick");
+                    if (fpsKickClip == null || worldKickClip == null || fpsKickClip == worldKickClip ||
+                        Mathf.Abs(fpsKickClip.frameRate - MovementLabContract.AnimationSourceFrameRate) > 0.001f ||
+                        Mathf.Abs(worldKickClip.frameRate - MovementLabContract.AnimationSourceFrameRate) > 0.001f)
+                    {
+                        throw new InvalidOperationException("World and FPS Kick clips must be distinct imported 30 fps motions.");
+                    }
+                    var strikeTime = (MovementLabContract.KickStrikeFrame - MovementLabContract.KickStartFrame) /
+                        MovementLabContract.AnimationSourceFrameRate;
+                    if (Mathf.Abs(strikeTime - BallKickDefaults.DashContactStartDelay) > 0.0001f)
+                        throw new InvalidOperationException("Kick strike frame must match BallKickDefaults.DashContactStartDelay.");
+                    var durationTolerance = 1f / MovementLabContract.AnimationSourceFrameRate;
+                    if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance ||
+                        Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance)
+                    {
+                        throw new InvalidOperationException("World and FPS Kick durations must stay within one source frame of dash duration.");
+                    }
+                    ValidateWorldKickCurveBindings(worldKickClip);
 
                     var fpsController = AssetDatabase.LoadAssetAtPath<AnimatorController>(FpsControllerPath);
-                    if (fpsController == null || fpsController.layers.Length == 0)
+                    if (fpsController == null || fpsController.layers.Length != 1 || fpsController.layers[0].stateMachine == null)
                         throw new InvalidOperationException("FPS Kick controller is missing.");
                     var fpsStateMachine = fpsController.layers[0].stateMachine;
                     AnimatorState fpsKickState = null;
@@ -2452,9 +2777,9 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("FPS Kick controller trigger path must be AnyState -> Kick via Kick trigger.");
 
                     var worldController = AssetDatabase.LoadAssetAtPath<AnimatorController>(WorldControllerPath);
-                    if (worldController == null || worldController.layers.Length == 0)
+                    if (worldController == null || worldController.layers.Length != 2 || worldController.layers[1].stateMachine == null)
                         throw new InvalidOperationException("World character controller is missing.");
-                    var worldStateMachine = worldController.layers[0].stateMachine;
+                    var worldStateMachine = worldController.layers[1].stateMachine;
                     AnimatorState worldKickState = null;
                     for (var i = 0; i < worldStateMachine.states.Length; i++)
                     {
@@ -2464,8 +2789,56 @@ namespace RocketFooxball.Editor
                             break;
                         }
                     }
-                    if (worldKickState == null || worldKickState.motion != worldKickClip || worldKickState.motion == fpsKickClip)
-                        throw new InvalidOperationException("World Kick controller must retain distinct imported motion.");
+                    if (worldKickState == null || worldKickState.motion != worldKickClip || worldKickState.motion == fpsKickClip ||
+                        Mathf.Abs(worldKickState.speed - 1f) > 0.001f)
+                        throw new InvalidOperationException("World Kick controller must retain distinct imported motion at speed 1.");
+                }
+
+                private static ModelImporterClipAnimation FindImportedKickSettings(ModelImporter importer)
+                {
+                    var clips = importer != null ? importer.clipAnimations : null;
+                    for (var i = 0; clips != null && i < clips.Length; i++)
+                    {
+                        if (clips[i] != null && string.Equals(clips[i].name, MovementLabContract.KickStateName, StringComparison.Ordinal))
+                            return clips[i];
+                    }
+                    return null;
+                }
+
+                private static void ValidateKickImporterSettings(ModelImporterClipAnimation settings, string label)
+                {
+                    if (settings == null || settings.name != MovementLabContract.KickStateName ||
+                        settings.takeName != MovementLabContract.KickStateName ||
+                        Mathf.Abs(settings.firstFrame - MovementLabContract.KickStartFrame) > 0.001f ||
+                        Mathf.Abs(settings.lastFrame - MovementLabContract.KickEndFrame) > 0.001f ||
+                        Mathf.Abs(settings.cycleOffset) > 0.001f || settings.loopTime || !settings.lockRootRotation ||
+                        !settings.keepOriginalOrientation || !settings.lockRootHeightY || !settings.keepOriginalPositionY ||
+                        !settings.lockRootPositionXZ || !settings.keepOriginalPositionXZ || settings.heightFromFeet ||
+                        settings.hasAdditiveReferencePose || settings.mirror)
+                    {
+                        throw new InvalidOperationException(label + " import must use frames 1..11 with exact root locks.");
+                    }
+                }
+
+                private static void ValidateWorldKickCurveBindings(AnimationClip clip)
+                {
+                    var allowed = new HashSet<string>(MovementLabContract.WorldKickLegBoneNames, StringComparer.Ordinal);
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
+                    var bindings = AnimationUtility.GetCurveBindings(clip);
+                    for (var i = 0; i < bindings.Length; i++)
+                    {
+                        var binding = bindings[i];
+                        if (binding.type != typeof(Transform))
+                            throw new InvalidOperationException("World Kick must contain only Transform leg curves.");
+                        var path = binding.path ?? string.Empty;
+                        var separator = path.LastIndexOf('/');
+                        var boneName = separator >= 0 ? path.Substring(separator + 1) : path;
+                        if (!allowed.Contains(boneName))
+                            throw new InvalidOperationException("World Kick curve targets forbidden bone/object: " + path + ".");
+                        seen.Add(boneName);
+                    }
+                    if (AnimationUtility.GetObjectReferenceCurveBindings(clip).Length != 0 || seen.Count != allowed.Count)
+                        throw new InvalidOperationException("World Kick must bind exactly the six leg bones and no object curves.");
                 }
 
                 internal static void ValidateCrosshair(Camera camera)

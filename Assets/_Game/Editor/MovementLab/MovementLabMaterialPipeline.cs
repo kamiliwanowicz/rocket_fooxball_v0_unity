@@ -148,6 +148,18 @@ namespace RocketFooxball.Editor
                     return material;
                 }
 
+                internal static Material GetOrCreateCharacterMaterial(PbrMaterialSpecification specification)
+                {
+                    var material = GetOrCreateLitMaterial(specification);
+                    if (material == null) throw new InvalidOperationException("Character material creation returned null: " + specification.Name);
+                    if (material.HasProperty("_EnvironmentReflections")) material.SetFloat("_EnvironmentReflections", 1f);
+                    material.DisableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                    if (material.HasProperty("_SpecularHighlights")) material.SetFloat("_SpecularHighlights", 1f);
+                    material.DisableKeyword("_SPECULARHIGHLIGHTS_OFF");
+                    EditorUtility.SetDirty(material);
+                    return material;
+                }
+
                 private static void ApplyWeaponMaterialResponse(Material material, string name)
                 {
                     if (material == null || string.IsNullOrEmpty(name)) return;
@@ -421,7 +433,53 @@ namespace RocketFooxball.Editor
                         if (material == null || material.shader == null || material.shader.name != LitShaderName) throw new InvalidOperationException("Opaque material must use URP Lit: " + paths[i]);
                         ValidateOpaqueSurfaceState(material, paths[i]);
                     }
+                    ValidateCharacterMaterialAssets();
                     ValidateWeaponMaterialAssets();
+                }
+
+                internal static void ValidateCharacterMaterialAssets()
+                {
+                    ValidateCharacterMaterialAsset("CharacterRed", new Color(0.29f, 0.31f, 0.20f, 1f),
+                        0.55f, 0.28f, Color.clear, 0f);
+                    ValidateCharacterMaterialAsset("CharacterBlack", new Color(0.08f, 0.09f, 0.08f, 1f),
+                        0.85f, 0.35f, Color.clear, 0f);
+                    ValidateCharacterMaterialAsset("CharacterCream", new Color(0.39f, 0.31f, 0.20f, 1f),
+                        0.35f, 0.22f, Color.clear, 0f);
+                    ValidateCharacterMaterialAsset("CharacterEye", new Color(0.40f, 0.01f, 0.005f, 1f),
+                        0.20f, 0.50f, new Color(1f, 0.03f, 0.01f, 1f), 2f);
+                }
+
+                private static void ValidateCharacterMaterialAsset(string name, Color baseColor, float metallic,
+                    float smoothness, Color emissionColor, float emissionStrength)
+                {
+                    var path = MaterialsPath + "/" + name + ".mat";
+                    var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+                    if (material == null || !string.Equals(AssetDatabase.GetAssetPath(material), path, StringComparison.Ordinal))
+                        throw new InvalidOperationException("Character material asset path mismatch: " + path);
+
+                    ValidatePbrMaterial(material, null, null, null, null, null, null, Vector2.one, name);
+                    ValidatePbrScalars(material, metallic, smoothness, 1f, 1f, emissionStrength, name);
+                    ValidateEmission(material, emissionColor, emissionStrength, name);
+                    ValidateOpaqueSurfaceState(material, name);
+
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), baseColor) > 0.001f ||
+                        material.GetTexture("_BaseMap") != null || material.GetTexture("_BumpMap") != null ||
+                        material.GetTexture("_MetallicGlossMap") != null || material.GetTexture("_OcclusionMap") != null ||
+                        material.GetTexture("_EmissionMap") != null || material.GetTexture("_DetailNormalMap") != null ||
+                        !material.enableInstancing)
+                    {
+                        throw new InvalidOperationException(name + " must use the exact texture-free instanced PBR specification.");
+                    }
+
+                    if (material.IsKeywordEnabled("_NORMALMAP") || material.IsKeywordEnabled("_METALLICSPECGLOSSMAP") ||
+                        material.IsKeywordEnabled("_OCCLUSIONMAP") || material.IsKeywordEnabled("_DETAIL") ||
+                        material.IsKeywordEnabled("_DETAIL_SCALED") || material.IsKeywordEnabled("_DETAIL_MULX2") ||
+                        material.IsKeywordEnabled("_SPECULARHIGHLIGHTS_OFF") ||
+                        material.IsKeywordEnabled("_ENVIRONMENTREFLECTIONS_OFF") ||
+                        material.IsKeywordEnabled("_EMISSION") != (emissionStrength > 0.001f))
+                    {
+                        throw new InvalidOperationException(name + " keyword contract mismatch.");
+                    }
                 }
 
                 internal static void ValidateWeaponMaterialAssets()
