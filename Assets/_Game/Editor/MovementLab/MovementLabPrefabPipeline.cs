@@ -2577,10 +2577,7 @@ namespace RocketFooxball.Editor
                     var rootBone = importedBones["Root"];
                     if (rootBone.parent == null || !string.Equals(rootBone.parent.name, expectedParents["Root"], StringComparison.Ordinal))
                         throw new InvalidOperationException(label + " Root must be parented by CharacterRig.");
-                    if (rootBone.localPosition != Vector3.zero ||
-                        Quaternion.Angle(rootBone.localRotation, Quaternion.identity) > 0.001f ||
-                        Vector3.Distance(rootBone.localScale, Vector3.one) > 0.001f)
-                        throw new InvalidOperationException(label + " Root bone must preserve the imported origin transform.");
+                    ValidateImportedRootTransform(rootBone, CharacterModelPath, label);
 
                     foreach (var expected in expectedParents)
                     {
@@ -2597,10 +2594,7 @@ namespace RocketFooxball.Editor
                     var rootBone = FindUniqueNamedTransform(visualRoot, "Root", label);
                     if (rootBone.parent == null || !string.Equals(rootBone.parent.name, "FpsKickRig", StringComparison.Ordinal))
                         throw new InvalidOperationException(label + " Root must be parented by FpsKickRig.");
-                    if (rootBone.localPosition != Vector3.zero ||
-                        Quaternion.Angle(rootBone.localRotation, Quaternion.identity) > 0.001f ||
-                        Vector3.Distance(rootBone.localScale, Vector3.one) > 0.001f)
-                        throw new InvalidOperationException(label + " Root bone must preserve the imported origin transform.");
+                    ValidateImportedRootTransform(rootBone, FpsKickModelPath, label);
                     var hierarchy = rootBone.GetComponentsInChildren<Transform>(true);
                     if (hierarchy.Length != 3)
                         throw new InvalidOperationException(label + " must contain exactly Root, Shin.R, and Foot.R bones.");
@@ -2608,6 +2602,20 @@ namespace RocketFooxball.Editor
                     var foot = FindUniqueNamedTransform(rootBone, "Foot.R", label);
                     if (shin.parent != rootBone || foot.parent != shin)
                         throw new InvalidOperationException(label + " bone parent hierarchy must be Root -> Shin.R -> Foot.R.");
+                }
+
+                private static void ValidateImportedRootTransform(Transform instanceRoot, string sourceModelPath, string label)
+                {
+                    var sourceModel = AssetDatabase.LoadAssetAtPath<GameObject>(sourceModelPath);
+                    if (sourceModel == null)
+                        throw new InvalidOperationException(label + " source FBX is missing: " + sourceModelPath + ".");
+                    var sourceRoot = FindUniqueNamedTransform(sourceModel.transform, "Root", label + " source FBX");
+                    if (Vector3.Distance(instanceRoot.localPosition, sourceRoot.localPosition) > 0.001f ||
+                        Quaternion.Angle(instanceRoot.localRotation, sourceRoot.localRotation) > 0.001f ||
+                        Vector3.Distance(instanceRoot.localScale, sourceRoot.localScale) > 0.001f)
+                    {
+                        throw new InvalidOperationException(label + " Root bone must preserve the imported source transform.");
+                    }
                 }
 
                 private static Transform FindUniqueNamedTransform(Transform root, string name, string label)
