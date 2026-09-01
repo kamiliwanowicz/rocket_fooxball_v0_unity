@@ -2533,35 +2533,62 @@ namespace RocketFooxball.Editor
 
                 private static void ValidateCharacterBoneHierarchy(Transform visualRoot, string label)
                 {
-                    var expectedNames = new[]
+                    var expectedParents = new Dictionary<string, string>(StringComparer.Ordinal)
                     {
-                        "Root", "Pelvis", "Spine", "Chest", "Neck", "Head",
-                        "UpperArm.R", "Forearm.R", "Hand.R", "UpperArm.L", "Forearm.L", "Hand.L",
-                        "Thigh.R", "Shin.R", "Foot.R", "Thigh.L", "Shin.L", "Foot.L"
+                        { "Root", "CharacterRig" },
+                        { "Pelvis", "Root" },
+                        { "Spine", "Pelvis" },
+                        { "Chest", "Spine" },
+                        { "Neck", "Chest" },
+                        { "Head", "Neck" },
+                        { "UpperArm.R", "Chest" },
+                        { "Forearm.R", "UpperArm.R" },
+                        { "Hand.R", "Forearm.R" },
+                        { "UpperArm.L", "Chest" },
+                        { "Forearm.L", "UpperArm.L" },
+                        { "Hand.L", "Forearm.L" },
+                        { "Thigh.R", "Pelvis" },
+                        { "Shin.R", "Thigh.R" },
+                        { "Foot.R", "Shin.R" },
+                        { "Thigh.L", "Pelvis" },
+                        { "Shin.L", "Thigh.L" },
+                        { "Foot.L", "Shin.L" }
                     };
-                    var expectedParents = new[]
+
+                    var importedBones = new Dictionary<string, Transform>(StringComparer.Ordinal);
+                    var transforms = visualRoot == null
+                        ? Array.Empty<Transform>()
+                        : visualRoot.GetComponentsInChildren<Transform>(true);
+                    for (var i = 0; i < transforms.Length; i++)
                     {
-                        "CharacterRig", "Root", "Pelvis", "Spine", "Chest", "Neck",
-                        "Chest", "UpperArm.R", "Forearm.R", "Chest", "UpperArm.L", "Forearm.L",
-                        "Pelvis", "Thigh.R", "Shin.R", "Pelvis", "Thigh.L", "Shin.L"
-                    };
-                    var rootBone = FindUniqueNamedTransform(visualRoot, "Root", label);
-                    if (rootBone.parent == null || !string.Equals(rootBone.parent.name, expectedParents[0], StringComparison.Ordinal))
+                        var transform = transforms[i];
+                        if (transform == null || !expectedParents.ContainsKey(transform.name)) continue;
+                        if (importedBones.ContainsKey(transform.name))
+                            throw new InvalidOperationException(label + " must contain exactly one transform named " + transform.name + ".");
+                        importedBones.Add(transform.name, transform);
+                    }
+
+                    foreach (var expected in expectedParents)
+                    {
+                        if (!importedBones.ContainsKey(expected.Key))
+                            throw new InvalidOperationException(label + " must contain exactly one transform named " + expected.Key + ".");
+                    }
+
+                    var rootBone = importedBones["Root"];
+                    if (rootBone.parent == null || !string.Equals(rootBone.parent.name, expectedParents["Root"], StringComparison.Ordinal))
                         throw new InvalidOperationException(label + " Root must be parented by CharacterRig.");
                     if (rootBone.localPosition != Vector3.zero ||
                         Quaternion.Angle(rootBone.localRotation, Quaternion.identity) > 0.001f ||
                         Vector3.Distance(rootBone.localScale, Vector3.one) > 0.001f)
                         throw new InvalidOperationException(label + " Root bone must preserve the imported origin transform.");
-                    var hierarchy = rootBone.GetComponentsInChildren<Transform>(true);
-                    if (hierarchy.Length != expectedNames.Length)
-                        throw new InvalidOperationException(label + " must contain exactly 18 imported bones.");
-                    for (var i = 0; i < expectedNames.Length; i++)
+
+                    foreach (var expected in expectedParents)
                     {
-                        var bone = FindUniqueNamedTransform(rootBone, expectedNames[i], label);
-                        if (i == 0) continue;
-                        var expectedParent = FindUniqueNamedTransform(rootBone, expectedParents[i], label);
+                        if (expected.Key == "Root") continue;
+                        var bone = importedBones[expected.Key];
+                        var expectedParent = importedBones[expected.Value];
                         if (bone.parent != expectedParent)
-                            throw new InvalidOperationException(label + " bone parent mismatch: " + expectedNames[i] + ".");
+                            throw new InvalidOperationException(label + " bone parent mismatch: " + expected.Key + ".");
                     }
                 }
 
