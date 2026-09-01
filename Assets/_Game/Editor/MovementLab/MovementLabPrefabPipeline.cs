@@ -2469,7 +2469,7 @@ namespace RocketFooxball.Editor
 
                     var camera = visual.GetComponentInParent<Camera>();
                     if (camera == null || Mathf.Abs(camera.fieldOfView - 75f) > 0.001f || Mathf.Abs(camera.nearClipPlane - 0.03f) > 0.001f ||
-                        Vector3.Dot(visual.forward, camera.transform.forward) < 0.999f)
+                        Vector3.Dot(visual.transform.forward, camera.transform.forward) < 0.999f)
                     {
                         throw new InvalidOperationException(label + " must face the gameplay camera at 75-degree FOV with a 0.03 near plane.");
                     }
