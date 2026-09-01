@@ -65,11 +65,11 @@ namespace RocketFooxball.Editor
 
     internal static class MovementLabStageGraph
     {
-        private const string ImporterContract = "importer-contract:" + MovementLabContract.ImporterStageContractVersion;
-        private const string MaterialContract = "material-prefab-contract:" + MovementLabContract.MaterialPrefabStageContractVersion;
+        private static readonly string ImporterContract = "importer-contract:" + MovementLabContract.ImporterStageContractVersion;
+        private static readonly string MaterialContract = "material-prefab-contract:" + MovementLabContract.MaterialPrefabStageContractVersion;
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:" + MovementLabContract.GameplaySceneStageContractVersion;
+        private static readonly string GameplayContract = "gameplay-scene-contract:" + MovementLabContract.GameplaySceneStageContractVersion;
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:5";
         private const string LightingContract = "lighting-contract:7";
