@@ -46,6 +46,7 @@ namespace RocketFooxball.Editor
         private const float FpsKickBoundsTolerance = 0.02f;
         private const float CharacterFeetTolerance = 0.015f;
         private const float ForwardFacingTolerance = 0.001f;
+        private const float KickDurationComparisonEpsilon = 0.0001f;
         private static readonly string[] ForbiddenCharacterTransformTokens =
         {
             "jet", "thruster", "flame", "fire", "plume", "propulsion"
@@ -2413,10 +2414,10 @@ namespace RocketFooxball.Editor
 
                     var eye = FindUniqueRendererByName(renderers, "CharacterEye", label);
                     var eyeBounds = AggregateSkinnedMeshBounds(visual.transform, new[] { eye }, out var hasEyeBounds);
-                    if (!hasEyeBounds || eyeBounds.min.x <= ForwardFacingTolerance || eyeBounds.min.z <= ForwardFacingTolerance ||
+                    if (!hasEyeBounds || eyeBounds.max.x >= -ForwardFacingTolerance || eyeBounds.min.z <= ForwardFacingTolerance ||
                         eyeBounds.max.z <= eyeBounds.min.z)
                     {
-                        throw new InvalidOperationException(label + " eye/camera pod must be asymmetric and front-facing on Unity +Z.");
+                        throw new InvalidOperationException(label + " eye/camera pod must be asymmetric on Unity -X and front-facing +Z.");
                     }
 
                     var animators = visual.GetComponentsInChildren<Animator>(true);
@@ -2774,8 +2775,8 @@ namespace RocketFooxball.Editor
                     if (Mathf.Abs(strikeTime - BallKickDefaults.DashContactStartDelay) > 0.0001f)
                         throw new InvalidOperationException("Kick strike frame must match BallKickDefaults.DashContactStartDelay.");
                     var durationTolerance = 1f / MovementLabContract.AnimationSourceFrameRate;
-                    if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance ||
-                        Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance)
+                    if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon ||
+                        Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon)
                     {
                         throw new InvalidOperationException("World and FPS Kick durations must stay within one source frame of dash duration.");
                     }
