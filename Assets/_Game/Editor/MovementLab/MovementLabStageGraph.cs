@@ -65,11 +65,11 @@ namespace RocketFooxball.Editor
 
     internal static class MovementLabStageGraph
     {
-        private const string ImporterContract = "importer-contract:5";
-        private const string MaterialContract = "material-prefab-contract:16";
+        private const string ImporterContract = "importer-contract:" + MovementLabContract.ImporterStageContractVersion;
+        private const string MaterialContract = "material-prefab-contract:" + MovementLabContract.MaterialPrefabStageContractVersion;
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:18";
+        private const string GameplayContract = "gameplay-scene-contract:" + MovementLabContract.GameplaySceneStageContractVersion;
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:5";
         private const string LightingContract = "lighting-contract:7";
@@ -89,7 +89,11 @@ namespace RocketFooxball.Editor
                 MovementLabContractCatalog.GeneratedImporterMetadataPaths, includeUnityVersion: true),
             new StageDefinition(MovementLabStage.MaterialPrefab, new[] { MovementLabStage.Importer }, Array.Empty<MovementLabStage>(),
                 MaterialContract + ";serialized:" + MovementLabContract.SerializedContractVersion,
-                Concat(new[] { "Tools/Blender/generate_retro_textures.py", "Tools/Blender/generate_fps_rocket_launcher.py", "Tools/Blender/generate_fps_shotgun.py" }, WithMetas(new[]
+                Concat(new[]
+                {
+                    "Tools/Blender/generate_retro_textures.py", "Tools/Blender/generate_fps_rocket_launcher.py", "Tools/Blender/generate_fps_shotgun.py",
+                    "Tools/Blender/generate_low_poly_character.py", "Tools/Blender/generate_fps_kick_rig.py"
+                }, WithMetas(new[]
                 {
                     MovementLabContract.InputActionsPath,
                     MovementLabContract.ShadersPath + "/RetroToonLit.shader", MovementLabContract.ShadersPath + "/RetroParticle.shader",
@@ -97,7 +101,8 @@ namespace RocketFooxball.Editor
                      MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
-                      "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabAnimatorPipeline.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabContract.cs",

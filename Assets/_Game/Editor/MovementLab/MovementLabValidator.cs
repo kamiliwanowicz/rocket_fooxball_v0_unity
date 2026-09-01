@@ -2117,6 +2117,11 @@ namespace RocketFooxball.Editor
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.blueImmunityShield", context.Presentation, "blueImmunityShield", context.Player != null ? context.Player.transform.Find("ImmunityShield/BlueImmunityShield")?.gameObject : null);
                 CaptureReference(accumulator, "visual/wiring", "PlayerPresentation.redImmunityShield", context.Presentation, "redImmunityShield", context.Player != null ? context.Player.transform.Find("ImmunityShield/RedImmunityShield")?.gameObject : null);
             }
+            if (context.WorldVisual != null && availableAssets != null && availableAssets.Contains(CharacterModelPath))
+            {
+                accumulator.Capture("visual/character", "WorldCharacterVisualContract", () =>
+                    MovementLabPrefabPipeline.ValidateWorldCharacterVisualContract(context.WorldVisual.gameObject, "Scene Player WorldVisual"));
+            }
             if (context.WorldAnimator != null)
             {
                 accumulator.Capture("visual/animator", "root-motion", () =>
@@ -2188,6 +2193,11 @@ namespace RocketFooxball.Editor
                 if (availableAssets != null && availableAssets.Contains(FpsControllerPath) && availableAssets.Contains(FpsKickModelPath) &&
                     availableAssets.Contains(WorldControllerPath) && availableAssets.Contains(CharacterModelPath))
                     accumulator.Capture("visual/animator", "dash-kick-compatibility", MovementLabPrefabPipeline.ValidateDashAnimationCompatibility);
+            }
+            if (context.FpsVisual != null && availableAssets != null && availableAssets.Contains(FpsKickModelPath))
+            {
+                accumulator.Capture("visual/character", "FpsKickVisualContract", () =>
+                    MovementLabPrefabPipeline.ValidateFpsKickVisualContract(context.FpsVisual.gameObject, "Scene Player FpsKickVisual"));
             }
             if (context.Camera != null)
             {
