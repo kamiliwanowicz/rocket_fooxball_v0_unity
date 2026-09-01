@@ -35,6 +35,14 @@ EXPECTED_PREVIEWS = {
     "front.png", "rear.png", "left.png", "right.png", "top.png", "three-quarter.png",
     "contact-kick.png", "unity-camera-kick.png",
 }
+# Camera-space offsets keep the full-size upper joint behind its knee clevis at contact.
+UPPER_JOINT_PRESENTATION_OFFSET = Vector((0.0, -0.071, 0.0))
+KNEE_AXLE_PRESENTATION_OFFSET = Vector((0.0, -0.018, -0.044))
+BOOT_STRIKE_PARTS = ("BootShell", "BootToeBlock")
+KNEE_AXLE_PARTS = ("KneeAxle", "KneeAxleCapLeft", "KneeAxleCapRight")
+MAX_BOOT_AXLE_OVERLAP_RATIO = 0.275
+MAX_AXLE_BOOT_WIDTH_RATIO = 1.90
+MAX_AXLE_BOOT_AREA_RATIO = 0.57
 
 # Declared before geometry. Parts meet through closed-solid overlap along named axis.
 CONNECTION_MAP = (
@@ -218,16 +226,19 @@ def create_geometry(materials):
 
     # Exact world-character right shin/foot inventory mapped around its
     # (x=-0.155, z=0.500) origin into the fixed first-person envelope.
+    upper_joint = lambda location: Vector(location) + UPPER_JOINT_PRESENTATION_OFFSET
     parts["Knee"] = add_beveled_box(
-        "Knee", (0.0, 0.0, -0.025), (0.068, 0.068, 0.096),
+        "Knee", upper_joint((0.0, 0.0, -0.025)), (0.068, 0.068, 0.096),
         gunmetal, "Shin.R", 0.012, 2,
     )
     parts["KneeFrontArmor"] = add_beveled_box(
-        "KneeFrontArmor", (0.0, -0.050, -0.028), (0.082, 0.032, 0.076),
+        "KneeFrontArmor", upper_joint((0.0, -0.050, -0.028)), (0.082, 0.032, 0.076),
         tan, "Shin.R", 0.008, 2,
     )
     parts["KneeAxle"] = add_cylinder(
-        "KneeAxle", (-0.090, 0.0, 0.015), (0.090, 0.0, 0.015),
+        "KneeAxle",
+        upper_joint((-0.090, 0.0, 0.015)) + KNEE_AXLE_PRESENTATION_OFFSET,
+        upper_joint((0.090, 0.0, 0.015)) + KNEE_AXLE_PRESENTATION_OFFSET,
         0.015, 12, gunmetal, "Shin.R",
     )
     for side_name, start, end in (
@@ -235,9 +246,24 @@ def create_geometry(materials):
         ("Right", (0.084, 0.0, 0.015), (0.100, 0.0, 0.015)),
     ):
         parts[f"KneeAxleCap{side_name}"] = add_cylinder(
-            f"KneeAxleCap{side_name}", start, end,
+            f"KneeAxleCap{side_name}",
+            upper_joint(start) + KNEE_AXLE_PRESENTATION_OFFSET,
+            upper_joint(end) + KNEE_AXLE_PRESENTATION_OFFSET,
             0.023, 12, tan, "Shin.R",
         )
+    knee_lower, knee_upper = world_bounds(parts["Knee"])
+    knee_axle_lower, knee_axle_upper = world_bounds(parts["KneeAxle"])
+    knee_axle_dimensions = knee_axle_upper - knee_axle_lower
+    require(
+        (knee_axle_dimensions - Vector((0.180, 0.030, 0.030))).length <= 1e-6,
+        f"Knee axle dimensions/axis invalid: {tuple(knee_axle_dimensions)}",
+    )
+    require(
+        knee_lower.y <= knee_axle_lower.y <= knee_axle_upper.y <= knee_upper.y
+        and knee_lower.z <= knee_axle_lower.z <= knee_axle_upper.z <= knee_upper.z,
+        "Knee axle is not captured through the knee clevis",
+    )
+    print("AUDIT knee_mechanics axle=+X dimensions=(0.180000,0.030000,0.030000)m clevis=captured")
 
     parts["ShinMain"] = add_cylinder(
         "ShinMain", (-0.030, -0.024, 0.000), (-0.030, -0.024, -0.355),
@@ -368,6 +394,14 @@ def create_geometry(materials):
     print("AUDIT world_lower_leg_inventory=31 shin=16 foot=15 materials=exact")
     audit_connections(parts)
 
+    part_samples = {
+        part_name: (
+            next(iter(part.vertex_groups)).name,
+            tuple(part.matrix_world @ vertex.co for vertex in part.data.vertices),
+        )
+        for part_name, part in parts.items()
+    }
+
     bpy.ops.object.select_all(action="DESELECT")
     for part in parts.values():
         part.select_set(True)
@@ -380,7 +414,12 @@ def create_geometry(materials):
     # The first-person-only envelope sits forward/up relative to its deform
     # bones so the complete contact silhouette stays inside the fixed camera.
     # This changes no dimensions, transforms, bone hierarchy, or animation keys.
-    mesh.data.transform(Matrix.Translation((0.0, -0.120, 0.150)))
+    presentation_offset = Vector((0.0, -0.120, 0.150))
+    mesh.data.transform(Matrix.Translation(presentation_offset))
+    part_samples = {
+        part_name: (bone_name, tuple(point + presentation_offset for point in points))
+        for part_name, (bone_name, points) in part_samples.items()
+    }
     normalize_material_slots(mesh, materials)
 
     # Stable single UV layer for Unity materials.
@@ -394,7 +433,7 @@ def create_geometry(materials):
     bpy.ops.uv.smart_project(angle_limit=math.radians(66.0), island_margin=0.02)
     bpy.ops.object.mode_set(mode="OBJECT")
     mesh.select_set(False)
-    return mesh
+    return mesh, part_samples
 
 
 def create_armature(mesh):
@@ -492,6 +531,53 @@ def camera_contract_sample(mesh, armature, action, frame):
     return lower, upper, unity_center, unity_lower, unity_upper
 
 
+def named_part_world_bounds(part_samples, armature, part_names):
+    points = []
+    for part_name in part_names:
+        require(part_name in part_samples, f"Missing named projection part: {part_name}")
+        bone_name, local_points = part_samples[part_name]
+        pose_matrix = (
+            armature.matrix_world
+            @ armature.pose.bones[bone_name].matrix
+            @ armature.data.bones[bone_name].matrix_local.inverted()
+        )
+        points.extend(pose_matrix @ point for point in local_points)
+    return (
+        Vector((min(point.x for point in points), min(point.y for point in points), min(point.z for point in points))),
+        Vector((max(point.x for point in points), max(point.y for point in points), max(point.z for point in points))),
+    )
+
+
+def project_named_bounds(bounds, half_vertical_tangent):
+    lower, upper = bounds
+    projected = []
+    for x in (lower.x, upper.x):
+        for y in (lower.y, upper.y):
+            for z in (lower.z, upper.z):
+                unity = Vector((MOUNT_UNITY.x + x, MOUNT_UNITY.y + z, MOUNT_UNITY.z - y))
+                require(unity.z > 0.03, f"Named projection crosses near plane: Unity z={unity.z:.6f}")
+                projected.append((
+                    unity.x / (unity.z * half_vertical_tangent * (16.0 / 9.0)),
+                    unity.y / (unity.z * half_vertical_tangent),
+                ))
+    return (
+        min(point[0] for point in projected),
+        max(point[0] for point in projected),
+        min(point[1] for point in projected),
+        max(point[1] for point in projected),
+    )
+
+
+def bbox_area(bounds):
+    return (bounds[1] - bounds[0]) * (bounds[3] - bounds[2])
+
+
+def bbox_intersection_area(first, second):
+    width = max(0.0, min(first[1], second[1]) - max(first[0], second[0]))
+    height = max(0.0, min(first[3], second[3]) - max(first[2], second[2]))
+    return width * height
+
+
 def action_bound_bones(action):
     prefix = 'pose.bones["'
     return {
@@ -522,7 +608,7 @@ def assert_pose(armature, action, frame, shin_location, shin_x_degrees, foot_x_d
     require(max(abs(shin.rotation_euler.y), abs(shin.rotation_euler.z), abs(foot.rotation_euler.y), abs(foot.rotation_euler.z)) <= 1e-6, f"Off-axis rotation at frame {frame}")
 
 
-def audit(mesh, armature, idle, kick):
+def audit(mesh, armature, idle, kick, part_samples):
     require([obj.name for obj in bpy.context.scene.objects if obj.type == "MESH"] == ["FpsKickMesh"], "Expected one mesh object")
     require([obj.name for obj in bpy.context.scene.objects if obj.type == "ARMATURE"] == ["FpsKickRig"], "Expected one armature")
     require(mesh.data.name == "FpsKickMeshData", "Unstable mesh data name")
@@ -614,6 +700,39 @@ def audit(mesh, armature, idle, kick):
     require(contact_bounds[3].z > 0.03, f"Contact crosses near plane: minimum Unity z={contact_bounds[3].z:.3f}")
     require(min(contact_projection_x) >= -0.98 and max(contact_projection_x) <= 0.98, f"Contact silhouette clips horizontally: {min(contact_projection_x):.3f}..{max(contact_projection_x):.3f}")
     require(min(contact_projection_y) >= -0.98 and max(contact_projection_y) <= 0.98, f"Contact silhouette clips vertically: {min(contact_projection_y):.3f}..{max(contact_projection_y):.3f}")
+    boot_projection = project_named_bounds(
+        named_part_world_bounds(part_samples, armature, BOOT_STRIKE_PARTS),
+        half_vertical_tangent,
+    )
+    axle_projection = project_named_bounds(
+        named_part_world_bounds(part_samples, armature, KNEE_AXLE_PARTS),
+        half_vertical_tangent,
+    )
+    boot_area = bbox_area(boot_projection)
+    axle_area = bbox_area(axle_projection)
+    overlap_ratio = bbox_intersection_area(boot_projection, axle_projection) / boot_area
+    width_ratio = (axle_projection[1] - axle_projection[0]) / (boot_projection[1] - boot_projection[0])
+    area_ratio = axle_area / boot_area
+    print(
+        f"AUDIT camera_strike_readability boot_bbox={tuple(round(value, 6) for value in boot_projection)} "
+        f"axle_bbox={tuple(round(value, 6) for value in axle_projection)} "
+        f"overlap_ratio={overlap_ratio:.6f}<={MAX_BOOT_AXLE_OVERLAP_RATIO:.3f} "
+        f"width_ratio={width_ratio:.6f}<={MAX_AXLE_BOOT_WIDTH_RATIO:.2f} "
+        f"area_ratio={area_ratio:.6f}<={MAX_AXLE_BOOT_AREA_RATIO:.2f}"
+    )
+    require(
+        overlap_ratio <= MAX_BOOT_AXLE_OVERLAP_RATIO,
+        f"Knee axle obscures boot strike: overlap_ratio={overlap_ratio:.6f} width_ratio={width_ratio:.6f} "
+        f"area_ratio={area_ratio:.6f} max_overlap={MAX_BOOT_AXLE_OVERLAP_RATIO:.3f}",
+    )
+    require(
+        width_ratio <= MAX_AXLE_BOOT_WIDTH_RATIO,
+        f"Knee axle dominates boot width: width_ratio={width_ratio:.6f} > {MAX_AXLE_BOOT_WIDTH_RATIO:.2f}",
+    )
+    require(
+        area_ratio <= MAX_AXLE_BOOT_AREA_RATIO,
+        f"Knee axle dominates boot area: area_ratio={area_ratio:.6f} > {MAX_AXLE_BOOT_AREA_RATIO:.2f}",
+    )
     forbidden = ("rocket", "thruster", "nozzle", "exhaust", "jet", "particle", "emission")
     exported_names = [mesh.name, mesh.data.name, armature.name, armature.data.name, *MATERIAL_NAMES, *ACTION_NAMES]
     require(not any(token in name.lower() for token in forbidden for name in exported_names), "Forbidden propulsion name detected")
@@ -831,11 +950,11 @@ def main():
     scene.unit_settings.scale_length = 1.0
 
     materials = tuple(make_material(*spec) for spec in MATERIAL_SPECS)
-    mesh = create_geometry(materials)
+    mesh, part_samples = create_geometry(materials)
     armature = create_armature(mesh)
     idle, kick = create_actions(armature)
     mesh.data.calc_loop_triangles()
-    audit(mesh, armature, idle, kick)
+    audit(mesh, armature, idle, kick, part_samples)
     render_previews(mesh, armature, idle)
     save_and_export(mesh, armature, idle)
     roundtrip_fbx_audit()
