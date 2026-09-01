@@ -18,6 +18,9 @@ namespace RocketFooxball.Runtime.Weapons
         public const float DefaultDirectRocketDamage = 50f;
         public const float DefaultEnemyRocketImpulseMultiplier = 1f;
         public const float DefaultCameraFeedbackScale = 0.8f;
+        public const float DefaultUnderfootForwardImpulseScale = 0f;
+        public const float DefaultUnderfootUpwardImpulseScale = 1f;
+        public const float DefaultUnderfootHighSpeedVerticalRedirect = 0f;
 
         [Header("Blast")]
         [SerializeField, Min(0.1f)] private float blastRadius = 11.7f;
@@ -31,9 +34,9 @@ namespace RocketFooxball.Runtime.Weapons
         [SerializeField, Range(0f, 1f)] private float enemyRocketImpulseMultiplier = DefaultEnemyRocketImpulseMultiplier;
 
         [Header("Rocket Jump")]
-        [SerializeField, Min(0f)] private float underfootForwardImpulseScale = 0.5625f;
-        [SerializeField, Min(0f)] private float underfootUpwardImpulseScale = 1f;
-        [SerializeField, Range(0f, 1f)] private float underfootHighSpeedVerticalRedirect = 1f;
+        [SerializeField, Min(0f)] private float underfootForwardImpulseScale = DefaultUnderfootForwardImpulseScale;
+        [SerializeField, Min(0f)] private float underfootUpwardImpulseScale = DefaultUnderfootUpwardImpulseScale;
+        [SerializeField, Range(0f, 1f)] private float underfootHighSpeedVerticalRedirect = DefaultUnderfootHighSpeedVerticalRedirect;
         [SerializeField] private GoalShieldSet goalShieldSet;
 
         [Header("Feedback")]
@@ -208,8 +211,11 @@ namespace RocketFooxball.Runtime.Weapons
 
             var controller = target.GetComponent<CharacterController>();
             var facing = Vector3.zero;
+            var travelDirection = BlastMath.ResolvePlanarTravelDirection(
+                target.Velocity,
+                target.transform.forward);
             var isUnderfoot = controller != null && BlastMath.TryGetUnderfootFacing(
-                target.transform.forward,
+                travelDirection,
                 controller.bounds,
                 controller.radius,
                 origin,

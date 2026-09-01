@@ -124,7 +124,7 @@ namespace RocketFooxball.Runtime.Participants
             presentation?.SetLocalMode(localParticipant);
             presentation?.SetAlive(true);
             presentation?.SetImmune(false);
-            presentation?.SetShotgunOwned(hasShotgun);
+            ApplyShotgunPresentation();
         }
 
         private void OnEnable()
@@ -192,7 +192,7 @@ namespace RocketFooxball.Runtime.Participants
             identityConfigured = true;
             presentation?.ConfigureSlot(this);
             presentation?.SetLocalMode(localParticipant);
-            presentation?.SetShotgunOwned(hasShotgun);
+            ApplyShotgunPresentation();
             return true;
         }
 
@@ -277,6 +277,7 @@ namespace RocketFooxball.Runtime.Participants
             cameraFeedback?.ResetFeedback();
             botController?.ResetState();
             presentation?.SetAlive(true);
+            ApplyShotgunPresentation();
             ApplyLeafSimulation();
             CollisionStateChanged?.Invoke(this);
             PublishReadModel();
@@ -306,6 +307,7 @@ namespace RocketFooxball.Runtime.Participants
             botController?.ResetState();
             presentation?.SetAlive(true);
             presentation?.SetImmune(immunityRemaining > 0f);
+            ApplyShotgunPresentation();
             ApplyLeafSimulation();
             if (previous != lifecycle)
             {
@@ -457,7 +459,7 @@ namespace RocketFooxball.Runtime.Participants
 
             hasShotgun = nextHasShotgun;
             shotgunShells = nextShells;
-            presentation?.SetShotgunOwned(hasShotgun);
+            ApplyShotgunPresentation();
             return true;
         }
 
@@ -483,6 +485,7 @@ namespace RocketFooxball.Runtime.Participants
 
             hasShotgun = nextHasShotgun;
             shotgunShells = nextShells;
+            ApplyShotgunPresentation();
             return true;
         }
 
@@ -495,6 +498,7 @@ namespace RocketFooxball.Runtime.Participants
             }
 
             shotgunShells--;
+            ApplyShotgunPresentation();
             return true;
         }
 
@@ -726,7 +730,13 @@ namespace RocketFooxball.Runtime.Participants
             hasShotgun = false;
             shotgunShells = 0;
             shotgun?.ResetState();
-            presentation?.SetShotgunOwned(false);
+            ApplyShotgunPresentation();
+        }
+
+        private void ApplyShotgunPresentation()
+        {
+            presentation?.SetShotgunOwned(hasShotgun);
+            presentation?.SetShotgunAmmoAvailable(shotgunShells > 0);
         }
 
         private static bool IsFinite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);

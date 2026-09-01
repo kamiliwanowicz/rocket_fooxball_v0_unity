@@ -9,6 +9,10 @@ namespace RocketFooxball.Runtime.Physics
         // Keep one shared gravity source for CharacterController and Rigidbody
         // simulation. Prototype gravity is reduced by 30% for the current feel.
         public const float GravityMagnitude = 16.875f * 0.7f;
+        public const float PlayerCollisionRetentionFraction = 0.35f;
+        public const float PlayerCollisionTransferFraction = 0.65f;
+        public const float BallContactAssistPerContactCap = 12f;
+        public const float BallContactAssistAggregateCap = 12f;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         private static void Apply()

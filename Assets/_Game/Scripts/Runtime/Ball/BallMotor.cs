@@ -12,6 +12,7 @@ namespace RocketFooxball.Runtime.Ball
     /// <summary>Single owner for ball Rigidbody velocity, impulses, contact assist, and reset state.</summary>
     [RequireComponent(typeof(Rigidbody))]
     [RequireComponent(typeof(Collider))]
+    [DefaultExecutionOrder(100)]
     [MovedFrom("RocketFooxball")]
     public sealed class BallMotor : MonoBehaviour
     {
@@ -34,6 +35,7 @@ namespace RocketFooxball.Runtime.Ball
         private const float AdditionalGravityFraction = 0.2f;
         private Vector3 queuedContactAssistImpulse;
         private Vector3 queuedExternalImpulse;
+        private readonly HashSet<ulong> contactAssistParticipantIds = new HashSet<ulong>();
         private bool groundedContact;
         private bool simulationEnabled = true;
         private bool freezeStored;
@@ -46,6 +48,7 @@ namespace RocketFooxball.Runtime.Ball
         private Vector3 prePauseVelocity;
         private Vector3 prePauseAngularVelocity;
         private Action<ControllerColliderHit>[] collisionHandlers;
+        private Action<PlayerCollisionResolution>[] dynamicCollisionHandlers;
         private Action[] kickHandlers;
         private ParticipantState lastTouchParticipant;
 
@@ -86,6 +89,7 @@ namespace RocketFooxball.Runtime.Ball
             if (participants != null)
             {
                 collisionHandlers = new Action<ControllerColliderHit>[participants.Length];
+                dynamicCollisionHandlers = new Action<PlayerCollisionResolution>[participants.Length];
                 kickHandlers = new Action[participants.Length];
                 for (var i = 0; i < participants.Length; i++)
                 {
@@ -101,6 +105,10 @@ namespace RocketFooxball.Runtime.Ball
                         Action<ControllerColliderHit> handler = hit => OnPlayerCollisionHit(capturedParticipant, hit);
                         collisionHandlers[i] = handler;
                         participant.Motor.CollisionHit += handler;
+
+                        Action<PlayerCollisionResolution> dynamicHandler = resolution => OnPlayerDynamicCollisionResolved(capturedParticipant, resolution);
+                        dynamicCollisionHandlers[i] = dynamicHandler;
+                        participant.Motor.DynamicCollisionResolved += dynamicHandler;
                     }
                     if (participant.Kick != null)
                     {
@@ -116,6 +124,7 @@ namespace RocketFooxball.Runtime.Ball
         {
             SetPaused(false);
             UnsubscribeParticipantHandlers();
+            ClearQueuedState();
         }
 
         private void FixedUpdate()
@@ -135,6 +144,7 @@ namespace RocketFooxball.Runtime.Ball
             {
                 body.AddForce(queuedImpulse, ForceMode.Impulse);
             }
+            contactAssistParticipantIds.Clear();
 
             // Supported balls keep normal sleep behaviour instead of being woken by a force every step.
             if (!grounded && !body.IsSleeping())
@@ -275,6 +285,7 @@ namespace RocketFooxball.Runtime.Ball
         {
             queuedContactAssistImpulse = Vector3.zero;
             queuedExternalImpulse = Vector3.zero;
+            contactAssistParticipantIds.Clear();
             groundedContact = false;
         }
 
@@ -395,7 +406,7 @@ namespace RocketFooxball.Runtime.Ball
 
         private void OnPlayerCollisionHit(ParticipantState participant, ControllerColliderHit hit)
         {
-            if (paused || !simulationEnabled || hit == null || hit.collider == null || body == null)
+            if (hit == null || hit.collider == null)
             {
                 return;
             }
@@ -405,25 +416,56 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             RecordParticipantTouch(participant);
+        }
 
-            var playerVelocity = participant != null && participant.Motor != null ? participant.Motor.Velocity : Vector3.zero;
-            var relativeVelocity = playerVelocity - Velocity;
-            var relativeSpeed = relativeVelocity.magnitude;
-            if (participant != null && relativeSpeed >= meaningfulContactSpeedThreshold)
+        private void OnPlayerDynamicCollisionResolved(ParticipantState participant, PlayerCollisionResolution resolution)
+        {
+            var hit = resolution.Hit;
+            if (hit == null || hit.collider == null)
             {
-                participant.NotifyMeaningfulBallContact();
+                return;
             }
-
-            var playerHorizontal = new Vector3(playerVelocity.x, 0f, playerVelocity.z);
-            var playerSpeed = playerHorizontal.magnitude;
-            if (playerSpeed <= Epsilon)
+            if (hit.collider != ballCollider && hit.collider.attachedRigidbody != body)
             {
                 return;
             }
 
-            var direction = playerHorizontal / playerSpeed;
-            var impulse = Mathf.Min(contactAssistImpulseCap, playerSpeed * contactAssistStrength);
-            queuedContactAssistImpulse += direction * impulse;
+            // Attribution must happen even when the contact has no usable impulse.
+            RecordParticipantTouch(participant);
+            if (paused || !simulationEnabled || body == null || resolution.WasDashing)
+            {
+                return;
+            }
+
+            if (participant == null || participant.Motor == null)
+            {
+                return;
+            }
+
+            var entityId = participant.GetEntityId();
+            var participantId = EntityId.ToULong(entityId);
+            if (!BallMotionRules.ShouldAcceptParticipantContact(contactAssistParticipantIds, participantId))
+            {
+                return;
+            }
+
+            var effectiveBallVelocity = body.linearVelocity + queuedContactAssistImpulse;
+            var candidate = BallMotionRules.ComputeContactAssist(
+                resolution.IncomingPlayerVelocity,
+                effectiveBallVelocity,
+                hit.normal,
+                GamePhysicsSettings.BallContactAssistPerContactCap,
+                GamePhysicsSettings.PlayerCollisionTransferFraction);
+            queuedContactAssistImpulse = BallMotionRules.AccumulateContactAssist(
+                queuedContactAssistImpulse,
+                candidate,
+                GamePhysicsSettings.BallContactAssistAggregateCap);
+
+            var relativeSpeed = (resolution.IncomingPlayerVelocity - effectiveBallVelocity).magnitude;
+            if (relativeSpeed >= meaningfulContactSpeedThreshold)
+            {
+                participant.NotifyMeaningfulBallContact();
+            }
         }
 
         private void OnKickSucceeded(ParticipantState participant)
@@ -458,6 +500,7 @@ namespace RocketFooxball.Runtime.Ball
             if (participants == null)
             {
                 collisionHandlers = null;
+                dynamicCollisionHandlers = null;
                 kickHandlers = null;
                 return;
             }
@@ -474,6 +517,10 @@ namespace RocketFooxball.Runtime.Ball
                 {
                     participant.Motor.CollisionHit -= collisionHandlers[i];
                 }
+                if (dynamicCollisionHandlers != null && i < dynamicCollisionHandlers.Length && dynamicCollisionHandlers[i] != null && participant.Motor != null)
+                {
+                    participant.Motor.DynamicCollisionResolved -= dynamicCollisionHandlers[i];
+                }
                 if (kickHandlers != null && i < kickHandlers.Length && kickHandlers[i] != null && participant.Kick != null)
                 {
                     participant.Kick.KickSucceeded -= kickHandlers[i];
@@ -481,6 +528,7 @@ namespace RocketFooxball.Runtime.Ball
             }
 
             collisionHandlers = null;
+            dynamicCollisionHandlers = null;
             kickHandlers = null;
         }
 

@@ -11,7 +11,7 @@ namespace RocketFooxball.Runtime.Weapons
         public const float DefaultMediumRange = 16f;
         public const float DefaultMaxRange = 30f;
         public const float DefaultMediumMultiplier = 0.55f;
-        public const float DefaultFarMultiplier = 0.20f;
+        public const float DefaultFarMultiplier = 0.40f;
         public const float DefaultPerPelletBallImpulse = 3.4f;
         public const float DefaultBallImpulseCap = 20.4f;
         public const float DefaultSpreadAngleDegrees = 7f;

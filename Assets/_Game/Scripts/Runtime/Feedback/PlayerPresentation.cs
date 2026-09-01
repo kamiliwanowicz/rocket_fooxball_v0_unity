@@ -81,6 +81,7 @@ namespace RocketFooxball.Runtime.Feedback
         private bool alive = true;
         private bool localMode;
         private bool shotgunOwned = true;
+        private bool shotgunAmmoAvailable = true;
         private bool matchPaused;
         private bool localModeInitialized;
         private bool presentationStateInitialized;
@@ -339,6 +340,7 @@ namespace RocketFooxball.Runtime.Feedback
             if (ownerChanged || !presentationStateInitialized)
             {
                 shotgunOwned = owner == null || owner.HasShotgun;
+                SetShotgunAmmoAvailable(owner == null || owner.ShotgunShells > 0);
             }
             var isBlue = owner == null || owner.Team == ParticipantTeam.Blue;
             if (blueTeamCue != null)
@@ -420,6 +422,18 @@ namespace RocketFooxball.Runtime.Feedback
             RefreshShotgunVisibility();
         }
 
+        /// <summary>Updates first-person shotgun availability without changing world ownership visibility.</summary>
+        public void SetShotgunAmmoAvailable(bool available)
+        {
+            if (shotgunAmmoAvailable == available)
+            {
+                return;
+            }
+
+            shotgunAmmoAvailable = available;
+            RefreshShotgunVisibility();
+        }
+
         public void SetImmune(bool immune)
         {
             if (immunityShield != null)
@@ -475,7 +489,7 @@ namespace RocketFooxball.Runtime.Feedback
         {
             if (fpsShotgunVisual != null)
             {
-                fpsShotgunVisual.gameObject.SetActive(localMode && alive && shotgunOwned);
+                fpsShotgunVisual.gameObject.SetActive(localMode && alive && shotgunOwned && shotgunAmmoAvailable);
             }
             if (worldShotgunVisual != null)
             {

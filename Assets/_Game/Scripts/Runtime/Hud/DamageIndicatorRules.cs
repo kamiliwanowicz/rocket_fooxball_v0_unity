@@ -2,15 +2,6 @@ using UnityEngine;
 
 namespace RocketFooxball.Runtime.Hud
 {
-    /// <summary>Cardinal directions used by the incoming-damage HUD indicator.</summary>
-    public enum DamageIndicatorSector
-    {
-        Front,
-        Right,
-        Back,
-        Left
-    }
-
     /// <summary>Pure direction and timing rules for the incoming-damage indicator.</summary>
     public static class DamageIndicatorRules
     {
@@ -19,28 +10,37 @@ namespace RocketFooxball.Runtime.Hud
         public const float FadeDuration = 0.25f;
 
         /// <summary>
-        /// Resolves a victim-to-source direction against the camera's right and forward axes.
+        /// Resolves a victim-to-source direction to clockwise degrees around the camera.
+        /// Zero degrees is forward; positive degrees turn clockwise toward camera right.
         /// The camera axes are normalized so callers can provide transform-like directions.
         /// </summary>
-        public static bool TryResolveSector(
+        public static bool TryResolveAngle(
             Vector3 victimToSource,
             Vector3 cameraRight,
             Vector3 cameraForward,
-            out DamageIndicatorSector sector)
+            out float angleDegrees)
         {
-            sector = DamageIndicatorSector.Front;
+            angleDegrees = 0f;
             if (!IsFinite(victimToSource) || !IsFinite(cameraRight) || !IsFinite(cameraForward))
             {
                 return false;
             }
 
-            if (cameraRight.sqrMagnitude <= Mathf.Epsilon || cameraForward.sqrMagnitude <= Mathf.Epsilon)
+            var rightMagnitudeSquared = cameraRight.sqrMagnitude;
+            var forwardMagnitudeSquared = cameraForward.sqrMagnitude;
+            if (!IsFinite(rightMagnitudeSquared) || !IsFinite(forwardMagnitudeSquared) ||
+                rightMagnitudeSquared <= Mathf.Epsilon || forwardMagnitudeSquared <= Mathf.Epsilon)
             {
                 return false;
             }
 
             cameraRight.Normalize();
             cameraForward.Normalize();
+            if (!IsFinite(cameraRight) || !IsFinite(cameraForward))
+            {
+                return false;
+            }
+
             var rightProjection = Vector3.Dot(victimToSource, cameraRight);
             var forwardProjection = Vector3.Dot(victimToSource, cameraForward);
             if (!IsFinite(rightProjection) || !IsFinite(forwardProjection) ||
@@ -49,32 +49,27 @@ namespace RocketFooxball.Runtime.Hud
                 return false;
             }
 
-            var angle = Mathf.Atan2(rightProjection, forwardProjection) * Mathf.Rad2Deg;
-            if (!IsFinite(angle))
+            angleDegrees = Mathf.Repeat(
+                Mathf.Atan2(rightProjection, forwardProjection) * Mathf.Rad2Deg,
+                360f);
+            if (!IsFinite(angleDegrees))
             {
+                angleDegrees = 0f;
                 return false;
             }
 
-            if (angle < 0f)
-            {
-                angle += 360f;
-            }
-
-            // Adding half a sector makes exact boundaries choose the clockwise sector.
-            var sectorIndex = Mathf.FloorToInt((angle + 45f) / 90f) % 4;
-            sector = (DamageIndicatorSector)sectorIndex;
             return true;
         }
 
         /// <summary>Resolves positions directly by constructing victim-to-source direction.</summary>
-        public static bool TryResolveSector(
+        public static bool TryResolveAngle(
             Vector3 victimPosition,
             Vector3 sourcePosition,
             Vector3 cameraRight,
             Vector3 cameraForward,
-            out DamageIndicatorSector sector)
+            out float angleDegrees)
         {
-            return TryResolveSector(sourcePosition - victimPosition, cameraRight, cameraForward, out sector);
+            return TryResolveAngle(sourcePosition - victimPosition, cameraRight, cameraForward, out angleDegrees);
         }
 
         /// <summary>Alias for callers that prefer a shorter pure resolver name.</summary>
@@ -82,9 +77,9 @@ namespace RocketFooxball.Runtime.Hud
             Vector3 victimToSource,
             Vector3 cameraRight,
             Vector3 cameraForward,
-            out DamageIndicatorSector sector)
+            out float angleDegrees)
         {
-            return TryResolveSector(victimToSource, cameraRight, cameraForward, out sector);
+            return TryResolveAngle(victimToSource, cameraRight, cameraForward, out angleDegrees);
         }
 
         /// <summary>Returns indicator opacity for a remaining unscaled lifetime.</summary>

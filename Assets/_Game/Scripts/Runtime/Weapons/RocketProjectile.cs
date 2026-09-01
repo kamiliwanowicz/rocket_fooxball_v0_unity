@@ -28,6 +28,7 @@ namespace RocketFooxball.Runtime.Weapons
 
         private Transform ownerRoot;
         private RocketLauncher launcher;
+        private WeaponImpactFeedback impactFeedback;
         private Vector3 flightDirection = Vector3.forward;
         private float lifeRemaining;
         private ProjectileState state;
@@ -72,7 +73,7 @@ namespace RocketFooxball.Runtime.Weapons
             var distance = speed * deltaTime;
             if (distance > 0f && TryGetNearestValidHit(body.position, flightDirection, distance + ColliderRadius(), out var hit))
             {
-                TryDetonate(hit.collider, hit.point, true);
+                TryDetonate(hit.collider, hit.point, hit.normal, true);
                 return;
             }
 
@@ -86,8 +87,16 @@ namespace RocketFooxball.Runtime.Weapons
                 return;
             }
 
-            var point = collision.contactCount > 0 ? collision.GetContact(0).point : body.position;
-            TryDetonate(collision.collider, point, true);
+            var point = body != null ? body.position : transform.position;
+            var normal = -flightDirection.normalized;
+            if (collision.contactCount > 0)
+            {
+                var contact = collision.GetContact(0);
+                point = contact.point;
+                normal = contact.normal;
+            }
+
+            TryDetonate(collision.collider, point, normal, true);
         }
 
         private void OnTriggerEnter(Collider other)
@@ -97,17 +106,34 @@ namespace RocketFooxball.Runtime.Weapons
                 return;
             }
 
-            TryDetonate(other, other != null ? other.ClosestPoint(body != null ? body.position : transform.position) : default, other != null);
+            TryDetonate(
+                other,
+                other != null ? other.ClosestPoint(body != null ? body.position : transform.position) : default,
+                Vector3.zero,
+                other != null);
         }
 
         /// <summary>Initializes owner collision filters, world direction, and explosion callback.</summary>
         public void Initialize(ParticipantState owner, Transform ownerTransform, RocketLauncher sourceLauncher, ExplosionResolver resolver, Vector3 direction)
+        {
+            Initialize(owner, ownerTransform, sourceLauncher, resolver, null, direction);
+        }
+
+        /// <summary>Initializes owner collision filters, world direction, explosion callback, and impact feedback.</summary>
+        public void Initialize(
+            ParticipantState owner,
+            Transform ownerTransform,
+            RocketLauncher sourceLauncher,
+            ExplosionResolver resolver,
+            WeaponImpactFeedback feedback,
+            Vector3 direction)
         {
             CacheReferences();
             ownerParticipant = owner;
             ownerRoot = ownerTransform != null ? ownerTransform : owner != null ? owner.transform : null;
             launcher = sourceLauncher;
             explosionResolver = resolver != null ? resolver : explosionResolver;
+            impactFeedback = feedback;
             firingTeam = ownerParticipant != null
                 ? ParticipantRelationshipAdapter.GetValidTeam(ownerParticipant.Team)
                 : (ParticipantTeam?)null;
@@ -125,7 +151,7 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Compatibility initializer for callers that only have owner transform.</summary>
         public void Initialize(Transform owner, RocketLauncher sourceLauncher, ExplosionResolver resolver, Vector3 direction)
         {
-            Initialize(owner != null ? owner.GetComponent<ParticipantState>() : null, owner, sourceLauncher, resolver, direction);
+            Initialize(owner != null ? owner.GetComponent<ParticipantState>() : null, owner, sourceLauncher, resolver, null, direction);
         }
 
         /// <summary>Registers a collision pair that must not detonate this rocket.</summary>
@@ -165,6 +191,12 @@ namespace RocketFooxball.Runtime.Weapons
         /// <summary>Requests one explosion and unregisters projectile before destruction.</summary>
         public bool TryDetonate(Collider hitCollider, Vector3 hitPoint, bool hasHitPoint)
         {
+            return TryDetonate(hitCollider, hitPoint, -flightDirection.normalized, hasHitPoint);
+        }
+
+        /// <summary>Requests one explosion with an optional physical impact normal.</summary>
+        public bool TryDetonate(Collider hitCollider, Vector3 hitPoint, Vector3 hitNormal, bool hasHitPoint)
+        {
             if (paused || state != ProjectileState.Flying)
             {
                 return false;
@@ -177,6 +209,11 @@ namespace RocketFooxball.Runtime.Weapons
             state = ProjectileState.Detonated;
             simulationEnabled = false;
             var explosionPosition = hasHitPoint ? hitPoint : (body != null ? body.position : transform.position);
+            if (impactFeedback != null && ShouldEmitRocketMark(hitCollider, hasHitPoint))
+            {
+                impactFeedback.EmitRocketMark(hitPoint, hitNormal);
+            }
+
             UnregisterOnce();
             trailVfx?.DetachAndFade();
             explosionResolver?.ResolveExplosion(explosionPosition, this, hitCollider, firingTeam);
@@ -263,6 +300,14 @@ namespace RocketFooxball.Runtime.Weapons
 
             var participant = other.GetComponentInParent<ParticipantState>();
             return participant != null && (!participant.IsAlive || participant.IsImmune);
+        }
+
+        private static bool ShouldEmitRocketMark(Collider collider, bool hasHitPoint)
+        {
+            return hasHitPoint && collider != null && !collider.isTrigger &&
+                   collider.attachedRigidbody == null &&
+                   collider.GetComponentInParent<CharacterController>() == null &&
+                   collider.GetComponentInParent<ParticipantState>() == null;
         }
 
         private bool TryGetNearestValidHit(Vector3 origin, Vector3 direction, float distance, out RaycastHit nearest)

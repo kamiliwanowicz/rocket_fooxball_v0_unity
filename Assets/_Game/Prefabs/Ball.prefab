@@ -167,6 +167,6 @@ MonoBehaviour:
   speedCapMultiplier: 4
   rollingResistance: 1.25
   restSpeed: 0.08
-  contactAssistStrength: 0.35
-  contactAssistImpulseCap: 5
+  contactAssistStrength: 0.65
+  contactAssistImpulseCap: 12
   meaningfulContactSpeedThreshold: 1

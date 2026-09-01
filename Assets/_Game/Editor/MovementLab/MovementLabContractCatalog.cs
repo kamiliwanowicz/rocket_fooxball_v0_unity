@@ -11,6 +11,7 @@ namespace RocketFooxball.Editor
     internal static class MovementLabContractCatalog
     {
         internal const string PrefabPath = MovementLabContract.PlayerPrefabPath;
+        internal const string PlayerPrefabPath = MovementLabContract.PlayerPrefabPath;
         internal const string BallPrefabPath = MovementLabContract.BallPrefabPath;
         internal const string RocketPrefabPath = MovementLabContract.RocketPrefabPath;
         internal const string RocketModelPath = "Assets/_Game/Models/LowPolyRocket.fbx";
@@ -43,14 +44,52 @@ namespace RocketFooxball.Editor
         internal const string ShotgunPickupPrefabPath = MovementLabContract.ShotgunPickupPrefabPath;
         internal const string AmmoPickupPrefabPath = MovementLabContract.AmmoPickupPrefabPath;
         internal const string AmmoShellMaterialPath = MovementLabContract.AmmoShellMaterialPath;
+        internal const string ShotgunPelletMaterialPath = MovementLabContract.ShotgunPelletMaterialPath;
+        internal const string WeaponImpactMarkMaterialPath = MovementLabContract.WeaponImpactMarkMaterialPath;
         internal const string HealthPickupsRootName = MovementLabContract.HealthPickupsRootName;
         internal const string HealthPickupWestNorthName = MovementLabContract.HealthPickupWestNorthName;
         internal const string HealthPickupEastSouthName = MovementLabContract.HealthPickupEastSouthName;
         internal const string ShotgunPickupsRootName = MovementLabContract.ShotgunPickupsRootName;
         internal const string AmmoPickupsRootName = MovementLabContract.AmmoPickupsRootName;
+        internal const string ShotgunPickupNorthName = MovementLabContract.ShotgunPickupNorthName;
+        internal const string ShotgunPickupSouthName = MovementLabContract.ShotgunPickupSouthName;
         internal const string ShotgunPickupName = MovementLabContract.ShotgunPickupName;
         internal const string AmmoPickupWestNorthName = MovementLabContract.AmmoPickupWestNorthName;
         internal const string AmmoPickupEastSouthName = MovementLabContract.AmmoPickupEastSouthName;
+        internal const float HealthPickupRespawnDelay = MovementLabContract.HealthPickupRespawnDelay;
+        internal const float HealthPickupRestoreFraction = MovementLabContract.HealthPickupRestoreFraction;
+        internal const float HealthPickupTriggerRadius = MovementLabContract.HealthPickupTriggerRadius;
+        internal const float ShotgunPickupRespawnDelay = MovementLabContract.ShotgunPickupRespawnDelay;
+        internal const float AmmoPickupRespawnDelay = MovementLabContract.AmmoPickupRespawnDelay;
+        internal const int ShotgunPickupGrant = MovementLabContract.ShotgunPickupGrant;
+        internal const int AmmoPickupGrant = MovementLabContract.AmmoPickupGrant;
+        internal const float ShotgunPickupTriggerRadius = MovementLabContract.ShotgunPickupTriggerRadius;
+        internal const float AmmoPickupTriggerRadius = MovementLabContract.AmmoPickupTriggerRadius;
+        internal const int ShotgunShellCapacity = MovementLabContract.ShotgunShellCapacity;
+        internal const float ShotgunPickupModelScale = MovementLabContract.ShotgunPickupModelScale;
+        internal static readonly Vector3 ShotgunPickupNorthPosition = MovementLabContract.ShotgunPickupNorthPosition;
+        internal static readonly Vector3 ShotgunPickupSouthPosition = MovementLabContract.ShotgunPickupSouthPosition;
+        internal static readonly Quaternion ShotgunPickupNorthRotation = MovementLabContract.ShotgunPickupNorthRotation;
+        internal static readonly Quaternion ShotgunPickupSouthRotation = MovementLabContract.ShotgunPickupSouthRotation;
+        internal static readonly Vector3 ShotgunPickupPosition = MovementLabContract.ShotgunPickupPosition;
+        internal static readonly Quaternion ShotgunPickupRotation = MovementLabContract.ShotgunPickupRotation;
+        internal static readonly Vector3 AmmoPickupWestNorthPosition = MovementLabContract.AmmoPickupWestNorthPosition;
+        internal static readonly Vector3 AmmoPickupEastSouthPosition = MovementLabContract.AmmoPickupEastSouthPosition;
+        internal static readonly Quaternion AmmoPickupWestNorthRotation = MovementLabContract.AmmoPickupWestNorthRotation;
+        internal static readonly Quaternion AmmoPickupEastSouthRotation = MovementLabContract.AmmoPickupEastSouthRotation;
+        internal static readonly Vector3 HealthPickupWestNorthPosition = MovementLabContract.HealthPickupWestNorthPosition;
+        internal static readonly Vector3 HealthPickupEastSouthPosition = MovementLabContract.HealthPickupEastSouthPosition;
+        internal static readonly Quaternion HealthPickupWestNorthRotation = MovementLabContract.HealthPickupWestNorthRotation;
+        internal static readonly Quaternion HealthPickupEastSouthRotation = MovementLabContract.HealthPickupEastSouthRotation;
+        internal static readonly Vector3 PickupCueBluePosition = MovementLabContract.PickupCueBluePosition;
+        internal static readonly Vector3 PickupCueRedPosition = MovementLabContract.PickupCueRedPosition;
+        internal static readonly Vector3 PickupCueScale = MovementLabContract.PickupCueScale;
+        internal static readonly Vector3 AmmoShellLeftPosition = MovementLabContract.AmmoShellLeftPosition;
+        internal static readonly Vector3 AmmoShellRightPosition = MovementLabContract.AmmoShellRightPosition;
+        internal static readonly Vector3 AmmoShellScale = MovementLabContract.AmmoShellScale;
+        internal static readonly Vector3 HealthCrossHorizontalScale = MovementLabContract.HealthCrossHorizontalScale;
+        internal static readonly Vector3 HealthCrossVerticalScale = MovementLabContract.HealthCrossVerticalScale;
+        internal static readonly Vector3 HealthCrossCoreScale = MovementLabContract.HealthCrossCoreScale;
         internal const string WorldControllerPath = AnimationsPath + "/WorldCharacter.controller";
         internal const string FpsControllerPath = AnimationsPath + "/FpsKick.controller";
         internal const string TeamBlueMaterialPath = MaterialsPath + "/TeamBlue.mat";
@@ -139,7 +178,8 @@ namespace RocketFooxball.Editor
 
         internal static readonly ShotgunPickupSpawnDefinition[] ShotgunPickupSpawns =
         {
-            new ShotgunPickupSpawnDefinition(ShotgunPickupName, MovementLabContract.ShotgunPickupPosition, MovementLabContract.ShotgunPickupRotation)
+            new ShotgunPickupSpawnDefinition(ShotgunPickupNorthName, MovementLabContract.ShotgunPickupNorthPosition, MovementLabContract.ShotgunPickupNorthRotation),
+            new ShotgunPickupSpawnDefinition(ShotgunPickupSouthName, MovementLabContract.ShotgunPickupSouthPosition, MovementLabContract.ShotgunPickupSouthRotation)
         };
 
         internal static readonly AmmoPickupSpawnDefinition[] AmmoPickupSpawns =
@@ -151,12 +191,12 @@ namespace RocketFooxball.Editor
         // Stable six-slot composition. Blue owns positive-X/South goal; Red owns negative-X/North goal.
         internal static readonly ParticipantSlotDefinition[] ParticipantSlots =
         {
-            Slot(0, "Player", ParticipantTeam.Blue, true, new Vector3(12f, 0f, 0f), Vector3.left),
-            Slot(1, "Bolt", ParticipantTeam.Blue, false, new Vector3(12f, 0f, -10f), Vector3.left),
-            Slot(2, "Echo", ParticipantTeam.Blue, false, new Vector3(12f, 0f, 10f), Vector3.left),
-            Slot(3, "Rook", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 0f), Vector3.right),
-            Slot(4, "Nova", ParticipantTeam.Red, false, new Vector3(-12f, 0f, 10f), Vector3.right),
-            Slot(5, "Vex", ParticipantTeam.Red, false, new Vector3(-12f, 0f, -10f), Vector3.right)
+            Slot(0, "Player", ParticipantTeam.Blue, true, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 0f), Vector3.left),
+            Slot(1, "Bolt", ParticipantTeam.Blue, false, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, -10f), Vector3.left),
+            Slot(2, "Echo", ParticipantTeam.Blue, false, new Vector3(MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 10f), Vector3.left),
+            Slot(3, "Rook", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 0f), Vector3.right),
+            Slot(4, "Nova", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, 10f), Vector3.right),
+            Slot(5, "Vex", ParticipantTeam.Red, false, new Vector3(-MovementLabContract.PlayerSpawnOffset, MovementLabContract.PlayerControllerSkinWidth, -10f), Vector3.right)
         };
 
         private static ParticipantSlotDefinition Slot(int id, string name, ParticipantTeam team, bool local, Vector3 position, Vector3 forward)
@@ -231,6 +271,10 @@ namespace RocketFooxball.Editor
         internal const string LightingSettingsPath = MovementLabContract.LightingSettingsPath;
         internal const string LightingManifestPath = MovementLabContract.LightingManifestPath;
         internal const string BakedLightingPath = MovementLabContract.BakedLightingPath;
+        internal const string EditorBuildSettingsPath = MovementLabContract.EditorBuildSettingsPath;
+        internal const string DynamicsManagerPath = MovementLabContract.DynamicsManagerPath;
+        internal const string TimeManagerPath = MovementLabContract.TimeManagerPath;
+        internal const string TagManagerPath = MovementLabContract.TagManagerPath;
         internal const int ExpectedLightmapCount = MovementLabContract.ExpectedLightmapCount;
         internal const int ExpectedReflectionProbeBakeCount = MovementLabContract.ExpectedReflectionProbeBakeCount;
         internal const string DetailNormalKeyword = "_DETAIL_MULX2";
@@ -241,6 +285,7 @@ namespace RocketFooxball.Editor
         internal const int QualityStageContractVersion = MovementLabContract.QualityStageContractVersion;
         internal const int LightingStageContractVersion = MovementLabContract.LightingStageContractVersion;
         internal const int BakedOutputStageContractVersion = MovementLabContract.BakedOutputStageContractVersion;
+        internal const int SerializedContractVersion = MovementLabContract.SerializedContractVersion;
         internal const int LocalPlayerHiddenLayer = MovementLabContract.LocalPlayerHiddenLayer;
         internal const int ProjectilesLayer = MovementLabContract.ProjectilesLayer;
         internal const int ParticipantsLayer = MovementLabContract.ParticipantsLayer;
@@ -275,6 +320,7 @@ namespace RocketFooxball.Editor
         internal const float PlayerControllerSkinWidth = MovementLabContract.PlayerControllerSkinWidth;
         internal const float PlayableFloorTop = MovementLabContract.PlayableFloorTop;
         internal const float ParticipantRecoveryThreshold = MovementLabContract.ParticipantRecoveryThreshold;
+        internal const float BotScale = MovementLabContract.BotScale;
         internal const float WorldVisualScale = MovementLabContract.WorldVisualScale;
         internal const float PlayerHeadHeight = MovementLabContract.PlayerHeadHeight;
         internal const float TeamCueScaleMultiplier = MovementLabContract.TeamCueScaleMultiplier;
@@ -290,6 +336,85 @@ namespace RocketFooxball.Editor
         internal static readonly Color RocketEmissionColor = MovementLabContract.RocketEmissionColor;
         internal const float RocketEmissionStrength = MovementLabContract.RocketEmissionStrength;
         internal static readonly Color RocketBaseColor = MovementLabContract.RocketBaseColor;
+        internal const float WeaponImpactFeedbackEpsilon = MovementLabContract.WeaponImpactFeedbackEpsilon;
+        internal const float WeaponImpactVisualTraceRange = MovementLabContract.WeaponImpactVisualTraceRange;
+        internal const float WeaponImpactTracerOriginOffset = MovementLabContract.WeaponImpactTracerOriginOffset;
+        internal const float WeaponImpactTracerSpeed = MovementLabContract.WeaponImpactTracerSpeed;
+        internal const float WeaponImpactTracerSystemDuration = MovementLabContract.WeaponImpactTracerSystemDuration;
+        internal const float WeaponImpactMinimumTracerLifetime = MovementLabContract.WeaponImpactMinimumTracerLifetime;
+        internal const float WeaponImpactTracerSize = MovementLabContract.WeaponImpactTracerSize;
+        internal const float WeaponImpactMarkSurfaceOffset = MovementLabContract.WeaponImpactMarkSurfaceOffset;
+        internal const float WeaponImpactMarkLifetime = MovementLabContract.WeaponImpactMarkLifetime;
+        internal const float ShotgunImpactMarkSize = MovementLabContract.ShotgunImpactMarkSize;
+        internal const float RocketImpactMarkSize = MovementLabContract.RocketImpactMarkSize;
+        internal static readonly Color WeaponImpactMarkColor = MovementLabContract.WeaponImpactMarkColor;
+        internal const int ShotgunPelletMaxParticles = MovementLabContract.ShotgunPelletMaxParticles;
+        internal const int WeaponImpactMarkMaxParticles = MovementLabContract.WeaponImpactMarkMaxParticles;
+        internal const float PlayerCollisionRetentionFraction = MovementLabContract.PlayerCollisionRetentionFraction;
+        internal const float PlayerCollisionTransferFraction = MovementLabContract.PlayerCollisionTransferFraction;
+        internal const float BallContactAssistPerContactCap = MovementLabContract.BallContactAssistPerContactCap;
+        internal const float BallContactAssistAggregateCap = MovementLabContract.BallContactAssistAggregateCap;
+
+        internal const float ArenaPitchHalfLength = MovementLabContract.ArenaPitchHalfLength;
+        internal const float ArenaPitchHalfWidth = MovementLabContract.ArenaPitchHalfWidth;
+        internal const float ArenaMarkingLineWidth = MovementLabContract.ArenaMarkingLineWidth;
+        internal const float ArenaMarkingLineHeight = MovementLabContract.ArenaMarkingLineHeight;
+        internal const float ArenaCenterCircleRadius = MovementLabContract.ArenaCenterCircleRadius;
+        internal const int ArenaCenterCircleSegments = MovementLabContract.ArenaCenterCircleSegments;
+        internal const float ArenaCenterSpotRadius = MovementLabContract.ArenaCenterSpotRadius;
+        internal const int ArenaCenterSpotSegments = MovementLabContract.ArenaCenterSpotSegments;
+        internal const float ArenaPenaltyAreaDepth = MovementLabContract.ArenaPenaltyAreaDepth;
+        internal const float ArenaPenaltyAreaHalfWidth = MovementLabContract.ArenaPenaltyAreaHalfWidth;
+        internal const float ArenaGoalAreaDepth = MovementLabContract.ArenaGoalAreaDepth;
+        internal const float ArenaGoalAreaHalfWidth = MovementLabContract.ArenaGoalAreaHalfWidth;
+        internal const float ArenaGoalOpeningHeight = MovementLabContract.ArenaGoalOpeningHeight;
+        internal const float ArenaGoalOpeningWidth = MovementLabContract.ArenaGoalOpeningWidth;
+        internal const float ArenaGoalOpeningHalfWidth = MovementLabContract.ArenaGoalOpeningHalfWidth;
+        internal const float ArenaGoalOpeningCenterY = MovementLabContract.ArenaGoalOpeningCenterY;
+        internal const float ArenaGoalOpeningFrameThickness = MovementLabContract.ArenaGoalOpeningFrameThickness;
+        internal const float ArenaGoalOpeningFrameCenterX = MovementLabContract.ArenaGoalOpeningFrameCenterX;
+        internal const float ArenaGoalOpeningLintelCenterY = MovementLabContract.ArenaGoalOpeningLintelCenterY;
+        internal const float ArenaGoalRecessDepth = MovementLabContract.ArenaGoalRecessDepth;
+        internal const float ArenaGoalRecessBackCenterZ = MovementLabContract.ArenaGoalRecessBackCenterZ;
+        internal const float ArenaGoalRecessBackWidth = MovementLabContract.ArenaGoalRecessBackWidth;
+        internal const float ArenaGoalOpeningContainmentHeight = MovementLabContract.ArenaGoalOpeningContainmentHeight;
+        internal const float ArenaGoalOpeningContainmentDepth = MovementLabContract.ArenaGoalOpeningContainmentDepth;
+        internal const float ArenaUpperWallTop = MovementLabContract.ArenaUpperWallTop;
+        internal const float ArenaSconceHeight = MovementLabContract.ArenaSconceHeight;
+        internal static readonly float[] ArenaLongWallSconceXs = MovementLabContract.ArenaLongWallSconceXs;
+        internal static readonly float[] ArenaEndWallSconceZs = MovementLabContract.ArenaEndWallSconceZs;
+        internal const float ArenaNorthWallSconceZ = MovementLabContract.ArenaNorthWallSconceZ;
+        internal const float ArenaSouthWallSconceZ = MovementLabContract.ArenaSouthWallSconceZ;
+        internal const float ArenaWestWallSconceX = MovementLabContract.ArenaWestWallSconceX;
+        internal const float ArenaEastWallSconceX = MovementLabContract.ArenaEastWallSconceX;
+        internal static readonly Quaternion ArenaNorthWallSconceRotation = MovementLabContract.ArenaNorthWallSconceRotation;
+        internal static readonly Quaternion ArenaSouthWallSconceRotation = MovementLabContract.ArenaSouthWallSconceRotation;
+        internal static readonly Quaternion ArenaWestWallSconceRotation = MovementLabContract.ArenaWestWallSconceRotation;
+        internal static readonly Quaternion ArenaEastWallSconceRotation = MovementLabContract.ArenaEastWallSconceRotation;
+        internal const string ArenaGoalRecessMesh = MovementLabContract.ArenaGoalRecessMesh;
+        internal const string ArenaWallSconceMesh = MovementLabContract.ArenaWallSconceMesh;
+        internal static readonly string[] ArenaGoalRecessMaterialSlots = MovementLabContract.ArenaGoalRecessMaterialSlots;
+        internal static readonly string[] ArenaWallSconceMaterialSlots = MovementLabContract.ArenaWallSconceMaterialSlots;
+        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMin = MovementLabContract.ArenaGoalRecessGeneratorBoundsMin;
+        internal static readonly Vector3 ArenaGoalRecessGeneratorBoundsMax = MovementLabContract.ArenaGoalRecessGeneratorBoundsMax;
+        internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMin = MovementLabContract.ArenaWallSconceGeneratorBoundsMin;
+        internal static readonly Vector3 ArenaWallSconceGeneratorBoundsMax = MovementLabContract.ArenaWallSconceGeneratorBoundsMax;
+        internal static readonly Vector3 ArenaGoalRecessBoundsMin = MovementLabContract.ArenaGoalRecessBoundsMin;
+        internal static readonly Vector3 ArenaGoalRecessBoundsMax = MovementLabContract.ArenaGoalRecessBoundsMax;
+        internal static readonly Vector3 ArenaWallSconceBoundsMin = MovementLabContract.ArenaWallSconceBoundsMin;
+        internal static readonly Vector3 ArenaWallSconceBoundsMax = MovementLabContract.ArenaWallSconceBoundsMax;
+        internal static readonly MovementLabContract.ArenaArchitectureSpecification[] ArenaUpperWallSpecifications = MovementLabContract.ArenaUpperWallSpecifications;
+        internal static readonly MovementLabContract.ArenaArchitectureSpecification[] ArenaGoalOpeningLintelSpecifications = MovementLabContract.ArenaGoalOpeningLintelSpecifications;
+        internal const float ArenaRampLength = MovementLabContract.ArenaRampLength;
+        internal const float ArenaRampWidth = MovementLabContract.ArenaRampWidth;
+        internal const float ArenaRampHeight = MovementLabContract.ArenaRampHeight;
+        internal static readonly Vector3 ArenaRampWestCenter = MovementLabContract.ArenaRampWestCenter;
+        internal static readonly Vector3 ArenaRampEastCenter = MovementLabContract.ArenaRampEastCenter;
+        internal static readonly Quaternion ArenaRampWestRotation = MovementLabContract.ArenaRampWestRotation;
+        internal static readonly Quaternion ArenaRampEastRotation = MovementLabContract.ArenaRampEastRotation;
+        internal static readonly MovementLabContract.RampGeometrySpecification[] ArenaRampSpecifications = MovementLabContract.ArenaRampSpecifications;
+        internal static readonly MovementLabContract.CollisionGeometrySpecification[] PrimaryCollisionGeometry = MovementLabContract.PrimaryCollisionGeometry;
+
         internal static readonly Color WeaponMetalBaseColor = MovementLabContract.WeaponMetalBaseColor;
         internal static readonly Color WeaponDarkBaseColor = MovementLabContract.WeaponDarkBaseColor;
         internal static readonly Color WeaponAccentBaseColor = MovementLabContract.WeaponAccentBaseColor;
@@ -363,7 +488,7 @@ namespace RocketFooxball.Editor
         internal static readonly string[] GeneratedYamlAssetPaths =
         {
             PrefabPath, BallPrefabPath, RocketPrefabPath, ExplosionPrefabPath, HealthPickupPrefabPath, ShotgunPickupPrefabPath, AmmoPickupPrefabPath, ScenePath,
-            HealthPickupMaterialPath, AmmoShellMaterialPath,
+            HealthPickupMaterialPath, AmmoShellMaterialPath, ShotgunPelletMaterialPath, WeaponImpactMarkMaterialPath,
             MaterialsPath + "/Floor.mat", MaterialsPath + "/Wall.mat", MaterialsPath + "/Trim.mat", MaterialsPath + "/Hazard.mat",
             MaterialsPath + "/Marking.mat", MaterialsPath + "/Ball.mat", MaterialsPath + "/Rocket.mat", RocketHotMaterialPath,
             ProjectileGlowMaterialPath, MaterialsPath + "/GoalFrame.mat", MaterialsPath + "/Shield.mat", MaterialsPath + "/ShieldBlue.mat",

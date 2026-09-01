@@ -66,10 +66,10 @@ namespace RocketFooxball.Editor
     internal static class MovementLabStageGraph
     {
         private const string ImporterContract = "importer-contract:5";
-        private const string MaterialContract = "material-prefab-contract:15";
+        private const string MaterialContract = "material-prefab-contract:16";
         // GameplayScene owns TagManager/DynamicsManager layer and collision
         // repair, plus six-slot roster wiring.
-        private const string GameplayContract = "gameplay-scene-contract:17";
+        private const string GameplayContract = "gameplay-scene-contract:18";
         // T5 adds the persisted Iteration profile and its URP assets.
         private const string QualityContract = "quality-contract:5";
         private const string LightingContract = "lighting-contract:7";
@@ -106,7 +106,9 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
                       "Assets/_Game/Scripts/Runtime/Input/PlayerInputReader.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/ShotgunWeapon.cs",
+                      "Assets/_Game/Scripts/Runtime/Weapons/ShotgunDamageRules.cs",
                      "Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs",
+                     "Assets/_Game/Scripts/Runtime/Feedback/WeaponImpactFeedback.cs",
                      "Assets/_Game/Scripts/Runtime/Feedback/RocketTrailVfx.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/HealthPickup.cs",
@@ -119,8 +121,12 @@ namespace RocketFooxball.Editor
                      ,"Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs"
                      ,"Assets/_Game/Scripts/Runtime/Bots/BotController.cs"
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Movement/PlayerMotorDefaults.cs"
                      ,"Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs"
                      ,"Assets/_Game/Scripts/Runtime/Ball/BallKick.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Ball/BallMotionRules.cs"
+                     ,"Assets/_Game/Scripts/Runtime/Physics/GamePhysicsSettings.cs"
                       ,"Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs"
                       ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
                       ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfx.cs"
@@ -149,9 +155,12 @@ namespace RocketFooxball.Editor
                  {
                      "Assets/_Game/Scripts/Runtime/Participants/ParticipantState.cs",
                      "Assets/_Game/Scripts/Runtime/Weapons/ShotgunWeapon.cs",
+                     "Assets/_Game/Scripts/Runtime/Weapons/ShotgunDamageRules.cs",
                      "Assets/_Game/Scripts/Runtime/Weapons/ExplosionResolver.cs",
                      "Assets/_Game/Scripts/Runtime/Match/MatchController.cs",
                      "Assets/_Game/Scripts/Runtime/Ball/BallMotor.cs",
+                     "Assets/_Game/Scripts/Runtime/Ball/BallMotionRules.cs",
+                     "Assets/_Game/Scripts/Runtime/Physics/GamePhysicsSettings.cs",
                      "Assets/_Game/Scripts/Runtime/Weapons/RocketLauncher.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabBotPipeline.cs",
                      "Assets/_Game/Scripts/Runtime/Pickups/ArenaPickup.cs",
@@ -166,6 +175,7 @@ namespace RocketFooxball.Editor
                      "Assets/_Game/Scripts/Runtime/Bots/BotController.cs",
                      "Assets/_Game/Scripts/Runtime/Bots/BotNavigationRules.cs",
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerMotor.cs",
+                     "Assets/_Game/Scripts/Runtime/Movement/PlayerMotorDefaults.cs",
                      "Assets/_Game/Scripts/Runtime/Movement/PlayerLook.cs",
                      "Assets/_Game/Scripts/Runtime/Ball/BallKick.cs",
                       "Assets/_Game/Scripts/Runtime/Weapons/RocketProjectile.cs"
@@ -173,6 +183,9 @@ namespace RocketFooxball.Editor
                       ,"Assets/_Game/Scripts/Runtime/Feedback/ExplosionVfxSpawner.cs"
                       ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerCameraFeedback.cs"
                       ,"Assets/_Game/Scripts/Runtime/Feedback/PlayerPresentation.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Feedback/WeaponImpactFeedback.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Hud/DamageIndicatorRules.cs"
+                      ,"Assets/_Game/Scripts/Runtime/Weapons/BlastMath.cs"
                       ,"Assets/_Game/Scripts/Runtime/Participants/ParticipantSpawnSet.cs"
                       ,"Assets/_Game/Scripts/Runtime/Bots/BotController.cs"
                       ,"Assets/_Game/Scripts/Runtime/Bots/BotTeamRoleCoordinator.cs"

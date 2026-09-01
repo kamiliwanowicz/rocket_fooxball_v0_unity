@@ -156,6 +156,12 @@ function Test-GeneratedPathSurfaceRemoved {
         'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png',
         'Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png.meta'
     )
+    $weaponImpactMaterialPaths = @(
+        'Assets/_Game/Materials/ShotgunPellet.mat',
+        'Assets/_Game/Materials/ShotgunPellet.mat.meta',
+        'Assets/_Game/Materials/WeaponImpactMark.mat',
+        'Assets/_Game/Materials/WeaponImpactMark.mat.meta'
+    )
     $currentAppendixValues = @(Get-HarnessStringAssignment $State.CurrentSource 'script:AppendixAPaths')
     $currentAst = Get-HarnessAst $State.CurrentSource
     $currentSourceValues = @($currentAst.FindAll({
@@ -194,7 +200,15 @@ function Test-GeneratedPathSurfaceRemoved {
         $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
         if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing Lightmap-4 entry: ' + $path) }
     }
-    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail, five shotgun atlas metadata entries, and six Lightmap-4 entries are closed')
+    foreach ($path in $weaponImpactMaterialPaths) {
+        $appendixCount = @($currentAppendixValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($appendixCount -ne 1) { return New-HarnessFail ('Appendix-A inventory must contain exactly one weapon impact material entry: ' + $path + ' (observed ' + $appendixCount + ')') }
+        $sourceCount = @($currentSourceValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($sourceCount -ne 1) { return New-HarnessFail ('Weapon impact material entry must occur exactly once in workflow source: ' + $path + ' (observed ' + $sourceCount + ')') }
+        $redCountForPath = @($redBuilderValues | Where-Object { [string]$_ -ceq $path }).Count
+        if ($redCountForPath -ne 0) { return New-HarnessFail ('historical red workflow must remain missing weapon impact material entry: ' + $path) }
+    }
+    return New-HarnessPass ('HEAD removed legacy surface; RedAtSha retains ' + $redCount + ' site(s); TeamRedTrail, five shotgun atlas metadata entries, six Lightmap-4 entries, and four weapon impact material entries are closed')
 }
 
 function Test-GeneratedYamlComparatorCoverage {

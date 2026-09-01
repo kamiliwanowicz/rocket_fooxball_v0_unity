@@ -21,6 +21,8 @@ $script:BuilderOutputContract = @(
 # importer metadata closure; the green workflow must add each exact path once.
 # Deliberately omits the six Lightmap-4 asset/meta paths required by the
 # five-atlas production contract; the green workflow must add each once.
+# Deliberately omits the four weapon impact material asset/meta paths; the
+# green workflow must add each exact path once.
 # Deliberately omits the distinct Fast persisted validator process and ledger
 # row; the green workflow must retain this proof after BuildFast.
 $legacyRow = [ordered]@{ requested_inventory = @() }

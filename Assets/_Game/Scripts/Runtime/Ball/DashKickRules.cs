@@ -12,6 +12,30 @@ namespace RocketFooxball.Runtime.Ball
             return Mathf.Max(remaining - Mathf.Max(deltaTime, 0f), 0f);
         }
 
+        /// <summary>Resolves full-look kick aim, falling back to the dash vector when needed.</summary>
+        public static Vector3 ResolveKickDirection(Vector3 lookDirection, Vector3 fallbackDashDirection)
+        {
+            if (IsFinite(lookDirection) && lookDirection.sqrMagnitude > Epsilon)
+            {
+                var normalizedLook = lookDirection.normalized;
+                if (IsFinite(normalizedLook) && normalizedLook.sqrMagnitude > Epsilon)
+                {
+                    return normalizedLook;
+                }
+            }
+
+            if (IsFinite(fallbackDashDirection) && fallbackDashDirection.sqrMagnitude > Epsilon)
+            {
+                var normalizedFallback = fallbackDashDirection.normalized;
+                if (IsFinite(normalizedFallback) && normalizedFallback.sqrMagnitude > Epsilon)
+                {
+                    return normalizedFallback;
+                }
+            }
+
+            return Vector3.zero;
+        }
+
         public static bool CanActivate(bool simulationEnabled, Vector3 aim, bool isDashing, float cooldownRemaining, bool isGrounded, bool airDashAvailable)
         {
             return simulationEnabled &&

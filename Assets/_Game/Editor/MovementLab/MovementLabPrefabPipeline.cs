@@ -145,6 +145,15 @@ namespace RocketFooxball.Editor
                     muzzle.SetParent(camera.transform, false);
                     muzzle.localPosition = new Vector3(0f, -0.05f, 0.45f);
 
+                    var weaponImpactFeedbackRoot = new GameObject("WeaponImpactFeedback").transform;
+                    weaponImpactFeedbackRoot.SetParent(root.transform, false);
+                    var weaponImpactFeedback = weaponImpactFeedbackRoot.gameObject.AddComponent<WeaponImpactFeedback>();
+                    var shotgunPelletMaterial = GetOrCreateAdditiveParticleMaterial(
+                        "ShotgunPellet", Color.white, LoadTexture(RocketGlowTexturePath), 2.5f);
+                    var impactMarkMaterial = GetOrCreateWeaponImpactMarkMaterial();
+                    var shotgunPellets = CreateWeaponTracerSystem(weaponImpactFeedbackRoot, shotgunPelletMaterial);
+                    var impactMarks = CreateWeaponImpactMarkSystem(weaponImpactFeedbackRoot, impactMarkMaterial);
+
                     var hiddenLayer = EnsureLocalPlayerHiddenLayer();
                     camera.cullingMask &= ~(1 << hiddenLayer);
                     camera.cullingMask |= MovementLabContractCatalog.ViewmodelLightCullingMask;
@@ -333,17 +342,21 @@ namespace RocketFooxball.Editor
                     SetObjectReference(feedback, "targetCamera", camera);
                     SetObjectReference(feedback, "viewmodels", viewmodels.gameObject);
                     SetObjectReference(feedback, "crosshairCanvas", camera.transform.Find("CrosshairCanvas").gameObject);
+                    SetObjectReference(weaponImpactFeedback, "shotgunPellets", shotgunPellets);
+                    SetObjectReference(weaponImpactFeedback, "impactMarks", impactMarks);
                     SetObjectReference(qualityRuntime, "targetCamera", camera);
                     SetObjectReference(launcher, "input", input);
                     SetObjectReference(launcher, "look", look);
                     SetObjectReference(launcher, "aimCamera", camera);
                     SetObjectReference(launcher, "spawnPoint", muzzle);
                      SetObjectReference(launcher, "projectilePrefab", rocketPrefab.GetComponent<RocketProjectile>());
+                     SetObjectReference(launcher, "impactFeedback", weaponImpactFeedback);
                      SetFloat(launcher, "firingInterval", 0.90f);
                      SetObjectReference(shotgun, "input", input);
                      SetObjectReference(shotgun, "look", look);
                      SetObjectReference(shotgun, "aimCamera", camera);
                      SetObjectReference(shotgun, "ownerParticipant", participant);
+                     SetObjectReference(shotgun, "impactFeedback", weaponImpactFeedback);
                      SetLayerMask(shotgun, "hitMask", ~(1 << projectileLayer));
                      SetFloat(shotgun, "pelletDamage", ShotgunDamageRules.DefaultPelletDamage);
                      SetInteger(shotgun, "pelletCount", ShotgunDamageRules.DefaultPelletCount);
@@ -452,6 +465,98 @@ namespace RocketFooxball.Editor
                     return prefab;
                 }
 
+                private static ParticleSystem CreateWeaponTracerSystem(Transform parent, Material material)
+                {
+                    if (parent == null || material == null)
+                    {
+                        throw new InvalidOperationException("Weapon tracer particle composition requires a parent and material.");
+                    }
+
+                    var child = new GameObject("ShotgunPellets");
+                    child.transform.SetParent(parent, false);
+                    var system = child.AddComponent<ParticleSystem>();
+                    var main = system.main;
+                    main.loop = false;
+                    main.playOnAwake = false;
+                    main.duration = MovementLabContractCatalog.WeaponImpactTracerSystemDuration;
+                    main.simulationSpace = ParticleSystemSimulationSpace.World;
+                    main.startLifetime = MovementLabContractCatalog.WeaponImpactMinimumTracerLifetime;
+                    main.startSpeed = MovementLabContractCatalog.WeaponImpactTracerSpeed;
+                    main.startSize = MovementLabContractCatalog.WeaponImpactTracerSize;
+                    main.startColor = Color.white;
+                    main.maxParticles = MovementLabContractCatalog.ShotgunPelletMaxParticles;
+
+                    var emission = system.emission;
+                    emission.enabled = true;
+                    emission.rateOverTime = 0f;
+                    emission.rateOverDistance = 0f;
+                    var shape = system.shape;
+                    shape.enabled = false;
+
+                    system.useAutoRandomSeed = false;
+                    system.randomSeed = 0x51A7u;
+                    var renderer = child.GetComponent<ParticleSystemRenderer>();
+                    renderer.sharedMaterial = material;
+                    renderer.renderMode = ParticleSystemRenderMode.Stretch;
+                    renderer.alignment = ParticleSystemRenderSpace.View;
+                    renderer.velocityScale = 0.01f;
+                    renderer.lengthScale = 1f;
+                    renderer.cameraVelocityScale = 0f;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    renderer.lightProbeUsage = LightProbeUsage.Off;
+                    renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    return system;
+                }
+
+                private static ParticleSystem CreateWeaponImpactMarkSystem(Transform parent, Material material)
+                {
+                    if (parent == null || material == null)
+                    {
+                        throw new InvalidOperationException("Weapon impact mark particle composition requires a parent and material.");
+                    }
+
+                    var child = new GameObject("ImpactMarks");
+                    child.transform.SetParent(parent, false);
+                    var system = child.AddComponent<ParticleSystem>();
+                    var main = system.main;
+                    main.loop = false;
+                    main.playOnAwake = false;
+                    main.duration = MovementLabContractCatalog.WeaponImpactMarkLifetime;
+                    main.simulationSpace = ParticleSystemSimulationSpace.World;
+                    main.startLifetime = MovementLabContractCatalog.WeaponImpactMarkLifetime;
+                    main.startSpeed = 0f;
+                    main.startRotation3D = true;
+                    main.startSize = MovementLabContractCatalog.ShotgunImpactMarkSize;
+                    main.startColor = Color.white;
+                    main.maxParticles = MovementLabContractCatalog.WeaponImpactMarkMaxParticles;
+
+                    var emission = system.emission;
+                    emission.enabled = true;
+                    emission.rateOverTime = 0f;
+                    emission.rateOverDistance = 0f;
+                    var shape = system.shape;
+                    shape.enabled = false;
+
+                    system.useAutoRandomSeed = false;
+                    system.randomSeed = 0x51A8u;
+                    var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(BlueCircleCueMeshPath);
+                    if (mesh == null)
+                    {
+                        mesh = GetOrCreateShapeMesh(false);
+                    }
+                    var renderer = child.GetComponent<ParticleSystemRenderer>();
+                    renderer.sharedMaterial = material;
+                    renderer.renderMode = ParticleSystemRenderMode.Mesh;
+                    renderer.alignment = ParticleSystemRenderSpace.World;
+                    renderer.mesh = mesh;
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    renderer.receiveShadows = false;
+                    renderer.lightProbeUsage = LightProbeUsage.Off;
+                    renderer.reflectionProbeUsage = ReflectionProbeUsage.Off;
+                    return system;
+                }
+
                 internal static GameObject BuildBallPrefab(Material ballMaterial, PhysicsMaterial ballSurface)
                 {
                     var root = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -475,8 +580,8 @@ namespace RocketFooxball.Editor
                     SetFloat(motor, "speedCapMultiplier", 4f);
                     SetFloat(motor, "rollingResistance", 1.25f);
                     SetFloat(motor, "restSpeed", 0.08f);
-                    SetFloat(motor, "contactAssistStrength", 0.35f);
-                    SetFloat(motor, "contactAssistImpulseCap", 5f);
+                    SetFloat(motor, "contactAssistStrength", GamePhysicsSettings.PlayerCollisionTransferFraction);
+                    SetFloat(motor, "contactAssistImpulseCap", GamePhysicsSettings.BallContactAssistPerContactCap);
                     SetFloat(motor, "meaningfulContactSpeedThreshold", 1f);
                     var prefab = PrefabUtility.SaveAsPrefabAsset(root, BallPrefabPath);
                     UnityEngine.Object.DestroyImmediate(root);
@@ -567,7 +672,8 @@ namespace RocketFooxball.Editor
 
                     var visualRoot = new GameObject("VisualRoot");
                     visualRoot.transform.SetParent(root.transform, false);
-                    var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity, Vector3.one);
+                    var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity,
+                        Vector3.one * MovementLabContractCatalog.ShotgunPickupModelScale);
                     AssignImportedMaterials(shotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
                     RemovePhysicsAndAnimators(shotgunVisual);
                     var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, MovementLabContract.PickupCueBluePosition);
@@ -1606,8 +1712,11 @@ namespace RocketFooxball.Editor
                     ValidateNoPhysics(model.gameObject, "Shotgun pickup imported model");
                     ValidateNoAnimators(model.gameObject, "Shotgun pickup imported model");
                     ValidateImportedVisualForward(model, "Shotgun pickup imported model");
-                    if (model.localRotation != Quaternion.identity || model.localScale != Vector3.one)
-                        throw new InvalidOperationException("Shotgun pickup imported model must use identity +Z mounting.");
+                    if (Vector3.Distance(model.localPosition, Vector3.zero) > 0.001f ||
+                        Quaternion.Angle(model.localRotation, Quaternion.identity) > 0.1f ||
+                        Vector3.Distance(model.localScale, Vector3.one * MovementLabContractCatalog.ShotgunPickupModelScale) > 0.001f)
+                        throw new InvalidOperationException("Shotgun pickup imported model transform must be zero/identity at scale " +
+                            MovementLabContractCatalog.ShotgunPickupModelScale + ".");
                     ValidatePickupCuePair(visualRoot, "Shotgun pickup");
                     ValidateDynamicHierarchy(root, "Shotgun pickup");
                 }
