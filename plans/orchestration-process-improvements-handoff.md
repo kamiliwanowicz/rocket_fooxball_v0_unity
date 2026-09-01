@@ -186,6 +186,12 @@ Acceptance:
 - active Unity/process lock -> failure even on cache hit
 - red fixtures still execute on full run and remain red
 
+Additional observed issues:
+
+- Blender evidence under project `Temp` -> Unity later cleared files. CP7 independent review remains accepted. Future Blender workflows -> copy previews to durable evidence alias.
+- Non-Unity harness launched through PowerShell 7 `Start-Process` -> polluted `PSModulePath` -> false `Get-FileHash` failure. Run harnesses directly. Reserve waited `Start-Process` for Unity.
+- Failed attempt used `C:\wt\pvf-349bae`, not assigned evidence alias. Workflow-probed evidence remains usable. Future prompts -> validate exact alias before execution.
+
 ## Recommended Order
 
 `ProductionPreflight` -> failure JSON -> exact diagnostics -> ownership linter -> reviewer watchdog -> validation-only re-attestation -> harness cache
