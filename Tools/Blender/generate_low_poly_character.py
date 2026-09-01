@@ -83,9 +83,9 @@ def make_material(name, color, metallic, roughness):
     material.diffuse_color = (*color, 1.0)
     material.use_nodes = True
     shader = material.node_tree.nodes.get("Principled BSDF")
-    shader.inputs["Base Color"].default_value = (*color, 1.0)
     shader.inputs["Metallic"].default_value = metallic
     shader.inputs["Roughness"].default_value = roughness
+    shader.inputs["Base Color"].default_value = (*color, 1.0)
     return material
 
 
@@ -157,6 +157,33 @@ def add_cone(name, collection, bone_name, base, tip, radius, material, bounds, v
     obj = bpy.context.object
     obj.rotation_mode = "QUATERNION"
     obj.rotation_quaternion = Vector((0.0, 0.0, 1.0)).rotation_difference(direction.normalized())
+    return finish_part(obj, name, collection, bone_name, material, bounds)
+
+
+def add_profile_plate(name, collection, bone_name, profile, y_center, half_depth, material, bounds, bevel=0.008):
+    """Extrude an X/Z silhouette into a closed, low-poly armored plate."""
+    require(len(profile) >= 3, f"Plate profile invalid: {name}")
+    front_y = y_center - half_depth
+    rear_y = y_center + half_depth
+    vertices = [(x, front_y, z) for x, z in profile] + [(x, rear_y, z) for x, z in profile]
+    count = len(profile)
+    faces = [tuple(range(count)), tuple(reversed(range(count, count * 2)))]
+    for index in range(count):
+        following = (index + 1) % count
+        faces.append((index, following, count + following, count + index))
+    mesh = bpy.data.meshes.new(name + "Mesh")
+    mesh.from_pydata(vertices, [], faces)
+    mesh.uv_layers.new(name="UVMap")
+    mesh.validate(verbose=True)
+    mesh.update(calc_edges=True)
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    if bevel:
+        modifier = obj.modifiers.new("EdgeChamfer", "BEVEL")
+        modifier.width = bevel
+        modifier.segments = 1
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.modifier_apply(modifier=modifier.name)
     return finish_part(obj, name, collection, bone_name, material, bounds)
 
 
@@ -403,53 +430,121 @@ def make_actions(rig):
 
 
 def build_character():
-    body_material = make_material("CyborgDarkMetal", (0.055, 0.065, 0.075), 0.78, 0.30)
-    armor_material = make_material("CyborgOxideArmor", (0.34, 0.055, 0.035), 0.68, 0.34)
-    head_material = make_material("CyborgHeadMetal", (0.14, 0.17, 0.18), 0.82, 0.25)
-    eye_material = make_material("CyborgLensGlass", (0.02, 0.42, 0.48), 0.42, 0.16)
+    body_material = make_material("CyborgDarkMetal", (0.028, 0.035, 0.032), 0.88, 0.28)
+    armor_material = make_material("CyborgOxideArmor", (0.060, 0.075, 0.028), 0.66, 0.46)
+    head_material = make_material("CyborgHeadMetal", (0.120, 0.045, 0.015), 0.78, 0.38)
+    eye_material = make_material("CyborgLensGlass", (0.48, 0.012, 0.004), 0.52, 0.13)
     body, armor, head, eye, bounds = [], [], [], [], {}
 
-    add_sphere("PelvisCore", body, "Pelvis", (0, 0.01, 0.82), (0.23, 0.135, 0.17), body_material, bounds)
-    add_box("TorsoCore", body, "Spine", (0, 0, 1.18), (0.255, 0.145, 0.24), body_material, bounds, 0.025)
-    add_cylinder("NeckCore", body, "Neck", (0, 0, 1.37), (0, 0, 1.51), 0.075, body_material, bounds)
+    # The dark core is mostly hidden by a deep barrel shell, leaving mechanisms visible at every limb gap.
+    add_sphere("PelvisCore", body, "Pelvis", (0.0, 0.02, 0.83), (0.22, 0.145, 0.19), body_material, bounds, 14, 8)
+    add_sphere("TorsoCore", body, "Spine", (0.01, 0.01, 1.18), (0.285, 0.19, 0.295), body_material, bounds, 18, 10)
+    add_cylinder("NeckCore", body, "Neck", (0.075, -0.055, 1.35), (0.10, -0.15, 1.45), 0.055, body_material, bounds, 10)
+
+    for side, x in (("R", -0.155), ("L", 0.155)):
+        outward = -1.0 if side == "R" else 1.0
+        add_cylinder(f"HipDisc.{side}", body, f"Thigh.{side}", (x, -0.105, 0.84), (x, 0.085, 0.84), 0.090, body_material, bounds, 14)
+        add_cylinder(f"HipHub.{side}", head, f"Thigh.{side}", (x, -0.122, 0.84), (x, -0.094, 0.84), 0.052, head_material, bounds, 12)
+        add_cylinder(f"Thigh.{side}", body, f"Thigh.{side}", (x + outward * 0.031, -0.020, 0.84), (x + outward * 0.031, -0.020, 0.50), 0.034, body_material, bounds, 10)
+        add_cylinder(f"ThighPiston.{side}", body, f"Thigh.{side}", (x - outward * 0.026, 0.025, 0.82), (x - outward * 0.026, 0.025, 0.53), 0.024, body_material, bounds, 10)
+        add_cylinder(f"Knee.{side}", body, f"Shin.{side}", (x, -0.112, 0.51), (x, 0.074, 0.51), 0.090, body_material, bounds, 14)
+        add_cylinder(f"KneeHub.{side}", head, f"Shin.{side}", (x, -0.128, 0.51), (x, -0.100, 0.51), 0.053, head_material, bounds, 12)
+        add_cylinder(f"Shin.{side}", body, f"Shin.{side}", (x + outward * 0.030, -0.020, 0.49), (x + outward * 0.030, -0.020, 0.135), 0.031, body_material, bounds, 10)
+        add_cylinder(f"ShinPiston.{side}", body, f"Shin.{side}", (x - outward * 0.026, 0.025, 0.47), (x - outward * 0.026, 0.025, 0.16), 0.022, body_material, bounds, 10)
+        add_cylinder(f"AnkleDisc.{side}", body, f"Foot.{side}", (x, -0.084, 0.15), (x, 0.060, 0.15), 0.066, body_material, bounds, 12)
+        add_box(f"Boot.{side}", body, f"Foot.{side}", (x, -0.045, 0.075), (0.112, 0.155, 0.075), body_material, bounds, 0.018)
+        add_box(f"BootHeel.{side}", body, f"Foot.{side}", (x, 0.112, 0.076), (0.094, 0.044, 0.058), body_material, bounds, 0.012)
+
+    for side, x0, x1 in (("R", -0.235, -0.305), ("L", 0.235, 0.305)):
+        outward = -1.0 if side == "R" else 1.0
+        hand_x = -0.300 if side == "R" else 0.300
+        add_cylinder(f"UpperArm.{side}", body, f"UpperArm.{side}", (x0 + outward * 0.018, -0.026, 1.35), (x1 + outward * 0.018, -0.026, 1.03), 0.034, body_material, bounds, 10)
+        add_cylinder(f"UpperArmPiston.{side}", body, f"UpperArm.{side}", (x0 - outward * 0.022, 0.025, 1.33), (x1 - outward * 0.022, 0.025, 1.07), 0.023, body_material, bounds, 10)
+        add_cylinder(f"Elbow.{side}", body, f"Forearm.{side}", (x1, -0.095, 1.05), (x1, 0.070, 1.05), 0.067, body_material, bounds, 14)
+        add_cylinder(f"ElbowHub.{side}", head, f"Forearm.{side}", (x1, -0.111, 1.05), (x1, -0.084, 1.05), 0.041, head_material, bounds, 12)
+        add_cylinder(f"Forearm.{side}", body, f"Forearm.{side}", (x1 + outward * 0.020, -0.022, 1.04), (hand_x + outward * 0.020, -0.040, 0.79), 0.032, body_material, bounds, 10)
+        add_cylinder(f"ForearmPiston.{side}", body, f"Forearm.{side}", (x1 - outward * 0.020, 0.025, 1.02), (hand_x - outward * 0.020, 0.005, 0.81), 0.022, body_material, bounds, 10)
+        add_cylinder(f"WristDisc.{side}", body, f"Hand.{side}", (hand_x, -0.078, 0.81), (hand_x, 0.050, 0.81), 0.057, body_material, bounds, 12)
+        add_box(f"Fist.{side}", body, f"Hand.{side}", (hand_x, -0.045, 0.745), (0.074, 0.076, 0.082), body_material, bounds, 0.016)
+        for finger_index in range(3):
+            finger_x = hand_x + (finger_index - 1) * 0.045
+            add_box(f"Knuckle{finger_index}.{side}", head, f"Hand.{side}", (finger_x, -0.132, 0.775), (0.019, 0.022, 0.027), head_material, bounds, 0.006)
+            add_box(f"Finger{finger_index}.{side}", head, f"Hand.{side}", (finger_x, -0.129, 0.727), (0.019, 0.020, 0.018), head_material, bounds, 0.005)
+
+    # A large rounded front shell and broad asymmetric cowl create the concept's dominant silhouette.
+    add_profile_plate(
+        "ChestPlate", armor, "Chest",
+        ((-0.245, 0.985), (0.145, 0.965), (0.255, 1.035), (0.285, 1.255),
+         (0.235, 1.430), (0.100, 1.475), (-0.185, 1.445), (-0.280, 1.300), (-0.290, 1.115)),
+        -0.188, 0.027, armor_material, bounds, 0.014,
+    )
+    add_profile_plate(
+        "ChestRib", head, "Chest",
+        ((-0.125, 1.035), (0.155, 1.025), (0.195, 1.080), (0.175, 1.225), (-0.145, 1.215), (-0.165, 1.095)),
+        -0.224, 0.010, head_material, bounds, 0.006,
+    )
+    add_sphere("WaistPlate", armor, "Pelvis", (-0.015, -0.115, 0.89), (0.225, 0.060, 0.105), armor_material, bounds, 14, 8)
+    add_box("BackHousing", armor, "Chest", (0.015, 0.145, 1.23), (0.225, 0.045, 0.205), armor_material, bounds, 0.025)
+
+    add_cylinder("RearTank", head, "Chest", (0.12, 0.120, 1.34), (0.325, 0.120, 1.34), 0.075, head_material, bounds, 14)
+    add_sphere("RearTankCapInner", head, "Chest", (0.12, 0.120, 1.34), (0.040, 0.077, 0.077), head_material, bounds, 12, 8)
+    add_sphere("RearTankCapOuter", head, "Chest", (0.337, 0.120, 1.34), (0.037, 0.077, 0.077), head_material, bounds, 12, 8)
+    add_cylinder("RearTankBandInner", body, "Chest", (0.175, 0.120, 1.34), (0.195, 0.120, 1.34), 0.080, body_material, bounds, 14)
+    add_cylinder("RearTankBandOuter", body, "Chest", (0.270, 0.120, 1.34), (0.290, 0.120, 1.34), 0.080, body_material, bounds, 14)
+
+    add_cylinder("ExhaustLower", head, "Chest", (0.155, 0.120, 1.395), (0.065, 0.120, 1.515), 0.032, head_material, bounds, 10)
+    add_sphere("ExhaustElbow", head, "Chest", (0.065, 0.120, 1.515), (0.043, 0.043, 0.043), head_material, bounds, 10, 6)
+    add_cylinder("ExhaustUpper", head, "Chest", (0.065, 0.120, 1.515), (-0.015, 0.120, 1.620), 0.030, head_material, bounds, 10)
+    add_sphere("ExhaustUpperBend", head, "Chest", (-0.015, 0.120, 1.620), (0.040, 0.040, 0.040), head_material, bounds, 10, 6)
+    add_cylinder("ExhaustCollar", body, "Chest", (-0.015, 0.120, 1.620), (-0.070, 0.120, 1.690), 0.036, body_material, bounds, 10)
+
+    add_profile_plate(
+        "Cowl.R", armor, "Chest",
+        ((-0.360, 1.250), (-0.065, 1.235), (0.020, 1.390), (-0.060, 1.560), (-0.285, 1.535), (-0.355, 1.420)),
+        -0.115, 0.085, armor_material, bounds, 0.012,
+    )
+    add_cone("CowlSpikeRear", armor, "Chest", (-0.310, -0.120, 1.455), (-0.350, -0.115, 1.555), 0.026, armor_material, bounds, 10)
+    add_cone("CowlSpikeFront", armor, "Chest", (-0.235, -0.145, 1.505), (-0.270, -0.150, 1.650), 0.026, armor_material, bounds, 10)
+    add_cone("CowlSpikeCrown", armor, "Chest", (-0.135, -0.125, 1.535), (-0.145, -0.125, 1.690), 0.025, armor_material, bounds, 10)
+    add_sphere("Cowl.L", head, "UpperArm.L", (0.295, -0.005, 1.345), (0.075, 0.105, 0.125), head_material, bounds, 12, 8)
+
     for side, x in (("R", -0.16), ("L", 0.16)):
-        add_cylinder(f"Thigh.{side}", body, f"Thigh.{side}", (x, 0, 0.86), (x, 0, 0.50), 0.088, body_material, bounds)
-        add_sphere(f"Knee.{side}", body, f"Shin.{side}", (x, -0.005, 0.51), (0.103, 0.092, 0.10), body_material, bounds)
-        add_cylinder(f"Shin.{side}", body, f"Shin.{side}", (x, 0, 0.52), (x, 0, 0.13), 0.073, body_material, bounds)
-        add_box(f"Boot.{side}", body, f"Foot.{side}", (x, -0.055, 0.07), (0.125, 0.16, 0.07), body_material, bounds, 0.022)
-    for side, x0, x1 in (("R", -0.24, -0.31), ("L", 0.24, 0.31)):
-        add_cylinder(f"UpperArm.{side}", body, f"UpperArm.{side}", (x0, 0, 1.35), (x1, 0, 1.05), 0.058, body_material, bounds)
-        add_sphere(f"Elbow.{side}", body, f"Forearm.{side}", (x1, -0.005, 1.05), (0.064, 0.068, 0.072), body_material, bounds)
-        add_cylinder(f"Forearm.{side}", body, f"Forearm.{side}", (x1, 0, 1.06), ((-0.29 if side == "R" else 0.29), -0.03, 0.80), 0.058, body_material, bounds)
-        add_box(f"Fist.{side}", body, f"Hand.{side}", ((-0.29 if side == "R" else 0.29), -0.055, 0.76), (0.074, 0.088, 0.10), body_material, bounds, 0.020)
+        add_cylinder(f"KneePlate.{side}", armor, f"Shin.{side}", (x, -0.134, 0.51), (x, -0.102, 0.51), 0.075, armor_material, bounds, 12)
+        add_box(f"ShinPlate.{side}", armor, f"Shin.{side}", (x, -0.070, 0.305), (0.070, 0.027, 0.115), armor_material, bounds, 0.012)
+        add_box(f"BootSole.{side}", head, f"Foot.{side}", (x, -0.050, 0.018), (0.118, 0.160, 0.018), head_material, bounds, 0.006)
+        add_box(f"BootToePlate.{side}", armor, f"Foot.{side}", (x, -0.203, 0.080), (0.103, 0.022, 0.050), armor_material, bounds, 0.010)
+        hand_x = -0.300 if side == "R" else 0.300
+        plate_inner = hand_x + (0.060 if side == "R" else -0.060)
+        plate_outer = hand_x + (-0.055 if side == "R" else 0.055)
+        add_profile_plate(
+            f"ForearmPlate.{side}", armor, f"Forearm.{side}",
+            ((plate_inner, 0.820), (plate_outer, 0.835), (plate_outer, 1.010), (plate_inner, 1.035)),
+            -0.078, 0.032, armor_material, bounds, 0.010,
+        )
+        add_box(f"FistPlate.{side}", armor, f"Hand.{side}", (hand_x, -0.116, 0.750), (0.072, 0.017, 0.070), armor_material, bounds, 0.008)
 
-    add_box("ChestPlate", armor, "Chest", (0, -0.13, 1.23), (0.27, 0.04, 0.205), armor_material, bounds, 0.026)
-    add_box("ChestRib", armor, "Chest", (0, -0.174, 1.18), (0.16, 0.018, 0.055), armor_material, bounds, 0.010)
-    add_box("WaistPlate", armor, "Pelvis", (0, -0.12, 0.86), (0.225, 0.035, 0.07), armor_material, bounds, 0.018)
-    add_box("BackHousing", armor, "Chest", (0, 0.13, 1.22), (0.215, 0.045, 0.19), armor_material, bounds, 0.024)
-    add_cylinder("RearTank", armor, "Chest", (0, 0.16, 1.04), (0, 0.16, 1.38), 0.075, armor_material, bounds, 12)
-    add_cylinder("ExhaustLower", armor, "Chest", (-0.04, 0.16, 1.18), (-0.11, 0.16, 1.29), 0.032, armor_material, bounds, 10)
-    add_sphere("ExhaustElbow", armor, "Chest", (-0.11, 0.16, 1.29), (0.042, 0.042, 0.042), armor_material, bounds, 10, 6)
-    add_cylinder("ExhaustUpper", armor, "Chest", (-0.11, 0.16, 1.29), (-0.18, 0.16, 1.39), 0.028, armor_material, bounds, 10)
-    add_sphere("Cowl.R", armor, "UpperArm.R", (-0.292, -0.005, 1.34), (0.066, 0.11, 0.13), armor_material, bounds, 10, 6)
-    add_cone("CowlSpikeRear", armor, "UpperArm.R", (-0.315, 0.045, 1.39), (-0.36, 0.085, 1.48), 0.018, armor_material, bounds)
-    add_cone("CowlSpikeFront", armor, "UpperArm.R", (-0.315, -0.045, 1.38), (-0.36, -0.09, 1.46), 0.018, armor_material, bounds)
-    add_sphere("Cowl.L", armor, "UpperArm.L", (0.285, 0, 1.33), (0.060, 0.09, 0.10), armor_material, bounds, 10, 6)
-    for side, x in (("R", -0.16), ("L", 0.16)):
-        add_box(f"KneePlate.{side}", armor, f"Shin.{side}", (x, -0.084, 0.51), (0.09, 0.025, 0.085), armor_material, bounds, 0.014)
-        add_box(f"ShinPlate.{side}", armor, f"Shin.{side}", (x, -0.071, 0.29), (0.068, 0.022, 0.12), armor_material, bounds, 0.012)
-        hand_x = -0.29 if side == "R" else 0.29
-        add_box(f"ForearmPlate.{side}", armor, f"Forearm.{side}", (hand_x, -0.067, 0.93), (0.070, 0.025, 0.12), armor_material, bounds, 0.012)
-        add_box(f"FistPlate.{side}", armor, f"Hand.{side}", (hand_x, -0.135, 0.77), (0.078, 0.020, 0.075), armor_material, bounds, 0.010)
+    # The face is a recessed camera module cut into the upper shell, never a head perched on top.
+    add_box("HeadPod", body, "Head", (0.105, -0.185, 1.420), (0.135, 0.048, 0.090), body_material, bounds, 0.018)
+    add_box("Brow", head, "Head", (0.105, -0.226, 1.488), (0.125, 0.014, 0.026), head_material, bounds, 0.007)
+    add_box("JawGuard", head, "Head", (0.105, -0.225, 1.350), (0.118, 0.014, 0.025), head_material, bounds, 0.007)
+    for side, lens_x in (("R", 0.052), ("L", 0.158)):
+        add_cylinder(f"LensCollar.{side}", head, "Head", (lens_x, -0.232, 1.425), (lens_x, -0.198, 1.425), 0.043, head_material, bounds, 14)
+    add_cylinder("AntennaStem", body, "Head", (0.190, -0.170, 1.470), (0.235, -0.105, 1.685), 0.008, body_material, bounds, 8)
+    add_sphere("AntennaBall", body, "Head", (0.238, -0.102, 1.690), (0.020, 0.020, 0.020), body_material, bounds, 10, 6)
 
-    add_sphere("HeadPod", head, "Head", (0, 0, 1.57), (0.15, 0.13, 0.15), head_material, bounds, 12, 8)
-    add_box("Brow", head, "Head", (0, -0.12, 1.625), (0.125, 0.030, 0.035), head_material, bounds, 0.012)
-    add_box("JawGuard", head, "Head", (0, -0.105, 1.515), (0.105, 0.035, 0.045), head_material, bounds, 0.012)
-    add_cylinder("AntennaStem", head, "Head", (0.06, 0.01, 1.67), (0.06, 0.01, 1.71), 0.008, head_material, bounds, 8)
-    add_sphere("AntennaBall", head, "Head", (0.06, 0.01, 1.72), (0.015, 0.015, 0.015), head_material, bounds, 10, 6)
-    add_sphere("Lens.R", eye, "Head", (-0.060, -0.125, 1.59), (0.045, 0.018, 0.040), eye_material, bounds, 12, 8)
-    add_sphere("Lens.L", eye, "Head", (0.060, -0.125, 1.59), (0.045, 0.018, 0.040), eye_material, bounds, 12, 8)
+    # Oversized fasteners make the construction legible at gameplay distance.
+    for index, (x, y, z) in enumerate((
+        (-0.325, -0.207, 1.315), (-0.290, -0.207, 1.435), (-0.205, -0.207, 1.505),
+        (-0.105, -0.207, 1.520), (-0.205, -0.229, 1.125), (-0.105, -0.229, 1.085),
+        (0.000, -0.229, 1.075), (0.105, -0.229, 1.095), (0.205, -0.229, 1.155),
+    )):
+        add_sphere(f"ArmorRivet{index:02d}", body, "Chest", (x, y, z), (0.014, 0.014, 0.014), body_material, bounds, 8, 6)
+    add_sphere("Lens.R", eye, "Head", (0.052, -0.236, 1.425), (0.031, 0.013, 0.030), eye_material, bounds, 12, 8)
+    add_sphere("Lens.L", eye, "Head", (0.158, -0.236, 1.425), (0.031, 0.013, 0.030), eye_material, bounds, 12, 8)
 
+    for part_name, (part_low, part_high) in bounds.items():
+        if part_low.x < -0.37 or part_high.x > 0.37:
+            print(f"AUDIT silhouette_extreme part={part_name} x=({part_low.x:.6f},{part_high.x:.6f})")
     audit_connections(bounds)
     meshes = (
         join_parts(armor, "CharacterArmor"),
@@ -562,7 +657,10 @@ def audit_meshes(meshes, rig):
     high = Vector((max(p.x for p in all_points), max(p.y for p in all_points), max(p.z for p in all_points)))
     dimensions = high - low
     require(abs(low.z) <= 1e-5, f"Feet must rest at z=0: {low.z:.7f}")
-    require(all(dimensions[index] <= TARGET_BOUNDS[index] + 1e-5 for index in range(3)), f"Character exceeds bounds: {tuple(dimensions)}")
+    require(
+        all(dimensions[index] <= TARGET_BOUNDS[index] + 1e-5 for index in range(3)),
+        f"Character exceeds bounds: low={tuple(low)} high={tuple(high)} dimensions={tuple(dimensions)}",
+    )
     print(f"AUDIT geometry meshes=4 closed_connected_solids=true UVMap=1 slots=1 transforms=applied origin=rig_root")
     print(f"AUDIT bounds min={tuple(round(v, 6) for v in low)} max={tuple(round(v, 6) for v in high)} dimensions={tuple(round(v, 6) for v in dimensions)}")
     print(f"AUDIT counts vertices={total_vertices} triangles={total_triangles} report_only=true")
