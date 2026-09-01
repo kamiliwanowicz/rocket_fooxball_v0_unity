@@ -202,9 +202,9 @@ namespace RocketFooxball.Editor
                     if (Mathf.Abs(importer.globalScale - 1f) > 0.0001f) { importer.globalScale = 1f; changed = true; }
                     if (importer.materialImportMode != ModelImporterMaterialImportMode.None) { importer.materialImportMode = ModelImporterMaterialImportMode.None; changed = true; }
                     if (!importer.importAnimation) { importer.importAnimation = true; changed = true; }
+                    if (importer.optimizeGameObjects) { importer.optimizeGameObjects = false; changed = true; }
 
                     var sourceClips = importer.clipAnimations;
-                    var syntheticClips = false;
                     if (sourceClips == null || sourceClips.Length == 0)
                     {
                         sourceClips = importer.defaultClipAnimations;
@@ -214,30 +214,37 @@ namespace RocketFooxball.Editor
                         // Unity may not expose FBX takes through defaultClipAnimations
                         // until clipAnimations is explicitly seeded. Use deterministic
                         // source ranges authored by the generators as a fallback.
-                        var idle = new ModelImporterClipAnimation { name = "Idle", takeName = "Idle", firstFrame = 1f, lastFrame = character ? 30f : 31f };
-                        var kick = new ModelImporterClipAnimation { name = "Kick", takeName = "Kick", firstFrame = 1f, lastFrame = character ? 12f : 11f };
+                        var idle = new ModelImporterClipAnimation
+                        {
+                            name = MovementLabContract.IdleStateName,
+                            takeName = MovementLabContract.IdleStateName,
+                            firstFrame = MovementLabContract.KickStartFrame,
+                            lastFrame = character ? 30f : 31f
+                        };
+                        var kick = new ModelImporterClipAnimation
+                        {
+                            name = MovementLabContract.KickStateName,
+                            takeName = MovementLabContract.KickStateName,
+                            firstFrame = MovementLabContract.KickStartFrame,
+                            lastFrame = MovementLabContract.KickEndFrame
+                        };
                         sourceClips = new[] { idle, kick };
-                        syntheticClips = true;
                     }
 
-                    var expectedNames = character ? new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" } : new[] { "Idle", "Kick" };
+                    var expectedNames = character
+                        ? new[] { MovementLabContract.IdleStateName, MovementLabContract.RunStateName, MovementLabContract.JumpStateName, MovementLabContract.FallStateName, MovementLabContract.LandStateName, MovementLabContract.KickStateName }
+                        : new[] { MovementLabContract.IdleStateName, MovementLabContract.KickStateName };
                     var expectedLoops = character ? new[] { true, true, false, false, false, false } : new[] { true, false };
-                    var expectedStarts = character ? new[] { 1f, 1f, 1f, 1f, 1f, 1f } : new[] { 1f, 1f };
-                    var expectedEnds = character ? new[] { 30f, 20f, 12f, 15f, 10f, 12f } : new[] { 31f, 11f };
+                    var expectedStarts = character
+                        ? new[] { 1f, 1f, 1f, 1f, 1f, (float)MovementLabContract.WorldKickStartFrame }
+                        : new[] { 1f, (float)MovementLabContract.FpsKickStartFrame };
+                    var expectedEnds = character
+                        ? new[] { 30f, 20f, 12f, 15f, 10f, (float)MovementLabContract.WorldKickEndFrame }
+                        : new[] { 31f, (float)MovementLabContract.FpsKickEndFrame };
                     var clips = new List<ModelImporterClipAnimation>();
                     for (var expectedIndex = 0; expectedIndex < expectedNames.Length; expectedIndex++)
                     {
-                        ModelImporterClipAnimation source = null;
-                        for (var sourceIndex = 0; sourceIndex < sourceClips.Length; sourceIndex++)
-                        {
-                            var sourceName = sourceClips[sourceIndex].name ?? string.Empty;
-                            if (string.Equals(sourceName, expectedNames[expectedIndex], StringComparison.OrdinalIgnoreCase) ||
-                                (sourceName.EndsWith(expectedNames[expectedIndex], StringComparison.OrdinalIgnoreCase) && sourceName.Length > expectedNames[expectedIndex].Length && !char.IsLetterOrDigit(sourceName[sourceName.Length - expectedNames[expectedIndex].Length - 1])))
-                            {
-                                source = sourceClips[sourceIndex];
-                                break;
-                            }
-                        }
+                        var source = FindSourceClip(sourceClips, expectedNames[expectedIndex]);
                         if (source == null)
                         {
                             source = new ModelImporterClipAnimation();
@@ -246,6 +253,7 @@ namespace RocketFooxball.Editor
                         source.takeName = expectedNames[expectedIndex];
                         source.firstFrame = expectedStarts[expectedIndex];
                         source.lastFrame = expectedEnds[expectedIndex];
+                        source.cycleOffset = 0f;
                         source.loopTime = expectedLoops[expectedIndex];
                         source.lockRootRotation = true;
                         source.keepOriginalOrientation = true;
@@ -255,6 +263,7 @@ namespace RocketFooxball.Editor
                         source.keepOriginalPositionXZ = true;
                         source.heightFromFeet = false;
                         source.hasAdditiveReferencePose = false;
+                        source.mirror = false;
                         clips.Add(source);
                     }
                     var configured = clips.ToArray();
@@ -269,12 +278,41 @@ namespace RocketFooxball.Editor
                     }
                 }
 
+                private static ModelImporterClipAnimation FindSourceClip(ModelImporterClipAnimation[] sourceClips, string expected)
+                {
+                    // Exact name/take matches win even when a prefixed suffix
+                    // appears earlier in Unity's source clip ordering.
+                    for (var sourceIndex = 0; sourceIndex < sourceClips.Length; sourceIndex++)
+                    {
+                        var source = sourceClips[sourceIndex];
+                        if (source == null) continue;
+                        if (string.Equals(source.name, expected, StringComparison.Ordinal) ||
+                            string.Equals(source.takeName, expected, StringComparison.Ordinal)) return source;
+                    }
+                    for (var sourceIndex = 0; sourceIndex < sourceClips.Length; sourceIndex++)
+                    {
+                        var source = sourceClips[sourceIndex];
+                        if (source == null) continue;
+                        if (IsExactOrDelimiterSafeTake(source.name ?? string.Empty, expected) ||
+                            IsExactOrDelimiterSafeTake(source.takeName ?? string.Empty, expected)) return source;
+                    }
+                    return null;
+                }
+
+                private static bool IsExactOrDelimiterSafeTake(string candidate, string expected)
+                {
+                    if (string.Equals(candidate, expected, StringComparison.Ordinal)) return true;
+                    if (string.IsNullOrEmpty(candidate) || candidate.Length <= expected.Length ||
+                        !candidate.EndsWith(expected, StringComparison.Ordinal)) return false;
+                    return !char.IsLetterOrDigit(candidate[candidate.Length - expected.Length - 1]);
+                }
+
                 internal static bool ClipsEqual(ModelImporterClipAnimation[] a, ModelImporterClipAnimation[] b)
                 {
                     if (a == null || b == null || a.Length != b.Length) return false;
                     for (var i = 0; i < a.Length; i++)
                     {
-                        if (a[i].name != b[i].name || Mathf.Abs(a[i].firstFrame - b[i].firstFrame) > 0.001f || Mathf.Abs(a[i].lastFrame - b[i].lastFrame) > 0.001f || a[i].loopTime != b[i].loopTime || a[i].lockRootRotation != b[i].lockRootRotation || a[i].lockRootHeightY != b[i].lockRootHeightY || a[i].lockRootPositionXZ != b[i].lockRootPositionXZ)
+                        if (a[i].name != b[i].name || a[i].takeName != b[i].takeName || Mathf.Abs(a[i].firstFrame - b[i].firstFrame) > 0.001f || Mathf.Abs(a[i].lastFrame - b[i].lastFrame) > 0.001f || Mathf.Abs(a[i].cycleOffset - b[i].cycleOffset) > 0.001f || a[i].loopTime != b[i].loopTime || a[i].lockRootRotation != b[i].lockRootRotation || a[i].keepOriginalOrientation != b[i].keepOriginalOrientation || a[i].lockRootHeightY != b[i].lockRootHeightY || a[i].keepOriginalPositionY != b[i].keepOriginalPositionY || a[i].lockRootPositionXZ != b[i].lockRootPositionXZ || a[i].keepOriginalPositionXZ != b[i].keepOriginalPositionXZ || a[i].heightFromFeet != b[i].heightFromFeet || a[i].hasAdditiveReferencePose != b[i].hasAdditiveReferencePose || a[i].mirror != b[i].mirror)
                         {
                             return false;
                         }
@@ -319,6 +357,17 @@ namespace RocketFooxball.Editor
                     return null;
                 }
 
+                internal static Avatar[] FindImportedAvatars(string modelPath)
+                {
+                    var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
+                    var avatars = new List<Avatar>();
+                    for (var i = 0; i < assets.Length; i++)
+                    {
+                        if (assets[i] is Avatar avatar) avatars.Add(avatar);
+                    }
+                    return avatars.ToArray();
+                }
+
                 internal static AnimationClip FindImportedClip(string modelPath, string name)
                 {
                     var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
@@ -329,7 +378,7 @@ namespace RocketFooxball.Editor
                     // model prefix contains "Kick".
                     for (var i = 0; i < assets.Length; i++)
                     {
-                        if (assets[i] is AnimationClip clip && string.Equals(clip.name, name, StringComparison.OrdinalIgnoreCase)) return clip;
+                        if (assets[i] is AnimationClip clip && string.Equals(clip.name, name, StringComparison.Ordinal)) return clip;
                     }
 
                     // Fall back to a delimiter-safe take suffix ("|Idle", "@Kick",
@@ -340,7 +389,7 @@ namespace RocketFooxball.Editor
                     {
                         if (!(assets[i] is AnimationClip clip)) continue;
                         var clipName = clip.name;
-                        if (clipName.Length <= name.Length || !clipName.EndsWith(name, StringComparison.OrdinalIgnoreCase)) continue;
+                        if (clipName.Length <= name.Length || !clipName.EndsWith(name, StringComparison.Ordinal)) continue;
                         var delimiter = clipName[clipName.Length - name.Length - 1];
                         if (!char.IsLetterOrDigit(delimiter)) return clip;
                     }
@@ -882,15 +931,50 @@ namespace RocketFooxball.Editor
                 internal static void ValidateRigImporter(string path)
                 {
                     var importer = AssetImporter.GetAtPath(path) as ModelImporter;
-                    if (importer == null || importer.animationType != ModelImporterAnimationType.Generic || importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel || importer.materialImportMode != ModelImporterMaterialImportMode.None || !importer.importAnimation || Mathf.Abs(importer.globalScale - 1f) > 0.0001f)
+                    if (importer == null || importer.animationType != ModelImporterAnimationType.Generic || importer.avatarSetup != ModelImporterAvatarSetup.CreateFromThisModel || importer.materialImportMode != ModelImporterMaterialImportMode.None || !importer.importAnimation || importer.optimizeGameObjects || Mathf.Abs(importer.globalScale - 1f) > 0.0001f)
                     {
                         throw new InvalidOperationException("Rig importer contract invalid: " + path);
                     }
                     var clips = importer.clipAnimations;
-                    var expected = path == CharacterModelPath ? new[] { "Idle", "Run", "Jump", "Fall", "Land", "Kick" } : new[] { "Idle", "Kick" };
+                    var character = path == CharacterModelPath;
+                    var expected = character
+                        ? new[] { MovementLabContract.IdleStateName, MovementLabContract.RunStateName, MovementLabContract.JumpStateName, MovementLabContract.FallStateName, MovementLabContract.LandStateName, MovementLabContract.KickStateName }
+                        : new[] { MovementLabContract.IdleStateName, MovementLabContract.KickStateName };
                     var loops = path == CharacterModelPath ? new[] { true, true, false, false, false, false } : new[] { true, false };
+                    var starts = character
+                        ? new[] { 1f, 1f, 1f, 1f, 1f, (float)MovementLabContract.WorldKickStartFrame }
+                        : new[] { 1f, (float)MovementLabContract.FpsKickStartFrame };
+                    var ends = character
+                        ? new[] { 30f, 20f, 12f, 15f, 10f, (float)MovementLabContract.WorldKickEndFrame }
+                        : new[] { 31f, (float)MovementLabContract.FpsKickEndFrame };
                     if (clips == null || clips.Length != expected.Length) throw new InvalidOperationException("Rig importer clip count mismatch: " + path);
-                    for (var i = 0; i < expected.Length; i++) if (clips[i].name != expected[i] || clips[i].loopTime != loops[i]) throw new InvalidOperationException("Rig importer clip contract invalid: " + path + "/" + expected[i]);
+                    var importedClips = new HashSet<AnimationClip>();
+                    for (var i = 0; i < expected.Length; i++)
+                    {
+                        var clip = clips[i];
+                        if (clip.name != expected[i] || clip.takeName != expected[i] ||
+                            Mathf.Abs(clip.firstFrame - starts[i]) > 0.001f || Mathf.Abs(clip.lastFrame - ends[i]) > 0.001f ||
+                            Mathf.Abs(clip.cycleOffset) > 0.001f ||
+                            clip.loopTime != loops[i] || !clip.lockRootRotation || !clip.keepOriginalOrientation ||
+                            !clip.lockRootHeightY || !clip.keepOriginalPositionY || !clip.lockRootPositionXZ ||
+                            !clip.keepOriginalPositionXZ || clip.heightFromFeet || clip.hasAdditiveReferencePose || clip.mirror)
+                        {
+                            throw new InvalidOperationException("Rig importer clip contract invalid: " + path + "/" + expected[i]);
+                        }
+
+                        var imported = FindImportedClip(path, expected[i]);
+                        if (imported == null || !importedClips.Add(imported) || Mathf.Abs(imported.frameRate - MovementLabContract.AnimationSourceFrameRate) > 0.001f)
+                        {
+                            throw new InvalidOperationException("Rig importer imported clip identity/rate invalid: " + path + "/" + expected[i]);
+                        }
+                    }
+
+                    var avatars = FindImportedAvatars(path);
+                    if (avatars.Length != 1 || avatars[0] == null || FindImportedAvatar(path) != avatars[0] ||
+                        !string.Equals(AssetDatabase.GetAssetPath(avatars[0]), path, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException("Rig importer Avatar provenance invalid: " + path);
+                    }
                 }
 
     }

@@ -16,9 +16,10 @@ namespace RocketFooxball.Editor
         // Stage-local manifests carry explicit ownership, stale reasons, and a
         // top-level fingerprint/path union. Bump whenever that wire contract changes.
         internal const int ManifestSchemaVersion = 8;
-        internal const int SerializedContractVersion = 15;
-        internal const int MaterialPrefabStageContractVersion = 17;
-        internal const int GameplaySceneStageContractVersion = 19;
+        internal const int ImporterStageContractVersion = 6;
+        internal const int SerializedContractVersion = 16;
+        internal const int MaterialPrefabStageContractVersion = 18;
+        internal const int GameplaySceneStageContractVersion = 20;
         internal const int QualityStageContractVersion = 5;
         internal const int LightingStageContractVersion = 7;
         internal const int BakedOutputStageContractVersion = 8;
@@ -40,6 +41,46 @@ namespace RocketFooxball.Editor
         internal const string TexturesPath = "Assets/_Game/Textures";
         internal const string ShadersPath = "Assets/_Game/Shaders";
         internal const string AnimationsPath = "Assets/_Game/Animations";
+
+        // Imported animation timing is shared by both authored rigs. Keeping
+        // frame markers in the contract prevents Unity clip ranges and the
+        // source animation generators from drifting apart.
+        internal const int AnimationSourceFps = 30;
+        internal const int AnimationSourceFrameRate = AnimationSourceFps;
+        internal const float KickStartFrame = 1f;
+        internal const float KickStrikeFrame = 4f;
+        internal const float KickEndFrame = 11f;
+        internal const float WorldKickStartFrame = KickStartFrame;
+        internal const float WorldKickStrikeFrame = KickStrikeFrame;
+        internal const float WorldKickEndFrame = KickEndFrame;
+        internal const float FpsKickStartFrame = KickStartFrame;
+        internal const float FpsKickStrikeFrame = KickStrikeFrame;
+        internal const float FpsKickEndFrame = KickEndFrame;
+
+        // Animator names are contracts with PlayerPresentation and the
+        // generated prefab. They intentionally remain exact and case-sensitive.
+        internal const string AnimatorBaseLayerName = "Base Layer";
+        internal const string AnimatorKickLayerName = "Kick Layer";
+        internal const string IdleStateName = "Idle";
+        internal const string RunStateName = "Run";
+        internal const string JumpStateName = "Jump";
+        internal const string FallStateName = "Fall";
+        internal const string LandStateName = "Land";
+        internal const string EmptyStateName = "Empty";
+        internal const string KickStateName = "Kick";
+        internal const string KickTriggerParameterName = "Kick";
+        internal static readonly string[] WorldBaseStateNames =
+        {
+            IdleStateName, RunStateName, JumpStateName, FallStateName, LandStateName
+        };
+        internal static readonly string[] WorldKickStateNames =
+        {
+            EmptyStateName, KickStateName
+        };
+        internal static readonly string[] WorldKickLegBoneNames =
+        {
+            "Thigh.R", "Shin.R", "Foot.R", "Thigh.L", "Shin.L", "Foot.L"
+        };
         internal const string GeneratedPath = "Assets/_Game/Generated";
         internal const string BlueCircleCueMeshPath = GeneratedPath + "/BlueCircleCueMesh.asset";
         internal const string RedTriangleCueMeshPath = GeneratedPath + "/RedTriangleCueMesh.asset";
@@ -364,6 +405,9 @@ namespace RocketFooxball.Editor
             return paths;
         }
 
+        // Base locomotion is deliberately independent from the kick layer so
+        // a kick can override only the authored leg curves while locomotion
+        // continues uninterrupted underneath it.
         internal static readonly WorldAnimatorTransitionSpecification[] WorldAnimatorTransitions = CreateWorldAnimatorTransitions();
 
         internal const float ArenaPitchHalfLength = 60f;
@@ -696,25 +740,20 @@ namespace RocketFooxball.Editor
             const float blend = 0.02f;
             return new[]
             {
-                Transition("Idle", "Run", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.30f, "Speed")),
-                Transition("Run", "Idle", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                Transition("Idle", "Jump", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Idle", "Fall", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Run", "Jump", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Run", "Fall", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Jump", "Fall", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0f, "VerticalSpeed")),
-                Transition("Jump", "Land", false, false, 0f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded")),
-                Transition("Fall", "Jump", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Fall", "Land", false, false, 0f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded")),
-                Transition("Land", "Jump", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Land", "Fall", false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
-                Transition("Land", "Idle", false, true, 0.65f, blend, true, Condition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                Transition("Land", "Run", false, true, 0.65f, blend, true, Condition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
-                Transition("Kick", "Idle", false, true, 1f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded"), Condition(AnimatorConditionMode.Less, 0.20f, "Speed")),
-                Transition("Kick", "Run", false, true, 1f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded"), Condition(AnimatorConditionMode.Greater, 0.20f, "Speed")),
-                Transition("Kick", "Jump", false, true, 1f, blend, true, Condition(AnimatorConditionMode.IfNot, 0f, "Grounded"), Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed")),
-                Transition("Kick", "Fall", false, true, 1f, blend, true, Condition(AnimatorConditionMode.IfNot, 0f, "Grounded"), Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed")),
-                Transition("AnyState", "Kick", true, false, 0f, blend, false, Condition(AnimatorConditionMode.If, 0f, "Kick"))
+                Transition(IdleStateName, RunStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.30f, "Speed")),
+                Transition(RunStateName, IdleStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                Transition(IdleStateName, JumpStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(IdleStateName, FallStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(RunStateName, JumpStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(RunStateName, FallStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(JumpStateName, FallStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0f, "VerticalSpeed")),
+                Transition(JumpStateName, LandStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded")),
+                Transition(FallStateName, JumpStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(FallStateName, LandStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.If, 0f, "Grounded")),
+                Transition(LandStateName, JumpStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Greater, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(LandStateName, FallStateName, false, false, 0f, blend, true, Condition(AnimatorConditionMode.Less, 0.05f, "VerticalSpeed"), Condition(AnimatorConditionMode.IfNot, 0f, "Grounded")),
+                Transition(LandStateName, IdleStateName, false, true, 0.65f, blend, true, Condition(AnimatorConditionMode.Less, 0.20f, "Speed")),
+                Transition(LandStateName, RunStateName, false, true, 0.65f, blend, true, Condition(AnimatorConditionMode.Greater, 0.20f, "Speed"))
             };
         }
 
