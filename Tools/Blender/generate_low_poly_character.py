@@ -33,6 +33,7 @@ CONTACT_SHEET_ACTIONS = ("Run", "Jump", "Fall", "Land", "Kick")
 TARGET_BOUNDS = Vector((0.75, 0.45, 1.75))
 MIN_OVERLAP = 0.005
 FORBIDDEN_TERMS = ("jet", "thruster", "flame", "fire", "plume", "propulsion", "nozzle")
+KNEE_MECHANICS = {}
 
 # Authored before geometry. Each closed-solid pair names its contact axis and overlap.
 CONNECTION_MAP = (
@@ -506,17 +507,18 @@ def make_actions(rig):
 
 
 def build_character():
+    KNEE_MECHANICS.clear()
     body_material = make_material("CyborgDarkMetal", (0.018, 0.024, 0.023), 0.92, 0.24)
     armor_material = make_material("CyborgOxideArmor", (0.035, 0.047, 0.018), 0.66, 0.52)
     head_material = make_material("CyborgHeadMetal", (0.110, 0.045, 0.016), 0.68, 0.45)
     eye_material = make_material("CyborgLensGlass", (0.80, 0.008, 0.002), 0.20, 0.16)
     body, armor, head, eye, bounds = [], [], [], [], {}
 
-    # Rounded boiler body: the olive shell owns the mass while dark seams expose the inner machine.
-    add_sphere("PelvisCore", body, "Pelvis", (0.0, 0.020, 0.83), (0.215, 0.140, 0.185), body_material, bounds, 20, 12, True)
+    # One curved boiler remains, but its lower structure is a faceted cradle and layered plate shell.
+    add_box("PelvisCore", body, "Pelvis", (0.0, 0.020, 0.835), (0.205, 0.115, 0.145), body_material, bounds, 0.035, bevel_segments=3)
     add_sphere("TorsoCore", armor, "Spine", (0.005, 0.005, 1.185), (0.282, 0.185, 0.305), armor_material, bounds, 28, 16, True)
-    add_sphere("TorsoLowerPlate", armor, "Spine", (0.005, -0.018, 1.065), (0.270, 0.180, 0.155), armor_material, bounds, 24, 12, True)
-    add_sphere("TorsoUpperPlate", armor, "Chest", (-0.005, -0.005, 1.335), (0.265, 0.178, 0.155), armor_material, bounds, 24, 12, True)
+    add_profile_plate("TorsoLowerPlate", armor, "Spine", ((-0.250, 0.990), (0.245, 0.990), (0.270, 1.145), (0.220, 1.205), (-0.220, 1.205), (-0.270, 1.145)), -0.130, 0.040, armor_material, bounds, 0.018)
+    add_profile_plate("TorsoUpperPlate", armor, "Chest", ((-0.235, 1.245), (0.225, 1.245), (0.260, 1.390), (0.205, 1.455), (-0.205, 1.455), (-0.260, 1.390)), -0.120, 0.038, armor_material, bounds, 0.016)
     add_torus("TorsoWaistSeam", body, "Spine", (0.005, -0.005, 1.035), (0, 0, 1), 0.245, 0.010, body_material, bounds, 28, 6, (1.0, 0.69))
     add_torus("TorsoCrownSeam", body, "Chest", (-0.005, 0.000, 1.365), (0, 0, 1), 0.238, 0.009, body_material, bounds, 28, 6, (1.0, 0.70))
     add_cylinder("NeckCore", body, "Neck", (0.075, -0.045, 1.355), (0.105, -0.145, 1.455), 0.052, body_material, bounds, 14)
@@ -529,12 +531,16 @@ def build_character():
         add_box(f"SidePanelUpper.{side}", armor, "Chest", (x, 0.030, 1.355), (0.024, 0.095, 0.070), armor_material, bounds, 0.010, bevel_segments=2)
         add_box(f"SidePanelLower.{side}", armor, "Spine", (x, 0.025, 1.015), (0.024, 0.090, 0.066), armor_material, bounds, 0.010, bevel_segments=2)
 
-    # Legs use paired rods, sleeves, braces, and three-level rotary joints.
+    # Legs use paired rods and true X-axis clevis hinges: side plates capture a narrow child lug.
     for side, x in (("R", -0.155), ("L", 0.155)):
         outward = -1.0 if side == "R" else 1.0
-        add_cylinder(f"HipDisc.{side}", body, f"Thigh.{side}", (x, -0.105, 0.84), (x, 0.080, 0.84), 0.086, body_material, bounds, 20)
-        add_cylinder(f"HipOuterRing.{side}", armor, f"Thigh.{side}", (x, -0.125, 0.84), (x, -0.098, 0.84), 0.074, armor_material, bounds, 20)
-        add_cylinder(f"HipHub.{side}", head, f"Thigh.{side}", (x, -0.139, 0.84), (x, -0.118, 0.84), 0.047, head_material, bounds, 18)
+        add_box(f"HipCradle.{side}", armor, "Pelvis", (x, 0.012, 0.850), (0.076, 0.058, 0.078), armor_material, bounds, 0.018, bevel_segments=3)
+        add_box(f"HipBearing.{side}", body, f"Thigh.{side}", (x, -0.010, 0.840), (0.040, 0.042, 0.060), body_material, bounds, 0.014, bevel_segments=2)
+        add_cylinder(f"HipAxle.{side}", body, f"Thigh.{side}", (x - 0.087, -0.010, 0.840), (x + 0.087, -0.010, 0.840), 0.015, body_material, bounds, 12)
+        for cap_side in (-1.0, 1.0):
+            cap_x = x + cap_side * 0.086
+            add_cylinder(f"HipAxleCap{int(cap_side):+d}.{side}", head, f"Thigh.{side}", (cap_x - cap_side * 0.006, -0.010, 0.840), (cap_x + cap_side * 0.010, -0.010, 0.840), 0.024, head_material, bounds, 12)
+        add_box(f"HipFrontBracket.{side}", armor, f"Thigh.{side}", (x, -0.066, 0.840), (0.052, 0.018, 0.050), armor_material, bounds, 0.010, bevel_segments=2)
         for rod_index, (dx, y) in enumerate(((outward * 0.032, -0.026), (-outward * 0.030, 0.030))):
             add_cylinder(f"Thigh{'Main' if rod_index == 0 else 'Piston'}.{side}", body, f"Thigh.{side}", (x + dx, y, 0.84), (x + dx, y, 0.50), 0.021, body_material, bounds, 14)
             add_cylinder(f"ThighSleeve{rod_index}.{side}", head, f"Thigh.{side}", (x + dx, y, 0.70), (x + dx, y, 0.79), 0.029, head_material, bounds, 14)
@@ -544,9 +550,31 @@ def build_character():
         add_cylinder(f"ThighBrace.{side}", armor, f"Thigh.{side}", (x - outward * 0.044, -0.005, 0.735), (x + outward * 0.045, -0.005, 0.620), 0.012, armor_material, bounds, 10)
         add_box(f"ThighMount.{side}", armor, f"Thigh.{side}", (x, -0.058, 0.675), (0.058, 0.018, 0.040), armor_material, bounds, 0.010, bevel_segments=2)
 
-        add_cylinder(f"Knee.{side}", body, f"Shin.{side}", (x, -0.108, 0.51), (x, 0.075, 0.51), 0.087, body_material, bounds, 20)
-        add_cylinder(f"KneeOuterRing.{side}", armor, f"Shin.{side}", (x, -0.130, 0.51), (x, -0.101, 0.51), 0.074, armor_material, bounds, 20)
-        add_cylinder(f"KneeHub.{side}", head, f"Shin.{side}", (x, -0.142, 0.51), (x, -0.125, 0.51), 0.047, head_material, bounds, 18)
+        plate_extents = Vector((0.014, 0.088, 0.078))
+        lug_extents = Vector((0.034, 0.034, 0.048))
+        bridge_extents = Vector((0.078, 0.019, 0.020))
+        plate_centers = []
+        for plate_side in (-1.0, 1.0):
+            plate_center = Vector((x + plate_side * 0.060, 0.0, 0.515))
+            plate_centers.append(plate_center)
+            add_box(f"KneeClevisPlate{int(plate_side):+d}.{side}", armor, f"Thigh.{side}", plate_center, plate_extents, armor_material, bounds, 0.010, bevel_segments=2)
+        bridge_center = Vector((x, -0.103, 0.590))
+        add_box(f"KneeBridge.{side}", armor, f"Thigh.{side}", bridge_center, bridge_extents, armor_material, bounds, 0.009, bevel_segments=2)
+        lug_center = Vector((x, 0.0, 0.475))
+        add_box(f"Knee.{side}", body, f"Shin.{side}", lug_center, lug_extents, body_material, bounds, 0.012, bevel_segments=2)
+        add_box(f"KneeFrontArmor.{side}", head, f"Shin.{side}", (x, -0.050, 0.472), (0.041, 0.016, 0.038), head_material, bounds, 0.008, bevel_segments=2)
+        axle_start = Vector((x - 0.090, 0.0, 0.515))
+        axle_end = Vector((x + 0.090, 0.0, 0.515))
+        add_cylinder(f"KneeAxle.{side}", body, f"Shin.{side}", axle_start, axle_end, 0.015, body_material, bounds, 12)
+        for cap_side in (-1.0, 1.0):
+            cap_x = x + cap_side * 0.090
+            add_cylinder(f"KneeAxleCap{int(cap_side):+d}.{side}", head, f"Shin.{side}", (cap_x - cap_side * 0.006, 0.0, 0.515), (cap_x + cap_side * 0.010, 0.0, 0.515), 0.023, head_material, bounds, 12)
+        KNEE_MECHANICS[side] = {
+            "axle_bone": f"Shin.{side}", "axle_start": axle_start, "axle_end": axle_end,
+            "plates": [(f"Thigh.{side}", center, plate_extents) for center in plate_centers],
+            "bridge": (f"Thigh.{side}", bridge_center, bridge_extents),
+            "lug": (f"Shin.{side}", lug_center, lug_extents),
+        }
         for rod_index, (dx, y) in enumerate(((outward * 0.030, -0.024), (-outward * 0.028, 0.030))):
             add_cylinder(f"Shin{'Main' if rod_index == 0 else 'Piston'}.{side}", body, f"Shin.{side}", (x + dx, y, 0.50), (x + dx, y, 0.145), 0.019, body_material, bounds, 14)
             add_cylinder(f"ShinSleeve{rod_index}.{side}", head, f"Shin.{side}", (x + dx, y, 0.245), (x + dx, y, 0.340), 0.027, head_material, bounds, 14)
@@ -555,9 +583,13 @@ def build_character():
         add_cylinder(f"ShinBrace.{side}", armor, f"Shin.{side}", (x + outward * 0.044, -0.004, 0.405), (x - outward * 0.043, -0.004, 0.285), 0.011, armor_material, bounds, 10)
         add_box(f"ShinPlate.{side}", armor, f"Shin.{side}", (x, -0.060, 0.330), (0.058, 0.016, 0.052), armor_material, bounds, 0.010, bevel_segments=2)
 
-        add_cylinder(f"AnkleDisc.{side}", body, f"Foot.{side}", (x, -0.079, 0.15), (x, 0.060, 0.15), 0.063, body_material, bounds, 18)
-        add_cylinder(f"AnkleRing.{side}", armor, f"Foot.{side}", (x, -0.098, 0.15), (x, -0.073, 0.15), 0.053, armor_material, bounds, 18)
-        add_cylinder(f"AnkleCap.{side}", head, f"Foot.{side}", (x, -0.110, 0.15), (x, -0.094, 0.15), 0.033, head_material, bounds, 16)
+        for plate_side in (-1.0, 1.0):
+            add_box(f"AnkleClevisPlate{int(plate_side):+d}.{side}", armor, f"Shin.{side}", (x + plate_side * 0.047, 0.0, 0.155), (0.011, 0.042, 0.055), armor_material, bounds, 0.008, bevel_segments=2)
+        add_box(f"AnkleBearing.{side}", body, f"Foot.{side}", (x, -0.002, 0.145), (0.031, 0.031, 0.044), body_material, bounds, 0.009, bevel_segments=2)
+        add_cylinder(f"AnkleAxle.{side}", body, f"Foot.{side}", (x - 0.068, -0.002, 0.155), (x + 0.068, -0.002, 0.155), 0.012, body_material, bounds, 12)
+        for cap_side in (-1.0, 1.0):
+            cap_x = x + cap_side * 0.068
+            add_cylinder(f"AnkleAxleCap{int(cap_side):+d}.{side}", head, f"Foot.{side}", (cap_x - cap_side * 0.005, -0.002, 0.155), (cap_x + cap_side * 0.008, -0.002, 0.155), 0.019, head_material, bounds, 12)
         add_box(f"AnkleYoke.{side}", armor, f"Foot.{side}", (x, -0.005, 0.125), (0.078, 0.055, 0.052), armor_material, bounds, 0.012, bevel_segments=2)
         add_box(f"Boot.{side}", body, f"Foot.{side}", (x, -0.045, 0.078), (0.108, 0.150, 0.075), body_material, bounds, 0.018, bevel_segments=3)
         add_box(f"BootUpperShell.{side}", armor, f"Foot.{side}", (x, -0.070, 0.105), (0.096, 0.104, 0.047), armor_material, bounds, 0.014, rotation=(math.radians(-10.0), 0.0, 0.0), bevel_segments=3)
@@ -570,13 +602,13 @@ def build_character():
             add_box(f"BootSidePlate{int(plate_side):+d}.{side}", head, f"Foot.{side}", (plate_x, -0.070, 0.075), (0.009, 0.080, 0.035), head_material, bounds, 0.005)
             add_sphere(f"BootFastener{int(plate_side):+d}.{side}", body, f"Foot.{side}", (plate_x + plate_side * 0.006, -0.095, 0.078), (0.010, 0.010, 0.010), body_material, bounds, 10, 6, True)
 
-    # Arm construction is deliberately asymmetric: broad spiked cowl at right, rotary housing at left.
+    # Arm construction is deliberately asymmetric, with layered block bearings instead of facade wheels.
     for side, x0, x1 in (("R", -0.235, -0.305), ("L", 0.235, 0.305)):
         outward = -1.0 if side == "R" else 1.0
         hand_x = -0.298 if side == "R" else 0.298
-        add_cylinder(f"ShoulderDisc.{side}", body, f"UpperArm.{side}", (x0, -0.102, 1.35), (x0, 0.072, 1.35), 0.082, body_material, bounds, 20)
-        add_cylinder(f"ShoulderRing.{side}", armor if side == "R" else head, f"UpperArm.{side}", (x0, -0.124, 1.35), (x0, -0.096, 1.35), 0.068, armor_material if side == "R" else head_material, bounds, 20)
-        add_cylinder(f"ShoulderCap.{side}", head, f"UpperArm.{side}", (x0, -0.139, 1.35), (x0, -0.119, 1.35), 0.041, head_material, bounds, 18)
+        add_box(f"ShoulderBearing.{side}", body, f"UpperArm.{side}", (x0, -0.005, 1.35), (0.062, 0.060, 0.075), body_material, bounds, 0.018, bevel_segments=3)
+        add_box(f"ShoulderArmor.{side}", armor if side == "R" else head, f"UpperArm.{side}", (x0, -0.073, 1.35), (0.054, 0.018, 0.063), armor_material if side == "R" else head_material, bounds, 0.010, bevel_segments=2)
+        add_cylinder(f"ShoulderAxle.{side}", body, f"UpperArm.{side}", (x0 - 0.075, -0.008, 1.35), (x0 + 0.075, -0.008, 1.35), 0.012, body_material, bounds, 12)
         for rod_index, (dx, y) in enumerate(((outward * 0.018, -0.030), (-outward * 0.023, 0.027))):
             start = (x0 + dx, y, 1.35 - rod_index * 0.015)
             end = (x1 + dx, y, 1.04 + rod_index * 0.018)
@@ -587,9 +619,12 @@ def build_character():
         add_cylinder(f"UpperArm.{side}", body, f"UpperArm.{side}", (x0 + outward * 0.018, -0.030, 1.35), (x1 + outward * 0.018, -0.030, 1.04), 0.021, body_material, bounds, 14)
         add_box(f"UpperArmHinge.{side}", armor, f"UpperArm.{side}", ((x0 + x1) * 0.5, -0.070, 1.195), (0.052, 0.018, 0.042), armor_material, bounds, 0.009, bevel_segments=2)
 
-        add_cylinder(f"Elbow.{side}", body, f"Forearm.{side}", (x1, -0.098, 1.05), (x1, 0.070, 1.05), 0.069, body_material, bounds, 20)
-        add_cylinder(f"ElbowRing.{side}", armor, f"Forearm.{side}", (x1, -0.120, 1.05), (x1, -0.092, 1.05), 0.057, armor_material, bounds, 20)
-        add_cylinder(f"ElbowHub.{side}", head, f"Forearm.{side}", (x1, -0.134, 1.05), (x1, -0.116, 1.05), 0.037, head_material, bounds, 18)
+        add_box(f"ElbowClevis.{side}", armor, f"UpperArm.{side}", (x1, 0.0, 1.055), (0.058, 0.050, 0.068), armor_material, bounds, 0.014, bevel_segments=3)
+        add_box(f"Elbow.{side}", body, f"Forearm.{side}", (x1, -0.012, 1.045), (0.037, 0.036, 0.050), body_material, bounds, 0.010, bevel_segments=2)
+        add_cylinder(f"ElbowAxle.{side}", body, f"Forearm.{side}", (x1 - 0.055, -0.006, 1.05), (x1 + 0.055, -0.006, 1.05), 0.013, body_material, bounds, 12)
+        for cap_side in (-1.0, 1.0):
+            cap_x = x1 + cap_side * 0.055
+            add_cylinder(f"ElbowAxleCap{int(cap_side):+d}.{side}", head, f"Forearm.{side}", (cap_x - cap_side * 0.005, -0.006, 1.05), (cap_x + cap_side * 0.008, -0.006, 1.05), 0.020, head_material, bounds, 12)
         for rod_index, (dx, y) in enumerate(((outward * 0.019, -0.028), (-outward * 0.021, 0.025))):
             start = (x1 + dx, y, 1.04)
             end = (hand_x + dx, y - 0.010, 0.805)
@@ -602,8 +637,9 @@ def build_character():
         add_box(f"ForearmRail.{side}", head, f"Forearm.{side}", ((x1 + hand_x) * 0.5 - outward * 0.044, -0.060, 0.900), (0.012, 0.018, 0.082), head_material, bounds, 0.005)
         add_rivet_row(f"ForearmFastener.{side}.", body, f"Forearm.{side}", ((x1 + hand_x) * 0.5 + outward * 0.045, -0.100, 0.845), ((x1 + hand_x) * 0.5 + outward * 0.045, -0.100, 0.955), 3, 0.008, body_material, bounds)
 
-        add_cylinder(f"WristDisc.{side}", body, f"Hand.{side}", (hand_x, -0.075, 0.81), (hand_x, 0.045, 0.81), 0.054, body_material, bounds, 18)
-        add_cylinder(f"WristCap.{side}", head, f"Hand.{side}", (hand_x, -0.092, 0.81), (hand_x, -0.070, 0.81), 0.038, head_material, bounds, 16)
+        add_box(f"WristClamp.{side}", armor, f"Forearm.{side}", (hand_x, -0.010, 0.81), (0.052, 0.042, 0.048), armor_material, bounds, 0.010, bevel_segments=2)
+        add_box(f"WristBearing.{side}", body, f"Hand.{side}", (hand_x, -0.025, 0.805), (0.033, 0.032, 0.038), body_material, bounds, 0.008, bevel_segments=2)
+        add_cylinder(f"WristAxle.{side}", body, f"Hand.{side}", (hand_x - 0.061, -0.018, 0.81), (hand_x + 0.061, -0.018, 0.81), 0.010, body_material, bounds, 12)
         add_box(f"Fist.{side}", body, f"Hand.{side}", (hand_x, -0.048, 0.748), (0.066, 0.067, 0.074), body_material, bounds, 0.014, bevel_segments=3)
         # Four stepped fingers and a side thumb remain separated at gameplay distance.
         for finger_index in range(4):
@@ -642,10 +678,10 @@ def build_character():
     add_rivet_row("CowlLowerRivet", body, "Chest", (-0.330, -0.233, 1.292), (-0.060, -0.233, 1.270), 8, 0.009, body_material, bounds)
     add_box("CowlLowerLip", head, "Chest", (-0.185, -0.226, 1.258), (0.137, 0.010, 0.018), head_material, bounds, 0.006, rotation=(0.0, math.radians(-2.5), 0.0), bevel_segments=2)
 
-    # Opposite shoulder uses a layered round housing rather than mirroring the cowl.
-    add_sphere("Cowl.L", head, "UpperArm.L", (0.292, -0.004, 1.345), (0.078, 0.105, 0.122), head_material, bounds, 20, 12, True)
-    add_cylinder("LeftShoulderArmorRing", armor, "UpperArm.L", (0.292, -0.120, 1.345), (0.292, -0.090, 1.345), 0.076, armor_material, bounds, 20)
-    add_cylinder("LeftShoulderCenterCap", body, "UpperArm.L", (0.292, -0.138, 1.345), (0.292, -0.116, 1.345), 0.038, body_material, bounds, 18)
+    # Opposite shoulder retains its asymmetry through stacked plates and a small side pin.
+    add_box("Cowl.L", head, "UpperArm.L", (0.292, -0.004, 1.345), (0.076, 0.090, 0.105), head_material, bounds, 0.024, bevel_segments=3)
+    add_box("LeftShoulderArmorPlate", armor, "UpperArm.L", (0.292, -0.103, 1.345), (0.066, 0.018, 0.082), armor_material, bounds, 0.012, bevel_segments=2)
+    add_box("LeftShoulderCenterBlock", body, "UpperArm.L", (0.292, -0.128, 1.345), (0.036, 0.010, 0.045), body_material, bounds, 0.008, bevel_segments=2)
     add_rivet_row("LeftShoulderRivet", body, "UpperArm.L", (0.250, -0.144, 1.390), (0.334, -0.144, 1.390), 4, 0.008, body_material, bounds)
 
     # Deep access hatch: proud frame, dark seam, inset door, hinge barrels, latch, dense fasteners.
@@ -665,8 +701,9 @@ def build_character():
     add_rivet_row("HatchTopFastener", body, "Chest", (-0.080, -0.244, 1.190), (0.170, -0.244, 1.190), 6, 0.008, body_material, bounds)
     add_rivet_row("HatchBottomFastener", body, "Chest", (-0.080, -0.244, 1.040), (0.170, -0.244, 1.040), 6, 0.008, body_material, bounds)
 
-    add_sphere("WaistPlate", armor, "Pelvis", (-0.015, -0.118, 0.895), (0.222, 0.060, 0.105), armor_material, bounds, 20, 10, True)
-    add_sphere("BackHousing", armor, "Chest", (0.010, 0.145, 1.235), (0.225, 0.043, 0.205), armor_material, bounds, 24, 14, True)
+    add_profile_plate("WaistPlate", armor, "Pelvis", ((-0.215, 0.800), (0.200, 0.800), (0.225, 0.900), (0.170, 0.970), (-0.180, 0.970), (-0.235, 0.900)), -0.120, 0.026, armor_material, bounds, 0.014)
+    add_profile_plate("PelvisApron", head, "Pelvis", ((-0.180, 0.735), (0.175, 0.735), (0.205, 0.815), (0.165, 0.875), (-0.170, 0.875), (-0.210, 0.815)), -0.153, 0.018, head_material, bounds, 0.010)
+    add_box("BackHousing", armor, "Chest", (0.010, 0.135, 1.235), (0.215, 0.055, 0.190), armor_material, bounds, 0.030, bevel_segments=3)
     add_box("BackCenterSeam", body, "Chest", (0.010, 0.188, 1.235), (0.012, 0.006, 0.168), body_material, bounds, 0.004)
 
     # Large tan tank with end domes, ribs, straps, brackets, plumbing, and a jointed exhaust.
@@ -804,6 +841,75 @@ def angle_degrees(first, second):
 def pose_ray(rig, bone_name):
     bone = rig.pose.bones[bone_name]
     return (bone.tail - bone.head).normalized()
+
+
+def rigid_part_obb(rig, part):
+    """Return a rigid-weighted box as an armature-space oriented bounding box."""
+    bone_name, bind_center, half_extents = part
+    pose_bone = rig.pose.bones[bone_name]
+    deform = pose_bone.matrix @ rig.data.bones[bone_name].matrix_local.inverted()
+    rotation = deform.to_3x3()
+    axes = tuple((rotation @ axis).normalized() for axis in (
+        Vector((1.0, 0.0, 0.0)), Vector((0.0, 1.0, 0.0)), Vector((0.0, 0.0, 1.0)),
+    ))
+    return deform @ bind_center, axes, half_extents
+
+
+def obb_separating_clearance(first, second):
+    """Return the strongest separating-axis gap; positive means definite clearance."""
+    center_a, axes_a, extents_a = first
+    center_b, axes_b, extents_b = second
+    delta = center_b - center_a
+    candidates = [*axes_a, *axes_b]
+    candidates.extend(axis_a.cross(axis_b) for axis_a in axes_a for axis_b in axes_b)
+    best_gap = -float("inf")
+    for axis in candidates:
+        if axis.length <= 1e-8:
+            continue
+        axis.normalize()
+        radius_a = sum(extents_a[index] * abs(axes_a[index].dot(axis)) for index in range(3))
+        radius_b = sum(extents_b[index] * abs(axes_b[index].dot(axis)) for index in range(3))
+        best_gap = max(best_gap, abs(delta.dot(axis)) - radius_a - radius_b)
+    return best_gap
+
+
+def audit_knee_mechanics(rig, actions):
+    require(set(KNEE_MECHANICS) == {"R", "L"}, f"Knee mechanics records invalid: {set(KNEE_MECHANICS)}")
+    tested_poses = 0
+    minimum_clearance = float("inf")
+    maximum_axis_error = 0.0
+    for action in actions:
+        if action.name not in {"Run", "Jump", "Land", "Kick"}:
+            continue
+        for frame in ACTION_KEYS[action.name]:
+            set_action_frame(rig, action, frame)
+            for side, mechanics in KNEE_MECHANICS.items():
+                axle_bone = mechanics["axle_bone"]
+                deform = rig.pose.bones[axle_bone].matrix @ rig.data.bones[axle_bone].matrix_local.inverted()
+                axle_ray = (deform @ mechanics["axle_end"] - deform @ mechanics["axle_start"]).normalized()
+                axis_error = angle_degrees(axle_ray, (1.0, 0.0, 0.0))
+                maximum_axis_error = max(maximum_axis_error, axis_error)
+                require(axis_error <= 3.0, f"Knee axle axis invalid: {action.name}/{frame}/{side}/{axis_error:.4f}deg")
+
+                lug = rigid_part_obb(rig, mechanics["lug"])
+                obstacles = [*mechanics["plates"], mechanics["bridge"]]
+                for obstacle in obstacles:
+                    clearance = obb_separating_clearance(rigid_part_obb(rig, obstacle), lug)
+                    minimum_clearance = min(minimum_clearance, clearance)
+                    require(clearance >= 0.003, f"Knee clevis clearance invalid: {action.name}/{frame}/{side}/{clearance:.6f}m")
+                tested_poses += 1
+
+        # The child lug must be narrowly captured laterally, not floating between decorative plates.
+        for side, mechanics in KNEE_MECHANICS.items():
+            lug_center = mechanics["lug"][1]
+            lug_extent = mechanics["lug"][2].x
+            plate_centers = sorted(item[1].x for item in mechanics["plates"])
+            plate_extent = mechanics["plates"][0][2].x
+            left_gap = (lug_center.x - lug_extent) - (plate_centers[0] + plate_extent)
+            right_gap = (plate_centers[1] - plate_extent) - (lug_center.x + lug_extent)
+            require(0.003 <= left_gap <= 0.015 and 0.003 <= right_gap <= 0.015, f"Knee lug capture invalid: {side}/{left_gap:.6f}/{right_gap:.6f}")
+
+    print(f"AUDIT knee_mechanics axle=+X max_error={maximum_axis_error:.4f}deg poses={tested_poses} minimum_clearance={minimum_clearance:.6f}m clevis=captured")
 
 
 def audit_meshes(meshes, rig):
@@ -1023,6 +1129,7 @@ def audit(meshes, rig, actions, kick_source):
     audit_rig(rig)
     low, high = audit_meshes(meshes, rig)
     audit_actions(meshes, rig, actions, kick_source)
+    audit_knee_mechanics(rig, actions)
     print(f"AUDIT connections={len(CONNECTION_MAP)} minimum_overlap={MIN_OVERLAP:.3f}m")
     return low, high
 
