@@ -6,7 +6,7 @@ from pathlib import Path
 
 import bpy
 import bmesh
-from mathutils import Vector
+from mathutils import Matrix, Vector
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -33,13 +33,24 @@ EXPECTED_PREVIEWS = {
 
 # Declared before geometry. Parts meet through closed-solid overlap along named axis.
 CONNECTION_MAP = (
-    ("ShinGuard", "ShinCore", "Y", MIN_OVERLAP),
-    ("ShinCore", "Cuff", "Z", MIN_OVERLAP),
-    ("ShinPiston", "Cuff", "Z", MIN_OVERLAP),
-    ("Cuff", "BootShell", "Z", MIN_OVERLAP),
-    ("BootShell", "Toe", "Y", MIN_OVERLAP),
-    ("BootShell", "Sole", "Z", MIN_OVERLAP),
+    ("ShinMain", "UpperShinBracket", "Z", MIN_OVERLAP),
+    ("ShinPiston", "UpperShinBracket", "Z", MIN_OVERLAP),
+    ("ShinMain", "ShinSleeve0", "Z", MIN_OVERLAP),
+    ("ShinPiston", "ShinSleeve1", "Z", MIN_OVERLAP),
+    ("ShinMain", "LowerShinBracket", "Z", MIN_OVERLAP),
+    ("ShinPiston", "LowerShinBracket", "Z", MIN_OVERLAP),
+    ("ShinGuardBase", "ShinGuardFront", "Y", MIN_OVERLAP),
+    ("ShinGuardBase", "LowerShinBracket", "Z", MIN_OVERLAP),
+    ("LowerShinBracket", "AnkleClevisLeft", "Z", MIN_OVERLAP),
+    ("LowerShinBracket", "AnkleClevisRight", "Z", MIN_OVERLAP),
+    ("FootLug", "AnkleYoke", "Z", MIN_OVERLAP),
+    ("AnkleYoke", "BootShell", "Z", MIN_OVERLAP),
+    ("BootShell", "ToeArmor", "Y", MIN_OVERLAP),
+    ("BootShell", "SoleUpper", "Z", MIN_OVERLAP),
+    ("SoleUpper", "SoleLower", "Z", MIN_OVERLAP),
     ("BootShell", "Heel", "Y", MIN_OVERLAP),
+    ("BootShell", "BootSidePlateLeft", "X", MIN_OVERLAP),
+    ("BootShell", "BootSidePlateRight", "X", MIN_OVERLAP),
 )
 
 
@@ -66,12 +77,16 @@ def apply_transform(obj):
     obj.select_set(False)
 
 
-def add_beveled_box(name, location, dimensions, material, bone_name, bevel=0.018, segments=2):
+def add_beveled_box(
+    name, location, dimensions, material, bone_name, bevel=0.018, segments=2,
+    rotation=(0.0, 0.0, 0.0),
+):
     bpy.ops.mesh.primitive_cube_add(size=2.0, location=location)
     obj = bpy.context.object
     obj.name = name
     obj.data.name = f"{name}Mesh"
     obj.scale = Vector(dimensions) * 0.5
+    obj.rotation_euler = rotation
     apply_transform(obj)
     modifier = obj.modifiers.new("EdgeChamfer", "BEVEL")
     modifier.width = bevel
@@ -161,40 +176,162 @@ def audit_connections(parts):
 def create_geometry(materials):
     olive, gunmetal, tan = materials
     parts = {}
-    # Exact source dimensions from the accepted world character's right lower leg,
-    # translated so the camera-space shin begins at the rig origin.
-    parts["ShinCore"] = add_cylinder(
-        "ShinCore", (-0.030, -0.020, -0.020), (-0.030, -0.020, -0.375),
-        0.031, 10, gunmetal, "Shin.R",
+
+    # World-character lower-leg dimensions mapped into camera space. The world
+    # generator authors boxes with half-extents, so the full dimensions below
+    # intentionally preserve its silhouette and mechanical density.
+    parts["ShinMain"] = add_cylinder(
+        "ShinMain", (-0.030, -0.024, 0.000), (-0.030, -0.024, -0.355),
+        0.019, 14, gunmetal, "Shin.R",
     )
     parts["ShinPiston"] = add_cylinder(
-        "ShinPiston", (0.026, 0.025, -0.040), (0.026, 0.025, -0.350),
-        0.022, 10, gunmetal, "Shin.R",
+        "ShinPiston", (0.028, 0.030, -0.010), (0.028, 0.030, -0.355),
+        0.019, 14, gunmetal, "Shin.R",
     )
-    parts["ShinGuard"] = add_beveled_box(
-        "ShinGuard", (-0.005, -0.070, -0.205), (0.140, 0.054, 0.230),
-        olive, "Shin.R", 0.012, 1,
+    for index, (x, y, upper, lower) in enumerate((
+        (-0.030, -0.024, -0.160, -0.260),
+        (0.028, 0.030, -0.150, -0.250),
+    )):
+        parts[f"ShinSleeve{index}"] = add_cylinder(
+            f"ShinSleeve{index}", (x, y, upper), (x, y, lower),
+            0.027, 14, tan, "Shin.R",
+        )
+        parts[f"ShinCapUpper{index}"] = add_cylinder(
+            f"ShinCapUpper{index}", (x, y, upper + 0.015), (x, y, upper - 0.005),
+            0.030, 14, gunmetal, "Shin.R", 0.002,
+        )
+        parts[f"ShinCapLower{index}"] = add_cylinder(
+            f"ShinCapLower{index}", (x, y, lower + 0.005), (x, y, lower - 0.015),
+            0.030, 14, gunmetal, "Shin.R", 0.002,
+        )
+
+    parts["UpperShinBracket"] = add_beveled_box(
+        "UpperShinBracket", (0.0, 0.0, -0.0225), (0.145, 0.090, 0.045),
+        olive, "Shin.R", 0.009, 2,
     )
-    parts["Cuff"] = add_cylinder(
-        "Cuff", (0.0, -0.084, -0.360), (0.0, 0.060, -0.360),
-        0.066, 12, tan, "Shin.R",
+    parts["LowerShinBracket"] = add_beveled_box(
+        "LowerShinBracket", (0.0, 0.0, -0.3375), (0.150, 0.090, 0.045),
+        olive, "Shin.R", 0.009, 2,
+    )
+    parts["ShinBrace"] = add_cylinder(
+        "ShinBrace", (-0.044, -0.004, -0.095), (0.043, -0.004, -0.215),
+        0.011, 10, olive, "Shin.R",
+    )
+    parts["ShinGuardBase"] = add_beveled_box(
+        "ShinGuardBase", (0.0, -0.035, -0.195), (0.148, 0.030, 0.250),
+        olive, "Shin.R", 0.012, 2,
+    )
+    parts["ShinGuardFront"] = add_beveled_box(
+        "ShinGuardFront", (0.0, -0.057, -0.170), (0.116, 0.032, 0.104),
+        tan, "Shin.R", 0.010, 2,
+    )
+    for side_name, x in (("Left", -0.069), ("Right", 0.069)):
+        parts[f"ShinGuardRail{side_name}"] = add_beveled_box(
+            f"ShinGuardRail{side_name}", (x, -0.045, -0.195), (0.018, 0.040, 0.220),
+            gunmetal, "Shin.R", 0.005, 1,
+        )
+    for seam_name, z in (("Upper", -0.119), ("Lower", -0.218)):
+        parts[f"ShinGuardSeam{seam_name}"] = add_beveled_box(
+            f"ShinGuardSeam{seam_name}", (0.0, -0.075, z), (0.120, 0.014, 0.014),
+            gunmetal, "Shin.R", 0.003, 1,
+        )
+    for row, z in enumerate((-0.139, -0.199)):
+        for column, x in enumerate((-0.045, 0.045)):
+            name = f"ShinFastener{row}{column}"
+            parts[name] = add_cylinder(
+                name, (x, -0.071, z), (x, -0.085, z),
+                0.006, 10, gunmetal, "Shin.R", 0.001,
+            )
+
+    # A true X-axis clevis: two squared shin plates capture the foot lug with
+    # 5 mm lateral clearance, while the axle and small end caps remain pins.
+    parts["AnkleClevisLeft"] = add_beveled_box(
+        "AnkleClevisLeft", (-0.047, 0.0, -0.345), (0.022, 0.084, 0.110),
+        olive, "Shin.R", 0.008, 2,
+    )
+    parts["AnkleClevisRight"] = add_beveled_box(
+        "AnkleClevisRight", (0.047, 0.0, -0.345), (0.022, 0.084, 0.110),
+        olive, "Shin.R", 0.008, 2,
+    )
+    parts["AnkleHousing"] = add_beveled_box(
+        "AnkleHousing", (0.0, 0.034, -0.327), (0.116, 0.026, 0.042),
+        olive, "Shin.R", 0.007, 2,
+    )
+    parts["FootLug"] = add_beveled_box(
+        "FootLug", (0.0, -0.002, -0.355), (0.062, 0.062, 0.088),
+        gunmetal, "Foot.R", 0.009, 2,
+    )
+    parts["AnkleAxle"] = add_cylinder(
+        "AnkleAxle", (-0.068, -0.002, -0.345), (0.068, -0.002, -0.345),
+        0.012, 12, gunmetal, "Foot.R",
+    )
+    for side_name, start, end in (
+        ("Left", (-0.081, -0.002, -0.345), (-0.068, -0.002, -0.345)),
+        ("Right", (0.068, -0.002, -0.345), (0.081, -0.002, -0.345)),
+    ):
+        parts[f"AnkleAxleCap{side_name}"] = add_cylinder(
+            f"AnkleAxleCap{side_name}", start, end, 0.019, 12, tan, "Foot.R", 0.002,
+        )
+    left_gap = world_bounds(parts["FootLug"])[0].x - world_bounds(parts["AnkleClevisLeft"])[1].x
+    right_gap = world_bounds(parts["AnkleClevisRight"])[0].x - world_bounds(parts["FootLug"])[1].x
+    require(0.005 - 1e-6 <= left_gap <= 0.015, f"Ankle left lug clearance invalid: {left_gap:.6f}m")
+    require(0.005 - 1e-6 <= right_gap <= 0.015, f"Ankle right lug clearance invalid: {right_gap:.6f}m")
+    print(f"AUDIT ankle_mechanics axle=+X left_clearance={left_gap:.6f}m right_clearance={right_gap:.6f}m clevis=captured")
+
+    parts["AnkleYoke"] = add_beveled_box(
+        "AnkleYoke", (0.0, -0.005, -0.375), (0.156, 0.110, 0.104),
+        olive, "Foot.R", 0.012, 2,
     )
     parts["BootShell"] = add_beveled_box(
-        "BootShell", (0.0, -0.045, -0.435), (0.224, 0.310, 0.150),
-        gunmetal, "Foot.R", 0.018, 1,
+        "BootShell", (0.0, -0.045, -0.422), (0.216, 0.300, 0.150),
+        gunmetal, "Foot.R", 0.018, 3,
     )
-    parts["Toe"] = add_beveled_box(
-        "Toe", (0.0, -0.203, -0.430), (0.206, 0.044, 0.100),
-        olive, "Foot.R", 0.010, 1,
+    parts["BootUpperShell"] = add_beveled_box(
+        "BootUpperShell", (0.0, -0.070, -0.395), (0.192, 0.208, 0.094),
+        olive, "Foot.R", 0.014, 3, (math.radians(-10.0), 0.0, 0.0),
     )
-    parts["Sole"] = add_beveled_box(
-        "Sole", (0.0, -0.050, -0.492), (0.236, 0.320, 0.036),
-        tan, "Foot.R", 0.006, 1,
+    parts["ToeArmor"] = add_beveled_box(
+        "ToeArmor", (0.0, -0.181, -0.438), (0.208, 0.076, 0.104),
+        olive, "Foot.R", 0.012, 2,
+    )
+    parts["ToeTopPlate"] = add_beveled_box(
+        "ToeTopPlate", (0.0, -0.174, -0.393), (0.180, 0.068, 0.018),
+        tan, "Foot.R", 0.005, 2,
+    )
+    parts["ToeCap"] = add_beveled_box(
+        "ToeCap", (0.0, -0.215, -0.443), (0.196, 0.024, 0.072),
+        gunmetal, "Foot.R", 0.006, 2,
+    )
+    parts["SoleUpper"] = add_beveled_box(
+        "SoleUpper", (0.0, -0.045, -0.474), (0.228, 0.308, 0.036),
+        tan, "Foot.R", 0.006, 2,
+    )
+    parts["SoleLower"] = add_beveled_box(
+        "SoleLower", (0.0, -0.045, -0.491), (0.236, 0.316, 0.018),
+        gunmetal, "Foot.R", 0.004, 2,
     )
     parts["Heel"] = add_beveled_box(
-        "Heel", (0.0, 0.112, -0.434), (0.188, 0.088, 0.116),
-        gunmetal, "Foot.R", 0.012, 1,
+        "Heel", (0.0, 0.112, -0.432), (0.184, 0.090, 0.110),
+        gunmetal, "Foot.R", 0.012, 2,
     )
+    parts["HeelPlate"] = add_beveled_box(
+        "HeelPlate", (0.0, 0.149, -0.430), (0.160, 0.026, 0.072),
+        olive, "Foot.R", 0.006, 2,
+    )
+    for side_name, x in (("Left", -0.108), ("Right", 0.108)):
+        parts[f"BootSidePlate{side_name}"] = add_beveled_box(
+            f"BootSidePlate{side_name}", (x, -0.070, -0.425), (0.018, 0.160, 0.070),
+            tan, "Foot.R", 0.005, 1,
+        )
+        direction = -1.0 if x < 0.0 else 1.0
+        for index, y in enumerate((-0.115, -0.045)):
+            name = f"BootFastener{side_name}{index}"
+            parts[name] = add_cylinder(
+                name,
+                (x + direction * 0.005, y, -0.425),
+                (x + direction * 0.020, y, -0.425),
+                0.007, 10, gunmetal, "Foot.R", 0.001,
+            )
     audit_connections(parts)
 
     bpy.ops.object.select_all(action="DESELECT")
@@ -206,6 +343,10 @@ def create_geometry(materials):
     mesh.name = "FpsKickMesh"
     mesh.data.name = "FpsKickMeshData"
     bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    # The first-person-only envelope sits forward/up relative to its deform
+    # bones so the complete contact silhouette stays inside the fixed camera.
+    # This changes no dimensions, transforms, bone hierarchy, or animation keys.
+    mesh.data.transform(Matrix.Translation((0.0, -0.120, 0.150)))
     normalize_material_slots(mesh, materials)
     for polygon in mesh.data.polygons:
         polygon.use_smooth = False
@@ -417,9 +558,24 @@ def audit(mesh, armature, idle, kick):
     idle_screen_y = idle_center.y / (idle_center.z * half_vertical_tangent)
     contact_screen_y = contact_center.y / (contact_center.z * half_vertical_tangent)
     contact_screen_x = contact_center.x / (contact_center.z * half_vertical_tangent * (16.0 / 9.0))
+    evaluated = mesh.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    unity_vertices = [
+        Vector((MOUNT_UNITY.x + point.x, MOUNT_UNITY.y + point.z, MOUNT_UNITY.z - point.y))
+        for point in (evaluated.matrix_world @ vertex.co for vertex in evaluated.data.vertices)
+    ]
+    contact_projection_x = [
+        point.x / (point.z * half_vertical_tangent * (16.0 / 9.0))
+        for point in unity_vertices
+    ]
+    contact_projection_y = [
+        point.y / (point.z * half_vertical_tangent)
+        for point in unity_vertices
+    ]
     require(idle_screen_y < -1.10, f"Idle center not below view: normalized y={idle_screen_y:.3f}")
     require(abs(contact_screen_x) <= 0.25 and -0.85 <= contact_screen_y <= -0.25, f"Contact misses lower-center: center={tuple(round(v, 3) for v in contact_center)} normalized=({contact_screen_x:.3f},{contact_screen_y:.3f})")
     require(contact_bounds[3].z > 0.03, f"Contact crosses near plane: minimum Unity z={contact_bounds[3].z:.3f}")
+    require(min(contact_projection_x) >= -0.98 and max(contact_projection_x) <= 0.98, f"Contact silhouette clips horizontally: {min(contact_projection_x):.3f}..{max(contact_projection_x):.3f}")
+    require(min(contact_projection_y) >= -0.98 and max(contact_projection_y) <= 0.98, f"Contact silhouette clips vertically: {min(contact_projection_y):.3f}..{max(contact_projection_y):.3f}")
     forbidden = ("rocket", "thruster", "nozzle", "exhaust", "jet", "particle", "emission")
     exported_names = [mesh.name, mesh.data.name, armature.name, armature.data.name, *MATERIAL_NAMES, *ACTION_NAMES]
     require(not any(token in name.lower() for token in forbidden for name in exported_names), "Forbidden propulsion name detected")
@@ -435,6 +591,7 @@ def audit(mesh, armature, idle, kick):
     print("AUDIT hierarchy=Root>Shin.R>Foot.R bindings=Shin.R,Foot.R root=locked transforms=zero/unit")
     print(f"AUDIT camera_idle_center={tuple(round(v, 6) for v in idle_center)} normalized_y={idle_screen_y:.6f}")
     print(f"AUDIT camera_strike_center={tuple(round(v, 6) for v in contact_center)} normalized=({contact_screen_x:.6f},{contact_screen_y:.6f}) min_unity_z={contact_bounds[3].z:.6f}")
+    print(f"AUDIT camera_strike_silhouette x={min(contact_projection_x):.6f}..{max(contact_projection_x):.6f} y={min(contact_projection_y):.6f}..{max(contact_projection_y):.6f} unclipped=true")
 
 
 def point_camera(camera, target):
@@ -447,8 +604,8 @@ def render_previews(mesh, armature, idle):
         stale.unlink()
     scene = bpy.context.scene
     scene.render.engine = "BLENDER_EEVEE_NEXT"
-    scene.render.resolution_x = 640
-    scene.render.resolution_y = 640
+    scene.render.resolution_x = 1024
+    scene.render.resolution_y = 1024
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
     if scene.world is None:
@@ -459,7 +616,8 @@ def render_previews(mesh, armature, idle):
     background.inputs["Strength"].default_value = 0.38
     scene.view_settings.look = "AgX - Medium High Contrast"
 
-    bpy.ops.mesh.primitive_plane_add(size=8.0, location=(0.0, 0.0, -0.516))
+    idle_lower, _ = evaluated_world_bounds(mesh)
+    bpy.ops.mesh.primitive_plane_add(size=8.0, location=(0.0, 0.0, idle_lower.z - 0.016))
     floor = bpy.context.object
     floor.name = "PreviewFloor"
     floor_material = make_material("PreviewFloorMaterial", (0.070, 0.078, 0.074), 0.12, 0.62)
@@ -519,8 +677,8 @@ def render_previews(mesh, armature, idle):
     camera.location = contact_target + Vector((1.20, 0.55, 0.42))
     camera.data.lens = 58
     point_camera(camera, contact_target)
-    scene.render.resolution_x = 1024
-    scene.render.resolution_y = 576
+    scene.render.resolution_x = 1280
+    scene.render.resolution_y = 720
     output = PREVIEW_DIR / "contact-kick.png"
     scene.render.filepath = str(output)
     bpy.ops.render.render(write_still=True)
