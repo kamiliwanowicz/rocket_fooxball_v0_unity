@@ -95,8 +95,8 @@ namespace RocketFooxball.Editor
 
             var idle = stateMachine.AddState(MovementLabContract.IdleStateName);
             var kick = stateMachine.AddState(MovementLabContract.KickStateName);
-            ConfigureState(idle, clips[0]);
-            ConfigureState(kick, clips[1]);
+            ConfigureState(idle, clips[0], true);
+            ConfigureState(kick, clips[1], true);
             stateMachine.defaultState = idle;
 
             var anyToKick = stateMachine.AddAnyStateTransition(kick);
@@ -186,7 +186,7 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < MovementLabContract.WorldBaseStateNames.Length; i++)
             {
                 var state = baseStateMachine.AddState(MovementLabContract.WorldBaseStateNames[i]);
-                ConfigureState(state, baseMotions[i]);
+                ConfigureState(state, baseMotions[i], true);
                 baseStates.Add(state.name, state);
             }
             baseStateMachine.defaultState = baseStates[MovementLabContract.IdleStateName];
@@ -194,8 +194,8 @@ namespace RocketFooxball.Editor
 
             var empty = kickStateMachine.AddState(MovementLabContract.EmptyStateName);
             var kick = kickStateMachine.AddState(MovementLabContract.KickStateName);
-            ConfigureState(empty, null);
-            ConfigureState(kick, clips[5]);
+            ConfigureState(empty, null, false);
+            ConfigureState(kick, clips[5], false);
             kickStateMachine.defaultState = empty;
             var anyToKick = kickStateMachine.AddAnyStateTransition(kick);
             ConfigureTransition(anyToKick, false, 0f, 0f, false,
@@ -371,7 +371,7 @@ namespace RocketFooxball.Editor
             var expectedBaseMotions = new[] { clips[0], clips[1], clips[2], clips[3], clips[4] };
             if (!ValidateStateMotions(baseStates, MovementLabContract.WorldBaseStateNames, expectedBaseMotions, out reason) ||
                 !ValidateStateMotions(kickStates, MovementLabContract.WorldKickStateNames, new AnimationClip[] { null, clips[5] }, out reason)) return false;
-            if (!ValidateAllStateSettings(baseStates.Values, out reason) || !ValidateAllStateSettings(kickStates.Values, out reason)) return false;
+            if (!ValidateAllStateSettings(baseStates.Values, true, out reason) || !ValidateAllStateSettings(kickStates.Values, false, out reason)) return false;
             if (!DistinctClips(clips, out reason)) return false;
             if (!ValidateWorldKickCurveBindings(clips[5], out reason)) return false;
 
@@ -419,7 +419,7 @@ namespace RocketFooxball.Editor
             var states = GetNamedStates(stateMachine, out reason);
             if (states == null || !HasExpectedStates(states, new[] { MovementLabContract.IdleStateName, MovementLabContract.KickStateName }, out reason)) return false;
             if (!ValidateStateMotions(states, new[] { MovementLabContract.IdleStateName, MovementLabContract.KickStateName }, clips, out reason) ||
-                !ValidateAllStateSettings(states.Values, out reason) || !DistinctClips(clips, out reason)) return false;
+                !ValidateAllStateSettings(states.Values, true, out reason) || !DistinctClips(clips, out reason)) return false;
 
             if (!MatchesTriggerTransition(stateMachine.anyStateTransitions[0], states[MovementLabContract.KickStateName], out reason)) return false;
             var kickTransitions = states[MovementLabContract.KickStateName].transitions;
@@ -493,7 +493,7 @@ namespace RocketFooxball.Editor
             for (var i = 0; i < names.Length; i++) controller.AddParameter(names[i], types[i]);
         }
 
-        private static void ConfigureState(AnimatorState state, Motion motion)
+        private static void ConfigureState(AnimatorState state, Motion motion, bool writeDefaultValues)
         {
             state.motion = motion;
             state.speed = 1f;
@@ -504,7 +504,7 @@ namespace RocketFooxball.Editor
             state.cycleOffsetParameterActive = false;
             state.timeParameterActive = false;
             state.iKOnFeet = false;
-            state.writeDefaultValues = true;
+            state.writeDefaultValues = writeDefaultValues;
         }
 
         private static void ConfigureTransition(AnimatorStateTransition transition, bool hasExitTime, float exitTime,
@@ -629,13 +629,13 @@ namespace RocketFooxball.Editor
             return true;
         }
 
-        private static bool ValidateAllStateSettings(IEnumerable<AnimatorState> states, out string reason)
+        private static bool ValidateAllStateSettings(IEnumerable<AnimatorState> states, bool expectedWriteDefaultValues, out string reason)
         {
             foreach (var state in states)
             {
                 if (state == null || Mathf.Abs(state.speed - 1f) > 0.0001f || Mathf.Abs(state.cycleOffset) > 0.0001f ||
                     state.mirror || state.speedParameterActive || state.mirrorParameterActive || state.cycleOffsetParameterActive ||
-                    state.timeParameterActive || state.iKOnFeet || !state.writeDefaultValues)
+                    state.timeParameterActive || state.iKOnFeet || state.writeDefaultValues != expectedWriteDefaultValues)
                     return Fail("state settings", out reason);
             }
             reason = null;
