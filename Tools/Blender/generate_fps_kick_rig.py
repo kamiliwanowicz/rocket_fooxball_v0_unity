@@ -26,6 +26,11 @@ MOUNT_UNITY = Vector((0.12, -0.42, 0.30))
 MIN_OVERLAP = 0.005
 ACTION_NAMES = {"Idle", "Kick"}
 MATERIAL_NAMES = ("KickRed", "KickBlack", "KickCream")
+MATERIAL_SPECS = (
+    ("KickRed", (0.035, 0.047, 0.018), 0.66, 0.52),
+    ("KickBlack", (0.018, 0.024, 0.023), 0.92, 0.24),
+    ("KickCream", (0.110, 0.045, 0.016), 0.68, 0.45),
+)
 EXPECTED_PREVIEWS = {
     "front.png", "rear.png", "left.png", "right.png", "top.png", "three-quarter.png",
     "contact-kick.png", "unity-camera-kick.png",
@@ -33,19 +38,14 @@ EXPECTED_PREVIEWS = {
 
 # Declared before geometry. Parts meet through closed-solid overlap along named axis.
 CONNECTION_MAP = (
-    ("ShinMain", "UpperShinBracket", "Z", MIN_OVERLAP),
-    ("ShinPiston", "UpperShinBracket", "Z", MIN_OVERLAP),
+    ("Knee", "ShinMain", "Z", MIN_OVERLAP),
     ("ShinMain", "ShinSleeve0", "Z", MIN_OVERLAP),
     ("ShinPiston", "ShinSleeve1", "Z", MIN_OVERLAP),
-    ("ShinMain", "LowerShinBracket", "Z", MIN_OVERLAP),
-    ("ShinPiston", "LowerShinBracket", "Z", MIN_OVERLAP),
-    ("ShinGuardBase", "ShinGuardFront", "Y", MIN_OVERLAP),
-    ("ShinGuardBase", "LowerShinBracket", "Z", MIN_OVERLAP),
-    ("LowerShinBracket", "AnkleClevisLeft", "Z", MIN_OVERLAP),
-    ("LowerShinBracket", "AnkleClevisRight", "Z", MIN_OVERLAP),
+    ("ShinMain", "AnkleClevisLeft", "Z", MIN_OVERLAP),
+    ("ShinPiston", "AnkleClevisRight", "Z", MIN_OVERLAP),
     ("FootLug", "AnkleYoke", "Z", MIN_OVERLAP),
     ("AnkleYoke", "BootShell", "Z", MIN_OVERLAP),
-    ("BootShell", "ToeArmor", "Y", MIN_OVERLAP),
+    ("BootShell", "BootToeBlock", "Y", MIN_OVERLAP),
     ("BootShell", "SoleUpper", "Z", MIN_OVERLAP),
     ("SoleUpper", "SoleLower", "Z", MIN_OVERLAP),
     ("BootShell", "Heel", "Y", MIN_OVERLAP),
@@ -134,6 +134,45 @@ def add_cylinder(name, start, end, radius, vertices, material, bone_name, bevel=
     return obj
 
 
+def add_torus(name, location, major_radius, minor_radius, material, bone_name):
+    bpy.ops.mesh.primitive_torus_add(
+        major_radius=major_radius,
+        minor_radius=minor_radius,
+        major_segments=16,
+        minor_segments=5,
+        location=location,
+    )
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = f"{name}Mesh"
+    apply_transform(obj)
+    obj.data.materials.append(material)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    group = obj.vertex_groups.new(name=bone_name)
+    group.add(range(len(obj.data.vertices)), 1.0, "REPLACE")
+    return obj
+
+
+def add_sphere(name, location, radius, material, bone_name):
+    bpy.ops.mesh.primitive_uv_sphere_add(
+        segments=10,
+        ring_count=6,
+        radius=radius,
+        location=location,
+    )
+    obj = bpy.context.object
+    obj.name = name
+    obj.data.name = f"{name}Mesh"
+    apply_transform(obj)
+    obj.data.materials.append(material)
+    for polygon in obj.data.polygons:
+        polygon.use_smooth = True
+    group = obj.vertex_groups.new(name=bone_name)
+    group.add(range(len(obj.data.vertices)), 1.0, "REPLACE")
+    return obj
+
+
 def normalize_material_slots(mesh, materials):
     old_names = [slot.name for slot in mesh.data.materials]
     polygon_names = [old_names[polygon.material_index] for polygon in mesh.data.polygons]
@@ -177,9 +216,29 @@ def create_geometry(materials):
     olive, gunmetal, tan = materials
     parts = {}
 
-    # World-character lower-leg dimensions mapped into camera space. The world
-    # generator authors boxes with half-extents, so the full dimensions below
-    # intentionally preserve its silhouette and mechanical density.
+    # Exact world-character right shin/foot inventory mapped around its
+    # (x=-0.155, z=0.500) origin into the fixed first-person envelope.
+    parts["Knee"] = add_beveled_box(
+        "Knee", (0.0, 0.0, -0.025), (0.068, 0.068, 0.096),
+        gunmetal, "Shin.R", 0.012, 2,
+    )
+    parts["KneeFrontArmor"] = add_beveled_box(
+        "KneeFrontArmor", (0.0, -0.050, -0.028), (0.082, 0.032, 0.076),
+        tan, "Shin.R", 0.008, 2,
+    )
+    parts["KneeAxle"] = add_cylinder(
+        "KneeAxle", (-0.090, 0.0, 0.015), (0.090, 0.0, 0.015),
+        0.015, 12, gunmetal, "Shin.R",
+    )
+    for side_name, start, end in (
+        ("Left", (-0.100, 0.0, 0.015), (-0.084, 0.0, 0.015)),
+        ("Right", (0.084, 0.0, 0.015), (0.100, 0.0, 0.015)),
+    ):
+        parts[f"KneeAxleCap{side_name}"] = add_cylinder(
+            f"KneeAxleCap{side_name}", start, end,
+            0.023, 12, tan, "Shin.R",
+        )
+
     parts["ShinMain"] = add_cylinder(
         "ShinMain", (-0.030, -0.024, 0.000), (-0.030, -0.024, -0.355),
         0.019, 14, gunmetal, "Shin.R",
@@ -188,63 +247,32 @@ def create_geometry(materials):
         "ShinPiston", (0.028, 0.030, -0.010), (0.028, 0.030, -0.355),
         0.019, 14, gunmetal, "Shin.R",
     )
-    for index, (x, y, upper, lower) in enumerate((
-        (-0.030, -0.024, -0.160, -0.260),
-        (0.028, 0.030, -0.150, -0.250),
+    for index, (x, y) in enumerate((
+        (-0.030, -0.024),
+        (0.028, 0.030),
     )):
         parts[f"ShinSleeve{index}"] = add_cylinder(
-            f"ShinSleeve{index}", (x, y, upper), (x, y, lower),
+            f"ShinSleeve{index}", (x, y, -0.255), (x, y, -0.160),
             0.027, 14, tan, "Shin.R",
         )
-        parts[f"ShinCapUpper{index}"] = add_cylinder(
-            f"ShinCapUpper{index}", (x, y, upper + 0.015), (x, y, upper - 0.005),
-            0.030, 14, gunmetal, "Shin.R", 0.002,
+        parts[f"ShinCap{index}"] = add_torus(
+            f"ShinCap{index}", (x, y, -0.260),
+            0.025, 0.006, gunmetal, "Shin.R",
         )
-        parts[f"ShinCapLower{index}"] = add_cylinder(
-            f"ShinCapLower{index}", (x, y, lower + 0.005), (x, y, lower - 0.015),
-            0.030, 14, gunmetal, "Shin.R", 0.002,
-        )
-
-    parts["UpperShinBracket"] = add_beveled_box(
-        "UpperShinBracket", (0.0, 0.0, -0.0225), (0.145, 0.090, 0.045),
-        olive, "Shin.R", 0.009, 2,
-    )
-    parts["LowerShinBracket"] = add_beveled_box(
-        "LowerShinBracket", (0.0, 0.0, -0.3375), (0.150, 0.090, 0.045),
-        olive, "Shin.R", 0.009, 2,
+    parts["Shin"] = add_cylinder(
+        "Shin", (-0.030, -0.024, 0.000), (-0.030, -0.024, -0.355),
+        0.020, 14, gunmetal, "Shin.R",
     )
     parts["ShinBrace"] = add_cylinder(
         "ShinBrace", (-0.044, -0.004, -0.095), (0.043, -0.004, -0.215),
         0.011, 10, olive, "Shin.R",
     )
-    parts["ShinGuardBase"] = add_beveled_box(
-        "ShinGuardBase", (0.0, -0.035, -0.195), (0.148, 0.030, 0.250),
-        olive, "Shin.R", 0.012, 2,
+    parts["ShinPlate"] = add_beveled_box(
+        "ShinPlate", (0.0, -0.060, -0.170), (0.116, 0.032, 0.104),
+        olive, "Shin.R", 0.010, 2,
     )
-    parts["ShinGuardFront"] = add_beveled_box(
-        "ShinGuardFront", (0.0, -0.057, -0.170), (0.116, 0.032, 0.104),
-        tan, "Shin.R", 0.010, 2,
-    )
-    for side_name, x in (("Left", -0.069), ("Right", 0.069)):
-        parts[f"ShinGuardRail{side_name}"] = add_beveled_box(
-            f"ShinGuardRail{side_name}", (x, -0.045, -0.195), (0.018, 0.040, 0.220),
-            gunmetal, "Shin.R", 0.005, 1,
-        )
-    for seam_name, z in (("Upper", -0.119), ("Lower", -0.218)):
-        parts[f"ShinGuardSeam{seam_name}"] = add_beveled_box(
-            f"ShinGuardSeam{seam_name}", (0.0, -0.075, z), (0.120, 0.014, 0.014),
-            gunmetal, "Shin.R", 0.003, 1,
-        )
-    for row, z in enumerate((-0.139, -0.199)):
-        for column, x in enumerate((-0.045, 0.045)):
-            name = f"ShinFastener{row}{column}"
-            parts[name] = add_cylinder(
-                name, (x, -0.071, z), (x, -0.085, z),
-                0.006, 10, gunmetal, "Shin.R", 0.001,
-            )
 
-    # A true X-axis clevis: two squared shin plates capture the foot lug with
-    # 5 mm lateral clearance, while the axle and small end caps remain pins.
+    # Exact world squared clevis: lateral plates capture a narrow foot lug.
     parts["AnkleClevisLeft"] = add_beveled_box(
         "AnkleClevisLeft", (-0.047, 0.0, -0.345), (0.022, 0.084, 0.110),
         olive, "Shin.R", 0.008, 2,
@@ -252,10 +280,6 @@ def create_geometry(materials):
     parts["AnkleClevisRight"] = add_beveled_box(
         "AnkleClevisRight", (0.047, 0.0, -0.345), (0.022, 0.084, 0.110),
         olive, "Shin.R", 0.008, 2,
-    )
-    parts["AnkleHousing"] = add_beveled_box(
-        "AnkleHousing", (0.0, 0.034, -0.327), (0.116, 0.026, 0.042),
-        olive, "Shin.R", 0.007, 2,
     )
     parts["FootLug"] = add_beveled_box(
         "FootLug", (0.0, -0.002, -0.355), (0.062, 0.062, 0.088),
@@ -266,8 +290,8 @@ def create_geometry(materials):
         0.012, 12, gunmetal, "Foot.R",
     )
     for side_name, start, end in (
-        ("Left", (-0.081, -0.002, -0.345), (-0.068, -0.002, -0.345)),
-        ("Right", (0.068, -0.002, -0.345), (0.081, -0.002, -0.345)),
+        ("Left", (-0.063, -0.002, -0.345), (-0.076, -0.002, -0.345)),
+        ("Right", (0.063, -0.002, -0.345), (0.076, -0.002, -0.345)),
     ):
         parts[f"AnkleAxleCap{side_name}"] = add_cylinder(
             f"AnkleAxleCap{side_name}", start, end, 0.019, 12, tan, "Foot.R", 0.002,
@@ -290,17 +314,9 @@ def create_geometry(materials):
         "BootUpperShell", (0.0, -0.070, -0.395), (0.192, 0.208, 0.094),
         olive, "Foot.R", 0.014, 3, (math.radians(-10.0), 0.0, 0.0),
     )
-    parts["ToeArmor"] = add_beveled_box(
-        "ToeArmor", (0.0, -0.181, -0.438), (0.208, 0.076, 0.104),
+    parts["BootToeBlock"] = add_beveled_box(
+        "BootToeBlock", (0.0, -0.181, -0.438), (0.208, 0.076, 0.104),
         olive, "Foot.R", 0.012, 2,
-    )
-    parts["ToeTopPlate"] = add_beveled_box(
-        "ToeTopPlate", (0.0, -0.174, -0.393), (0.180, 0.068, 0.018),
-        tan, "Foot.R", 0.005, 2,
-    )
-    parts["ToeCap"] = add_beveled_box(
-        "ToeCap", (0.0, -0.215, -0.443), (0.196, 0.024, 0.072),
-        gunmetal, "Foot.R", 0.006, 2,
     )
     parts["SoleUpper"] = add_beveled_box(
         "SoleUpper", (0.0, -0.045, -0.474), (0.228, 0.308, 0.036),
@@ -314,24 +330,42 @@ def create_geometry(materials):
         "Heel", (0.0, 0.112, -0.432), (0.184, 0.090, 0.110),
         gunmetal, "Foot.R", 0.012, 2,
     )
-    parts["HeelPlate"] = add_beveled_box(
-        "HeelPlate", (0.0, 0.149, -0.430), (0.160, 0.026, 0.072),
-        olive, "Foot.R", 0.006, 2,
-    )
     for side_name, x in (("Left", -0.108), ("Right", 0.108)):
         parts[f"BootSidePlate{side_name}"] = add_beveled_box(
             f"BootSidePlate{side_name}", (x, -0.070, -0.425), (0.018, 0.160, 0.070),
             tan, "Foot.R", 0.005, 1,
         )
         direction = -1.0 if x < 0.0 else 1.0
-        for index, y in enumerate((-0.115, -0.045)):
-            name = f"BootFastener{side_name}{index}"
-            parts[name] = add_cylinder(
-                name,
-                (x + direction * 0.005, y, -0.425),
-                (x + direction * 0.020, y, -0.425),
-                0.007, 10, gunmetal, "Foot.R", 0.001,
-            )
+        parts[f"BootFastener{side_name}"] = add_sphere(
+            f"BootFastener{side_name}",
+            (x + direction * 0.006, -0.095, -0.422),
+            0.010, gunmetal, "Foot.R",
+        )
+
+    armor_parts = {
+        "ShinBrace", "ShinPlate", "AnkleClevisLeft", "AnkleClevisRight",
+        "AnkleYoke", "BootUpperShell", "BootToeBlock",
+    }
+    body_parts = {
+        "Knee", "KneeAxle", "ShinMain", "ShinPiston", "ShinCap0", "ShinCap1", "Shin",
+        "FootLug", "AnkleAxle", "BootShell", "SoleLower", "Heel",
+        "BootFastenerLeft", "BootFastenerRight",
+    }
+    head_parts = {
+        "KneeFrontArmor", "KneeAxleCapLeft", "KneeAxleCapRight", "ShinSleeve0", "ShinSleeve1",
+        "AnkleAxleCapLeft", "AnkleAxleCapRight", "SoleUpper", "BootSidePlateLeft", "BootSidePlateRight",
+    }
+    expected_materials = {
+        **{name: olive.name for name in armor_parts},
+        **{name: gunmetal.name for name in body_parts},
+        **{name: tan.name for name in head_parts},
+    }
+    require(set(parts) == set(expected_materials), f"World lower-leg inventory mismatch: {sorted(set(parts) ^ set(expected_materials))}")
+    for part_name, expected_material in expected_materials.items():
+        actual_materials = tuple(slot.name for slot in parts[part_name].data.materials)
+        require(actual_materials == (expected_material,), f"World material mismatch: {part_name}={actual_materials}")
+    require(len(parts) == 31, f"World lower-leg part count invalid: {len(parts)}")
+    print("AUDIT world_lower_leg_inventory=31 shin=16 foot=15 materials=exact")
     audit_connections(parts)
 
     bpy.ops.object.select_all(action="DESELECT")
@@ -348,8 +382,6 @@ def create_geometry(materials):
     # This changes no dimensions, transforms, bone hierarchy, or animation keys.
     mesh.data.transform(Matrix.Translation((0.0, -0.120, 0.150)))
     normalize_material_slots(mesh, materials)
-    for polygon in mesh.data.polygons:
-        polygon.use_smooth = False
 
     # Stable single UV layer for Unity materials.
     while mesh.data.uv_layers:
@@ -508,6 +540,12 @@ def audit(mesh, armature, idle, kick):
     require(not any('pose.bones["Root"]' in curve.data_path for curve in kick.fcurves), "Kick contains Root binding")
     require(len(mesh.data.uv_layers) == 1 and mesh.data.uv_layers[0].name == "UVMap", "UVMap contract failed")
     require(tuple(slot.name for slot in mesh.data.materials) == MATERIAL_NAMES, "Material slots unstable")
+    for material, (name, color, metallic, roughness) in zip(mesh.data.materials, MATERIAL_SPECS):
+        shader = material.node_tree.nodes["Principled BSDF"]
+        require(material.name == name, f"Material name mismatch: {material.name}")
+        require(max(abs(shader.inputs["Base Color"].default_value[index] - color[index]) for index in range(3)) <= 1e-6, f"Material color mismatch: {name}")
+        require(abs(shader.inputs["Metallic"].default_value - metallic) <= 1e-6, f"Material metallic mismatch: {name}")
+        require(abs(shader.inputs["Roughness"].default_value - roughness) <= 1e-6, f"Material roughness mismatch: {name}")
     require(len(mesh.modifiers) == 1 and mesh.modifiers[0].type == "ARMATURE" and mesh.modifiers[0].object == armature, "Skin modifier invalid")
     for obj in (mesh, armature):
         require(obj.location.length < 1e-6, f"{obj.name} location not zero")
@@ -792,11 +830,7 @@ def main():
     scene.unit_settings.system = "METRIC"
     scene.unit_settings.scale_length = 1.0
 
-    materials = (
-        make_material("KickRed", (0.060, 0.075, 0.028), 0.66, 0.46),
-        make_material("KickBlack", (0.028, 0.035, 0.032), 0.88, 0.28),
-        make_material("KickCream", (0.120, 0.045, 0.015), 0.78, 0.38),
-    )
+    materials = tuple(make_material(*spec) for spec in MATERIAL_SPECS)
     mesh = create_geometry(materials)
     armature = create_armature(mesh)
     idle, kick = create_actions(armature)
