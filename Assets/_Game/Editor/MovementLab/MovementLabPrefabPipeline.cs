@@ -2848,7 +2848,7 @@ namespace RocketFooxball.Editor
                 private static void ValidateKickImporterSettings(ModelImporterClipAnimation settings, string label)
                 {
                     if (settings == null || settings.name != MovementLabContract.KickStateName ||
-                        settings.takeName != MovementLabContract.KickStateName ||
+                        !IsExactOrDelimiterSafeTake(settings.takeName, MovementLabContract.KickStateName) ||
                         Mathf.Abs(settings.firstFrame - MovementLabContract.KickStartFrame) > 0.001f ||
                         Mathf.Abs(settings.lastFrame - MovementLabContract.KickEndFrame) > 0.001f ||
                         Mathf.Abs(settings.cycleOffset) > 0.001f || settings.loopTime || !settings.lockRootRotation ||
@@ -2858,6 +2858,14 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException(label + " import must use frames 1..11 with exact root locks.");
                     }
+                }
+
+                private static bool IsExactOrDelimiterSafeTake(string candidate, string expected)
+                {
+                    if (string.Equals(candidate, expected, StringComparison.Ordinal)) return true;
+                    if (string.IsNullOrEmpty(candidate) || candidate.Length <= expected.Length ||
+                        !candidate.EndsWith(expected, StringComparison.Ordinal)) return false;
+                    return !char.IsLetterOrDigit(candidate[candidate.Length - expected.Length - 1]);
                 }
 
                 private static void ValidateWorldKickCurveBindings(AnimationClip clip)
