@@ -1,11 +1,11 @@
 {
     "schemaVersion": 8,
-    "gitSha": "36fcb8f5de036e1ce87f31d7a3306d3eef29f799",
+    "gitSha": "78b6f42333e15ce7b93f907652f082aa814e2946",
     "manifestStatus": "current",
-    "sourceSignature": "4774115fab125799e82596a803321d2c206bdb977775c0bc680c472732a8094f",
-    "generatedOutputFingerprint": "d47a6acff96d60305bb542deebc9bec2c6c34407825c488f73536d65c0052d50",
+    "sourceSignature": "5aeb85844341137f4eb86891a4d64d2be9d58b7e2fd779f0285f23b9f39f2f9b",
+    "generatedOutputFingerprint": "9688f663d3af5a253604ec7868613a6eeea083069efae05c182132fc414995aa",
     "unityVersion": "6000.5.6f1",
-    "lightingInputDigest": "29b8a9ebde8d83248945af02d3780abc3b80073955129c32fc551989bfe23a3c",
+    "lightingInputDigest": "c2e7f706031157d3880576e6f4919a9f91d0a73a30c37385f5470f0b81b56719",
     "bakedProfile": "Production",
     "staleStages": [],
     "staleReasons": [],
@@ -270,15 +270,15 @@
         "4b83569d67af61e458304325a23e5dfd",
         "0092650d14a11c12f40dabcbb7dc1d95b3916aa2e9f17525d90f3b8385faf746",
         "f288ae1f4751b564a96ac7587541f7a2",
-        "c1d793decc9c2c5394e42d1c52206fe89edb6cf92fc4492698944a2b7e4e4702",
+        "d2db869d8209204d25bba5092b6bec430351f64438905bc13e51a1bfb677313d",
         "3967b0aa6dbb9934c81a677b4334347d",
-        "b1bb8c8e1f3a45be77a6b074391e83d70e0a67b7bf798fde6246326427bd18b4",
+        "e7079f57de867b6e30a06971128f01cbf92710be679ea13ee07d56362b01f4bf",
         "f4486ef35b81d5a4dabd43be4ff31777",
         "d3a924566f4172204944f01e9d08a62a789bc5bfc2cbf63623fec696dda8da0f",
         "5d7990ee5ccf29f49871e4312211a549",
         "640596db53efd2367678624b6a50dcd674bd727e93671e39d86b03e05157c2fc",
         "62b65894efce7c445beb868116b3009a",
-        "c579bcfc6bb3062f234245ea929d1142cd6de8433a4bd5702e26303495594fa8",
+        "ffeb07b7ff3f318c13a04c5806afaedbdbc1a02802f9a25df421e416cddfbdda",
         "72e0360e42e1d194eac2b9de78fe5b83",
         "0b9f5938b1632a12ad3e9ccdffe00546af178af586fd9cbbbd7026b84e1fca5e",
         "9de7bc27372189346b95e51479e6c8c9",
@@ -300,13 +300,13 @@
         "a7ae45ca3ba510d4fa2900abebc2e680",
         "df79a4dcb848176114714b86ff150d71f55a044c06608343e0d87353b7669746",
         "9a08ae12ec4612d4db8f2266b6f08645",
-        "d43059c6a977a1a73ada7325aa5de9acc696e9b340a216546bdee853bfdc1d6a",
+        "0bdcac54b2fd49a2cc68b3e4292a8c6a9445ba448a1ec152070258b345dfc425",
         "59b36276bc5539e42b83de882dde427c",
-        "d758cd50383511a503d1f4792fa246623ebe4da4fc27239b2549a00c30b5aea5",
+        "3f1dfa6f2dfbf72acb9371c67a71ff71662dbde4c2b2630122908a8ed3b0c891",
         "5678dd2ce101e1b42b62c3ba94ef6a04",
-        "b569c408dd58bb974e481898a12f4f716fb6bdc55afacb8d56c2ddebed472fa4",
+        "393d118ccf914e6c8fb329827bf948f50cb57e134ad30c787988c85c486ec340",
         "e225006765e25794d88e8a593d837459",
-        "e5226b78e7cc87e25fd359418a20d76dcb1a0a36580c01d925d0a13735e9b60c",
+        "326d84d1e9907ebdcafc1b890a2c50cdb1fcbbb1811bfecc6a92b3a71815a62d",
         "4ce3a7d9ce6ff6544888d425dc7055d6",
         "3f537a59df7fb8fc399a15105d3ae55393e8352259e6a33e174db9473f2068bf",
         "ff277262b50864c4cb2ad307cb36c7ec",
@@ -397,7 +397,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "ad67784da45f39d601abd3f2ed7e11ca8cedd56476eea94aef92b4ad1ff505de",
+        "3f2cde3153daf12b287a3b9ac032ffbbd510a08f08dce038f4ef1303d711abff",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -405,43 +405,43 @@
         "052b0bad7e1c977438a11b8a680a6f9c",
         "215bf30c053a6315825a1042db57ed0efad4e1e2f6f47ccbad4d0ac36c2325da",
         "4f646a78eaba1c2409e9bb3fce837175",
-        "7ac7548121f8a870a243a084c607f6f9b625677ad59481ca991fea6783bb83f4",
+        "b09ec1936fcdd4d4e554380b4029c5d992913714c06cc7a72545473ad3d75b12",
         "d6fecb47b29c96247bccd3306e910ef1",
-        "bcc2dafc8dcded257394873234c31b5bafe667cf6cf97df6446672919166b2c8",
+        "a59b1b6efef721a9cf26fe7bc5996306d9ef5ec431ddbbfe220e35ed61274c02",
         "9b9608cccbee7a34b8339141b8987124",
-        "f8ec10527fce3a6da3630482dea7db120c924f50f9b2ec5944216efb17a0eace",
+        "52e5c25e936099e200cbd37724ca1b57346d45b34e2e456a1a8af2a86ee165eb",
         "a523cfd3fcb32f64793a6c0b125f5693",
-        "d1a6ccec74f96a41844c5197d9e4cb9fa7b9adf0989a8f282899a319446b56d2",
+        "2af0342092c531c8c0bcc1e157cf031e6b77847c3977c13d7f07724cfb7c1439",
         "398501dbd7d940c40bf14cc716604fbe",
-        "3e3094ee306b3315df61af14bb39a8ea7a5d35f05cb1cde20df148cb481abb48",
+        "076a444c26aea999833d757a2b67b83af6723ba45bd455a2f93af4cc1accac33",
         "c05e4a9f7241449408b69fddd2b668c1",
-        "cd9714d6ff224019ee4a1cb940ddeb2c21b94de30e5c95b3b7e004a4b2961d32",
+        "ebca80a0142490896e31a2287d10de9c53499df0c1d6630c2a2791fc7359f8c7",
         "2c58d3b279e208945a03c2afdcd1007d",
-        "7f95af2183efeb9bbdb68286e36f6178e97659c3ff1fb541949f8dcdd7877cb2",
+        "18bf8d7947e313dbf85893eec878c77d174c2d5d12a3762f7e08385d1462d469",
         "31a5a4c0c7a856443bbfabd685cd4781",
-        "b37b341bbf0a7b758caf9d11ac9b365a1b0b532d9d3d3a23bc2a0e9de44ca70b",
+        "a01b7391e629474ebc4384018637f1d10fe53cd97e24a92f98a02f94613387e5",
         "2e6626e5d3c5d2b4e88f30d5529d072c",
-        "778283dd8b8ef1769fa002f5f59fcfbbc2fa2ad7890aa4f631b52e2032867059",
+        "fec0a9ee67ec1288cb53970a10ccb8df39c3dcab836e334c52acc86c639632d2",
         "06f7795a149ea1f4eb11e3d67b7f75e3",
-        "3df55ffc9cc6766e265550c87d5fc4ab05679b208cd52092c14e44dfb06da310",
+        "144d386b5f9eef0b9f34a25f00910c410d61cd3efd7beaab2970bdb378afcc1b",
         "440e91dc930311443adcbcf32a2faad7",
-        "986a50b084d898a091fae72a5631ab45e3f802f264b8e8f4b2879ced6839caff",
+        "3d7c66d534a2c417c7957cc73934d1d1a89eaa6b1bc692fbddee8427e3ffd99a",
         "8362bce8cdaa75b439988314fc3ed7a0",
-        "a04874ad714522c03288d938d45120d549451c2399d477f8a6880dbdbfb4f3ca",
+        "40ced79b2aa6ffc25b7e6a5a0da6027692f5c0ee1dc338421da0f4ff7e0f7c62",
         "072a580eb7e3f494d905c0344ca6f59f",
-        "fd84465a3904c7226e695e807ca6233aafb756cd7cbe0fd5134bd7c313b29525",
+        "cb8710d6241d0d1f711dd722ce085abe1729261a1b9abe04bb6e9391961c3ff9",
         "c1161e72ce5d28f4e8b05688a7a7271b",
-        "cd9bc787eef04da718b87fcf1f8cabc8b1e404bc36368330c0d7d3a43eedb6d3",
+        "fcd19baf5952e93fe1be78eb419db77db0f089c58d0ad733936d235a30114924",
         "714e50bfc28a43e44aabf2173b408aca",
-        "897dcaff1077363e49cea18a475e87320458455f430c4ffc4677eed30b493c84",
+        "dfd19a62b7a49166ced55a61ebb0c1b131bf7f50406cea029fac8c67f35b3935",
         "e7d89a4de0c2b3e4c9714801a3b657b7",
-        "a0be3e3e051890ca9919e0485278c6799b8e4c99a547f5f230540b7d82145350",
+        "db3adf050850694df14baaad3c1f3da62a7206fd1279102540b0c3ab1cab353a",
         "9e3ed7cf9e3f93a4bbcbd8791f48f21a",
-        "1eac694313874d2c036cfbd9e76a2c08ff07399dcb667d8f25635a97358d444f",
+        "686118d88ebbe161de2d4ac123991286b42c57fc7eac79ed2b07e268b1edb8cb",
         "d8e149926c16f5446a4269af758ce5c3",
-        "9abfdef6a3b9e3bd12389dafb7661504f997236f996e541fc0575903ea1818cf",
+        "590e940484d000ea670a023c5d527720ea0be0af7dcf93aab718b75d3150f6a0",
         "fc37a95c5c6fe09488f12d42fdfb966f",
-        "6673289c168a74948917bf9c1f0f152805369767f9a7e37a5e9ca29571767227",
+        "b7c0dabc36c6ab1cbad0e37f9ebbb9b4425055c52b14ed495bbbf71184a0f7a9",
         "409213d61ad893b498262420b6489218",
         "d44cd845f6cf0294c8860d4014496e51",
         "57d2be1d9501c71479347db337265ef6",
@@ -509,10 +509,10 @@
         {
             "stage": "Importer",
             "schemaVersion": 8,
-            "contractVersion": "importer-contract:5",
+            "contractVersion": "importer-contract:6",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "3bf16fe3dcaa3f467289ab0ac1c8e5f983d334bed76b8eae5def7e4e7944aa17",
-            "repositoryInputDigest": "3bf16fe3dcaa3f467289ab0ac1c8e5f983d334bed76b8eae5def7e4e7944aa17",
+            "inputDigest": "625a14e6e918106500b869542e951b481410c4b418242509c4fc3492a2c17669",
+            "repositoryInputDigest": "625a14e6e918106500b869542e951b481410c4b418242509c4fc3492a2c17669",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "816dd05d30c9ca2a1cd5989d6ec370bfb48383d14483fa28f6150e564dd7afb8",
             "predecessorDigests": [],
@@ -836,12 +836,12 @@
         {
             "stage": "MaterialPrefab",
             "schemaVersion": 8,
-            "contractVersion": "material-prefab-contract:16;serialized:15",
+            "contractVersion": "material-prefab-contract:18;serialized:16",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "d8de38d53c9e7afb6e832df2128f7b4a30ea579e9d50b57383be41eb5b4675e7",
-            "repositoryInputDigest": "d738cfe74a76ef62d93d9322da71488c1072b76958040f97b256e5e84148d421",
-            "dependencyDigest": "c043f2a07aecc1bd2e0b7db3863d5ca6982261509699d55264698da2d2068221",
-            "outputDigest": "8c8032fa62cca1f3718e9981e6fdc6a239c534e89bc2fdf54ed7574825c5d63c",
+            "inputDigest": "06e4856046de9015a4542f08d4a5715339d653b2ed615bf1a562b0c321bfb8a5",
+            "repositoryInputDigest": "459e2dc1731c7a906a76d1f242110a5cda147084988f6f83b256bdf68058b74b",
+            "dependencyDigest": "692663a3a5e48a42160720aa3213f33eefbaf39d121ee9c81bfb39c4476de589",
+            "outputDigest": "954b8dd66f745e7b0572bf551b18700c9d373e1f1b4fa550f2853f6356c6f21b",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -850,7 +850,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Animations/FpsKick.controller",
-                    "digest": "c1d793decc9c2c5394e42d1c52206fe89edb6cf92fc4492698944a2b7e4e4702",
+                    "digest": "d2db869d8209204d25bba5092b6bec430351f64438905bc13e51a1bfb677313d",
                     "missing": false
                 },
                 {
@@ -860,7 +860,7 @@
                 },
                 {
                     "path": "Assets/_Game/Animations/WorldCharacter.controller",
-                    "digest": "b1bb8c8e1f3a45be77a6b074391e83d70e0a67b7bf798fde6246326427bd18b4",
+                    "digest": "e7079f57de867b6e30a06971128f01cbf92710be679ea13ee07d56362b01f4bf",
                     "missing": false
                 },
                 {
@@ -960,7 +960,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterBlack.mat",
-                    "digest": "d43059c6a977a1a73ada7325aa5de9acc696e9b340a216546bdee853bfdc1d6a",
+                    "digest": "0bdcac54b2fd49a2cc68b3e4292a8c6a9445ba448a1ec152070258b345dfc425",
                     "missing": false
                 },
                 {
@@ -970,7 +970,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterCream.mat",
-                    "digest": "d758cd50383511a503d1f4792fa246623ebe4da4fc27239b2549a00c30b5aea5",
+                    "digest": "3f1dfa6f2dfbf72acb9371c67a71ff71662dbde4c2b2630122908a8ed3b0c891",
                     "missing": false
                 },
                 {
@@ -980,7 +980,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterEye.mat",
-                    "digest": "b569c408dd58bb974e481898a12f4f716fb6bdc55afacb8d56c2ddebed472fa4",
+                    "digest": "393d118ccf914e6c8fb329827bf948f50cb57e134ad30c787988c85c486ec340",
                     "missing": false
                 },
                 {
@@ -990,7 +990,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/CharacterRed.mat",
-                    "digest": "e5226b78e7cc87e25fd359418a20d76dcb1a0a36580c01d925d0a13735e9b60c",
+                    "digest": "326d84d1e9907ebdcafc1b890a2c50cdb1fcbbb1811bfecc6a92b3a71815a62d",
                     "missing": false
                 },
                 {
@@ -1410,7 +1410,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "ad67784da45f39d601abd3f2ed7e11ca8cedd56476eea94aef92b4ad1ff505de",
+                    "digest": "3f2cde3153daf12b287a3b9ac032ffbbd510a08f08dce038f4ef1303d711abff",
                     "missing": false
                 },
                 {
@@ -1448,12 +1448,12 @@
         {
             "stage": "GameplayScene",
             "schemaVersion": 8,
-            "contractVersion": "gameplay-scene-contract:18;serialized:15",
+            "contractVersion": "gameplay-scene-contract:20;serialized:16",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "8189fdc9a18130bb4aea9ef4a8a89258ee5fb1b55ec8c8935d151c16dae23405",
-            "repositoryInputDigest": "dc29c0ce55f548d35751e1d7c67553964d2ca2ede4b27dae09c56256813b1bec",
-            "dependencyDigest": "c6ecca11e535c31dd53fff3bebc7d181f6ba1f38900a22ced895cb684f29d666",
-            "outputDigest": "33744cac2d197cbf1fed84bab1de35e91eeb6ef611bf9164391c52b9e0da6fce",
+            "inputDigest": "5b94edd1c05616e249a99a66dedcc4525b11efc0da1616bcde4399df298b2ffc",
+            "repositoryInputDigest": "b2c1f7fd60ea6a6c574aeb4123932a1dacb316427ca465e37d1814c13a3fb7b0",
+            "dependencyDigest": "ca104bf75ded2ded004ffd8242d95f57f00f6ae8711566600800787fccffb809",
+            "outputDigest": "9cd74c36cda49507b0baa269dfd4c3df134e0e0dfdcaecf44c50a6a4a10ace71",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1462,7 +1462,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "9e2ec9348b98f09b30bb14423bc1fbbde638b138bf42094f1821aca43a5368b2",
+                    "digest": "56d2543bdd0a4fe3ae011a2ff76df9276936698226f10296b71090574d78b4fd",
                     "missing": false
                 },
                 {
@@ -1579,8 +1579,8 @@
             "schemaVersion": 8,
             "contractVersion": "lighting-contract:7",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "29b8a9ebde8d83248945af02d3780abc3b80073955129c32fc551989bfe23a3c",
-            "repositoryInputDigest": "29b8a9ebde8d83248945af02d3780abc3b80073955129c32fc551989bfe23a3c",
+            "inputDigest": "c2e7f706031157d3880576e6f4919a9f91d0a73a30c37385f5470f0b81b56719",
+            "repositoryInputDigest": "c2e7f706031157d3880576e6f4919a9f91d0a73a30c37385f5470f0b81b56719",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14",
             "predecessorDigests": [],
@@ -1626,10 +1626,10 @@
             "schemaVersion": 8,
             "contractVersion": "baked-output-contract:8",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "797218f909f23be0aca0a5786477436b2f07f29bafab7694d6ad1493e637a28d",
-            "repositoryInputDigest": "8b37eac0c5688448a79f579da936205de16385e496c39461cabb0ea2148be500",
+            "inputDigest": "7e0a64992a37973014161f6fd397c3400d02566513f8f6ffcb232c9338e7c977",
+            "repositoryInputDigest": "e15249296656c0830542191340657c919a150789aecd16246715cc0957617a1f",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
-            "outputDigest": "27624d9a1a5bde331bb94fe58f8709bd17198e3b13ed919636bf406c82448f49",
+            "outputDigest": "64c3138a054da0e7ce2f4c4a53a7b6c90785ffffffc9e101f24319ac2a078d7f",
             "predecessorDigests": [
                 "Lighting:b4a0563df69039bc60063af3be785b7d8aaafe2b91515b339ec38858e3437f14"
             ],
@@ -1640,7 +1640,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Lighting/MovementLabLightingManifest.json",
-                    "digest": "c579bcfc6bb3062f234245ea929d1142cd6de8433a4bd5702e26303495594fa8",
+                    "digest": "ffeb07b7ff3f318c13a04c5806afaedbdbc1a02802f9a25df421e416cddfbdda",
                     "missing": false
                 },
                 {
@@ -1660,7 +1660,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/LightingData.asset",
-                    "digest": "7ac7548121f8a870a243a084c607f6f9b625677ad59481ca991fea6783bb83f4",
+                    "digest": "b09ec1936fcdd4d4e554380b4029c5d992913714c06cc7a72545473ad3d75b12",
                     "missing": false
                 },
                 {
@@ -1670,7 +1670,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_dir.png",
-                    "digest": "bcc2dafc8dcded257394873234c31b5bafe667cf6cf97df6446672919166b2c8",
+                    "digest": "a59b1b6efef721a9cf26fe7bc5996306d9ef5ec431ddbbfe220e35ed61274c02",
                     "missing": false
                 },
                 {
@@ -1680,7 +1680,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_light.exr",
-                    "digest": "f8ec10527fce3a6da3630482dea7db120c924f50f9b2ec5944216efb17a0eace",
+                    "digest": "52e5c25e936099e200cbd37724ca1b57346d45b34e2e456a1a8af2a86ee165eb",
                     "missing": false
                 },
                 {
@@ -1690,7 +1690,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-0_comp_shadowmask.png",
-                    "digest": "d1a6ccec74f96a41844c5197d9e4cb9fa7b9adf0989a8f282899a319446b56d2",
+                    "digest": "2af0342092c531c8c0bcc1e157cf031e6b77847c3977c13d7f07724cfb7c1439",
                     "missing": false
                 },
                 {
@@ -1700,7 +1700,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_dir.png",
-                    "digest": "3e3094ee306b3315df61af14bb39a8ea7a5d35f05cb1cde20df148cb481abb48",
+                    "digest": "076a444c26aea999833d757a2b67b83af6723ba45bd455a2f93af4cc1accac33",
                     "missing": false
                 },
                 {
@@ -1710,7 +1710,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_light.exr",
-                    "digest": "cd9714d6ff224019ee4a1cb940ddeb2c21b94de30e5c95b3b7e004a4b2961d32",
+                    "digest": "ebca80a0142490896e31a2287d10de9c53499df0c1d6630c2a2791fc7359f8c7",
                     "missing": false
                 },
                 {
@@ -1720,7 +1720,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-1_comp_shadowmask.png",
-                    "digest": "7f95af2183efeb9bbdb68286e36f6178e97659c3ff1fb541949f8dcdd7877cb2",
+                    "digest": "18bf8d7947e313dbf85893eec878c77d174c2d5d12a3762f7e08385d1462d469",
                     "missing": false
                 },
                 {
@@ -1730,7 +1730,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_dir.png",
-                    "digest": "b37b341bbf0a7b758caf9d11ac9b365a1b0b532d9d3d3a23bc2a0e9de44ca70b",
+                    "digest": "a01b7391e629474ebc4384018637f1d10fe53cd97e24a92f98a02f94613387e5",
                     "missing": false
                 },
                 {
@@ -1740,7 +1740,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_light.exr",
-                    "digest": "778283dd8b8ef1769fa002f5f59fcfbbc2fa2ad7890aa4f631b52e2032867059",
+                    "digest": "fec0a9ee67ec1288cb53970a10ccb8df39c3dcab836e334c52acc86c639632d2",
                     "missing": false
                 },
                 {
@@ -1750,7 +1750,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-2_comp_shadowmask.png",
-                    "digest": "3df55ffc9cc6766e265550c87d5fc4ab05679b208cd52092c14e44dfb06da310",
+                    "digest": "144d386b5f9eef0b9f34a25f00910c410d61cd3efd7beaab2970bdb378afcc1b",
                     "missing": false
                 },
                 {
@@ -1760,7 +1760,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_dir.png",
-                    "digest": "986a50b084d898a091fae72a5631ab45e3f802f264b8e8f4b2879ced6839caff",
+                    "digest": "3d7c66d534a2c417c7957cc73934d1d1a89eaa6b1bc692fbddee8427e3ffd99a",
                     "missing": false
                 },
                 {
@@ -1770,7 +1770,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_light.exr",
-                    "digest": "a04874ad714522c03288d938d45120d549451c2399d477f8a6880dbdbfb4f3ca",
+                    "digest": "40ced79b2aa6ffc25b7e6a5a0da6027692f5c0ee1dc338421da0f4ff7e0f7c62",
                     "missing": false
                 },
                 {
@@ -1780,7 +1780,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-3_comp_shadowmask.png",
-                    "digest": "fd84465a3904c7226e695e807ca6233aafb756cd7cbe0fd5134bd7c313b29525",
+                    "digest": "cb8710d6241d0d1f711dd722ce085abe1729261a1b9abe04bb6e9391961c3ff9",
                     "missing": false
                 },
                 {
@@ -1790,7 +1790,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_dir.png",
-                    "digest": "cd9bc787eef04da718b87fcf1f8cabc8b1e404bc36368330c0d7d3a43eedb6d3",
+                    "digest": "fcd19baf5952e93fe1be78eb419db77db0f089c58d0ad733936d235a30114924",
                     "missing": false
                 },
                 {
@@ -1800,7 +1800,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_light.exr",
-                    "digest": "897dcaff1077363e49cea18a475e87320458455f430c4ffc4677eed30b493c84",
+                    "digest": "dfd19a62b7a49166ced55a61ebb0c1b131bf7f50406cea029fac8c67f35b3935",
                     "missing": false
                 },
                 {
@@ -1810,7 +1810,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/Lightmap-4_comp_shadowmask.png",
-                    "digest": "a0be3e3e051890ca9919e0485278c6799b8e4c99a547f5f230540b7d82145350",
+                    "digest": "db3adf050850694df14baaad3c1f3da62a7206fd1279102540b0c3ab1cab353a",
                     "missing": false
                 },
                 {
@@ -1820,7 +1820,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-0.exr",
-                    "digest": "1eac694313874d2c036cfbd9e76a2c08ff07399dcb667d8f25635a97358d444f",
+                    "digest": "686118d88ebbe161de2d4ac123991286b42c57fc7eac79ed2b07e268b1edb8cb",
                     "missing": false
                 },
                 {
@@ -1830,7 +1830,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-1.exr",
-                    "digest": "9abfdef6a3b9e3bd12389dafb7661504f997236f996e541fc0575903ea1818cf",
+                    "digest": "590e940484d000ea670a023c5d527720ea0be0af7dcf93aab718b75d3150f6a0",
                     "missing": false
                 },
                 {
@@ -1840,7 +1840,7 @@
                 },
                 {
                     "path": "Assets/_Game/Scenes/MovementLab/ReflectionProbe-2.exr",
-                    "digest": "6673289c168a74948917bf9c1f0f152805369767f9a7e37a5e9ca29571767227",
+                    "digest": "b7c0dabc36c6ab1cbad0e37f9ebbb9b4425055c52b14ed495bbbf71184a0f7a9",
                     "missing": false
                 },
                 {
