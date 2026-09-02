@@ -33,7 +33,7 @@ ModelImporter:
     clipAnimations:
     - serializedVersion: 16
       name: Idle
-      takeName: FpsKickRig|Kick
+      takeName: FpsKickRig|Idle
       internalID: -3100369314251171874
       firstFrame: 1
       lastFrame: 31
