@@ -47,7 +47,6 @@ namespace RocketFooxball.Editor
         private const float FpsKickBoundsTolerance = 0.02f;
         private const float CharacterFeetTolerance = 0.015f;
         private const float ForwardFacingTolerance = 0.001f;
-        private const float KickDurationComparisonEpsilon = 0.0001f;
         private static readonly string[] ForbiddenCharacterTransformTokens =
         {
             "jet", "thruster", "flame", "fire", "plume", "propulsion"
@@ -2776,14 +2775,14 @@ namespace RocketFooxball.Editor
                     if (Mathf.Abs(strikeTime - BallKickDefaults.DashContactStartDelay) > 0.0001f)
                         throw new InvalidOperationException("Kick strike frame must match BallKickDefaults.DashContactStartDelay.");
                     var durationTolerance = 1f / MovementLabContract.AnimationSourceFrameRate;
-                    if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon ||
-                        Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon)
+                    if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance ||
+                        Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance)
                     {
                         throw new InvalidOperationException("World and FPS Kick durations must stay within one source frame of dash duration. " +
                             "FPS clip length=" + fpsKickClip.length.ToString("R", CultureInfo.InvariantCulture) +
                             ", world clip length=" + worldKickClip.length.ToString("R", CultureInfo.InvariantCulture) +
                             ", PlayerMotorDefaults.DashDuration=" + PlayerMotorDefaults.DashDuration.ToString("R", CultureInfo.InvariantCulture) +
-                            ", effective tolerance=" + (durationTolerance + KickDurationComparisonEpsilon).ToString("R", CultureInfo.InvariantCulture) + ".");
+                            ", one-frame tolerance=" + durationTolerance.ToString("R", CultureInfo.InvariantCulture) + ".");
                     }
                     ValidateWorldKickCurveBindings(worldKickClip);
 

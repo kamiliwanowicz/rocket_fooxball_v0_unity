@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using RocketFooxball.Runtime.Ball;
 using RocketFooxball.Runtime.Diagnostics;
@@ -31,6 +32,9 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabImportPipeline
     {
+        private static readonly FieldInfo ModelImporterClipAnimationInternalIdField =
+            typeof(ModelImporterClipAnimation).GetField("internalID", BindingFlags.Instance | BindingFlags.NonPublic);
+
         internal static void Apply()
         {
             // Preserve importer settlement order: textures first, models second.
@@ -370,30 +374,112 @@ namespace RocketFooxball.Editor
 
                 internal static AnimationClip FindImportedClip(string modelPath, string name)
                 {
-                    var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
-
-                    // Prefer an exact imported take name. Model importers commonly prefix
-                    // clips with the source model name, so a broad substring match can
-                    // bind e.g. "FpsKickRig|Idle" to the Kick state just because the
-                    // model prefix contains "Kick".
-                    for (var i = 0; i < assets.Length; i++)
+                    var importer = AssetImporter.GetAtPath(modelPath) as ModelImporter;
+                    if (importer == null)
                     {
-                        if (assets[i] is AnimationClip clip && string.Equals(clip.name, name, StringComparison.Ordinal)) return clip;
+                        throw new InvalidOperationException("Missing model importer for imported clip lookup: " + modelPath + ".");
+                    }
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        throw new ArgumentException("Imported clip name must not be null or empty.", nameof(name));
                     }
 
-                    // Fall back to a delimiter-safe take suffix ("|Idle", "@Kick",
-                    // etc.). The character before the take must be a non-alphanumeric
-                    // delimiter; this excludes model-prefix substrings such as
-                    // "FpsKickRig|Idle" when looking for Kick.
+                    var configuredClips = importer.clipAnimations;
+                    if (configuredClips == null || configuredClips.Length == 0)
+                    {
+                        throw new InvalidOperationException("Model importer has no configured clipAnimations for imported clip lookup: " + modelPath + ".");
+                    }
+
+                    var exactMatches = new List<ModelImporterClipAnimation>();
+                    for (var i = 0; i < configuredClips.Length; i++)
+                    {
+                        var configured = configuredClips[i];
+                        if (configured == null ||
+                            (!string.Equals(configured.name, name, StringComparison.Ordinal) &&
+                             !string.Equals(configured.takeName, name, StringComparison.Ordinal)))
+                        {
+                            continue;
+                        }
+                        exactMatches.Add(configured);
+                    }
+
+                    ModelImporterClipAnimation selected = null;
+                    if (exactMatches.Count > 1)
+                    {
+                        throw new InvalidOperationException("Model importer has ambiguous exact clip configuration for " + modelPath + "/" + name + ".");
+                    }
+                    if (exactMatches.Count == 1)
+                    {
+                        selected = exactMatches[0];
+                    }
+                    else
+                    {
+                        var suffixMatches = new List<ModelImporterClipAnimation>();
+                        for (var i = 0; i < configuredClips.Length; i++)
+                        {
+                            var configured = configuredClips[i];
+                            if (configured == null ||
+                                (!IsDelimiterSafeTakeSuffix(configured.name, name) &&
+                                 !IsDelimiterSafeTakeSuffix(configured.takeName, name)))
+                            {
+                                continue;
+                            }
+                            suffixMatches.Add(configured);
+                        }
+
+                        if (suffixMatches.Count > 1)
+                        {
+                            throw new InvalidOperationException("Model importer has ambiguous delimiter-safe clip configuration for " + modelPath + "/" + name + ".");
+                        }
+                        if (suffixMatches.Count == 1) selected = suffixMatches[0];
+                    }
+
+                    if (selected == null)
+                    {
+                        throw new InvalidOperationException("Model importer has no configured clip matching " + modelPath + "/" + name + ".");
+                    }
+                    if (ModelImporterClipAnimationInternalIdField == null ||
+                        ModelImporterClipAnimationInternalIdField.FieldType != typeof(long))
+                    {
+                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection contract is unavailable; expected a private Int64 instance field.");
+                    }
+                    var internalIdValue = ModelImporterClipAnimationInternalIdField.GetValue(selected);
+                    if (!(internalIdValue is long configuredInternalId))
+                    {
+                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection value is not Int64 for " + modelPath + "/" + name + ".");
+                    }
+                    if (configuredInternalId == 0)
+                    {
+                        throw new InvalidOperationException("Configured clip internalID is zero for " + modelPath + "/" + name + ".");
+                    }
+
+                    var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
+                    var modelGuid = AssetDatabase.AssetPathToGUID(modelPath);
+                    var matches = new List<AnimationClip>();
                     for (var i = 0; i < assets.Length; i++)
                     {
                         if (!(assets[i] is AnimationClip clip)) continue;
-                        var clipName = clip.name;
-                        if (clipName.Length <= name.Length || !clipName.EndsWith(name, StringComparison.Ordinal)) continue;
-                        var delimiter = clipName[clipName.Length - name.Length - 1];
-                        if (!char.IsLetterOrDigit(delimiter)) return clip;
+                        if (!string.Equals(AssetDatabase.GetAssetPath(clip), modelPath, StringComparison.Ordinal)) continue;
+                        if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(clip, out var clipGuid, out long clipLocalId)) continue;
+                        if (!string.Equals(clipGuid, modelGuid, StringComparison.Ordinal) || clipLocalId != configuredInternalId) continue;
+                        matches.Add(clip);
                     }
-                    return null;
+                    if (matches.Count == 0)
+                    {
+                        throw new InvalidOperationException("No imported AnimationClip matched configured internalID " + configuredInternalId + " for " + modelPath + "/" + name + ".");
+                    }
+                    if (matches.Count > 1)
+                    {
+                        throw new InvalidOperationException("Multiple imported AnimationClips matched configured internalID " + configuredInternalId + " for " + modelPath + "/" + name + ".");
+                    }
+                    return matches[0];
+                }
+
+                private static bool IsDelimiterSafeTakeSuffix(string candidate, string expected)
+                {
+                    if (string.IsNullOrEmpty(candidate) || candidate.Length <= expected.Length ||
+                        !candidate.EndsWith(expected, StringComparison.Ordinal)) return false;
+                    return !char.IsLetterOrDigit(candidate[candidate.Length - expected.Length - 1]);
                 }
 
                 internal static void ValidatePbrModelImporter(ModelImporter importer, bool arena, string label)
