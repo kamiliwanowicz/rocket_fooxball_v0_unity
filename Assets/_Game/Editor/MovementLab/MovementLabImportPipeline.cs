@@ -253,8 +253,11 @@ namespace RocketFooxball.Editor
                         {
                             source = new ModelImporterClipAnimation();
                         }
+                        var sourceTakeName = ResolveImportedSourceTakeName(
+                            importer,
+                            character ? expectedNames[expectedIndex] : MovementLabContract.KickStateName);
                         source.name = expectedNames[expectedIndex];
-                        source.takeName = expectedNames[expectedIndex];
+                        source.takeName = sourceTakeName;
                         source.firstFrame = expectedStarts[expectedIndex];
                         source.lastFrame = expectedEnds[expectedIndex];
                         source.cycleOffset = 0f;
@@ -280,6 +283,35 @@ namespace RocketFooxball.Editor
                     {
                         importer.SaveAndReimport();
                     }
+                }
+
+                private static string ResolveImportedSourceTakeName(ModelImporter importer, string logicalName)
+                {
+                    var importedTakeInfos = importer.importedTakeInfos;
+                    var matches = new List<string>();
+                    if (importedTakeInfos != null)
+                    {
+                        for (var i = 0; i < importedTakeInfos.Length; i++)
+                        {
+                            var take = importedTakeInfos[i];
+                            var sourceTakeName = take.name;
+                            if (string.IsNullOrEmpty(sourceTakeName)) continue;
+                            if (IsExactOrDelimiterSafeTake(sourceTakeName, logicalName))
+                            {
+                                matches.Add(sourceTakeName);
+                            }
+                        }
+                    }
+
+                    if (matches.Count == 0)
+                    {
+                        throw new InvalidOperationException("Model importer has no source take matching " + importer.assetPath + "/" + logicalName + ".");
+                    }
+                    if (matches.Count > 1)
+                    {
+                        throw new InvalidOperationException("Model importer has ambiguous source takes matching " + importer.assetPath + "/" + logicalName + ": " + string.Join(", ", matches) + ".");
+                    }
+                    return matches[0];
                 }
 
                 private static ModelImporterClipAnimation FindSourceClip(ModelImporterClipAnimation[] sourceClips, string expected)
@@ -438,20 +470,7 @@ namespace RocketFooxball.Editor
                     {
                         throw new InvalidOperationException("Model importer has no configured clip matching " + modelPath + "/" + name + ".");
                     }
-                    if (ModelImporterClipAnimationInternalIdField == null ||
-                        ModelImporterClipAnimationInternalIdField.FieldType != typeof(long))
-                    {
-                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection contract is unavailable; expected a private Int64 instance field.");
-                    }
-                    var internalIdValue = ModelImporterClipAnimationInternalIdField.GetValue(selected);
-                    if (!(internalIdValue is long configuredInternalId))
-                    {
-                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection value is not Int64 for " + modelPath + "/" + name + ".");
-                    }
-                    if (configuredInternalId == 0)
-                    {
-                        throw new InvalidOperationException("Configured clip internalID is zero for " + modelPath + "/" + name + ".");
-                    }
+                    var configuredInternalId = GetConfiguredClipInternalId(selected, modelPath + "/" + name);
 
                     var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
                     var modelGuid = AssetDatabase.AssetPathToGUID(modelPath);
@@ -473,6 +492,29 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Multiple imported AnimationClips matched configured internalID " + configuredInternalId + " for " + modelPath + "/" + name + ".");
                     }
                     return matches[0];
+                }
+
+                private static long GetConfiguredClipInternalId(ModelImporterClipAnimation clip, string label)
+                {
+                    if (ModelImporterClipAnimationInternalIdField == null ||
+                        ModelImporterClipAnimationInternalIdField.FieldType != typeof(long))
+                    {
+                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection contract is unavailable; expected a private Int64 instance field.");
+                    }
+                    var internalIdValue = ModelImporterClipAnimationInternalIdField.GetValue(clip);
+                    if (!(internalIdValue is long configuredInternalId))
+                    {
+                        throw new InvalidOperationException("ModelImporterClipAnimation.internalID reflection value is not Int64 for " + label + ".");
+                    }
+                    if (configuredInternalId == 0)
+                    {
+                        throw new InvalidOperationException("Configured clip internalID is zero for " + label + ".");
+                    }
+                    if (configuredInternalId >= 110800000L && configuredInternalId <= 110800999L)
+                    {
+                        throw new InvalidOperationException("Configured clip internalID resolves to an AnimatorState preview identity for " + label + ": " + configuredInternalId + ".");
+                    }
+                    return configuredInternalId;
                 }
 
                 private static bool IsDelimiterSafeTakeSuffix(string candidate, string expected)
@@ -1034,11 +1076,15 @@ namespace RocketFooxball.Editor
                         ? new[] { 30f, 20f, 12f, 15f, 10f, (float)MovementLabContract.WorldKickEndFrame }
                         : new[] { 31f, (float)MovementLabContract.FpsKickEndFrame };
                     if (clips == null || clips.Length != expected.Length) throw new InvalidOperationException("Rig importer clip count mismatch: " + path);
+                    ValidateConfiguredClipInternalIds(path, clips);
                     var importedClips = new HashSet<AnimationClip>();
                     for (var i = 0; i < expected.Length; i++)
                     {
                         var clip = clips[i];
-                        if (clip.name != expected[i] || clip.takeName != expected[i] ||
+                        var expectedTakeName = ResolveImportedSourceTakeName(
+                            importer,
+                            character ? expected[i] : MovementLabContract.KickStateName);
+                        if (clip.name != expected[i] || clip.takeName != expectedTakeName ||
                             Mathf.Abs(clip.firstFrame - starts[i]) > 0.001f || Mathf.Abs(clip.lastFrame - ends[i]) > 0.001f ||
                             Mathf.Abs(clip.cycleOffset) > 0.001f ||
                             clip.loopTime != loops[i] || !clip.lockRootRotation || !clip.keepOriginalOrientation ||
@@ -1060,6 +1106,19 @@ namespace RocketFooxball.Editor
                         !string.Equals(AssetDatabase.GetAssetPath(avatars[0]), path, StringComparison.Ordinal))
                     {
                         throw new InvalidOperationException("Rig importer Avatar provenance invalid: " + path);
+                    }
+                }
+
+                private static void ValidateConfiguredClipInternalIds(string path, ModelImporterClipAnimation[] clips)
+                {
+                    var configuredIds = new HashSet<long>();
+                    for (var i = 0; i < clips.Length; i++)
+                    {
+                        var configuredId = GetConfiguredClipInternalId(clips[i], path + "/" + clips[i].name);
+                        if (!configuredIds.Add(configuredId))
+                        {
+                            throw new InvalidOperationException("Rig importer configured clip internalID is not unique: " + path + "/" + clips[i].name + ".");
+                        }
                     }
                 }
 
