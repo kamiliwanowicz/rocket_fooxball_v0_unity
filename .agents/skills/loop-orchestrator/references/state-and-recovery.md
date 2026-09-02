@@ -133,9 +133,15 @@ Production-final order: zero writers -> clean exact SHA -> lease -> accepted rev
 
 ## Production Bake Gate
 
-- Budget: rehash bound `workflow-result.json` where `mode == 'ProductionPrepare'`; sum `bakeCount`. Cumulative `>=2` -> `blocked` before `ProductionPrepare`. Postflight `>2` -> evidence-corruption/contract violation; observed total never exceeds `2`.
+- Attempt classification: count only invocations that reached the lighting backend. A wrapper/parser/module failure before workflow dispatch, or a Unity failure during assembly/pre-bake validation before `Lightmapping.Bake` starts, is a `pre-bake failure`, not a bake attempt. Prove classification from workflow phase plus Unity log. Persist both classes in failure evidence.
+- Budget: rehash bound `workflow-result.json` where `mode == 'ProductionPrepare'`; sum `bakeCount`, where `bakeCount` increments only when the lighting backend starts. Cumulative real bake count `>=2` -> `blocked` before another real bake. Postflight real bake count `>2` -> evidence-corruption/contract violation. Pre-bake failures do not consume the bake budget; repair them with non-bake compile/assemble/pre-bake diagnostics, then rerun `ProductionPrepare` without requesting replacement-bake authority unless a prior attempt actually started lighting.
 - Marker/skip/input semantics: [`AGENTS.md`](../../../../AGENTS.md) `Unity execution` production bake gate sole owner. Lighting-input intersection invalidates production-final proof.
-- Replacement bake: current lighting-input digest changed after prior production-final attempt -> predicted real rebuild; explicit user authority required before dispatch. Missing authority -> `blocked`; never force rerun. With authority, `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild.
+- Replacement bake: current lighting-input digest changed after a prior attempt that actually started lighting -> predicted real rebuild; explicit user authority required before dispatch. Missing authority -> `blocked`; never force rerun. With authority, `RocketFooxball.Editor.MovementLabBuilder.BakeMovementLabLighting` owns skip/rebuild.
+
+### Failure evidence hardening
+
+- Invoke workflow scripts from a PowerShell process that explicitly imports `Microsoft.PowerShell.Utility` and verifies `Get-FileHash` before dispatch. Avoid interpolated command strings; pass an argument array or invoke the script directly.
+- Every workflow exit, including wrapper/preflight/Unity failure, must preserve a structured result containing `status`, `mode`, `phaseReached`, `lightingBackendStarted`, `bakeCount`, `exactSha`, primary error, changed paths, and release proof. Missing result -> classify conservatively from raw log, repair evidence plumbing before another expensive invocation, and never infer that a real bake occurred merely because the requested mode was `ProductionPrepare`.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
 

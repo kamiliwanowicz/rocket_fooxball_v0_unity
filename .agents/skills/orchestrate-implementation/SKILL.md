@@ -133,6 +133,8 @@ Evidence files carry attempt-specific names with attempt/SHA discriminator; neve
 
 Success extraction only: `status`, `exactSha`, evidence `result`/`path`, `evidenceManifestSha256`, `bakeCount`, `lockReleaseProof`. Failure evidence may retain full JSON + exit + log. `ProductionPrepare` bake budget -> [production-bake gate](../loop-orchestrator/references/state-and-recovery.md#production-bake-gate).
 
+On Windows, invoke the workflow without interpolated PowerShell command text: explicitly import `Microsoft.PowerShell.Utility`, verify `Get-FileHash`, then call the workflow script directly or pass a literal argument array to a hidden child process. Require structured failure evidence through the linked production-bake gate. Wrapper/parser/module failures and Unity failures before the lighting backend starts are pre-bake failures, not consumed bake attempts.
+
 ## Gate remediation
 
 - unblock/relax predicate-family change -> net-subtractive: deletions > insertions
