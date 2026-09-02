@@ -255,7 +255,7 @@ namespace RocketFooxball.Editor
                         }
                         var sourceTakeName = ResolveImportedSourceTakeName(
                             importer,
-                            character ? expectedNames[expectedIndex] : MovementLabContract.KickStateName);
+                            expectedNames[expectedIndex]);
                         source.name = expectedNames[expectedIndex];
                         source.takeName = sourceTakeName;
                         source.firstFrame = expectedStarts[expectedIndex];
@@ -1078,12 +1078,14 @@ namespace RocketFooxball.Editor
                     if (clips == null || clips.Length != expected.Length) throw new InvalidOperationException("Rig importer clip count mismatch: " + path);
                     ValidateConfiguredClipInternalIds(path, clips);
                     var importedClips = new HashSet<AnimationClip>();
+                    var configuredSourceTakeNames = new HashSet<string>(StringComparer.Ordinal);
+                    var loadedClipIds = new HashSet<long>();
                     for (var i = 0; i < expected.Length; i++)
                     {
                         var clip = clips[i];
                         var expectedTakeName = ResolveImportedSourceTakeName(
                             importer,
-                            character ? expected[i] : MovementLabContract.KickStateName);
+                            expected[i]);
                         if (clip.name != expected[i] || clip.takeName != expectedTakeName ||
                             Mathf.Abs(clip.firstFrame - starts[i]) > 0.001f || Mathf.Abs(clip.lastFrame - ends[i]) > 0.001f ||
                             Mathf.Abs(clip.cycleOffset) > 0.001f ||
@@ -1098,6 +1100,20 @@ namespace RocketFooxball.Editor
                         if (imported == null || !importedClips.Add(imported) || Mathf.Abs(imported.frameRate - MovementLabContract.AnimationSourceFrameRate) > 0.001f)
                         {
                             throw new InvalidOperationException("Rig importer imported clip identity/rate invalid: " + path + "/" + expected[i]);
+                        }
+                        if (!character)
+                        {
+                            if (!configuredSourceTakeNames.Add(clip.takeName))
+                            {
+                                throw new InvalidOperationException("FPS rig importer Idle and Kick must use distinct full source take names: " + path + "/" + clip.takeName + ".");
+                            }
+                            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(imported, out var importedGuid, out long importedId) ||
+                                !string.Equals(importedGuid, AssetDatabase.AssetPathToGUID(path), StringComparison.Ordinal) ||
+                                importedId >= 110800000L && importedId <= 110800999L ||
+                                !loadedClipIds.Add(importedId))
+                            {
+                                throw new InvalidOperationException("FPS rig imported Idle and Kick must have distinct non-legacy clip identities: " + path + "/" + expected[i] + ".");
+                            }
                         }
                     }
 

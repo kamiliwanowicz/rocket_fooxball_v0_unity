@@ -608,6 +608,25 @@ def assert_pose(armature, action, frame, shin_location, shin_x_degrees, foot_x_d
     require(max(abs(shin.rotation_euler.y), abs(shin.rotation_euler.z), abs(foot.rotation_euler.y), abs(foot.rotation_euler.z)) <= 1e-6, f"Off-axis rotation at frame {frame}")
 
 
+def assert_neutral_action(armature, action, start_frame, end_frame, label):
+    armature.animation_data.action = action
+    identity = Matrix.Identity(4)
+    for frame in range(start_frame, end_frame + 1):
+        bpy.context.scene.frame_set(frame)
+        bpy.context.view_layer.update()
+        for bone_name in ("Root", "Shin.R", "Foot.R"):
+            matrix = armature.pose.bones[bone_name].matrix_basis
+            maximum_delta = max(
+                abs(matrix[row][column] - identity[row][column])
+                for row in range(4)
+                for column in range(4)
+            )
+            require(
+                maximum_delta <= 1e-6,
+                f"{label} is not neutral at frame {frame}/{bone_name}: delta={maximum_delta:.9f}",
+            )
+
+
 def audit(mesh, armature, idle, kick, part_samples):
     require([obj.name for obj in bpy.context.scene.objects if obj.type == "MESH"] == ["FpsKickMesh"], "Expected one mesh object")
     require([obj.name for obj in bpy.context.scene.objects if obj.type == "ARMATURE"] == ["FpsKickRig"], "Expected one armature")
@@ -624,6 +643,7 @@ def audit(mesh, armature, idle, kick, part_samples):
     require(keyed_frames(kick) == {1, 3, 4, 7, 11}, f"Kick keys invalid: {sorted(keyed_frames(kick))}")
     require(action_bound_bones(kick) == {"Shin.R", "Foot.R"}, f"Kick bindings invalid: {sorted(action_bound_bones(kick))}")
     require(not any('pose.bones["Root"]' in curve.data_path for curve in kick.fcurves), "Kick contains Root binding")
+    assert_neutral_action(armature, idle, 1, 31, "Idle")
     require(len(mesh.data.uv_layers) == 1 and mesh.data.uv_layers[0].name == "UVMap", "UVMap contract failed")
     require(tuple(slot.name for slot in mesh.data.materials) == MATERIAL_NAMES, "Material slots unstable")
     for material, (name, color, metallic, roughness) in zip(mesh.data.materials, MATERIAL_SPECS):
@@ -877,14 +897,23 @@ def save_and_export(mesh, armature, idle):
     mesh.select_set(True)
     armature.select_set(True)
     bpy.context.view_layer.objects.active = armature
-    # Blender's all-actions path normally force-keeps one constant key per bone.
-    # Keep the official exporter but disable those empty bindings so the factory
-    # round-trip retains only the two authored Kick tracks.
+    # Preserve the neutral Idle take even though all of its samples are constant,
+    # while continuing to suppress empty Root/unrelated bindings from Kick.
     from io_scene_fbx import export_fbx_bin
     original_animation_export = export_fbx_bin.fbx_animations_do
 
     def export_without_empty_bindings(scene_data, ref_id, f_start, f_end, start_zero, objects=None, force_keep=False):
-        return original_animation_export(scene_data, ref_id, f_start, f_end, start_zero, objects, force_keep=False)
+        action = ref_id[1] if isinstance(ref_id, tuple) and len(ref_id) == 2 else None
+        keep_constant_take = action is not None and action.name == "Idle"
+        return original_animation_export(
+            scene_data,
+            ref_id,
+            f_start,
+            f_end,
+            start_zero,
+            objects,
+            force_keep=keep_constant_take,
+        )
 
     export_fbx_bin.fbx_animations_do = export_without_empty_bindings
     try:
@@ -927,9 +956,17 @@ def roundtrip_fbx_audit():
     require([bone.name for bone in rig.data.bones] == ["Root", "Shin.R", "Foot.R"], "Round-trip bones invalid")
     require(rig.data.bones["Shin.R"].parent == rig.data.bones["Root"], "Round-trip Shin parent invalid")
     require(rig.data.bones["Foot.R"].parent == rig.data.bones["Shin.R"], "Round-trip Foot parent invalid")
-    kick_actions = [action for action in bpy.data.actions if action.name == "Kick" or action.name.endswith("|Kick")]
+    imported_actions = list(bpy.data.actions)
+    idle_actions = [action for action in imported_actions if action.name == "Idle" or action.name.endswith("|Idle")]
+    kick_actions = [action for action in imported_actions if action.name == "Kick" or action.name.endswith("|Kick")]
+    require(len(imported_actions) == 2, f"Round-trip action inventory invalid: {[action.name for action in imported_actions]}")
+    require(len(idle_actions) == 1, f"Round-trip Idle missing/ambiguous: {[action.name for action in imported_actions]}")
     require(len(kick_actions) == 1, f"Round-trip Kick missing/ambiguous: {[action.name for action in bpy.data.actions]}")
+    idle = idle_actions[0]
     kick = kick_actions[0]
+    require(idle != kick and idle.name != kick.name, "Round-trip Idle and Kick actions are not distinct")
+    require(tuple(round(value) for value in idle.frame_range) == (1, 31), f"Round-trip Idle range invalid: {tuple(idle.frame_range)}")
+    assert_neutral_action(rig, idle, 1, 31, "Round-trip Idle")
     bound_bones = action_bound_bones(kick)
     require(bound_bones == {"Shin.R", "Foot.R"}, f"Round-trip Kick bindings invalid: {sorted(bound_bones)}")
     require(not any('pose.bones["Root"]' in curve.data_path for curve in kick.fcurves), "Round-trip Kick gained Root binding")
@@ -939,7 +976,11 @@ def roundtrip_fbx_audit():
         require(obj.location.length <= 1e-6, f"Round-trip {obj.name} location not zero")
         require(all(abs(value) <= 1e-6 for value in obj.rotation_euler), f"Round-trip {obj.name} rotation not zero")
         require(all(abs(value - 1.0) <= 1e-6 for value in obj.scale), f"Round-trip {obj.name} scale not unit")
-    print(f"ROUNDTRIP factory_empty=true mesh=FpsKickMesh rig=FpsKickRig Kick={kick.name} bindings={','.join(sorted(bound_bones))}")
+    print(
+        f"ROUNDTRIP factory_empty=true mesh=FpsKickMesh rig=FpsKickRig "
+        f"Idle={idle.name}[1,31] neutral_samples=31 Kick={kick.name}[1,11] "
+        f"bindings={','.join(sorted(bound_bones))} distinct_takes=true"
+    )
 
 
 def main():

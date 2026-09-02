@@ -2710,6 +2710,10 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateAnimatorController(Animator animator, string path, string modelPath)
                 {
+                    if (string.Equals(modelPath, FpsKickModelPath, StringComparison.Ordinal))
+                    {
+                        ValidateRigImporter(modelPath);
+                    }
                     var controller = animator.runtimeAnimatorController as AnimatorController;
                     if (controller == null || AssetDatabase.GetAssetPath(controller) != path)
                     {
