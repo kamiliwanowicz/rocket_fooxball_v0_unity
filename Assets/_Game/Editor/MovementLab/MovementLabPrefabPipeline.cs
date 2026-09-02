@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
@@ -2778,7 +2779,11 @@ namespace RocketFooxball.Editor
                     if (Mathf.Abs(fpsKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon ||
                         Mathf.Abs(worldKickClip.length - PlayerMotorDefaults.DashDuration) > durationTolerance + KickDurationComparisonEpsilon)
                     {
-                        throw new InvalidOperationException("World and FPS Kick durations must stay within one source frame of dash duration.");
+                        throw new InvalidOperationException("World and FPS Kick durations must stay within one source frame of dash duration. " +
+                            "FPS clip length=" + fpsKickClip.length.ToString("R", CultureInfo.InvariantCulture) +
+                            ", world clip length=" + worldKickClip.length.ToString("R", CultureInfo.InvariantCulture) +
+                            ", PlayerMotorDefaults.DashDuration=" + PlayerMotorDefaults.DashDuration.ToString("R", CultureInfo.InvariantCulture) +
+                            ", effective tolerance=" + (durationTolerance + KickDurationComparisonEpsilon).ToString("R", CultureInfo.InvariantCulture) + ".");
                     }
                     ValidateWorldKickCurveBindings(worldKickClip);
 
