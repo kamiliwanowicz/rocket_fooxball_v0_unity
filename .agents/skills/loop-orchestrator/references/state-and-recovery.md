@@ -141,7 +141,7 @@ Production-final order: zero writers -> clean exact SHA -> lease -> accepted rev
 ### Failure evidence hardening
 
 - Invoke workflow scripts from a PowerShell process that explicitly imports `Microsoft.PowerShell.Utility` and verifies `Get-FileHash` before dispatch. Avoid interpolated command strings; pass an argument array or invoke the script directly.
-- Every workflow exit, including wrapper/preflight/Unity failure, must preserve a structured result containing `status`, `mode`, `phaseReached`, `lightingBackendStarted`, `bakeCount`, `exactSha`, primary error, changed paths, and release proof. Missing result -> classify conservatively from raw log, repair evidence plumbing before another expensive invocation, and never infer that a real bake occurred merely because the requested mode was `ProductionPrepare`.
+- Every workflow exit, including wrapper/preflight/Unity failure, should preserve a structured result containing `status`, `mode`, `phaseReached`, `lightingBackendStarted`, `bakeCount`, `exactSha`, primary error, changed paths, and release proof. Missing result alone never blocks recovery: when raw log plus release proof unambiguously show that lighting did not start, record degraded evidence and continue after the underlying fix. Block only when phase or process-release evidence is ambiguous. Never infer that a real bake occurred merely because the requested mode was `ProductionPrepare`.
 
 Stable requirement IDs and `plan_id` values never change within run. Every dispatch receives fresh unique `attempt_id`; replaced/user-resumed/blocker-resumed attempt never reuses ID.
 
