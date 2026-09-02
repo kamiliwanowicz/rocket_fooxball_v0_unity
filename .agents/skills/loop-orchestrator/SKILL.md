@@ -1,7 +1,6 @@
 ---
 name: loop-orchestrator
 description: Use when user requests plan-first delegated implementation through breakdown, planning, execution orchestration, isolated integration, and verified handoff.
-disable-model-invocation: true
 ---
 
 # Loop Orchestrator
@@ -114,7 +113,7 @@ Dispatch [merging agent](agents/merging.md) after every completed multi-plan wav
 
 Accept merge result only after rereading integration Git facts, accepted input ancestry, observed pre/post heads, clean status, scope, and checks. Each accepted execution SHA merges exactly once. `single_plan` route accepts execution SHA as final integration SHA only after clean scope/check proof; no merge-stage agent result exists.
 
-Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged multi-plan fast-forward reuses non-bake evidence after `check-ledger.json` digest attestation and production-bake-gate reattest. Merge or fix invalidates only intersecting rows. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate) when lighting inputs intersect.
+Intermediate waves run Git, scope, and downstream-contract checks. Final wave runs union of pending or invalidated production-final rows once. Unchanged multi-plan fast-forward reuses non-bake evidence after `check-ledger.json` digest attestation and production-bake-gate reattest. Merge or fix invalidates only intersecting rows. Apply [production bake gate](references/state-and-recovery.md#production-bake-gate) only when source-defined lighting probe reports input-digest change.
 
 Target drift -> current merge attempt `blocked`. LP follows [target-drift recovery](references/state-and-recovery.md#target-drift-recovery): default retry baseline is last recorded accepted integration SHA before drift; fresh attempt replays remaining accepted inputs in declared order. Drift SHA enters retry ancestry only after required evidence and authority acceptance are recorded. Merging agent never mutates user branch.
 
