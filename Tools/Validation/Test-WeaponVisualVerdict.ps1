@@ -13,6 +13,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module -Name (Join-Path -Path $PSHOME -ChildPath 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
+if ($null -eq (Get-Command -Name Get-FileHash -ErrorAction SilentlyContinue)) {
+    throw 'Get-FileHash is unavailable after importing Microsoft.PowerShell.Utility.'
+}
 
 function Get-Property {
     param([AllowNull()]$Object, [Parameter(Mandatory = $true)][string]$Name)

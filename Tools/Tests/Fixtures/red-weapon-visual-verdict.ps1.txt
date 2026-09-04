@@ -5,6 +5,11 @@
 # schemaVersion + references records.
 param([string]$VerdictPath)
 
+Import-Module -Name (Join-Path -Path $PSHOME -ChildPath 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
+if ($null -eq (Get-Command -Name Get-FileHash -ErrorAction SilentlyContinue)) {
+    throw 'Get-FileHash is unavailable after importing Microsoft.PowerShell.Utility.'
+}
+
 # Historical parser accepted the legacy root and entry aliases. The canonical
 # validator must reject this shape, mixed aliases, unknown fields, and duplicate
 # JSON properties before ConvertFrom-Json can collapse them.
