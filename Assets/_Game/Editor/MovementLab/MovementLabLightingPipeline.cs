@@ -135,6 +135,7 @@ namespace RocketFooxball.Editor
                         wash.lightmapBakeType = LightmapBakeType.Realtime;
                         wash.shadows = LightShadows.None;
                         wash.bounceIntensity = 0f;
+                        wash.enabled = true;
                         wash.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
                     }
 
@@ -835,7 +836,8 @@ namespace RocketFooxball.Editor
                             Mathf.Abs(wash.intensity - WallWashIntensity) > 0.001f || Mathf.Abs(wash.range - WallWashRange) > 0.001f ||
                             Mathf.Abs(wash.spotAngle - WallWashOuterAngle) > 0.001f || Mathf.Abs(wash.innerSpotAngle - WallWashInnerAngle) > 0.001f ||
                             wash.lightmapBakeType != LightmapBakeType.Realtime || wash.shadows != LightShadows.None ||
-                            Mathf.Abs(wash.bounceIntensity) > 0.001f || wash.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask)
+                            Mathf.Abs(wash.bounceIntensity) > 0.001f || !wash.enabled ||
+                            wash.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask)
                         {
                             throw new InvalidOperationException("Wall wash light contract invalid: " + expected.name + ".");
                         }

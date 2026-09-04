@@ -1953,15 +1953,23 @@ namespace RocketFooxball.Editor
               var expectedNonPrivateLightNames = new HashSet<string>(StringComparer.Ordinal) { "Sun" };
               for (var i = 0; i < AccentLightContract.Length; i++)
                   expectedNonPrivateLightNames.Add(AccentLightContract[i].name);
+              for (var i = 0; i < MovementLabLightingPipeline.WallWashLightContract.Length; i++)
+                  expectedNonPrivateLightNames.Add(MovementLabLightingPipeline.WallWashLightContract[i].name);
               var expectedSceneLightCount = ParticipantSlots.Length + expectedNonPrivateLightNames.Count;
               if (sceneLights.Length != expectedSceneLightCount)
-                  throw new InvalidOperationException("MovementLab scene must contain exactly " + expectedSceneLightCount + " Lights: six private ViewmodelLights and the Environment/Sun plus catalog goal accents; found " + sceneLights.Length + ".");
+                  throw new InvalidOperationException("MovementLab scene must contain exactly " + expectedSceneLightCount + " Lights: six private ViewmodelLights and the Environment/Sun, catalog goal accents, and every catalog wall wash; found " + sceneLights.Length + ".");
               var nonPrivateLights = sceneLights.Where(light => !privateLights.Contains(light)).ToArray();
               var nonPrivateLightNames = new HashSet<string>(nonPrivateLights.Select(light => light.name), StringComparer.Ordinal);
+              for (var i = 0; i < MovementLabLightingPipeline.WallWashLightContract.Length; i++)
+              {
+                  var expectedWallWashName = MovementLabLightingPipeline.WallWashLightContract[i].name;
+                  if (!nonPrivateLightNames.Contains(expectedWallWashName))
+                      throw new InvalidOperationException("MovementLab scene is missing catalog wall wash light: " + expectedWallWashName + ".");
+              }
               if (nonPrivateLights.Length != expectedNonPrivateLightNames.Count ||
                   !nonPrivateLightNames.SetEquals(expectedNonPrivateLightNames) ||
                   !nonPrivateLights.Contains(RenderSettings.sun))
-                  throw new InvalidOperationException("MovementLab scene non-private Lights must be exactly Environment/Sun plus the catalog goal accents, with Environment/Sun assigned to RenderSettings.sun.");
+                  throw new InvalidOperationException("MovementLab scene non-private Lights must be exactly Environment/Sun plus every catalog goal accent and wall wash, with Environment/Sun assigned to RenderSettings.sun.");
           }
 
           private static void ValidateRemovedSceneLightNames(Scene scene)

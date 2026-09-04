@@ -35,13 +35,16 @@ namespace RocketFooxball.Editor
             internal readonly string DetailNormalMapPath;
             internal readonly Color BaseColor;
             internal readonly Vector2 TextureScale;
+            internal readonly Vector2 DetailNormalTextureScale;
+            internal readonly float DetailNormalScale;
             internal readonly float BumpScale;
             internal readonly float SatinSmoothness;
             internal readonly float GlossSmoothness;
 
             internal SurfaceExpectation(string baseMapPath, string normalMapPath, string metallicGlossMapPath,
                 string occlusionMapPath, string detailNormalMapPath,
-                Vector2 textureScale, float bumpScale, float satinSmoothness, float glossSmoothness)
+                Vector2 textureScale, Vector2 detailNormalTextureScale, float detailNormalScale,
+                float bumpScale, float satinSmoothness, float glossSmoothness)
             {
                 BaseMapPath = baseMapPath;
                 NormalMapPath = normalMapPath;
@@ -50,6 +53,8 @@ namespace RocketFooxball.Editor
                 DetailNormalMapPath = detailNormalMapPath;
                 BaseColor = Color.white;
                 TextureScale = textureScale;
+                DetailNormalTextureScale = detailNormalTextureScale;
+                DetailNormalScale = detailNormalScale;
                 BumpScale = bumpScale;
                 SatinSmoothness = satinSmoothness;
                 GlossSmoothness = glossSmoothness;
@@ -60,11 +65,14 @@ namespace RocketFooxball.Editor
             new ReadOnlyDictionary<Surface, SurfaceExpectation>(new Dictionary<Surface, SurfaceExpectation>
             {
                 { Surface.Floor, new SurfaceExpectation(GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
-                    GrassOcclusionTexturePath, DetailNormalTexturePath, new Vector2(32.5f, 22.5f), 0.65f, 0.85f, 1f) },
+                    GrassOcclusionTexturePath, DetailNormalTexturePath, new Vector2(32.5f, 22.5f), new Vector2(65f, 45f), 0.35f,
+                    0.65f, 0.85f, 1f) },
                 { Surface.Wall, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
-                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(8f, 2f), 0.80f, 0.90f, 1f) },
+                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(8f, 2f), new Vector2(52f, 12f), 0.25f,
+                    0.80f, 0.90f, 1f) },
                 { Surface.ArenaPrimary, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
-                    WallOcclusionTexturePath, DetailNormalTexturePath, Vector2.one, 0.80f, 0.90f, 1f) }
+                    WallOcclusionTexturePath, DetailNormalTexturePath, Vector2.one, new Vector2(52f, 12f), 0.25f,
+                    0.80f, 0.90f, 1f) }
             });
 
         internal static void Apply(Material material, Surface surface, Preset preset)
@@ -86,6 +94,8 @@ namespace RocketFooxball.Editor
             material.SetTexture("_DetailAlbedoMap", null);
             material.SetTexture("_DetailMask", null);
             material.SetTexture("_DetailNormalMap", LoadExpectedTexture(expectation.DetailNormalMapPath));
+            material.SetTextureScale("_DetailNormalMap", expectation.DetailNormalTextureScale);
+            material.SetFloat("_DetailNormalMapScale", expectation.DetailNormalScale);
             material.DisableKeyword("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A");
 
             material.EnableKeyword("_NORMALMAP");
@@ -126,7 +136,8 @@ namespace RocketFooxball.Editor
             }
 
             if (Vector4.Distance(material.GetColor("_BaseColor"), expectation.BaseColor) > 0.001f ||
-                material.GetTextureScale("_BaseMap") != expectation.TextureScale)
+                material.GetTextureScale("_BaseMap") != expectation.TextureScale ||
+                material.GetTextureScale("_DetailNormalMap") != expectation.DetailNormalTextureScale)
             {
                 throw new InvalidOperationException(label + " arena surface color or tiling contract invalid.");
             }
@@ -135,6 +146,7 @@ namespace RocketFooxball.Editor
                 Mathf.Abs(material.GetFloat("_Smoothness") - smoothness) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_OcclusionStrength") - (surface == Surface.Floor ? 0.75f : 0.80f)) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_BumpScale") - expectation.BumpScale) > 0.001f ||
+                Mathf.Abs(material.GetFloat("_DetailNormalMapScale") - expectation.DetailNormalScale) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_SmoothnessTextureChannel")) > 0.001f ||
                 material.IsKeywordEnabled("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A") ||
                 !material.IsKeywordEnabled("_METALLICSPECGLOSSMAP") ||
