@@ -25,7 +25,7 @@ Material:
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
   m_ValidKeywords:
-  - _ENVIRONMENTREFLECTIONS_OFF
+  - _DETAIL_MULX2
   - _METALLICSPECGLOSSMAP
   - _NORMALMAP
   - _OCCLUSIONMAP
@@ -43,11 +43,11 @@ Material:
     serializedVersion: 3
     m_TexEnvs:
     - _BaseMap:
-        m_Texture: {fileID: 2800000, guid: d44cd845f6cf0294c8860d4014496e51, type: 3}
+        m_Texture: {fileID: 2800000, guid: 9b8c979368ff9e14ea12ebccceb84601, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _BumpMap:
-        m_Texture: {fileID: 2800000, guid: 203575a5abdfaff47a21081393584ead, type: 3}
+        m_Texture: {fileID: 2800000, guid: f6c25e4826dc4d24f83971e5c87b93c2, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _DetailAlbedoMap:
@@ -59,7 +59,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _DetailNormalMap:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: ea18c14fe3b3fff43b3a9360765019a2, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _EmissionMap:
@@ -67,15 +67,15 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MainTex:
-        m_Texture: {fileID: 2800000, guid: d44cd845f6cf0294c8860d4014496e51, type: 3}
+        m_Texture: {fileID: 2800000, guid: 9b8c979368ff9e14ea12ebccceb84601, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _MetallicGlossMap:
-        m_Texture: {fileID: 2800000, guid: eb43e579a69d90844ab192451c66ba9c, type: 3}
+        m_Texture: {fileID: 2800000, guid: b2eab3fa6a1dcdb46948fc6d56ce8a19, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
-        m_Texture: {fileID: 2800000, guid: 55cd1c22641c6314aa3b01d6652884f4, type: 3}
+        m_Texture: {fileID: 2800000, guid: 3ea3f1e317f4cdd458337fc017be4ac6, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
@@ -116,19 +116,19 @@ Material:
     - _DstBlend: 0
     - _DstBlendAlpha: 0
     - _EmissionStrength: 0
-    - _EnvironmentReflections: 0
+    - _EnvironmentReflections: 1
     - _GlossMapScale: 0
     - _Glossiness: 0
     - _GlossyReflections: 0
     - _LightSteps: 3
-    - _Metallic: 0.55
-    - _OcclusionStrength: 1
+    - _Metallic: 1
+    - _OcclusionStrength: 0.7
     - _Parallax: 0.005
     - _QueueOffset: 0
     - _ReceiveShadows: 1
     - _RimPower: 3
     - _RimStrength: 0.12
-    - _Smoothness: 0.52
+    - _Smoothness: 1
     - _SmoothnessTextureChannel: 0
     - _SpecularHighlights: 1
     - _SrcBlend: 1
@@ -139,8 +139,8 @@ Material:
     - _ZWrite: 1
     m_Colors:
     - _AmbientColor: {r: 0.72, g: 0.86, b: 1, a: 1}
-    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
-    - _Color: {r: 1, g: 1, b: 1, a: 1}
+    - _BaseColor: {r: 0.95, g: 0.86, b: 0.7, a: 1}
+    - _Color: {r: 0.95, g: 0.86, b: 0.7, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 0}
     - _RimColor: {r: 0.2, g: 0.86, b: 0.92, a: 1}
     - _ShadowColor: {r: 0.32, g: 0.44, b: 0.62, a: 1}
