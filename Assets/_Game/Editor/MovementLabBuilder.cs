@@ -281,33 +281,45 @@ namespace RocketFooxball.Editor
         {
             MovementLabFastModeSession.RestoreIfActive();
             MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
-            var accumulator = new MovementLabValidationAccumulator();
             try
             {
                 AssembleMovementLab();
-                // Fast mode intentionally accepts the bounded Development
-                // lighting intermediate, but still proves persisted semantic
-                // state without review/pass/baked-output/capture work.
-                MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
-                accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
-                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
-                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
-                    Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
-
-                if (!accumulator.HasViolations)
-                    MovementLabStageRunner.WriteProbeIfRequested(probe);
-                accumulator.ThrowIfAny("MovementLab fast build semantic validation");
+                if (!Application.isBatchMode)
+                    ValidateMovementLabFastBuildState();
 
                 MovementLabFastModeSession.Enter();
                 MovementLabFastModeSession.AssertAppliedState();
                 Debug.Log("Rocket Fooxball fast build preview state applied: detached lightmap indices, Iteration quality, transient ambient/post/reflection settings.");
-                if (Application.isBatchMode) MovementLabFastModeSession.RestoreIfActive();
+                if (Application.isBatchMode)
+                {
+                    MovementLabFastModeSession.RestoreIfActive();
+                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+                    MovementLabStageRunner.RunSelective();
+                    ValidateMovementLabFastBuildState();
+                }
             }
             catch
             {
                 MovementLabFastModeSession.RestoreIfActive();
                 throw;
             }
+        }
+
+        private static void ValidateMovementLabFastBuildState()
+        {
+            var accumulator = new MovementLabValidationAccumulator();
+            // Fast mode intentionally accepts the bounded Development
+            // lighting intermediate, but still proves persisted semantic
+            // state without review/pass/baked-output/capture work.
+            MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
+            accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
+            var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
+            if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
+                Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
+
+            if (!accumulator.HasViolations)
+                MovementLabStageRunner.WriteProbeIfRequested(probe);
+            accumulator.ThrowIfAny("MovementLab fast build semantic validation");
         }
 
         /// <summary>
