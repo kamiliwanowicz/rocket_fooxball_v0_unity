@@ -401,32 +401,8 @@ namespace RocketFooxball.Editor
                 {
                     var probeObject = new GameObject("LightProbes");
                     probeObject.transform.SetParent(parent, false);
-                    var positions = new List<Vector3>();
-                    for (var yIndex = 0; yIndex < 5; yIndex++)
-                    {
-                        var y = new[] { 1.5f, 8f, 20f, 36f, 46f }[yIndex];
-                        for (var x = -56f; x <= 56f; x += 16f)
-                        {
-                            for (var z = -36f; z <= 36f; z += 18f)
-                            {
-                                var position = new Vector3(x, y, z);
-                                var overlaps = UnityEngine.Physics.OverlapSphere(position, 0.20f, ~0, QueryTriggerInteraction.Ignore);
-                                var blocked = false;
-                                for (var i = 0; i < overlaps.Length; i++)
-                                {
-                                    if (overlaps[i] != null && !overlaps[i].isTrigger)
-                                    {
-                                        blocked = true;
-                                        break;
-                                    }
-                                }
-                                if (!blocked) positions.Add(position);
-                            }
-                        }
-                    }
-
                     var group = probeObject.AddComponent<LightProbeGroup>();
-                    group.probePositions = positions.ToArray();
+                    group.probePositions = MovementLabLightingProfiles.CreateProductionPositions();
                 }
 
                 internal static void ConfigureReflectionProbes(Transform parent)

@@ -836,11 +836,14 @@ namespace RocketFooxball.Editor
                         expectedMax = WorldShotgunBoundsMax;
                     }
 
-                    if (!WithinBoundsTolerance(boundsMin, expectedMin, WeaponBoundsTolerance) ||
-                        !WithinBoundsTolerance(boundsMax, expectedMax, WeaponBoundsTolerance))
+                    var authoredMin = new Vector3(boundsMin.x, boundsMin.z, -boundsMax.y);
+                    var authoredMax = new Vector3(boundsMax.x, boundsMax.z, -boundsMin.y);
+                    if (!WithinBoundsTolerance(authoredMin, expectedMin, WeaponBoundsTolerance) ||
+                        !WithinBoundsTolerance(authoredMax, expectedMax, WeaponBoundsTolerance))
                     {
-                        throw new InvalidOperationException(label + " imported mesh bounds invalid; expected " + expectedMin + ".." + expectedMax +
-                                                            " within " + WeaponBoundsTolerance + ", actual " + boundsMin + ".." + boundsMax + ".");
+                        throw new InvalidOperationException(label + " imported mesh bounds invalid; expected authored bounds " + expectedMin + ".." + expectedMax +
+                                                            " within " + WeaponBoundsTolerance + ", observed imported bounds " + boundsMin + ".." + boundsMax +
+                                                            ", derived authored bounds " + authoredMin + ".." + authoredMax + ".");
                     }
                 }
 
