@@ -284,7 +284,9 @@ namespace RocketFooxball.Editor
             try
             {
                 AssembleMovementLab();
-                if (!Application.isBatchMode)
+                if (Application.isBatchMode)
+                    SettleFastMaterialPrefabOutputs();
+                else
                     ValidateMovementLabFastBuildState();
 
                 MovementLabFastModeSession.Enter();
@@ -293,8 +295,8 @@ namespace RocketFooxball.Editor
                 if (Application.isBatchMode)
                 {
                     MovementLabFastModeSession.RestoreIfActive();
-                    AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     MovementLabStageRunner.RunSelective();
+                    SettleFastMaterialPrefabOutputs();
                     ValidateMovementLabFastBuildState();
                 }
             }
@@ -303,6 +305,19 @@ namespace RocketFooxball.Editor
                 MovementLabFastModeSession.RestoreIfActive();
                 throw;
             }
+        }
+
+        private static void SettleFastMaterialPrefabOutputs()
+        {
+            AssetDatabase.SaveAssets();
+            var importOptions = ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate;
+            for (var i = 0; i < MovementLabContract.MaterialPrefabOutputs.Length; i++)
+            {
+                var path = MovementLabContract.MaterialPrefabOutputs[i];
+                if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path))) continue;
+                AssetDatabase.ImportAsset(path, importOptions);
+            }
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         private static void ValidateMovementLabFastBuildState()
