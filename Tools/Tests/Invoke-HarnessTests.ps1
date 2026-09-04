@@ -8,6 +8,10 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+Import-Module -Name Microsoft.PowerShell.Utility -ErrorAction Stop
+if ($null -eq (Get-Command -Name Get-FileHash -ErrorAction SilentlyContinue)) {
+    throw 'Get-FileHash is unavailable after importing Microsoft.PowerShell.Utility.'
+}
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 $runtimeLimitMs = 90000
 
