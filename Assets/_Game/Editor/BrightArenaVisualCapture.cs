@@ -12,6 +12,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace RocketFooxball.Editor
 {
@@ -364,6 +365,9 @@ namespace RocketFooxball.Editor
             GameObject externalCameraObject = null;
             Camera gameplayCamera = null;
             GraphicsQualityRuntime graphicsQualityRuntime = null;
+            Light viewmodelLight = null;
+            UniversalAdditionalLightData viewmodelLightAdditionalData = null;
+            var captureAddedViewmodelLightAdditionalData = false;
             Camera externalCamera = null;
             CameraState gameplayState = default;
             ObjectState viewmodelsState = default;
@@ -431,6 +435,8 @@ namespace RocketFooxball.Editor
                 var rocket = Require(viewmodels.transform.Find("WeaponVisual")?.gameObject, "rocket FPS viewmodel");
                 var shotgun = Require(viewmodels.transform.Find("FpsShotgunVisual")?.gameObject, "shotgun FPS viewmodel");
                 var kick = Require(viewmodels.transform.Find("FpsKickVisual")?.gameObject, "kick FPS viewmodel");
+                viewmodelLight = Require(viewmodels.transform.Find(MovementLabContract.ViewmodelLightName)?.GetComponent<Light>(), "local player ViewmodelLight");
+                viewmodelLightAdditionalData = EnsureViewmodelLightAdditionalData(viewmodelLight, out captureAddedViewmodelLightAdditionalData);
                 gameplayState = SaveCameraState(gameplayCamera);
                 viewmodelsState = new ObjectState { Object = viewmodels, Active = viewmodels.activeSelf };
                 crosshairState = new ObjectState { Object = crosshair, Active = crosshair.activeSelf };
@@ -594,43 +600,90 @@ namespace RocketFooxball.Editor
                 {
                     try
                     {
-                        surfaceOverrides?.RestoreAndDestroy();
+                        if (!MovementLabFastModeSession.IsActive && captureAddedViewmodelLightAdditionalData)
+                        {
+                            RemoveCaptureAddedViewmodelLightAdditionalData(viewmodelLight, viewmodelLightAdditionalData, captureAddedViewmodelLightAdditionalData);
+                        }
                     }
                     finally
                     {
-                        if (gameplayCamera != null)
+                        try
                         {
-                            RestoreCameraState(gameplayCamera, gameplayState);
+                            surfaceOverrides?.RestoreAndDestroy();
                         }
-                        if (viewmodelsState.Object != null)
+                        finally
                         {
-                            viewmodelsState.Object.SetActive(viewmodelsState.Active);
-                        }
-                        if (crosshairState.Object != null)
-                        {
-                            crosshairState.Object.SetActive(crosshairState.Active);
-                        }
-                        if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
-                        if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
-                        if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
-                        QualitySettings.SetQualityLevel(initialQualityLevel, true);
-                        if (graphicsQualityRuntime != null)
-                        {
-                            graphicsQualityRuntime.ApplyCurrentQuality();
-                        }
-                        if (externalCameraObject != null)
-                        {
-                            UnityEngine.Object.DestroyImmediate(externalCameraObject);
-                        }
-                        RenderTexture.active = previousActive;
-                        if (renderTarget != null)
-                        {
-                            renderTarget.Release();
-                            UnityEngine.Object.DestroyImmediate(renderTarget);
+                            if (gameplayCamera != null)
+                            {
+                                RestoreCameraState(gameplayCamera, gameplayState);
+                            }
+                            if (viewmodelsState.Object != null)
+                            {
+                                viewmodelsState.Object.SetActive(viewmodelsState.Active);
+                            }
+                            if (crosshairState.Object != null)
+                            {
+                                crosshairState.Object.SetActive(crosshairState.Active);
+                            }
+                            if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
+                            if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
+                            if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
+                            QualitySettings.SetQualityLevel(initialQualityLevel, true);
+                            if (graphicsQualityRuntime != null)
+                            {
+                                graphicsQualityRuntime.ApplyCurrentQuality();
+                            }
+                            if (externalCameraObject != null)
+                            {
+                                UnityEngine.Object.DestroyImmediate(externalCameraObject);
+                            }
+                            RenderTexture.active = previousActive;
+                            if (renderTarget != null)
+                            {
+                                renderTarget.Release();
+                                UnityEngine.Object.DestroyImmediate(renderTarget);
+                            }
                         }
                     }
                 }
             }
+        }
+
+        private static UniversalAdditionalLightData EnsureViewmodelLightAdditionalData(Light viewmodelLight, out bool captureAdded)
+        {
+            if (viewmodelLight == null || viewmodelLight.gameObject == null)
+                throw new InvalidOperationException("Bright arena capture ViewmodelLight is missing its owning GameObject.");
+
+            var existingAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (existingAdditionalData.Length > 1)
+                throw new InvalidOperationException("Bright arena capture ViewmodelLight has multiple UniversalAdditionalLightData components.");
+
+            captureAdded = existingAdditionalData.Length == 0;
+            var additionalData = viewmodelLight.GetUniversalAdditionalLightData();
+            if (additionalData == null || additionalData.gameObject != viewmodelLight.gameObject)
+                throw new InvalidOperationException("Bright arena capture ViewmodelLight UniversalAdditionalLightData belongs to a different GameObject.");
+
+            var currentAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData)
+                throw new InvalidOperationException("Bright arena capture ViewmodelLight must have exactly one UniversalAdditionalLightData component.");
+            return additionalData;
+        }
+
+        private static void RemoveCaptureAddedViewmodelLightAdditionalData(Light viewmodelLight, UniversalAdditionalLightData additionalData, bool captureAdded)
+        {
+            if (!captureAdded) return;
+            if (viewmodelLight == null || viewmodelLight.gameObject == null)
+                throw new InvalidOperationException("Bright arena capture cannot remove ViewmodelLight UniversalAdditionalLightData after its Light was destroyed.");
+            if (additionalData == null || additionalData.gameObject != viewmodelLight.gameObject)
+                throw new InvalidOperationException("Bright arena capture will only remove ViewmodelLight-owned UniversalAdditionalLightData.");
+
+            var currentAdditionalData = viewmodelLight.GetComponents<UniversalAdditionalLightData>();
+            if (currentAdditionalData.Length != 1 || currentAdditionalData[0] != additionalData)
+                throw new InvalidOperationException("Bright arena capture will only remove the exact capture-added UniversalAdditionalLightData component.");
+
+            UnityEngine.Object.DestroyImmediate(additionalData);
+            if (viewmodelLight.GetComponents<UniversalAdditionalLightData>().Length != 0)
+                throw new InvalidOperationException("Bright arena capture could not remove its exact ViewmodelLight UniversalAdditionalLightData component.");
         }
 
         private static CaptureOptions ReadCaptureOptions()
