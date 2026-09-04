@@ -697,48 +697,41 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateLauncherUvZones()
                 {
-                    var assets = AssetDatabase.LoadAllAssetsAtPath(WeaponModelPath);
-                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent" };
-                    var seen = new HashSet<string>(StringComparer.Ordinal);
-                    for (var i = 0; i < assets.Length; i++)
+                    var expectedGroups = StaticWeaponMeshGroups();
+                    var meshes = LoadStaticWeaponMeshesByGroup(WeaponModelPath, "Launcher");
+                    for (var i = 0; i < expectedGroups.Length; i++)
                     {
-                        var mesh = assets[i] as Mesh;
-                        if (mesh == null || AssetDatabase.GetAssetPath(mesh) != WeaponModelPath) continue;
-                        var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
-                        if (group == null) continue;
-                        var zone = group == "WeaponMetal" ? LauncherMetalUvZone :
-                            group == "WeaponDark" ? LauncherDarkUvZone :
-                            group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
-                        ValidateMeshUvZone(mesh, zone, "Launcher/" + group);
-                        seen.Add(group);
+                        var group = expectedGroups[i];
+                        ValidateLegacyWeaponUv(meshes[group], "Launcher/" + group);
                     }
-                    if (seen.Count != expectedGroups.Length)
-                        throw new InvalidOperationException("Launcher UV-zone mesh groups are incomplete.");
                 }
 
                 internal static void ValidateShotgunUvZones(string modelPath, bool fps)
                 {
-                    var assets = AssetDatabase.LoadAllAssetsAtPath(modelPath);
-                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent" };
-                    var seen = new HashSet<string>(StringComparer.Ordinal);
-                    for (var i = 0; i < assets.Length; i++)
+                    var expectedGroups = StaticWeaponMeshGroups();
+                    var modelLabel = fps ? "FpsShotgun" : "Shotgun";
+                    var meshes = LoadStaticWeaponMeshesByGroup(modelPath, modelLabel);
+                    for (var i = 0; i < expectedGroups.Length; i++)
                     {
-                        var mesh = assets[i] as Mesh;
-                        if (mesh == null || AssetDatabase.GetAssetPath(mesh) != modelPath) continue;
-                        var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
-                        if (group == null) continue;
-                        var zone = fps
-                            ? group == "WeaponMetal" ? FpsShotgunMetalUvZone :
-                              group == "WeaponDark" ? FpsShotgunDarkUvZone :
-                              group == "WeaponAccentCore" ? FpsShotgunAccentCoreUvZone : FpsShotgunAccentUvZone
-                            : group == "WeaponMetal" ? WorldShotgunMetalUvZone :
-                              group == "WeaponDark" ? WorldShotgunDarkUvZone :
-                              group == "WeaponAccentCore" ? WorldShotgunAccentCoreUvZone : WorldShotgunAccentUvZone;
-                        ValidateMeshUvZone(mesh, zone, (fps ? "FpsShotgun/" : "Shotgun/") + group);
-                        seen.Add(group);
+                        var group = expectedGroups[i];
+                        ValidateLegacyWeaponUv(meshes[group], modelLabel + "/" + group);
                     }
-                    if (seen.Count != expectedGroups.Length)
-                        throw new InvalidOperationException((fps ? "FPS shotgun" : "World shotgun") + " UV-zone mesh groups are incomplete.");
+                }
+
+                internal static void ValidateLegacyWeaponUv(Mesh mesh, string label)
+                {
+                    if (mesh == null || mesh.uv == null || mesh.uv.Length != mesh.vertexCount)
+                        throw new InvalidOperationException(label + " UV0 data is missing.");
+                    const float epsilon = 0.0005f;
+                    for (var i = 0; i < mesh.uv.Length; i++)
+                    {
+                        var uv = mesh.uv[i];
+                        if (float.IsNaN(uv.x) || float.IsNaN(uv.y) || float.IsInfinity(uv.x) || float.IsInfinity(uv.y) ||
+                            uv.x < -epsilon || uv.x > 1f + epsilon || uv.y < -epsilon || uv.y > 1f + epsilon)
+                        {
+                            throw new InvalidOperationException(label + " UV0 must be finite and remain within the legacy 0..1 range.");
+                        }
+                    }
                 }
 
                 internal static void ValidateMeshUvZone(Mesh mesh, RectInt zone, string label)
@@ -760,6 +753,10 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateStaticWeaponModel(string path, string label)
                 {
+                    if (path != WeaponModelPath && path != FpsShotgunModelPath && path != ShotgunModelPath)
+                    {
+                        throw new InvalidOperationException(label + " static weapon validation does not support model path: " + path);
+                    }
                     var importer = AssetImporter.GetAtPath(path) as ModelImporter;
                     if (importer == null || importer.animationType != ModelImporterAnimationType.None || importer.importAnimation || importer.materialImportMode != ModelImporterMaterialImportMode.None || Mathf.Abs(importer.globalScale - 1f) > 0.0001f)
                     {
@@ -767,7 +764,29 @@ namespace RocketFooxball.Editor
                     }
                     ValidatePbrModelImporter(importer, false, label);
 
-                    var expectedGroups = new[] { "WeaponMetal", "WeaponDark", "WeaponAccentCore", "WeaponAccent" };
+                    var expectedGroups = StaticWeaponMeshGroups();
+                    var meshes = LoadStaticWeaponMeshesByGroup(path, label);
+                    var boundsMin = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                    var boundsMax = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+                    for (var i = 0; i < expectedGroups.Length; i++)
+                    {
+                        var group = expectedGroups[i];
+                        var mesh = meshes[group];
+                        ValidateMeshPbrChannels(mesh, false, label + "/" + group);
+                        boundsMin = Vector3.Min(boundsMin, mesh.bounds.min);
+                        boundsMax = Vector3.Max(boundsMax, mesh.bounds.max);
+                    }
+                    ValidateStaticWeaponBounds(path, label, boundsMin, boundsMax);
+                }
+
+                private static string[] StaticWeaponMeshGroups()
+                {
+                    return new[] { "WeaponMetal", "WeaponDark", "WeaponAccent" };
+                }
+
+                private static Dictionary<string, Mesh> LoadStaticWeaponMeshesByGroup(string path, string label)
+                {
+                    var expectedGroups = StaticWeaponMeshGroups();
                     var assets = AssetDatabase.LoadAllAssetsAtPath(path);
                     var meshes = new List<Mesh>();
                     for (var i = 0; i < assets.Length; i++)
@@ -776,20 +795,53 @@ namespace RocketFooxball.Editor
                     }
                     if (meshes.Count != expectedGroups.Length)
                     {
-                        throw new InvalidOperationException(label + " imported mesh count must equal four.");
+                        throw new InvalidOperationException(label + " imported mesh count must equal three.");
                     }
-                    var seen = new HashSet<string>(StringComparer.Ordinal);
+
+                    var meshesByGroup = new Dictionary<string, Mesh>(StringComparer.Ordinal);
                     for (var i = 0; i < meshes.Count; i++)
                     {
                         var mesh = meshes[i];
                         var group = GetStaticWeaponMeshGroup(mesh.name, expectedGroups);
-                        if (group == null || !seen.Add(group) || mesh.subMeshCount != 1)
+                        if (group == null || meshesByGroup.ContainsKey(group) || mesh.subMeshCount != 1)
                         {
-                            throw new InvalidOperationException(label + " imported mesh groups must be exactly WeaponMetal, WeaponDark, WeaponAccent, and WeaponAccentCore.");
+                            throw new InvalidOperationException(label + " imported mesh groups must be exactly WeaponMetal, WeaponDark, and WeaponAccent, each with one submesh.");
                         }
-                        ValidateMeshPbrChannels(mesh, false, label + "/" + group);
+                        meshesByGroup.Add(group, mesh);
                     }
-                    if (seen.Count != expectedGroups.Length) throw new InvalidOperationException(label + " imported mesh groups are incomplete.");
+                    if (meshesByGroup.Count != expectedGroups.Length)
+                    {
+                        throw new InvalidOperationException(label + " imported mesh groups are incomplete.");
+                    }
+                    return meshesByGroup;
+                }
+
+                private static void ValidateStaticWeaponBounds(string path, string label, Vector3 boundsMin, Vector3 boundsMax)
+                {
+                    Vector3 expectedMin;
+                    Vector3 expectedMax;
+                    if (path == WeaponModelPath)
+                    {
+                        expectedMin = LauncherWeaponBoundsMin;
+                        expectedMax = LauncherWeaponBoundsMax;
+                    }
+                    else if (path == FpsShotgunModelPath)
+                    {
+                        expectedMin = FpsShotgunBoundsMin;
+                        expectedMax = FpsShotgunBoundsMax;
+                    }
+                    else
+                    {
+                        expectedMin = WorldShotgunBoundsMin;
+                        expectedMax = WorldShotgunBoundsMax;
+                    }
+
+                    if (!WithinBoundsTolerance(boundsMin, expectedMin, WeaponBoundsTolerance) ||
+                        !WithinBoundsTolerance(boundsMax, expectedMax, WeaponBoundsTolerance))
+                    {
+                        throw new InvalidOperationException(label + " imported mesh bounds invalid; expected " + expectedMin + ".." + expectedMax +
+                                                            " within " + WeaponBoundsTolerance + ", actual " + boundsMin + ".." + boundsMax + ".");
+                    }
                 }
 
                 private static string GetStaticWeaponMeshGroup(string meshName, string[] expectedGroups)
