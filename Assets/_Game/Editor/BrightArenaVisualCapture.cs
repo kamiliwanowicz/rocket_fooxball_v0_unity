@@ -164,7 +164,7 @@ namespace RocketFooxball.Editor
         {
             Rocket,
             Shotgun,
-            External
+            Arena
         }
 
         private enum VisualMode
@@ -362,13 +362,11 @@ namespace RocketFooxball.Editor
             var manifestPath = Path.Combine(evidenceDirectory, "BrightArenaVisualManifest.json");
             RenderTexture previousActive = null;
             RenderTexture renderTarget = null;
-            GameObject externalCameraObject = null;
             Camera gameplayCamera = null;
             GraphicsQualityRuntime graphicsQualityRuntime = null;
             Light viewmodelLight = null;
             UniversalAdditionalLightData viewmodelLightAdditionalData = null;
             var captureAddedViewmodelLightAdditionalData = false;
-            Camera externalCamera = null;
             CameraState gameplayState = default;
             ObjectState viewmodelsState = default;
             ObjectState crosshairState = default;
@@ -472,46 +470,20 @@ namespace RocketFooxball.Editor
                     for (var i = 0; i < views.Length; i++)
                     {
                         var view = views[i];
-                        Camera captureCamera;
-                        if (view.Mode != ViewMode.External)
-                        {
-                            captureCamera = gameplayCamera;
-                            RestoreCameraState(gameplayCamera, gameplayState);
-                            gameplayCamera.transform.SetPositionAndRotation(
-                                view.Position,
-                                Quaternion.LookRotation(view.Target - view.Position, Vector3.up));
-                            gameplayCamera.fieldOfView = view.FieldOfView;
-                            gameplayCamera.targetTexture = renderTarget;
-                            gameplayCamera.aspect = (float)Width / Height;
-                            viewmodels.SetActive(true);
-                            crosshair.SetActive(crosshairState.Active);
-                            rocket.SetActive(view.Mode == ViewMode.Rocket);
-                            shotgun.SetActive(view.Mode == ViewMode.Shotgun);
-                            kick.SetActive(false);
-                        }
-                        else
-                        {
-                            if (externalCameraObject == null)
-                            {
-                                externalCameraObject = new GameObject("__BrightArenaExternalCamera") { hideFlags = HideFlags.HideAndDontSave };
-                                externalCamera = externalCameraObject.AddComponent<Camera>();
-                                externalCamera.hideFlags = HideFlags.HideAndDontSave;
-                                externalCamera.enabled = false;
-                                externalCamera.targetTexture = renderTarget;
-                                externalCamera.clearFlags = CameraClearFlags.Skybox;
-                                externalCamera.backgroundColor = gameplayCamera.backgroundColor;
-                                externalCamera.nearClipPlane = 0.05f;
-                                externalCamera.farClipPlane = gameplayCamera.farClipPlane;
-                            }
-                            viewmodels.SetActive(false);
-                            crosshair.SetActive(false);
-                            externalCamera.cullingMask = ~0;
-                            externalCamera.fieldOfView = view.FieldOfView;
-                            externalCamera.transform.position = view.Position;
-                            externalCamera.transform.rotation = Quaternion.LookRotation(view.Target - view.Position, Vector3.up);
-                            externalCamera.aspect = (float)Width / Height;
-                             captureCamera = externalCamera;
-                        }
+                        var captureCamera = gameplayCamera;
+                        RestoreCameraState(gameplayCamera, gameplayState);
+                        gameplayCamera.transform.SetPositionAndRotation(
+                            view.Position,
+                            Quaternion.LookRotation(view.Target - view.Position, Vector3.up));
+                        gameplayCamera.fieldOfView = view.FieldOfView;
+                        gameplayCamera.targetTexture = renderTarget;
+                        gameplayCamera.aspect = (float)Width / Height;
+                        var arenaView = view.Mode == ViewMode.Arena;
+                        viewmodels.SetActive(!arenaView);
+                        crosshair.SetActive(arenaView ? false : crosshairState.Active);
+                        rocket.SetActive(view.Mode == ViewMode.Rocket);
+                        shotgun.SetActive(view.Mode == ViewMode.Shotgun);
+                        kick.SetActive(false);
 
                         var fastSession = false;
                         try
@@ -632,10 +604,6 @@ namespace RocketFooxball.Editor
                             if (graphicsQualityRuntime != null)
                             {
                                 graphicsQualityRuntime.ApplyCurrentQuality();
-                            }
-                            if (externalCameraObject != null)
-                            {
-                                UnityEngine.Object.DestroyImmediate(externalCameraObject);
                             }
                             RenderTexture.active = previousActive;
                             if (renderTarget != null)
@@ -837,7 +805,9 @@ namespace RocketFooxball.Editor
             {
                 new ViewDefinition("FirstPersonRocket", "01_FirstPersonRocket.png", ViewMode.Rocket, new Vector3(10f, 3.1f, 24f), new Vector3(-67f, 3.5f, 0f), 75f),
                 new ViewDefinition("FirstPersonShotgun", "02_FirstPersonShotgun.png", ViewMode.Shotgun, new Vector3(-10f, 3.1f, -24f), new Vector3(67f, 3.5f, 0f), 75f),
-                new ViewDefinition("ShadowSideNorthWall", "03_ShadowSideNorthWall.png", ViewMode.External, new Vector3(0f, 58f, 56f), new Vector3(0f, 1.5f, 0f), 70f)
+                new ViewDefinition("FirstPersonArena", "03_FirstPersonArena.png", ViewMode.Arena,
+                    MovementLabContractCatalog.ParticipantSlots[0].Position + Vector3.up * MovementLabContract.PlayerHeadHeight,
+                    new Vector3(0f, MovementLabContract.ArenaSconceHeight, MovementLabContract.ArenaNorthWallSconceZ), 75f)
             };
         }
 
