@@ -66,7 +66,11 @@ namespace RocketFooxball.Editor
 
                     var ballSurface = GetOrCreatePhysicMaterial();
                     var floorMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Floor", LoadTexture(GrassTexturePath), null, LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, null, FloorTextureScale, Color.white, Color.clear, 0f, 0f, 0.24f, 1f, 0f, Vector2.one, 0f));
+                    MovementLabArenaSurfaceProfile.Apply(floorMaterial, MovementLabArenaSurfaceProfile.Surface.Floor,
+                        MovementLabArenaSurfaceProfile.SelectedPreset);
                     var wallMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Wall", LoadTexture(WallTexturePath), null, LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null, WallTextureScale, Color.white, Color.clear, 0f, 0f, 0.28f, 1f, 0f, Vector2.one, 0f));
+                    MovementLabArenaSurfaceProfile.Apply(wallMaterial, MovementLabArenaSurfaceProfile.Surface.Wall,
+                        MovementLabArenaSurfaceProfile.SelectedPreset);
                     var trimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Trim", LoadTexture(TrimTexturePath), LoadTexture(TrimNormalTexturePath), LoadTexture(TrimMetallicTexturePath), LoadTexture(TrimOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 1f));
                     var hazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Hazard", LoadTexture(HazardTexturePath), LoadTexture(HazardNormalTexturePath), LoadTexture(HazardMetallicTexturePath), LoadTexture(HazardOcclusionTexturePath), null, LoadTexture(DetailNormalTexturePath), new Vector2(4f, 1f), Color.white, Color.clear, 0f, 1f, 1f, 0.80f, 0.75f));
                     var markingMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("Marking", null, null, null, null, null, null, Vector2.one, new Color(0.96f, 0.96f, 0.90f, 1f), Color.clear, 0f, 0f, 0.20f, 1f, 1f));
@@ -77,6 +81,8 @@ namespace RocketFooxball.Editor
                     var frameMaterial = trimMaterial;
                     var shieldMaterial = GetOrCreateShieldMaterial("Shield", new Color(0.10f, 0.75f, 1.00f, 1f), new Color(0.30f, 0.90f, 1.00f, 1f));
                     var arenaPrimaryMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaPrimary", LoadTexture(WallTexturePath), null, LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null, WallTextureScale, Color.white, Color.clear, 0f, 0f, 0.28f, 1f, 0f, Vector2.one, 0f));
+                    MovementLabArenaSurfaceProfile.Apply(arenaPrimaryMaterial, MovementLabArenaSurfaceProfile.Surface.ArenaPrimary,
+                        MovementLabArenaSurfaceProfile.SelectedPreset);
                     var arenaTrimMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaTrim", null, null, null, null, null, null, Vector2.one, new Color(0.78f, 0.79f, 0.77f, 1f), Color.clear, 0f, 0f, 0.30f, 1f, 1f));
                     var arenaHazardMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaHazard", null, null, null, null, null, null, Vector2.one, MovementLabContract.ArenaHazardColor, Color.clear, 0f, 0f, 0.35f, 1f, 1f));
                     var arenaGlowMaterial = GetOrCreateLitMaterial(new PbrMaterialSpecification("ArenaGlow", null, null, null, null, null, null, Vector2.one, MovementLabContract.ArenaGlowColor, MovementLabContract.ArenaGlowColor, MovementLabContract.ArenaGlowEmissionStrength, 0f, 0.25f, 1f, 1f));
@@ -105,7 +111,7 @@ namespace RocketFooxball.Editor
                     if (!EditorUtility.IsPersistent(explosionAssetComponent)) throw new InvalidOperationException("Explosion VFX component is not a persistent prefab asset.");
                     BuildHealthPickupPrefab(healthPickupMaterial);
                     BuildShotgunPickupPrefab(LoadRequiredAsset<Material>(ShotgunMetalMaterialPath), LoadRequiredAsset<Material>(ShotgunDarkMaterialPath),
-                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), LoadRequiredAsset<Material>(ShotgunAccentCoreMaterialPath), teamBlueMaterial, teamRedMaterial);
+                        LoadRequiredAsset<Material>(ShotgunAccentMaterialPath), teamBlueMaterial, teamRedMaterial);
                     BuildAmmoPickupPrefab(ammoShellMaterial, teamBlueMaterial, teamRedMaterial);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.ImportAsset(HealthPickupPrefabPath, ImportAssetOptions.ForceSynchronousImport);

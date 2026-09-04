@@ -341,9 +341,10 @@ namespace RocketFooxball.Editor
                     else if (string.Equals(path, MaterialsPath + "/ArenaGlow.mat", StringComparison.Ordinal))
                         ValidateReloadedEmission(material, MovementLabContract.ArenaGlowColor,
                             MovementLabContract.ArenaGlowEmissionStrength, null, path);
-                    else if (string.Equals(path, WeaponAccentMaterialPath, StringComparison.Ordinal) ||
-                             string.Equals(path, ShotgunAccentMaterialPath, StringComparison.Ordinal))
-                        ValidateReloadedEmissionOff(material, path);
+                    else if (string.Equals(path, WeaponAccentMaterialPath, StringComparison.Ordinal))
+                        MovementLabMaterialPipeline.ValidateClassicWeaponMaterial(material, "WeaponAccent");
+                    else if (string.Equals(path, ShotgunAccentMaterialPath, StringComparison.Ordinal))
+                        MovementLabMaterialPipeline.ValidateClassicWeaponMaterial(material, "ShotgunAccent");
                     else if (string.Equals(path, WeaponAccentCoreMaterialPath, StringComparison.Ordinal))
                         ValidateReloadedEmission(material, WeaponAccentCoreEmissionColor, WeaponAccentCoreEmissionStrength,
                             LauncherEmissionTexturePath, path);

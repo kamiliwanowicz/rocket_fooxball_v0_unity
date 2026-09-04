@@ -185,7 +185,6 @@ namespace RocketFooxball.Editor
 
         private static readonly string[] RemovedSceneLightNamePrefixes =
         {
-            "GoalAccent_",
             "WallFill_"
         };
 
@@ -1621,7 +1620,6 @@ namespace RocketFooxball.Editor
                      MovementLabPrefabPipeline.ValidateShotgunPresentation(participant.gameObject, camera, fpsShotgun, worldVisual, worldMount, worldShotgun, expected.DisplayName);
                      MovementLabPrefabPipeline.ValidateTeamTintRenderers(participant.Presentation, worldVisual, worldMount,
                          MovementLabPrefabPipeline.FindRendererByName(worldShotgun.gameObject, "WeaponAccent"),
-                         MovementLabPrefabPipeline.FindRendererByName(worldShotgun.gameObject, "WeaponAccentCore"),
                          expected.DisplayName + ".presentation.teamTintRenderers");
                      var worldLayers = worldVisual.GetComponentsInChildren<Transform>(true);
                     for (var layerIndex = 0; layerIndex < worldLayers.Length; layerIndex++)
@@ -1953,11 +1951,18 @@ namespace RocketFooxball.Editor
               var scenePrivateLights = sceneLights.Where(light => privateLights.Contains(light)).ToArray();
               if (privateLights.Count != ParticipantSlots.Length || scenePrivateLights.Length != ParticipantSlots.Length || privateLights.Distinct().Count() != ParticipantSlots.Length)
                   throw new InvalidOperationException("MovementLab scene must contain exactly six distinct prefab-provenance private ViewmodelLights.");
-              if (sceneLights.Length != ParticipantSlots.Length + 1)
-                  throw new InvalidOperationException("MovementLab scene must contain exactly seven Lights: six private ViewmodelLights and Environment/Sun; found " + sceneLights.Length + ".");
+              var expectedNonPrivateLightNames = new HashSet<string>(StringComparer.Ordinal) { "Sun" };
+              for (var i = 0; i < AccentLightContract.Length; i++)
+                  expectedNonPrivateLightNames.Add(AccentLightContract[i].name);
+              var expectedSceneLightCount = ParticipantSlots.Length + expectedNonPrivateLightNames.Count;
+              if (sceneLights.Length != expectedSceneLightCount)
+                  throw new InvalidOperationException("MovementLab scene must contain exactly " + expectedSceneLightCount + " Lights: six private ViewmodelLights and the Environment/Sun plus catalog goal accents; found " + sceneLights.Length + ".");
               var nonPrivateLights = sceneLights.Where(light => !privateLights.Contains(light)).ToArray();
-              if (nonPrivateLights.Length != 1 || nonPrivateLights[0] != RenderSettings.sun)
-                  throw new InvalidOperationException("MovementLab scene must contain exactly one non-private Light, and it must be Environment/Sun assigned to RenderSettings.sun.");
+              var nonPrivateLightNames = new HashSet<string>(nonPrivateLights.Select(light => light.name), StringComparer.Ordinal);
+              if (nonPrivateLights.Length != expectedNonPrivateLightNames.Count ||
+                  !nonPrivateLightNames.SetEquals(expectedNonPrivateLightNames) ||
+                  !nonPrivateLights.Contains(RenderSettings.sun))
+                  throw new InvalidOperationException("MovementLab scene non-private Lights must be exactly Environment/Sun plus the catalog goal accents, with Environment/Sun assigned to RenderSettings.sun.");
           }
 
           private static void ValidateRemovedSceneLightNames(Scene scene)
@@ -1971,12 +1976,7 @@ namespace RocketFooxball.Editor
 
           private static void ValidateEnvironmentLightScope(Scene scene)
           {
-              var environment = scene.GetRootGameObjects().FirstOrDefault(root => root != null && root.name == "Environment");
-              if (environment == null)
-                  throw new InvalidOperationException("Environment root is missing from the generated scene.");
-              var lights = environment.GetComponentsInChildren<Light>(true);
-              if (lights.Length != 1 || lights[0] == null || lights[0].name != "Sun" || RenderSettings.sun != lights[0])
-                  throw new InvalidOperationException("Environment must contain exactly one Light, Environment/Sun.");
+              MovementLabLightingPipeline.ValidateEnvironmentLights(scene);
           }
 
          private static void CaptureSpawnSetContracts(ValidationContext context, MovementLabValidationAccumulator accumulator, int participantLayer, int projectilesLayer)
@@ -2170,7 +2170,6 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("visual/presentation", "ShotgunTeamTint", () => MovementLabPrefabPipeline.ValidateTeamTintRenderers(
                     context.Presentation, context.WorldVisual, context.WorldShotgunMount,
                     MovementLabPrefabPipeline.FindRendererByName(context.WorldShotgunVisual.gameObject, "WeaponAccent"),
-                    MovementLabPrefabPipeline.FindRendererByName(context.WorldShotgunVisual.gameObject, "WeaponAccentCore"),
                     "Scene Player PlayerPresentation.teamTintRenderers"));
             }
             if (context.FpsVisual != null && context.FpsAnimator != null)
