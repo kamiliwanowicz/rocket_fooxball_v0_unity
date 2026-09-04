@@ -101,6 +101,7 @@ namespace RocketFooxball.Editor
                      MovementLabContract.ShadersPath + "/RetroShield.shader", MovementLabContract.ShadersPath + "/SunnyArenaSky.shader",
                      "Assets/_Game/Editor/MovementLab/MovementLabSceneComposer.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabMaterialPipeline.cs",
+                     "Assets/_Game/Editor/MovementLab/MovementLabArenaSurfaceProfile.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabAnimatorPipeline.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabValidator.cs",
                      "Assets/_Game/Editor/MovementLab/MovementLabPrefabPipeline.cs",

@@ -455,22 +455,13 @@ namespace RocketFooxball.Editor
             var hazard = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaHazard.mat");
             var glow = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/ArenaGlow.mat");
 
-            ValidatePbrMaterial(floor, LoadTexture(GrassTexturePath), null,
-                LoadTexture(GrassMetallicTexturePath), LoadTexture(GrassOcclusionTexturePath), null, null,
-                new Vector2(13f, 9f), "Floor", Vector2.one, 0f);
-            ValidatePbrScalars(floor, 0f, 0.24f, 1f, 0f, 0f, "Floor");
-            ValidateEmission(floor, Color.clear, 0f, "Floor");
-            ValidatePbrMaterial(wall, LoadTexture(WallTexturePath), null,
-                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null,
-                new Vector2(13f, 2f), "Wall", Vector2.one, 0f);
-            ValidatePbrScalars(wall, 0f, 0.28f, 1f, 0f, 0f, "Wall");
-            ValidateEmission(wall, Color.clear, 0f, "Wall");
+            MovementLabArenaSurfaceProfile.Validate(floor, MovementLabArenaSurfaceProfile.Surface.Floor,
+                MovementLabArenaSurfaceProfile.SelectedPreset);
+            MovementLabArenaSurfaceProfile.Validate(wall, MovementLabArenaSurfaceProfile.Surface.Wall,
+                MovementLabArenaSurfaceProfile.SelectedPreset);
             ValidateFlatMaterial(marking, new Color(0.96f, 0.96f, 0.90f, 1f), 0.20f, 0f, "Marking");
-            ValidatePbrMaterial(primary, LoadTexture(WallTexturePath), null,
-                LoadTexture(WallMetallicTexturePath), LoadTexture(WallOcclusionTexturePath), null, null,
-                new Vector2(13f, 2f), "ArenaPrimary", Vector2.one, 0f);
-            ValidatePbrScalars(primary, 0f, 0.28f, 1f, 0f, 0f, "ArenaPrimary");
-            ValidateEmission(primary, Color.clear, 0f, "ArenaPrimary");
+            MovementLabArenaSurfaceProfile.Validate(primary, MovementLabArenaSurfaceProfile.Surface.ArenaPrimary,
+                MovementLabArenaSurfaceProfile.SelectedPreset);
             ValidateFlatMaterial(trim, new Color(0.78f, 0.79f, 0.77f, 1f), 0.30f, 0f, "ArenaTrim");
             ValidateFlatMaterial(hazard, new Color(233f / 255f, 90f / 255f, 22f / 255f, 1f), 0.35f, 0f, "ArenaHazard");
             ValidateFlatMaterial(glow, new Color(1f, 240f / 255f, 200f / 255f, 1f), 0.25f, 3f, "ArenaGlow");
