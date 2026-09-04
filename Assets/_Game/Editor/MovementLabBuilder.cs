@@ -330,7 +330,7 @@ namespace RocketFooxball.Editor
             {
                 MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
                 accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
-                var probe = MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true, accumulator: accumulator);
+                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
                 var disallowedStale = probe.StaleStages.Where(stage =>
                     stage != MovementLabStage.Lighting &&
                     stage != MovementLabStage.BakedOutput &&
@@ -350,8 +350,13 @@ namespace RocketFooxball.Editor
                     Debug.Log("Rocket Fooxball fast persisted validation proceeding with informational raw output drift: " + string.Join(", ",
                         informationalRawDrift.Select(stage => stage + "=" +
                             (probe.TryGetStaleReason(stage, out var reason) ? reason : "stale"))));
-                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
-                    Debug.Log("Rocket Fooxball fast persisted validation: production lighting stages are stale but permitted for Fast preview.");
+                var permittedProductionStale = probe.StaleStages.Where(stage =>
+                    stage == MovementLabStage.Lighting ||
+                    stage == MovementLabStage.BakedOutput).ToArray();
+                if (permittedProductionStale.Length > 0)
+                    Debug.Log("Rocket Fooxball fast persisted validation: production lighting stages are stale but permitted for Fast preview when outputs are present: " +
+                        string.Join(", ", permittedProductionStale.Select(stage => stage + "=" +
+                            (probe.TryGetStaleReason(stage, out var reason) ? reason : "stale"))));
                 accumulator.ThrowIfAny("MovementLab fast persisted validation");
                 Debug.Log("Rocket Fooxball fast persisted validation passed after scene reopen; no project save performed.");
             }
