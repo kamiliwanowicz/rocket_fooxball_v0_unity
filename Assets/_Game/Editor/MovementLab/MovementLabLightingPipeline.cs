@@ -42,6 +42,8 @@ namespace RocketFooxball.Editor
                 internal const float FastAmbientIntensity = 1.15f;
                 internal const float ProductionSunIntensity = 1.6f;
                 internal const float ProductionSunShadowStrength = 0.25f;
+                internal const float GoalAccentIntensity = 8f;
+                internal const float GoalAccentRange = 20f;
                 internal const float SunnySkyCloudCoverage = 0.26f;
                 internal const float SunnySkyCloudSoftness = 0.72f;
                 internal const float SunnySkySunAngularRadius = 0.012f;
@@ -80,6 +82,26 @@ namespace RocketFooxball.Editor
                     sun.shadowBias = 0.05f;
                     sun.shadowNormalBias = 0.4f;
                     sun.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
+
+                    for (var i = 0; i < AccentLightContract.Length; i++)
+                    {
+                        var contract = AccentLightContract[i];
+                        var accentObject = new GameObject(contract.name);
+                        accentObject.transform.SetParent(environment.transform, false);
+                        accentObject.transform.localPosition = contract.position;
+                        var accent = accentObject.AddComponent<Light>();
+                        accent.GetUniversalAdditionalLightData();
+
+                        accent.type = LightType.Point;
+                        accent.color = contract.color;
+                        accent.intensity = GoalAccentIntensity;
+                        accent.range = GoalAccentRange;
+                        accent.lightmapBakeType = LightmapBakeType.Realtime;
+                        accent.shadows = LightShadows.None;
+                        accent.bounceIntensity = 0f;
+                        accent.enabled = true;
+                        accent.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
+                    }
 
                     var skyMaterial = AuthorSkyMaterial(-sun.transform.forward);
 
@@ -651,12 +673,7 @@ namespace RocketFooxball.Editor
                         throw new InvalidOperationException("Sunny sky material contract invalid.");
                     }
 
-                    var environment = GameObject.Find("Environment");
-                    var environmentLights = environment != null
-                        ? environment.GetComponentsInChildren<Light>(true)
-                        : Array.Empty<Light>();
-                    if (environmentLights.Length != 1 || environmentLights[0] != sun)
-                        throw new InvalidOperationException("Environment must contain exactly one Light: Environment/Sun.");
+                    ValidateEnvironmentLights(scene);
 
                     var volume = GameObject.Find("Environment/GlobalVolume")?.GetComponent<Volume>();
                     var expectedProfile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
@@ -745,6 +762,51 @@ namespace RocketFooxball.Editor
                         meshRenderers += skinned.Length;
                     }
                     Debug.Log("Rocket Fooxball Movement Lab render budget: triangles=" + sceneTriangles + " MeshRenderers=" + meshRenderers + " opaqueDraws=" + opaqueDraws + " staticTransparent=" + transparentStatic);
+                }
+
+                internal static void ValidateEnvironmentLights(Scene scene)
+                {
+                    if (!scene.IsValid())
+                        throw new InvalidOperationException("Environment light validation requires a valid scene.");
+
+                    var environmentRoots = scene.GetRootGameObjects()
+                        .Where(root => root != null && root.name == "Environment")
+                        .ToArray();
+                    if (environmentRoots.Length != 1)
+                        throw new InvalidOperationException("MovementLab scene must contain exactly one root-level Environment object.");
+
+                    var environment = environmentRoots[0];
+                    var environmentLights = environment.GetComponentsInChildren<Light>(true);
+                    var expectedLightCount = 1 + AccentLightContract.Length;
+                    if (environmentLights.Length != expectedLightCount)
+                        throw new InvalidOperationException("Environment must contain exactly " + expectedLightCount + " Lights: Environment/Sun and the catalog goal accents; found " + environmentLights.Length + ".");
+
+                    var sunMatches = environmentLights.Where(light => light != null && light.transform.parent == environment.transform && light.name == "Sun").ToArray();
+                    if (sunMatches.Length != 1 || sunMatches[0].gameObject.scene != scene || RenderSettings.sun != sunMatches[0])
+                        throw new InvalidOperationException("Environment must contain exactly one direct child Environment/Sun assigned to RenderSettings.sun in the supplied scene.");
+
+                    for (var i = 0; i < AccentLightContract.Length; i++)
+                    {
+                        var expected = AccentLightContract[i];
+                        var matches = environmentLights.Where(light => light != null && light.transform.parent == environment.transform && light.name == expected.name).ToArray();
+                        if (matches.Length != 1 || matches[0].gameObject.scene != scene)
+                            throw new InvalidOperationException("Environment must contain exactly one direct child goal accent light: " + expected.name + ".");
+
+                        var accent = matches[0];
+                        var accentData = accent.GetComponent<UniversalAdditionalLightData>();
+                        if (accentData == null || Vector3.Distance(accent.transform.localPosition, expected.position) > 0.001f ||
+                            !ColorsApproximately(accent.color, expected.color) || accent.type != LightType.Point ||
+                            Mathf.Abs(accent.intensity - GoalAccentIntensity) > 0.001f || Mathf.Abs(accent.range - GoalAccentRange) > 0.001f ||
+                            accent.lightmapBakeType != LightmapBakeType.Realtime || accent.shadows != LightShadows.None ||
+                            Mathf.Abs(accent.bounceIntensity) > 0.001f || !accent.enabled ||
+                            accent.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask)
+                        {
+                            throw new InvalidOperationException("Goal accent light contract invalid: " + expected.name + ".");
+                        }
+
+                        MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + expected.name);
+                        MovementLabSerializedProperties.ValidatePersistentIdentity(accentData, "Environment/" + expected.name + " UniversalAdditionalLightData");
+                    }
                 }
 
                 private static MovementLabLightingProfiles.Specification ResolveReadOnlyValidationProfile(bool includeBakedLighting, int probeCount, ReflectionProbe[] probes)
