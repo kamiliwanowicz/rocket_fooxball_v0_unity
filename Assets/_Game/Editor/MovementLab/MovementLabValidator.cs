@@ -185,7 +185,6 @@ namespace RocketFooxball.Editor
 
         private static readonly string[] RemovedSceneLightNamePrefixes =
         {
-            "WallFill_"
         };
 
         private sealed class ValidationContext

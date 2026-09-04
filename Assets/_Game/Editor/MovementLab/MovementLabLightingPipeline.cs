@@ -33,17 +33,31 @@ namespace RocketFooxball.Editor
 {
     internal static partial class MovementLabLightingPipeline
     {
-                internal static readonly Color ProductionAmbientSkyColor = new Color(0.55f, 0.65f, 0.75f, 1f);
-                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.48f, 0.50f, 0.48f, 1f);
-                internal static readonly Color ProductionAmbientGroundColor = new Color(0.28f, 0.28f, 0.25f, 1f);
+                internal static readonly Color ProductionAmbientSkyColor = new Color(0.30f, 0.34f, 0.38f, 1f);
+                internal static readonly Color ProductionAmbientEquatorColor = new Color(0.16f, 0.18f, 0.20f, 1f);
+                internal static readonly Color ProductionAmbientGroundColor = new Color(0.07f, 0.08f, 0.09f, 1f);
                 internal static readonly Color ProductionSunColor = new Color(1f, 0.95f, 0.86f, 1f);
                 internal static readonly Vector3 ProductionSunEuler = new Vector3(50f, 330f, 0f);
-                internal const float ProductionAmbientIntensity = 0.95f;
-                internal const float FastAmbientIntensity = 1.15f;
-                internal const float ProductionSunIntensity = 1.6f;
-                internal const float ProductionSunShadowStrength = 0.25f;
+                internal const float ProductionAmbientIntensity = 0.65f;
+                internal const float FastAmbientIntensity = 0.65f;
+                internal const float ProductionSunIntensity = 2.0f;
+                internal const float ProductionSunShadowStrength = 0.90f;
                 internal const float GoalAccentIntensity = 8f;
                 internal const float GoalAccentRange = 20f;
+                internal static readonly Color WallWashColor = new Color(1.0f, 0.82f, 0.64f, 1f);
+                internal const float WallWashIntensity = 280f;
+                internal const float WallWashRange = 32f;
+                internal const float WallWashOuterAngle = 120f;
+                internal const float WallWashInnerAngle = 105f;
+                internal static readonly (string name, Vector3 position, Vector3 target)[] WallWashLightContract =
+                {
+                    ("WallFill_North_West", new Vector3(-43f, 10f, -24f), new Vector3(-43f, 4f, -44.5f)),
+                    ("WallFill_North_Center", new Vector3(0f, 10f, -24f), new Vector3(0f, 4f, -44.5f)),
+                    ("WallFill_North_East", new Vector3(43f, 10f, -24f), new Vector3(43f, 4f, -44.5f)),
+                    ("WallFill_South_West", new Vector3(-43f, 10f, 24f), new Vector3(-43f, 4f, 44.5f)),
+                    ("WallFill_South_Center", new Vector3(0f, 10f, 24f), new Vector3(0f, 4f, 44.5f)),
+                    ("WallFill_South_East", new Vector3(43f, 10f, 24f), new Vector3(43f, 4f, 44.5f))
+                };
                 internal const float SunnySkyCloudCoverage = 0.26f;
                 internal const float SunnySkyCloudSoftness = 0.72f;
                 internal const float SunnySkySunAngularRadius = 0.012f;
@@ -101,6 +115,27 @@ namespace RocketFooxball.Editor
                         accent.bounceIntensity = 0f;
                         accent.enabled = true;
                         accent.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
+                    }
+
+                    for (var i = 0; i < WallWashLightContract.Length; i++)
+                    {
+                        var contract = WallWashLightContract[i];
+                        var washObject = new GameObject(contract.name);
+                        washObject.transform.SetParent(environment.transform, false);
+                        washObject.transform.localPosition = contract.position;
+                        washObject.transform.localRotation = Quaternion.LookRotation(contract.target - contract.position);
+                        var wash = washObject.AddComponent<Light>();
+                        wash.GetUniversalAdditionalLightData();
+                        wash.type = LightType.Spot;
+                        wash.color = WallWashColor;
+                        wash.intensity = WallWashIntensity;
+                        wash.range = WallWashRange;
+                        wash.spotAngle = WallWashOuterAngle;
+                        wash.innerSpotAngle = WallWashInnerAngle;
+                        wash.lightmapBakeType = LightmapBakeType.Realtime;
+                        wash.shadows = LightShadows.None;
+                        wash.bounceIntensity = 0f;
+                        wash.cullingMask = ~MovementLabContract.ViewmodelLightCullingMask;
                     }
 
                     var skyMaterial = AuthorSkyMaterial(-sun.transform.forward);
@@ -753,9 +788,9 @@ namespace RocketFooxball.Editor
 
                     var environment = environmentRoots[0];
                     var environmentLights = environment.GetComponentsInChildren<Light>(true);
-                    var expectedLightCount = 1 + AccentLightContract.Length;
+                    var expectedLightCount = 1 + AccentLightContract.Length + WallWashLightContract.Length;
                     if (environmentLights.Length != expectedLightCount)
-                        throw new InvalidOperationException("Environment must contain exactly " + expectedLightCount + " Lights: Environment/Sun and the catalog goal accents; found " + environmentLights.Length + ".");
+                        throw new InvalidOperationException("Environment must contain exactly " + expectedLightCount + " Lights: Environment/Sun, goal accents, and wall washes; found " + environmentLights.Length + ".");
 
                     var sunMatches = environmentLights.Where(light => light != null && light.transform.parent == environment.transform && light.name == "Sun").ToArray();
                     if (sunMatches.Length != 1 || sunMatches[0].gameObject.scene != scene || RenderSettings.sun != sunMatches[0])
@@ -782,6 +817,31 @@ namespace RocketFooxball.Editor
 
                         MovementLabSerializedProperties.ValidatePersistentIdentity(accent, "Environment/" + expected.name);
                         MovementLabSerializedProperties.ValidatePersistentIdentity(accentData, "Environment/" + expected.name + " UniversalAdditionalLightData");
+                    }
+
+                    for (var i = 0; i < WallWashLightContract.Length; i++)
+                    {
+                        var expected = WallWashLightContract[i];
+                        var matches = environmentLights.Where(light => light != null && light.transform.parent == environment.transform && light.name == expected.name).ToArray();
+                        if (matches.Length != 1 || matches[0].gameObject.scene != scene)
+                            throw new InvalidOperationException("Environment must contain exactly one direct child wall wash light: " + expected.name + ".");
+
+                        var wash = matches[0];
+                        var washData = wash.GetComponent<UniversalAdditionalLightData>();
+                        var expectedRotation = Quaternion.LookRotation(expected.target - expected.position);
+                        if (washData == null || Vector3.Distance(wash.transform.localPosition, expected.position) > 0.001f ||
+                            Quaternion.Angle(wash.transform.localRotation, expectedRotation) > 0.1f ||
+                            !ColorsApproximately(wash.color, WallWashColor) || wash.type != LightType.Spot ||
+                            Mathf.Abs(wash.intensity - WallWashIntensity) > 0.001f || Mathf.Abs(wash.range - WallWashRange) > 0.001f ||
+                            Mathf.Abs(wash.spotAngle - WallWashOuterAngle) > 0.001f || Mathf.Abs(wash.innerSpotAngle - WallWashInnerAngle) > 0.001f ||
+                            wash.lightmapBakeType != LightmapBakeType.Realtime || wash.shadows != LightShadows.None ||
+                            Mathf.Abs(wash.bounceIntensity) > 0.001f || wash.cullingMask != ~MovementLabContract.ViewmodelLightCullingMask)
+                        {
+                            throw new InvalidOperationException("Wall wash light contract invalid: " + expected.name + ".");
+                        }
+
+                        MovementLabSerializedProperties.ValidatePersistentIdentity(wash, "Environment/" + expected.name);
+                        MovementLabSerializedProperties.ValidatePersistentIdentity(washData, "Environment/" + expected.name + " UniversalAdditionalLightData");
                     }
                 }
 

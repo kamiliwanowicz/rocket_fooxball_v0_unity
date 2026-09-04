@@ -30,19 +30,24 @@ namespace RocketFooxball.Editor
         {
             internal readonly string BaseMapPath;
             internal readonly string NormalMapPath;
+            internal readonly string MetallicGlossMapPath;
             internal readonly string OcclusionMapPath;
+            internal readonly string DetailNormalMapPath;
             internal readonly Color BaseColor;
             internal readonly Vector2 TextureScale;
             internal readonly float BumpScale;
             internal readonly float SatinSmoothness;
             internal readonly float GlossSmoothness;
 
-            internal SurfaceExpectation(string baseMapPath, string normalMapPath, string occlusionMapPath,
+            internal SurfaceExpectation(string baseMapPath, string normalMapPath, string metallicGlossMapPath,
+                string occlusionMapPath, string detailNormalMapPath,
                 Vector2 textureScale, float bumpScale, float satinSmoothness, float glossSmoothness)
             {
                 BaseMapPath = baseMapPath;
                 NormalMapPath = normalMapPath;
+                MetallicGlossMapPath = metallicGlossMapPath;
                 OcclusionMapPath = occlusionMapPath;
+                DetailNormalMapPath = detailNormalMapPath;
                 BaseColor = Color.white;
                 TextureScale = textureScale;
                 BumpScale = bumpScale;
@@ -54,37 +59,41 @@ namespace RocketFooxball.Editor
         private static readonly IReadOnlyDictionary<Surface, SurfaceExpectation> ExpectedBySurface =
             new ReadOnlyDictionary<Surface, SurfaceExpectation>(new Dictionary<Surface, SurfaceExpectation>
             {
-                { Surface.Floor, new SurfaceExpectation(GrassTexturePath, GrassNormalTexturePath, GrassOcclusionTexturePath,
-                    new Vector2(13f, 9f), 0.55f, 0.32f, 0.52f) },
-                { Surface.Wall, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallOcclusionTexturePath,
-                    new Vector2(13f, 2f), 0.45f, 0.46f, 0.68f) },
-                { Surface.ArenaPrimary, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallOcclusionTexturePath,
-                    new Vector2(13f, 2f), 0.45f, 0.46f, 0.68f) }
+                { Surface.Floor, new SurfaceExpectation(GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
+                    GrassOcclusionTexturePath, DetailNormalTexturePath, new Vector2(32.5f, 22.5f), 0.65f, 0.85f, 1f) },
+                { Surface.Wall, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
+                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(8f, 2f), 0.80f, 0.90f, 1f) },
+                { Surface.ArenaPrimary, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
+                    WallOcclusionTexturePath, DetailNormalTexturePath, Vector2.one, 0.80f, 0.90f, 1f) }
             });
 
         internal static void Apply(Material material, Surface surface, Preset preset)
         {
             var expectation = GetExpectation(material, surface, preset, out var smoothness);
 
-            material.SetFloat("_Metallic", 0f);
+            material.SetFloat("_Metallic", 1f);
             material.SetFloat("_Smoothness", smoothness);
-            material.SetFloat("_OcclusionStrength", 1f);
+            material.SetFloat("_OcclusionStrength", surface == Surface.Floor ? 0.75f : 0.80f);
             material.SetFloat("_BumpScale", expectation.BumpScale);
             material.SetFloat("_SmoothnessTextureChannel", 0f);
+            material.SetColor("_BaseColor", expectation.BaseColor);
+            material.SetTexture("_BaseMap", LoadExpectedTexture(expectation.BaseMapPath));
+            material.SetTextureScale("_BaseMap", expectation.TextureScale);
             material.SetTexture("_BumpMap", LoadExpectedTexture(expectation.NormalMapPath));
-            material.SetTexture("_MetallicGlossMap", null);
+            material.SetTexture("_MetallicGlossMap", LoadExpectedTexture(expectation.MetallicGlossMapPath));
+            material.SetTexture("_OcclusionMap", LoadExpectedTexture(expectation.OcclusionMapPath));
             material.SetTexture("_EmissionMap", null);
             material.SetTexture("_DetailAlbedoMap", null);
             material.SetTexture("_DetailMask", null);
-            material.SetTexture("_DetailNormalMap", null);
+            material.SetTexture("_DetailNormalMap", LoadExpectedTexture(expectation.DetailNormalMapPath));
             material.DisableKeyword("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A");
 
             material.EnableKeyword("_NORMALMAP");
             material.EnableKeyword("_OCCLUSIONMAP");
-            material.DisableKeyword("_METALLICSPECGLOSSMAP");
+            material.EnableKeyword("_METALLICSPECGLOSSMAP");
             material.DisableKeyword("_EMISSION");
             material.DisableKeyword("_DETAIL");
-            material.DisableKeyword("_DETAIL_MULX2");
+            material.EnableKeyword("_DETAIL_MULX2");
             material.DisableKeyword("_DETAIL_SCALED");
             if (material.HasProperty("_EmissionStrength")) material.SetFloat("_EmissionStrength", 0f);
             material.SetColor("_EmissionColor", Color.clear);
@@ -102,14 +111,16 @@ namespace RocketFooxball.Editor
             var label = surface.ToString();
             var baseMap = LoadExpectedTexture(expectation.BaseMapPath);
             var normalMap = LoadExpectedTexture(expectation.NormalMapPath);
+            var metallicGlossMap = LoadExpectedTexture(expectation.MetallicGlossMapPath);
             var occlusionMap = LoadExpectedTexture(expectation.OcclusionMapPath);
+            var detailNormalMap = LoadExpectedTexture(expectation.DetailNormalMapPath);
 
             if (material.GetTexture("_BaseMap") != baseMap ||
                 material.GetTexture("_BumpMap") != normalMap ||
                 material.GetTexture("_OcclusionMap") != occlusionMap ||
-                material.GetTexture("_MetallicGlossMap") != null ||
+                material.GetTexture("_MetallicGlossMap") != metallicGlossMap ||
                 material.GetTexture("_EmissionMap") != null ||
-                material.GetTexture("_DetailNormalMap") != null)
+                material.GetTexture("_DetailNormalMap") != detailNormalMap)
             {
                 throw new InvalidOperationException(label + " arena surface texture routing contract invalid.");
             }
@@ -120,18 +131,18 @@ namespace RocketFooxball.Editor
                 throw new InvalidOperationException(label + " arena surface color or tiling contract invalid.");
             }
 
-            if (Mathf.Abs(material.GetFloat("_Metallic")) > 0.001f ||
+            if (Mathf.Abs(material.GetFloat("_Metallic") - 1f) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_Smoothness") - smoothness) > 0.001f ||
-                Mathf.Abs(material.GetFloat("_OcclusionStrength") - 1f) > 0.001f ||
+                Mathf.Abs(material.GetFloat("_OcclusionStrength") - (surface == Surface.Floor ? 0.75f : 0.80f)) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_BumpScale") - expectation.BumpScale) > 0.001f ||
                 Mathf.Abs(material.GetFloat("_SmoothnessTextureChannel")) > 0.001f ||
                 material.IsKeywordEnabled("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A") ||
-                material.IsKeywordEnabled("_METALLICSPECGLOSSMAP") ||
+                !material.IsKeywordEnabled("_METALLICSPECGLOSSMAP") ||
                 !material.IsKeywordEnabled("_NORMALMAP") ||
                 !material.IsKeywordEnabled("_OCCLUSIONMAP") ||
                 material.IsKeywordEnabled("_EMISSION") ||
                 material.IsKeywordEnabled("_DETAIL") ||
-                material.IsKeywordEnabled("_DETAIL_MULX2") ||
+                !material.IsKeywordEnabled("_DETAIL_MULX2") ||
                 material.IsKeywordEnabled("_DETAIL_SCALED") ||
                 !material.HasProperty("_SpecularHighlights") ||
                 Mathf.Abs(material.GetFloat("_SpecularHighlights") - 1f) > 0.001f ||

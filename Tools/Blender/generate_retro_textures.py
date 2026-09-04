@@ -538,6 +538,11 @@ WEAPON_READABILITY_TARGETS = {
     },
 }
 
+# The arena deliberately retains the original dense tiled motifs.  Keep this
+# selection local to grass and wall so the accepted weapon texture branches
+# continue through their current generator path unchanged.
+LEGACY_ARENA_SURFACE_KINDS = frozenset(("grass", "wall"))
+
 WEAPON_ACCENT_CONTRACT = {
     "palette": ((0.18, 0.012, 0.018), (0.58, 0.035, 0.050), (0.96, 0.14, 0.12)),
     "metallic": (0.0, 0.02),
@@ -696,7 +701,7 @@ def _surface_fields(kind: str, u: float, v: float):
     """Return base RGB, height, metallic, smoothness, AO for one tiled material."""
     u %= 1.0
     v %= 1.0
-    if kind in NATURAL_SURFACE_CONTRACT:
+    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
         u_array = np.asarray(u, dtype=np.float64)
         v_array = np.asarray(v, dtype=np.float64)
         n, n01, _detail = _natural_surface_layers(kind, u_array, v_array)
@@ -706,6 +711,17 @@ def _surface_fields(kind: str, u: float, v: float):
     phases = SURFACE_PHASES[kind]
     n = periodic_noise(u, v, phases)
     n01 = clamp01(0.5 + n * 0.50)
+    if kind == "grass":
+        stripe = 0.5 + 0.5 * math.sin(math.tau * (u * 8.0))
+        panel = 1.0 if (u * 8.0) % 1.0 < 0.035 or (v * 8.0) % 1.0 < 0.035 else 0.0
+        base = (mix(0.018, 0.055, n01), mix(0.20, 0.43, n01), mix(0.20, 0.36, n01))
+        base = tuple(mix(value, value + 0.10, stripe * 0.16) for value in base)
+        return base, 0.47 + n * 0.06 - panel * 0.08, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
+    if kind == "wall":
+        seam = 1.0 if (u * 16.0) % 1.0 < 0.028 or (v * 16.0) % 1.0 < 0.028 else 0.0
+        base = (mix(0.46, 0.76, n01), mix(0.53, 0.80, n01), mix(0.51, 0.72, n01))
+        base = tuple(mix(value, (0.06, 0.40, 0.47)[i], seam * 0.62) for i, value in enumerate(base))
+        return base, 0.50 + n * 0.07 - seam * 0.10, 0.0, 0.46 + n01 * 0.20, 0.77 - seam * 0.24
     if kind == "trim":
         stripe = (u * 12.0 + v * 12.0) % 1.0
         edge = 1.0 if stripe < 0.12 else 0.0
@@ -757,7 +773,7 @@ def _surface_fields(kind: str, u: float, v: float):
 
 
 def _surface_normal(kind: str, u: float, v: float):
-    if kind in NATURAL_SURFACE_CONTRACT:
+    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
         delta = 1.0 / 2048.0
         height_u0 = float(_natural_surface_height(kind, u - delta, v))
         height_u1 = float(_natural_surface_height(kind, u + delta, v))
@@ -783,7 +799,7 @@ def _surface_fields_array(kind: str, u, v):
     """Vectorized surface fields for one bounded row chunk."""
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
-    if kind in NATURAL_SURFACE_CONTRACT:
+    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
         n, n01, _detail = _natural_surface_layers(kind, u, v)
         base, height, metallic, smoothness, ao, _masks = _natural_surface_fields(kind, u, v, n, n01)
         return base, height, metallic, smoothness, ao
@@ -791,6 +807,18 @@ def _surface_fields_array(kind: str, u, v):
     n01 = np.clip(0.5 + n * 0.50, 0.0, 1.0)
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
+    if kind == "grass":
+        stripe = 0.5 + 0.5 * np.sin(np.float64(math.tau) * (u * 8.0))
+        panel = np.logical_or(np.mod(u * 8.0, 1.0) < 0.035, np.mod(v * 8.0, 1.0) < 0.035).astype(np.float64)
+        base = np.stack((0.018 + (0.055 - 0.018) * n01, 0.20 + (0.43 - 0.20) * n01, 0.20 + (0.36 - 0.20) * n01), axis=-1)
+        base = base + stripe[..., None] * 0.016
+        return base, 0.47 + n * 0.06 - panel * 0.08, 0.04 + panel * 0.18, 0.48 + n01 * 0.18, 0.72 - panel * 0.20
+    if kind == "wall":
+        seam = np.logical_or(np.mod(u * 16.0, 1.0) < 0.028, np.mod(v * 16.0, 1.0) < 0.028).astype(np.float64)
+        base = np.stack((0.46 + (0.76 - 0.46) * n01, 0.53 + (0.80 - 0.53) * n01, 0.51 + (0.72 - 0.51) * n01), axis=-1)
+        seam_color = np.array((0.06, 0.40, 0.47), dtype=np.float64)
+        base = base * (1.0 - seam[..., None] * 0.62) + seam_color * (seam[..., None] * 0.62)
+        return base, 0.50 + n * 0.07 - seam * 0.10, np.zeros_like(n), 0.46 + n01 * 0.20, 0.77 - seam * 0.24
     if kind == "trim":
         stripe = np.mod(u * 12.0 + v * 12.0, 1.0)
         edge = (stripe < 0.12).astype(np.float64)
@@ -898,7 +926,7 @@ def _generate_natural_surface_maps(kind: str, width: int, height: int):
 
 
 def generate_surface_maps(kind: str, width: int, height: int):
-    if kind in NATURAL_SURFACE_CONTRACT:
+    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
         return _generate_natural_surface_maps(kind, width, height)
     # Author at 1024? then deterministic nearest-upsample weapon maps to 2048?.
     # This preserves the approved source resolution while keeping background
@@ -2593,6 +2621,17 @@ def audit_weapon_accent_glass(generated, selected_families):
     }
 
 
+def audit_legacy_arena_surface(kind, generated):
+    """Preserve the legacy tiled arena response without applying natural-surface gates."""
+    prefix = "Retro" + kind.capitalize()
+    metallic = _rgba_view(generated[prefix + "_MetallicSmoothness"]["buffer"])
+    base = _rgba_view(generated[prefix]["buffer"])
+    nonmetallic = kind != "wall" or int(np.max(metallic[:, :, 0])) == 0
+    patterned = int(np.max(base[:, :, :3])) > int(np.min(base[:, :, :3]))
+    gates = {"legacy_patterned": patterned, "wall_nonmetallic": nonmetallic}
+    return {"pass": all(gates.values()), "gates": gates}
+
+
 def run_semantic_audits(generated, frames=None, selected_families=None):
     """Run only semantic checks whose family buffers were selected/generated."""
     selected_ordered = tuple(selected_families or FAMILY_IDS)
@@ -2621,7 +2660,7 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         checks["shield"] = audit_shield_semantics(generated["RetroShield"]["buffer"])
     for kind in ("grass", "wall"):
         if kind in selected:
-            checks[kind] = audit_continuous_surface(kind, generated)
+            checks[kind] = audit_legacy_arena_surface(kind, generated) if kind in LEGACY_ARENA_SURFACE_KINDS else audit_continuous_surface(kind, generated)
     if "sky" in selected:
         checks["sky"] = audit_sky_clouds(generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):
