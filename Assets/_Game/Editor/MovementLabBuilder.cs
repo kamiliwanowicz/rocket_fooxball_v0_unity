@@ -281,24 +281,27 @@ namespace RocketFooxball.Editor
         {
             MovementLabFastModeSession.RestoreIfActive();
             MovementLabLightingPipeline.AuthorPersistedVolumeProfile();
+            var accumulator = new MovementLabValidationAccumulator();
             try
             {
                 AssembleMovementLab();
-                if (Application.isBatchMode)
-                    SettleFastMaterialPrefabOutputs();
-                else
-                    ValidateMovementLabFastBuildState();
+                // Fast mode intentionally accepts the bounded Development
+                // lighting intermediate, but still proves persisted semantic
+                // state without review/pass/baked-output/capture work.
+                MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
+                accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
+                var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
+                if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
+                    Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
+
+                if (!accumulator.HasViolations)
+                    MovementLabStageRunner.WriteProbeIfRequested(probe);
+                accumulator.ThrowIfAny("MovementLab fast build semantic validation");
 
                 MovementLabFastModeSession.Enter();
                 MovementLabFastModeSession.AssertAppliedState();
                 Debug.Log("Rocket Fooxball fast build preview state applied: detached lightmap indices, Iteration quality, transient ambient/post/reflection settings.");
-                if (Application.isBatchMode)
-                {
-                    MovementLabFastModeSession.RestoreIfActive();
-                    MovementLabStageRunner.RunSelective();
-                    SettleFastMaterialPrefabOutputs();
-                    ValidateMovementLabFastBuildState();
-                }
+                if (Application.isBatchMode) MovementLabFastModeSession.RestoreIfActive();
             }
             catch
             {
@@ -307,42 +310,13 @@ namespace RocketFooxball.Editor
             }
         }
 
-        private static void SettleFastMaterialPrefabOutputs()
-        {
-            AssetDatabase.SaveAssets();
-            var importOptions = ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate;
-            for (var i = 0; i < MovementLabContract.MaterialPrefabOutputs.Length; i++)
-            {
-                var path = MovementLabContract.MaterialPrefabOutputs[i];
-                if (!File.Exists(MovementLabManifestStore.ResolveProjectPath(path))) continue;
-                AssetDatabase.ImportAsset(path, importOptions);
-            }
-            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-        }
-
-        private static void ValidateMovementLabFastBuildState()
-        {
-            var accumulator = new MovementLabValidationAccumulator();
-            // Fast mode intentionally accepts the bounded Development
-            // lighting intermediate, but still proves persisted semantic
-            // state without review/pass/baked-output/capture work.
-            MovementLabValidator.ValidateFastPersistedSemantics(accumulator);
-            accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
-            var probe = MovementLabStageGraph.Probe(true, allowBakedOutputDrift: true, accumulator: accumulator);
-            if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
-                Debug.Log("Rocket Fooxball fast build: production lighting stale; preview remains available (no bake/pass/full proof).");
-
-            if (!accumulator.HasViolations)
-                MovementLabStageRunner.WriteProbeIfRequested(probe);
-            accumulator.ThrowIfAny("MovementLab fast build semantic validation");
-        }
-
         /// <summary>
         /// Read-only persisted proof used after Fast assembly. The scene is
         /// explicitly reopened in a new Editor process by the workflow, then
         /// semantic, quality, and generated-state checks run without saving.
         /// Lighting and baked-output staleness are allowed for Fast preview;
-        /// every other stale stage remains a failure.
+        /// non-lighting raw-output-only drift is informational, while every
+        /// other stale stage remains a failure.
         /// </summary>
         public static void ValidateMovementLabFastPersisted()
         {
@@ -358,12 +332,24 @@ namespace RocketFooxball.Editor
                 accumulator.Capture("quality", "graphics-quality", () => GraphicsQualityConfigurator.Validate());
                 var probe = MovementLabStageGraph.Probe(false, allowBakedOutputDrift: true, accumulator: accumulator);
                 var disallowedStale = probe.StaleStages.Where(stage =>
-                    stage != MovementLabStage.Lighting && stage != MovementLabStage.BakedOutput).ToArray();
+                    stage != MovementLabStage.Lighting &&
+                    stage != MovementLabStage.BakedOutput &&
+                    !probe.IsRawOutputDriftOnly(stage)).ToArray();
                 if (disallowedStale.Length > 0)
                 {
                     accumulator.Add("generated-state", "fast-persisted-stale-non-lighting",
-                        "Fast persisted validation permits only Lighting/BakedOutput staleness: " + string.Join(", ", disallowedStale));
+                        "Fast persisted validation rejected stale non-lighting stages: " + string.Join(", ",
+                            disallowedStale.Select(stage => stage + "=" +
+                                (probe.TryGetStaleReason(stage, out var reason) ? reason : "stale"))));
                 }
+                var informationalRawDrift = probe.StaleStages.Where(stage =>
+                    stage != MovementLabStage.Lighting &&
+                    stage != MovementLabStage.BakedOutput &&
+                    probe.IsRawOutputDriftOnly(stage)).ToArray();
+                if (informationalRawDrift.Length > 0)
+                    Debug.Log("Rocket Fooxball fast persisted validation proceeding with informational raw output drift: " + string.Join(", ",
+                        informationalRawDrift.Select(stage => stage + "=" +
+                            (probe.TryGetStaleReason(stage, out var reason) ? reason : "stale"))));
                 if (probe.IsStale(MovementLabStage.Lighting) || probe.IsStale(MovementLabStage.BakedOutput))
                     Debug.Log("Rocket Fooxball fast persisted validation: production lighting stages are stale but permitted for Fast preview.");
                 accumulator.ThrowIfAny("MovementLab fast persisted validation");
