@@ -71,6 +71,12 @@ namespace RocketFooxball.Editor
             material.SetFloat("_OcclusionStrength", 1f);
             material.SetFloat("_BumpScale", expectation.BumpScale);
             material.SetFloat("_SmoothnessTextureChannel", 0f);
+            material.SetTexture("_BumpMap", LoadExpectedTexture(expectation.NormalMapPath));
+            material.SetTexture("_MetallicGlossMap", null);
+            material.SetTexture("_EmissionMap", null);
+            material.SetTexture("_DetailAlbedoMap", null);
+            material.SetTexture("_DetailMask", null);
+            material.SetTexture("_DetailNormalMap", null);
             material.DisableKeyword("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A");
 
             material.EnableKeyword("_NORMALMAP");
