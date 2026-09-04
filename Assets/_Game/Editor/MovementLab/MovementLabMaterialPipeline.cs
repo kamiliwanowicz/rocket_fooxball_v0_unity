@@ -160,6 +160,66 @@ namespace RocketFooxball.Editor
                     return material;
                 }
 
+                internal static Material GetOrCreateClassicWeaponMaterial(string name)
+                {
+                    var specification = GetClassicWeaponMaterialSpecification(name);
+                    var material = GetOrCreateLitMaterial(specification);
+
+                    // The generic factory repairs legacy weapon response values by name.
+                    // Reapply the classic specification after it so these materials remain exact.
+                    material.SetColor("_BaseColor", specification.BaseColor);
+                    material.SetFloat("_Metallic", specification.Metallic);
+                    material.SetFloat("_Smoothness", specification.Smoothness);
+                    material.SetFloat("_OcclusionStrength", specification.OcclusionStrength);
+                    material.SetFloat("_BumpScale", specification.BumpScale);
+                    material.SetColor("_EmissionColor", specification.EmissionStrength > 0.001f
+                        ? specification.EmissionColor * specification.EmissionStrength
+                        : Color.clear);
+                    if (material.HasProperty("_EmissionStrength")) material.SetFloat("_EmissionStrength", specification.EmissionStrength);
+                    if (!material.HasProperty("_EnvironmentReflections") || !material.HasProperty("_SpecularHighlights"))
+                        throw new InvalidOperationException("Classic weapon material shader response properties are unavailable: " + name);
+                    material.SetFloat("_EnvironmentReflections", 1f);
+                    material.DisableKeyword("_ENVIRONMENTREFLECTIONS_OFF");
+                    material.SetFloat("_SpecularHighlights", 1f);
+                    material.DisableKeyword("_SPECULARHIGHLIGHTS_OFF");
+                    SetOpaqueLitState(material);
+                    EditorUtility.SetDirty(material);
+                    return material;
+                }
+
+                private static PbrMaterialSpecification GetClassicWeaponMaterialSpecification(string name)
+                {
+                    switch (name)
+                    {
+                        case "WeaponMetal":
+                        case "ShotgunMetal":
+                            return new PbrMaterialSpecification(name,
+                                LoadTexture(WeaponMetalTexturePath), LoadTexture(WeaponMetalNormalTexturePath),
+                                LoadTexture(WeaponMetalMetallicTexturePath), LoadTexture(WeaponMetalOcclusionTexturePath),
+                                null, LoadTexture(DetailNormalTexturePath), Vector2.one,
+                                new Color(0.95f, 0.86f, 0.70f, 1f), Color.clear, 0f,
+                                1f, 1f, 0.70f, 1f, Vector2.one, 1f);
+                        case "WeaponDark":
+                        case "ShotgunDark":
+                            return new PbrMaterialSpecification(name,
+                                LoadTexture(WeaponDarkTexturePath), LoadTexture(WeaponDarkNormalTexturePath),
+                                LoadTexture(WeaponDarkMetallicTexturePath), LoadTexture(WeaponDarkOcclusionTexturePath),
+                                null, LoadTexture(DetailNormalTexturePath), Vector2.one,
+                                new Color(0.88f, 0.90f, 0.92f, 1f), Color.clear, 0f,
+                                1f, 1f, 0.70f, 1f, Vector2.one, 1f);
+                        case "WeaponAccent":
+                        case "ShotgunAccent":
+                            return new PbrMaterialSpecification(name,
+                                LoadTexture(WeaponAccentTexturePath), LoadTexture(WeaponAccentNormalTexturePath),
+                                LoadTexture(WeaponAccentMetallicTexturePath), LoadTexture(WeaponAccentOcclusionTexturePath),
+                                LoadTexture(WeaponAccentEmissionTexturePath), LoadTexture(DetailNormalTexturePath), Vector2.one,
+                                new Color(0.95f, 0.56f, 0.38f, 1f), new Color(1f, 0.16f, 0.03f, 1f), 1.5f,
+                                1f, 1f, 0.90f, 1f, Vector2.one, 1f);
+                        default:
+                            throw new InvalidOperationException("Unknown classic weapon material: " + name);
+                    }
+                }
+
                 private static void ApplyWeaponMaterialResponse(Material material, string name)
                 {
                     if (material == null || string.IsNullOrEmpty(name)) return;
@@ -426,7 +486,7 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateOpaqueMaterialReferences()
                 {
-                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "HealthPickup.mat", "AmmoShell.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccentCore.mat", "ShotgunMetal.mat", "ShotgunDark.mat", "ShotgunAccentCore.mat", "TeamBlue.mat", "TeamRed.mat" };
+                    var paths = new[] { "Floor.mat", "Wall.mat", "Trim.mat", "Hazard.mat", "Marking.mat", "Ball.mat", "Rocket.mat", "RocketHot.mat", "HealthPickup.mat", "AmmoShell.mat", "ArenaPrimary.mat", "ArenaTrim.mat", "ArenaHazard.mat", "ArenaGlow.mat", "CharacterRed.mat", "CharacterBlack.mat", "CharacterCream.mat", "CharacterEye.mat", "WeaponMetal.mat", "WeaponDark.mat", "WeaponAccent.mat", "WeaponAccentCore.mat", "ShotgunMetal.mat", "ShotgunDark.mat", "ShotgunAccent.mat", "ShotgunAccentCore.mat", "TeamBlue.mat", "TeamRed.mat" };
                     for (var i = 0; i < paths.Length; i++)
                     {
                         var material = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/" + paths[i]);
@@ -484,17 +544,18 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateWeaponMaterialAssets()
                 {
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponMetal.mat"), "WeaponMetal");
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponDark.mat"), "WeaponDark");
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentMaterialPath), "WeaponAccent");
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunMetalMaterialPath), "ShotgunMetal");
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunDarkMaterialPath), "ShotgunDark");
+                    ValidateClassicWeaponMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentMaterialPath), "ShotgunAccent");
+
                     var launcherBaseMap = LoadTexture(LauncherBaseColorTexturePath);
                     var launcherNormalMap = LoadTexture(LauncherNormalTexturePath);
                     var launcherMetallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var launcherOcclusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var launcherEmissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    ValidateLauncherMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponMetal.mat"), launcherBaseMap,
-                        launcherNormalMap, launcherMetallicMap, launcherOcclusionMap, null, LauncherMetalBaseColor, "WeaponMetal");
-                    ValidateLauncherMaterial(AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponDark.mat"), launcherBaseMap,
-                        launcherNormalMap, launcherMetallicMap, launcherOcclusionMap, null, LauncherDarkBaseColor, "WeaponDark");
-                    ValidateLauncherMaterial(AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentMaterialPath), launcherBaseMap,
-                        launcherNormalMap, launcherMetallicMap, launcherOcclusionMap, null, LauncherAccentBaseColor, "WeaponAccent");
                     ValidateLauncherCoreMaterial(AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentCoreMaterialPath), launcherBaseMap,
                         launcherNormalMap, launcherMetallicMap, launcherOcclusionMap, launcherEmissionMap, "WeaponAccentCore");
 
@@ -503,14 +564,39 @@ namespace RocketFooxball.Editor
                     var shotgunMetallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var shotgunOcclusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var shotgunEmissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    ValidateShotgunMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunMetalMaterialPath), shotgunBaseMap,
-                        shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null, ShotgunMetalBaseColor, "ShotgunMetal");
-                    ValidateShotgunMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunDarkMaterialPath), shotgunBaseMap,
-                        shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null, ShotgunDarkBaseColor, "ShotgunDark");
-                    ValidateShotgunMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentMaterialPath), shotgunBaseMap,
-                        shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null, ShotgunAccentBaseColor, "ShotgunAccent");
                     ValidateShotgunCoreMaterial(AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentCoreMaterialPath), shotgunBaseMap,
                         shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, shotgunEmissionMap, "ShotgunAccentCore");
+                }
+
+                internal static void ValidateClassicWeaponMaterial(Material material, string label)
+                {
+                    var specification = GetClassicWeaponMaterialSpecification(label);
+
+                    var expectedPath = MaterialsPath + "/" + label + ".mat";
+                    if (material == null || material != AssetDatabase.LoadAssetAtPath<Material>(expectedPath) ||
+                        !string.Equals(AssetDatabase.GetAssetPath(material), expectedPath, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(label + " material asset identity mismatch: " + expectedPath);
+                    }
+
+                    ValidatePbrMaterial(material, specification.BaseMap, specification.NormalMap,
+                        specification.MetallicGlossMap, specification.OcclusionMap, specification.EmissionMap,
+                        specification.DetailNormalMap, specification.TextureScale, label,
+                        specification.DetailNormalTiling, specification.DetailNormalScale);
+                    ValidatePbrScalars(material, specification.Metallic, specification.Smoothness,
+                        specification.OcclusionStrength, specification.BumpScale, specification.EmissionStrength, label);
+                    ValidateEmission(material, specification.EmissionColor, specification.EmissionStrength, label);
+                    ValidateOpaqueSurfaceState(material, label);
+                    if (Vector4.Distance(material.GetColor("_BaseColor"), specification.BaseColor) > 0.001f ||
+                        !material.HasProperty("_EnvironmentReflections") || Mathf.Abs(material.GetFloat("_EnvironmentReflections") - 1f) > 0.001f ||
+                        material.IsKeywordEnabled("_ENVIRONMENTREFLECTIONS_OFF") ||
+                        !material.HasProperty("_SpecularHighlights") || Mathf.Abs(material.GetFloat("_SpecularHighlights") - 1f) > 0.001f ||
+                        material.IsKeywordEnabled("_SPECULARHIGHLIGHTS_OFF") ||
+                        !material.IsKeywordEnabled("_NORMALMAP") || !material.IsKeywordEnabled("_METALLICSPECGLOSSMAP") ||
+                        !material.IsKeywordEnabled("_OCCLUSIONMAP") || !material.enableInstancing)
+                    {
+                        throw new InvalidOperationException(label + " classic weapon PBR response contract mismatch.");
+                    }
                 }
 
                 internal static void ValidateOpaqueSurfaceState(Material material, string label)
@@ -703,60 +789,7 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateWeaponMaterials(GameObject visual)
                 {
-                    var metal = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponMetal.mat");
-                    var dark = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/WeaponDark.mat");
-                    var accent = AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentMaterialPath);
-                    var core = AssetDatabase.LoadAssetAtPath<Material>(WeaponAccentCoreMaterialPath);
-                    var baseMap = LoadTexture(LauncherBaseColorTexturePath);
-                    var normalMap = LoadTexture(LauncherNormalTexturePath);
-                    var metallicMap = LoadTexture(LauncherMetallicTexturePath);
-                    var occlusionMap = LoadTexture(LauncherOcclusionTexturePath);
-                    var emissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    ValidateLauncherMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherMetalBaseColor, "WeaponMetal");
-                    ValidateLauncherMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherDarkBaseColor, "WeaponDark");
-                    ValidateLauncherMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, LauncherAccentBaseColor, "WeaponAccent");
-                    ValidateLauncherCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "WeaponAccentCore");
-
-                    var seenMetal = false;
-                    var seenDark = false;
-                    var seenAccent = false;
-                    var seenCore = false;
-                    var renderers = visual.GetComponentsInChildren<Renderer>(true);
-                    for (var i = 0; i < renderers.Length; i++)
-                    {
-                        var renderer = renderers[i];
-                        var expected = metal;
-                        if (renderer.name.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = core;
-                            seenCore = true;
-                        }
-                        else if (renderer.name.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = dark;
-                            seenDark = true;
-                        }
-                        else if (renderer.name.IndexOf("Accent", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = accent;
-                            seenAccent = true;
-                        }
-                        else if (renderer.name.IndexOf("Metal", StringComparison.OrdinalIgnoreCase) >= 0 || renderer.name.IndexOf("Weapon", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            seenMetal = true;
-                        }
-
-                        var slots = renderer.sharedMaterials;
-                        if (slots == null || slots.Length != 1) throw new InvalidOperationException("Weapon renderer must have exactly one material slot: " + renderer.name);
-                        for (var j = 0; j < slots.Length; j++)
-                        {
-                            if (slots[j] != expected) throw new InvalidOperationException("Weapon material slot mapping mismatch: " + renderer.name + "/" + j);
-                        }
-                    }
-                    if (renderers.Length != 4 || !seenMetal || !seenDark || !seenAccent || !seenCore)
-                    {
-                        throw new InvalidOperationException("Weapon material slots must contain exactly Metal, Dark, Accent, and AccentCore parts.");
-                    }
+                    ValidateClassicWeaponMaterials(visual, "Weapon");
                 }
 
                 internal static void ValidateLauncherMaterial(Material material, Texture2D baseMap, Texture2D normalMap,
@@ -786,61 +819,35 @@ namespace RocketFooxball.Editor
 
                 internal static void ValidateShotgunMaterials(GameObject visual)
                 {
-                    if (visual == null) throw new InvalidOperationException("Shotgun visual is null.");
-                    var metal = AssetDatabase.LoadAssetAtPath<Material>(ShotgunMetalMaterialPath);
-                    var dark = AssetDatabase.LoadAssetAtPath<Material>(ShotgunDarkMaterialPath);
-                    var accent = AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentMaterialPath);
-                    var core = AssetDatabase.LoadAssetAtPath<Material>(ShotgunAccentCoreMaterialPath);
-                    var baseMap = LoadTexture(ShotgunBaseColorTexturePath);
-                    var normalMap = LoadTexture(ShotgunNormalTexturePath);
-                    var metallicMap = LoadTexture(ShotgunMetallicTexturePath);
-                    var occlusionMap = LoadTexture(ShotgunOcclusionTexturePath);
-                    var emissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    ValidateShotgunMaterial(metal, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunMetalBaseColor, "ShotgunMetal");
-                    ValidateShotgunMaterial(dark, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunDarkBaseColor, "ShotgunDark");
-                    ValidateShotgunMaterial(accent, baseMap, normalMap, metallicMap, occlusionMap, null, ShotgunAccentBaseColor, "ShotgunAccent");
-                    ValidateShotgunCoreMaterial(core, baseMap, normalMap, metallicMap, occlusionMap, emissionMap, "ShotgunAccentCore");
+                    ValidateClassicWeaponMaterials(visual, "Shotgun");
+                }
 
+                private static void ValidateClassicWeaponMaterials(GameObject visual, string materialPrefix)
+                {
+                    if (visual == null) throw new InvalidOperationException(materialPrefix + " visual is null.");
+                    var expectedRendererNames = new[] { "WeaponMetal", "WeaponDark", "WeaponAccent" };
                     var renderers = visual.GetComponentsInChildren<Renderer>(true);
-                    if (renderers.Length != 4) throw new InvalidOperationException("Shotgun visual must contain exactly four renderers.");
-                    var seenMetal = false;
-                    var seenDark = false;
-                    var seenAccent = false;
-                    var seenCore = false;
+                    if (renderers.Length != expectedRendererNames.Length)
+                        throw new InvalidOperationException(materialPrefix + " visual must contain exactly WeaponMetal, WeaponDark, and WeaponAccent renderers.");
+
+                    var seen = new HashSet<string>(StringComparer.Ordinal);
                     for (var i = 0; i < renderers.Length; i++)
                     {
                         var renderer = renderers[i];
-                        var expected = metal;
-                        if (renderer.name.IndexOf("Core", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = core;
-                            seenCore = true;
-                        }
-                        else if (renderer.name.IndexOf("Dark", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = dark;
-                            seenDark = true;
-                        }
-                        else if (renderer.name.IndexOf("Accent", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            expected = accent;
-                            seenAccent = true;
-                        }
-                        else if (renderer.name.IndexOf("Metal", StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            seenMetal = true;
-                        }
-                        else
-                        {
-                            throw new InvalidOperationException("Shotgun renderer name must identify Metal, Dark, or Accent: " + renderer.name);
-                        }
+                        if (renderer == null || Array.IndexOf(expectedRendererNames, renderer.name) < 0 || !seen.Add(renderer.name))
+                            throw new InvalidOperationException(materialPrefix + " renderer identities must be exactly WeaponMetal, WeaponDark, and WeaponAccent.");
 
+                        var suffix = renderer.name.Substring("Weapon".Length);
+                        var materialName = materialPrefix + suffix;
+                        var expectedMaterial = AssetDatabase.LoadAssetAtPath<Material>(MaterialsPath + "/" + materialName + ".mat");
+                        ValidateClassicWeaponMaterial(expectedMaterial, materialName);
                         var slots = renderer.sharedMaterials;
-                        if (slots == null || slots.Length != 1 || slots[0] != expected)
-                            throw new InvalidOperationException("Shotgun material slot contract mismatch: " + renderer.name);
+                        if (slots == null || slots.Length != 1 || slots[0] != expectedMaterial)
+                            throw new InvalidOperationException(materialPrefix + " material slot contract mismatch: " + renderer.name);
                     }
-                    if (!seenMetal || !seenDark || !seenAccent || !seenCore)
-                        throw new InvalidOperationException("Shotgun material slots must contain exactly Metal, Dark, Accent, and AccentCore parts.");
+
+                    if (seen.Count != expectedRendererNames.Length)
+                        throw new InvalidOperationException(materialPrefix + " renderer identities are incomplete.");
                 }
 
                 internal static void ValidateShotgunMaterial(Material material, Texture2D baseMap, Texture2D normalMap,

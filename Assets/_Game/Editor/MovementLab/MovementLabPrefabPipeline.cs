@@ -253,29 +253,14 @@ namespace RocketFooxball.Editor
                     viewmodels.localPosition = Vector3.zero;
                     viewmodels.localRotation = Quaternion.identity;
                     var weaponVisual = InstantiateImportedVisual(weaponModel, "WeaponVisual", viewmodels, LauncherViewmodelPosition, Quaternion.identity, Vector3.one);
+                    var weaponMetal = GetOrCreateClassicWeaponMaterial("WeaponMetal");
+                    var weaponDark = GetOrCreateClassicWeaponMaterial("WeaponDark");
+                    var weaponAccent = GetOrCreateClassicWeaponMaterial("WeaponAccent");
                     var launcherBaseMap = LoadTexture(LauncherBaseColorTexturePath);
                     var launcherNormalMap = LoadTexture(LauncherNormalTexturePath);
                     var launcherMetallicMap = LoadTexture(LauncherMetallicTexturePath);
                     var launcherOcclusionMap = LoadTexture(LauncherOcclusionTexturePath);
                     var launcherEmissionMap = LoadTexture(LauncherEmissionTexturePath);
-                    var weaponMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "WeaponMetal", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, null, Vector2.one, LauncherMetalBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
-                    var weaponDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "WeaponDark", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, null, Vector2.one, LauncherDarkBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
-                    var weaponAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "WeaponAccent", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
-                        null, null, Vector2.one, LauncherAccentBaseColor, Color.clear, 0f,
-                        LauncherMetallic, LauncherSmoothness, LauncherOcclusion, LauncherBumpScale));
-                    SetTransparentWeaponShellState(weaponAccent);
-                    weaponAccent.SetColor("_EmissionColor", Color.clear);
-                    weaponAccent.SetTexture("_EmissionMap", null);
-                    weaponAccent.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
-                    weaponAccent.DisableKeyword("_EMISSION");
-                    EditorUtility.SetDirty(weaponAccent);
                     var weaponAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "WeaponAccentCore", launcherBaseMap, launcherNormalMap, launcherMetallicMap, launcherOcclusionMap,
                         launcherEmissionMap, null, Vector2.one, LauncherAccentCoreBaseColor, WeaponAccentCoreEmissionColor,
@@ -283,31 +268,16 @@ namespace RocketFooxball.Editor
                         LauncherOcclusion, LauncherBumpScale));
                     SetOpaqueLitState(weaponAccentCore);
                     EditorUtility.SetDirty(weaponAccentCore);
-                    AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent, weaponAccentCore);
+                    AssignImportedMaterials(weaponVisual, weaponMetal, weaponDark, weaponAccent);
                     RemovePhysicsComponents(weaponVisual);
+                    var shotgunMetal = GetOrCreateClassicWeaponMaterial("ShotgunMetal");
+                    var shotgunDark = GetOrCreateClassicWeaponMaterial("ShotgunDark");
+                    var shotgunAccent = GetOrCreateClassicWeaponMaterial("ShotgunAccent");
                     var shotgunBaseMap = LoadTexture(ShotgunBaseColorTexturePath);
                     var shotgunNormalMap = LoadTexture(ShotgunNormalTexturePath);
                     var shotgunMetallicMap = LoadTexture(ShotgunMetallicTexturePath);
                     var shotgunOcclusionMap = LoadTexture(ShotgunOcclusionTexturePath);
                     var shotgunEmissionMap = LoadTexture(ShotgunEmissionTexturePath);
-                    var shotgunMetal = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunMetal", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        null, Vector2.one, ShotgunMetalBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f));
-                    var shotgunDark = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunDark", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        null, Vector2.one, ShotgunDarkBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f));
-                    var shotgunAccent = GetOrCreateLitMaterial(new PbrMaterialSpecification(
-                        "ShotgunAccent", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap, null,
-                        null, Vector2.one, ShotgunAccentBaseColor, Color.clear, 0f,
-                        1f, 1f, 1f, 1f));
-                    SetTransparentWeaponShellState(shotgunAccent);
-                    shotgunAccent.SetColor("_EmissionColor", Color.clear);
-                    shotgunAccent.SetTexture("_EmissionMap", null);
-                    shotgunAccent.globalIlluminationFlags = MaterialGlobalIlluminationFlags.EmissiveIsBlack;
-                    shotgunAccent.DisableKeyword("_EMISSION");
-                    EditorUtility.SetDirty(shotgunAccent);
                     var shotgunAccentCore = GetOrCreateLitMaterial(new PbrMaterialSpecification(
                         "ShotgunAccentCore", shotgunBaseMap, shotgunNormalMap, shotgunMetallicMap, shotgunOcclusionMap,
                         shotgunEmissionMap, null, Vector2.one, ShotgunAccentCoreBaseColor,
@@ -316,10 +286,10 @@ namespace RocketFooxball.Editor
                     SetOpaqueLitState(shotgunAccentCore);
                     EditorUtility.SetDirty(shotgunAccentCore);
                     var fpsShotgunVisual = InstantiateImportedVisual(fpsShotgunModel, "FpsShotgunVisual", viewmodels, ShotgunViewmodelPosition, Quaternion.identity, Vector3.one);
-                    AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
+                    AssignImportedMaterials(fpsShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
                     RemovePhysicsAndAnimators(fpsShotgunVisual);
                     var worldShotgunVisual = InstantiateImportedVisual(shotgunModel, "WorldShotgunVisual", worldShotgunMount, Vector3.zero, Quaternion.identity, Vector3.one);
-                    AssignImportedMaterials(worldShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
+                    AssignImportedMaterials(worldShotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
                     RemovePhysicsAndAnimators(worldShotgunVisual);
                     SetDynamicRecursively(worldShotgunMount.gameObject);
                     SetDynamicRecursively(fpsShotgunVisual);
@@ -679,9 +649,9 @@ namespace RocketFooxball.Editor
                 }
 
                 internal static GameObject BuildShotgunPickupPrefab(Material shotgunMetal, Material shotgunDark,
-                    Material shotgunAccent, Material shotgunAccentCore, Material teamBlueMaterial, Material teamRedMaterial)
+                    Material shotgunAccent, Material teamBlueMaterial, Material teamRedMaterial)
                 {
-                    if (shotgunMetal == null || shotgunDark == null || shotgunAccent == null || shotgunAccentCore == null || teamBlueMaterial == null || teamRedMaterial == null)
+                    if (shotgunMetal == null || shotgunDark == null || shotgunAccent == null || teamBlueMaterial == null || teamRedMaterial == null)
                         throw new InvalidOperationException("Shotgun pickup materials are required before prefab build.");
                     var model = AssetDatabase.LoadAssetAtPath<GameObject>(ShotgunModelPath);
                     if (model == null) throw new InvalidOperationException("Missing shotgun pickup model: " + ShotgunModelPath);
@@ -702,7 +672,7 @@ namespace RocketFooxball.Editor
                     visualRoot.transform.SetParent(root.transform, false);
                     var shotgunVisual = InstantiateImportedVisual(model, "ShotgunModel", visualRoot.transform, Vector3.zero, Quaternion.identity,
                         Vector3.one * MovementLabContractCatalog.ShotgunPickupModelScale);
-                    AssignImportedMaterials(shotgunVisual, shotgunMetal, shotgunDark, shotgunAccent, shotgunAccentCore);
+                    AssignImportedMaterials(shotgunVisual, shotgunMetal, shotgunDark, shotgunAccent);
                     RemovePhysicsAndAnimators(shotgunVisual);
                     var blueCue = CreateShapeCue("BlueCircleCue", false, teamBlueMaterial, MovementLabContract.PickupCueBluePosition);
                     blueCue.transform.SetParent(visualRoot.transform, false);
@@ -1585,7 +1555,6 @@ namespace RocketFooxball.Editor
                              ValidateShotgunPresentation(root, prefabCamera, prefabFpsShotgunVisual, prefabWorldVisual, prefabWorldShotgunMount, prefabWorldShotgunVisual, "Player prefab");
                              ValidateTeamTintRenderers(prefabPresentation, prefabWorldVisual, prefabWorldShotgunMount,
                                  FindRendererByName(prefabWorldShotgunVisual.gameObject, "WeaponAccent"),
-                                 FindRendererByName(prefabWorldShotgunVisual.gameObject, "WeaponAccentCore"),
                                  "Player prefab PlayerPresentation.teamTintRenderers");
                              var blueCue = Require(root.transform.Find("BlueCircleCue"), "Player prefab BlueCircleCue");
                              var redCue = Require(root.transform.Find("RedTriangleCue"), "Player prefab RedTriangleCue");
@@ -1966,10 +1935,8 @@ namespace RocketFooxball.Editor
                 {
                     if (visual == null) throw new InvalidOperationException(label + " visual is missing.");
                     var renderers = visual.GetComponentsInChildren<MeshRenderer>(true);
-                    if (renderers.Length != 4) throw new InvalidOperationException(label + " must contain exactly four renderer groups.");
+                    if (renderers.Length != 3) throw new InvalidOperationException(label + " must contain exactly three renderer groups.");
                     var seen = new HashSet<string>(StringComparer.Ordinal);
-                    var shell = default(MeshRenderer);
-                    var core = default(MeshRenderer);
                     var aggregate = new Bounds();
                     var hasBounds = false;
                     for (var i = 0; i < renderers.Length; i++)
@@ -1977,29 +1944,14 @@ namespace RocketFooxball.Editor
                         var renderer = renderers[i];
                         var group = GetWeaponRendererGroup(renderer.name);
                         if (group == null || !seen.Add(group))
-                            throw new InvalidOperationException(label + " renderer groups must be exactly WeaponMetal, WeaponDark, WeaponAccent, and WeaponAccentCore.");
+                            throw new InvalidOperationException(label + " renderer groups must be exactly WeaponMetal, WeaponDark, and WeaponAccent.");
                         if (renderer.sharedMaterials == null || renderer.sharedMaterials.Length != 1 || renderer.sharedMaterials[0] == null)
                             throw new InvalidOperationException(label + " renderer must have exactly one material slot: " + renderer.name);
                         var filter = renderer.GetComponent<MeshFilter>();
-                        if (filter == null || filter.sharedMesh == null)
+                        if (filter == null || filter.sharedMesh == null || filter.sharedMesh.subMeshCount != 1)
                             throw new InvalidOperationException(label + " renderer mesh is missing: " + renderer.name);
                         ValidateMeshPbrChannels(filter.sharedMesh, false, label + "/" + group);
-                        var fpsShotgun = label.IndexOf("FpsShotgun", StringComparison.OrdinalIgnoreCase) >= 0;
-                        var worldShotgun = !fpsShotgun && label.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0;
-                        var uvZone = fpsShotgun
-                            ? group == "WeaponMetal" ? FpsShotgunMetalUvZone :
-                              group == "WeaponDark" ? FpsShotgunDarkUvZone :
-                              group == "WeaponAccentCore" ? FpsShotgunAccentCoreUvZone : FpsShotgunAccentUvZone
-                            : worldShotgun
-                                ? group == "WeaponMetal" ? WorldShotgunMetalUvZone :
-                                  group == "WeaponDark" ? WorldShotgunDarkUvZone :
-                                  group == "WeaponAccentCore" ? WorldShotgunAccentCoreUvZone : WorldShotgunAccentUvZone
-                                : group == "WeaponMetal" ? LauncherMetalUvZone :
-                                  group == "WeaponDark" ? LauncherDarkUvZone :
-                                  group == "WeaponAccentCore" ? LauncherAccentCoreUvZone : LauncherAccentUvZone;
-                        ValidateMeshUvZone(filter.sharedMesh, uvZone, label + "/" + group);
-                        if (group == "WeaponAccent") shell = renderer;
-                        if (group == "WeaponAccentCore") core = renderer;
+                        MovementLabImportPipeline.ValidateLegacyWeaponUv(filter.sharedMesh, label + "/" + group);
 
                         var meshBounds = filter.sharedMesh.bounds;
                         var center = meshBounds.center;
@@ -2013,12 +1965,20 @@ namespace RocketFooxball.Editor
                             else { aggregate = new Bounds(point, Vector3.zero); hasBounds = true; }
                         }
                     }
-                    if (seen.Count != 4 || shell == null || core == null)
+                    if (seen.Count != 3)
                         throw new InvalidOperationException(label + " renderer groups are incomplete.");
                     if (!hasBounds || !WithinWeaponBoundsTolerance(aggregate.min, expectedMin) ||
                         !WithinWeaponBoundsTolerance(aggregate.max, expectedMax))
                         throw new InvalidOperationException(label + " Unity bounds mismatch: expected " + expectedMin + ".." + expectedMax + ", got " + aggregate.min + ".." + aggregate.max + ".");
-                    ValidateShellCoreIslandContainment(visual, shell, core, label);
+                    var sourcePath = label.IndexOf("FpsShotgun", StringComparison.OrdinalIgnoreCase) >= 0
+                        ? FpsShotgunModelPath
+                        : label.IndexOf("Shotgun", StringComparison.OrdinalIgnoreCase) >= 0
+                            ? ShotgunModelPath
+                            : WeaponModelPath;
+                    ValidateImportedVisual(visual, sourcePath, label);
+                    ValidateImportedVisualForward(visual.transform, label);
+                    ValidateNoPhysics(visual, label);
+                    ValidateNoAnimators(visual, label);
                 }
 
                 private static bool WithinWeaponBoundsTolerance(Vector3 actual, Vector3 expected)
@@ -2031,7 +1991,6 @@ namespace RocketFooxball.Editor
                 private static string GetWeaponRendererGroup(string rendererName)
                 {
                     if (string.IsNullOrEmpty(rendererName)) return null;
-                    if (string.Equals(rendererName, "WeaponAccentCore", StringComparison.Ordinal)) return "WeaponAccentCore";
                     if (string.Equals(rendererName, "WeaponAccent", StringComparison.Ordinal)) return "WeaponAccent";
                     if (string.Equals(rendererName, "WeaponDark", StringComparison.Ordinal)) return "WeaponDark";
                     if (string.Equals(rendererName, "WeaponMetal", StringComparison.Ordinal)) return "WeaponMetal";
@@ -2042,7 +2001,6 @@ namespace RocketFooxball.Editor
                 {
                     if (string.Equals(group, "WeaponMetal", StringComparison.Ordinal)) return 0;
                     if (string.Equals(group, "WeaponDark", StringComparison.Ordinal)) return 1;
-                    if (string.Equals(group, "WeaponAccentCore", StringComparison.Ordinal)) return 3;
                     if (string.Equals(group, "WeaponAccent", StringComparison.Ordinal)) return 2;
                     return -1;
                 }
@@ -2678,9 +2636,9 @@ namespace RocketFooxball.Editor
                 }
 
                 internal static void ValidateTeamTintRenderers(PlayerPresentation presentation, Transform worldVisual,
-                    Transform worldShotgunMount, Renderer worldShotgunAccent, Renderer worldShotgunAccentCore, string label)
+                    Transform worldShotgunMount, Renderer worldShotgunAccent, string label)
                 {
-                    if (presentation == null || worldVisual == null || worldShotgunMount == null || worldShotgunAccent == null || worldShotgunAccentCore == null)
+                    if (presentation == null || worldVisual == null || worldShotgunMount == null || worldShotgunAccent == null)
                         throw new InvalidOperationException(label + " references are incomplete.");
                     var armor = FindUniqueRendererByName(worldVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true), "CharacterArmor", label);
                     var characterRenderers = worldVisual.GetComponentsInChildren<SkinnedMeshRenderer>(true);
@@ -2696,7 +2654,7 @@ namespace RocketFooxball.Editor
                     for (var i = 0; i < property.arraySize; i++)
                     {
                         var value = property.GetArrayElementAtIndex(i).objectReferenceValue as Renderer;
-                        if (value == null || value == worldShotgunAccent || value == worldShotgunAccentCore ||
+                        if (value == null || value == worldShotgunAccent ||
                             string.Equals(value.name, "CharacterBody", StringComparison.Ordinal) ||
                             string.Equals(value.name, "CharacterHead", StringComparison.Ordinal) ||
                             string.Equals(value.name, "CharacterEye", StringComparison.Ordinal) ||
