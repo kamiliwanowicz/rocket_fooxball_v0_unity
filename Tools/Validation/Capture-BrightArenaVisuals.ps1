@@ -3,11 +3,17 @@ param(
     [Parameter(Mandatory = $true)][string]$ProjectPath,
     [Parameter(Mandatory = $true)][string]$EvidenceRoot,
     [Parameter(Mandatory = $true)][string]$AttemptId,
-    [ValidateSet('Fast', 'Persisted')][string]$VisualMode = 'Persisted'
+    [ValidateSet('Fast', 'Persisted')][string]$VisualMode = 'Persisted',
+    [ValidateSet('Authored', 'Satin', 'Gloss')][string]$SurfacePreset = 'Authored'
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($SurfacePreset -ieq 'Authored') { $SurfacePreset = 'Authored' }
+elseif ($SurfacePreset -ieq 'Satin') { $SurfacePreset = 'Satin' }
+elseif ($SurfacePreset -ieq 'Gloss') { $SurfacePreset = 'Gloss' }
+else { throw "SurfacePreset must be Authored, Satin, or Gloss: $SurfacePreset" }
 
 $ProjectPath = [System.IO.Path]::GetFullPath($ProjectPath).TrimEnd('\')
 $EvidenceRoot = [System.IO.Path]::GetFullPath($EvidenceRoot).TrimEnd('\')
@@ -24,7 +30,11 @@ $LogPath = Join-Path $EvidenceRoot ("Capture-$AttemptId.log")
 $ResultPath = Join-Path $EvidenceDirectory 'CaptureResult.json'
 $LockPaths = @((Join-Path $ProjectPath 'Temp/UnityLockfile'), (Join-Path $ProjectPath 'Library/UnityLockfile'))
 $SourceScopeRoots = @('Assets', 'Tools', 'ProjectSettings', 'Packages')
-$RequiredSourceFiles = @('Assets/_Game/Editor/BrightArenaVisualCapture.cs', 'Tools/Validation/Capture-BrightArenaVisuals.ps1')
+$RequiredSourceFiles = @(
+    'Assets/_Game/Editor/BrightArenaVisualCapture.cs',
+    'Tools/Validation/Capture-BrightArenaVisuals.ps1',
+    'Assets/_Game/Editor/MovementLab/MovementLabArenaSurfaceProfile.cs'
+)
 
 function Get-ProjectUnityProcesses {
     $normalized = @($ProjectPath.TrimEnd('\').ToLowerInvariant())
@@ -135,6 +145,7 @@ $arguments = @(
     '-captureEvidenceRoot', ('"' + $EvidenceRoot + '"'),
     '-captureAttemptId', $AttemptId,
     '-captureVisualMode', $VisualMode,
+    '-captureSurfacePreset', $SurfacePreset,
     '-logFile', ('"' + $LogPath + '"')
 )
 Write-Output ('MOVEMENT_LAB_CAPTURE_UNITY ' + $UnityPath)
@@ -168,6 +179,7 @@ if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { throw "Capture
 $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
 if (-not $manifest.pass) { throw 'Capture manifest pass=false.' }
 if ([string]$manifest.visualMode -ne $VisualMode) { throw "Capture visual mode mismatch: expected $VisualMode, got $($manifest.visualMode)." }
+if ([string]$manifest.surfacePreset -cne $SurfacePreset) { throw "Capture surface preset mismatch: expected $SurfacePreset, got $($manifest.surfacePreset)." }
 Assert-ManifestSource -Manifest $manifest -ExpectedSha $expectedGitSha -ExpectedHashes $beforeHashes
 if ($null -eq $manifest.images -or @($manifest.images).Count -ne 6) { throw 'Capture manifest must contain six images.' }
 
@@ -184,8 +196,9 @@ foreach ($item in @($manifest.images)) {
     $quality = [string]$item.qualityLevel
     if (-not $qualityCounts.ContainsKey($quality)) { throw "Unexpected quality: $quality" }
     if ([string]$item.visualMode -ne $VisualMode) { throw "Image visual mode mismatch: expected $VisualMode, got $($item.visualMode): $imagePath" }
+    if ([string]$item.surfacePreset -cne $SurfacePreset) { throw "Image surface preset mismatch: expected $SurfacePreset, got $($item.surfacePreset): $imagePath" }
     $qualityCounts[$quality]++
-    $resultImages += [ordered]@{ view = [string]$item.view; quality = $quality; path = $imagePath; sha256 = $hash; width = 1920; height = 1080 }
+    $resultImages += [ordered]@{ view = [string]$item.view; quality = $quality; visualMode = [string]$item.visualMode; surfacePreset = [string]$item.surfacePreset; path = $imagePath; sha256 = $hash; width = 1920; height = 1080 }
 }
 if ($qualityCounts.High -ne 3 -or $qualityCounts.Low -ne 3) { throw 'Capture must contain three High and three Low images.' }
 if ($beforeStatus -cne (Get-ScopedGitStatus)) { throw 'Git status changed during non-mutating capture.' }
@@ -195,7 +208,7 @@ $result = [ordered]@{
     schemaVersion = 1; pass = $true; attemptId = $AttemptId; projectPath = $ProjectPath
     evidenceDirectory = $EvidenceDirectory; manifestPath = $manifestPath; logPath = $LogPath; unityExitCode = $exitCode
     harnessMilliseconds = [Math]::Round($harnessStopwatch.Elapsed.TotalMilliseconds)
-    unityMilliseconds = [Math]::Round($unityStopwatch.Elapsed.TotalMilliseconds); visualMode = $VisualMode; images = $resultImages
+    unityMilliseconds = [Math]::Round($unityStopwatch.Elapsed.TotalMilliseconds); visualMode = $VisualMode; surfacePreset = $SurfacePreset; images = $resultImages
 }
 [System.IO.File]::WriteAllText($ResultPath, ($result | ConvertTo-Json -Depth 5), [Text.UTF8Encoding]::new($false))
 Write-Output ('MOVEMENT_LAB_CAPTURE_RESULT ' + $ResultPath)

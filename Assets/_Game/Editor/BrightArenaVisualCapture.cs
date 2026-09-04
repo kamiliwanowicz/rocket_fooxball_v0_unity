@@ -44,7 +44,8 @@ namespace RocketFooxball.Editor
         private static readonly string[] RequiredSourceFiles =
         {
             "Assets/_Game/Editor/BrightArenaVisualCapture.cs",
-            "Tools/Validation/Capture-BrightArenaVisuals.ps1"
+            "Tools/Validation/Capture-BrightArenaVisuals.ps1",
+            "Assets/_Game/Editor/MovementLab/MovementLabArenaSurfaceProfile.cs"
         };
 
         [Serializable]
@@ -58,6 +59,7 @@ namespace RocketFooxball.Editor
             public UnityInfo unity;
             public BuildInfo build;
             public string visualMode;
+            public string surfacePreset;
             public CameraPose[] cameras;
             public ImageEvidence[] images;
             public BudgetEvidence budgets;
@@ -125,6 +127,7 @@ namespace RocketFooxball.Editor
             public string view;
             public string qualityLevel;
             public string visualMode;
+            public string surfacePreset;
             public string path;
             public string sha256;
             public int width;
@@ -167,6 +170,13 @@ namespace RocketFooxball.Editor
         {
             Fast,
             Persisted
+        }
+
+        private enum SurfacePreset
+        {
+            Authored,
+            Satin,
+            Gloss
         }
 
         private sealed class ViewDefinition
@@ -218,6 +228,128 @@ namespace RocketFooxball.Editor
             public string EvidenceRoot;
             public string AttemptId;
             public VisualMode VisualMode;
+            public SurfacePreset SurfacePreset;
+        }
+
+        private sealed class SurfaceMaterialOverrideState
+        {
+            private const string FloorMaterialPath = "Assets/_Game/Materials/Floor.mat";
+            private const string WallMaterialPath = "Assets/_Game/Materials/Wall.mat";
+            private const string ArenaPrimaryMaterialPath = "Assets/_Game/Materials/ArenaPrimary.mat";
+
+            private readonly SurfacePreset surfacePreset;
+            private readonly List<RendererMaterialState> rendererStates = new List<RendererMaterialState>();
+            private readonly List<Material> clones = new List<Material>();
+            private readonly List<MaterialReplacement> replacements = new List<MaterialReplacement>();
+
+            internal SurfaceMaterialOverrideState(SurfacePreset surfacePreset)
+            {
+                this.surfacePreset = surfacePreset;
+            }
+
+            internal void Install(Scene scene)
+            {
+                if (surfacePreset == SurfacePreset.Authored) return;
+
+                var profilePreset = surfacePreset == SurfacePreset.Satin
+                    ? MovementLabArenaSurfaceProfile.Preset.Satin
+                    : MovementLabArenaSurfaceProfile.Preset.Gloss;
+                AddReplacement(FloorMaterialPath, MovementLabArenaSurfaceProfile.Surface.Floor, profilePreset);
+                AddReplacement(WallMaterialPath, MovementLabArenaSurfaceProfile.Surface.Wall, profilePreset);
+                AddReplacement(ArenaPrimaryMaterialPath, MovementLabArenaSurfaceProfile.Surface.ArenaPrimary, profilePreset);
+
+                var renderers = UnityEngine.Object.FindObjectsByType<Renderer>(FindObjectsInactive.Include, FindObjectsSortMode.None)
+                    .Where(renderer => renderer != null && renderer.gameObject.scene == scene)
+                    .ToArray();
+                for (var i = 0; i < renderers.Length; i++)
+                {
+                    var renderer = renderers[i];
+                    var originalMaterials = renderer.sharedMaterials ?? Array.Empty<Material>();
+                    Material[] overriddenMaterials = null;
+                    for (var slot = 0; slot < originalMaterials.Length; slot++)
+                    {
+                        var replacement = FindReplacement(originalMaterials[slot]);
+                        if (replacement == null) continue;
+                        if (overriddenMaterials == null) overriddenMaterials = (Material[])originalMaterials.Clone();
+                        overriddenMaterials[slot] = replacement;
+                    }
+
+                    if (overriddenMaterials == null) continue;
+                    rendererStates.Add(new RendererMaterialState { Renderer = renderer, SharedMaterials = originalMaterials });
+                    renderer.sharedMaterials = overriddenMaterials;
+                }
+            }
+
+            internal void RestoreAndDestroy()
+            {
+                Exception cleanupFailure = null;
+                for (var i = rendererStates.Count - 1; i >= 0; i--)
+                {
+                    var state = rendererStates[i];
+                    if (state.Renderer == null) continue;
+                    try
+                    {
+                        state.Renderer.sharedMaterials = state.SharedMaterials;
+                    }
+                    catch (Exception exception)
+                    {
+                        cleanupFailure = cleanupFailure ?? exception;
+                    }
+                }
+
+                for (var i = clones.Count - 1; i >= 0; i--)
+                {
+                    var clone = clones[i];
+                    if (clone == null) continue;
+                    try
+                    {
+                        UnityEngine.Object.DestroyImmediate(clone);
+                    }
+                    catch (Exception exception)
+                    {
+                        cleanupFailure = cleanupFailure ?? exception;
+                    }
+                }
+
+                rendererStates.Clear();
+                clones.Clear();
+                replacements.Clear();
+                if (cleanupFailure != null) throw new InvalidOperationException("Bright arena surface override cleanup failed.", cleanupFailure);
+            }
+
+            private void AddReplacement(string path, MovementLabArenaSurfaceProfile.Surface surface,
+                MovementLabArenaSurfaceProfile.Preset profilePreset)
+            {
+                var original = AssetDatabase.LoadAssetAtPath<Material>(path);
+                if (original == null) throw new InvalidOperationException("Missing arena surface material: " + path);
+                var clone = UnityEngine.Object.Instantiate(original);
+                if (clone == null) throw new InvalidOperationException("Unable to clone arena surface material: " + path);
+                clones.Add(clone);
+                clone.hideFlags = HideFlags.HideAndDontSave;
+                MovementLabArenaSurfaceProfile.Apply(clone, surface, profilePreset);
+                replacements.Add(new MaterialReplacement { Original = original, Clone = clone });
+            }
+
+            private Material FindReplacement(Material material)
+            {
+                for (var i = 0; i < replacements.Count; i++)
+                {
+                    if (material == replacements[i].Original) return replacements[i].Clone;
+                }
+                return null;
+            }
+
+            private sealed class MaterialReplacement
+            {
+                internal Material Original;
+                internal Material Clone;
+            }
+
+            private sealed class RendererMaterialState
+            {
+                internal Renderer Renderer;
+                internal Material[] SharedMaterials;
+            }
         }
 
         [MenuItem("Rocket Fooxball/Capture Bright Arena Visuals")]
@@ -240,6 +372,9 @@ namespace RocketFooxball.Editor
             ObjectState shotgunState = default;
             ObjectState kickState = default;
             var initialQualityLevel = QualitySettings.GetQualityLevel();
+            var surfaceOverrides = captureOptions.SurfacePreset == SurfacePreset.Authored
+                ? null
+                : new SurfaceMaterialOverrideState(captureOptions.SurfacePreset);
             var manifest = new ManifestDto
             {
                 attemptId = captureOptions.AttemptId,
@@ -272,6 +407,8 @@ namespace RocketFooxball.Editor
                     UnityEngine.Debug.LogWarning("MovementLab scene is dirty after validation; capture continues for manual review.");
                 }
 
+                surfaceOverrides?.Install(scene);
+
                 var buildManifest = ReadBuildManifest(projectRoot);
                 manifest.source = ReadSourceInfo(projectRoot);
                 UnityEngine.Debug.Log("BRIGHT_ARENA_CAPTURE_SOURCE sha=" + manifest.source.gitSha + " dirty=" + manifest.source.gitDirty);
@@ -284,6 +421,7 @@ namespace RocketFooxball.Editor
                     generatedOutputFingerprint = buildManifest.generatedOutputFingerprint
                 };
                 manifest.visualMode = captureOptions.VisualMode.ToString();
+                manifest.surfacePreset = captureOptions.SurfacePreset.ToString();
 
                 var player = Require(GameObject.Find("Player"), "Player root");
                 gameplayCamera = Require(player.transform.Find("Head/Camera")?.GetComponent<Camera>(), "Player camera");
@@ -399,7 +537,7 @@ namespace RocketFooxball.Editor
                                 fieldOfView = captureCamera.fieldOfView,
                                 cullingMask = captureCamera.cullingMask
                             });
-                            images.Add(CaptureImage(captureCamera, view, quality.Item2, captureOptions.VisualMode.ToString(), evidenceDirectory));
+                            images.Add(CaptureImage(captureCamera, view, quality.Item2, captureOptions.VisualMode.ToString(), captureOptions.SurfacePreset.ToString(), evidenceDirectory));
                         }
                         finally
                         {
@@ -454,35 +592,42 @@ namespace RocketFooxball.Editor
                 }
                 finally
                 {
-                    if (gameplayCamera != null)
+                    try
                     {
-                        RestoreCameraState(gameplayCamera, gameplayState);
+                        surfaceOverrides?.RestoreAndDestroy();
                     }
-                    if (viewmodelsState.Object != null)
+                    finally
                     {
-                        viewmodelsState.Object.SetActive(viewmodelsState.Active);
-                    }
-                    if (crosshairState.Object != null)
-                    {
-                        crosshairState.Object.SetActive(crosshairState.Active);
-                    }
-                    if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
-                    if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
-                    if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
-                    QualitySettings.SetQualityLevel(initialQualityLevel, true);
-                    if (graphicsQualityRuntime != null)
-                    {
-                        graphicsQualityRuntime.ApplyCurrentQuality();
-                    }
-                    if (externalCameraObject != null)
-                    {
-                        UnityEngine.Object.DestroyImmediate(externalCameraObject);
-                    }
-                    RenderTexture.active = previousActive;
-                    if (renderTarget != null)
-                    {
-                        renderTarget.Release();
-                        UnityEngine.Object.DestroyImmediate(renderTarget);
+                        if (gameplayCamera != null)
+                        {
+                            RestoreCameraState(gameplayCamera, gameplayState);
+                        }
+                        if (viewmodelsState.Object != null)
+                        {
+                            viewmodelsState.Object.SetActive(viewmodelsState.Active);
+                        }
+                        if (crosshairState.Object != null)
+                        {
+                            crosshairState.Object.SetActive(crosshairState.Active);
+                        }
+                        if (rocketState.Object != null) rocketState.Object.SetActive(rocketState.Active);
+                        if (shotgunState.Object != null) shotgunState.Object.SetActive(shotgunState.Active);
+                        if (kickState.Object != null) kickState.Object.SetActive(kickState.Active);
+                        QualitySettings.SetQualityLevel(initialQualityLevel, true);
+                        if (graphicsQualityRuntime != null)
+                        {
+                            graphicsQualityRuntime.ApplyCurrentQuality();
+                        }
+                        if (externalCameraObject != null)
+                        {
+                            UnityEngine.Object.DestroyImmediate(externalCameraObject);
+                        }
+                        RenderTexture.active = previousActive;
+                        if (renderTarget != null)
+                        {
+                            renderTarget.Release();
+                            UnityEngine.Object.DestroyImmediate(renderTarget);
+                        }
                     }
                 }
             }
@@ -494,6 +639,7 @@ namespace RocketFooxball.Editor
             var root = ReadArgument(arguments, "-captureEvidenceRoot");
             var attemptId = ReadArgument(arguments, "-captureAttemptId");
             var visualModeText = ReadArgument(arguments, "-captureVisualMode");
+            var surfacePresetText = ReadArgument(arguments, "-captureSurfacePreset");
             if (string.IsNullOrWhiteSpace(root) || string.IsNullOrWhiteSpace(attemptId))
             {
                 throw new InvalidOperationException("Capture requires -captureEvidenceRoot and -captureAttemptId.");
@@ -510,7 +656,18 @@ namespace RocketFooxball.Editor
                 else if (string.Equals(visualModeText, "Persisted", StringComparison.OrdinalIgnoreCase)) visualMode = VisualMode.Persisted;
                 else throw new InvalidOperationException("Capture visual mode must be Fast or Persisted: " + visualModeText);
             }
-            return new CaptureOptions { EvidenceRoot = Path.GetFullPath(root), AttemptId = attemptId, VisualMode = visualMode };
+            var surfacePreset = SurfacePreset.Authored;
+            if (!string.IsNullOrWhiteSpace(surfacePresetText))
+            {
+                if (string.Equals(surfacePresetText, "Authored", StringComparison.OrdinalIgnoreCase)) surfacePreset = SurfacePreset.Authored;
+                else if (string.Equals(surfacePresetText, "Satin", StringComparison.OrdinalIgnoreCase)) surfacePreset = SurfacePreset.Satin;
+                else if (string.Equals(surfacePresetText, "Gloss", StringComparison.OrdinalIgnoreCase)) surfacePreset = SurfacePreset.Gloss;
+                else throw new InvalidOperationException("Capture surface preset must be Authored, Satin, or Gloss: " + surfacePresetText);
+            }
+            return new CaptureOptions
+            {
+                EvidenceRoot = Path.GetFullPath(root), AttemptId = attemptId, VisualMode = visualMode, SurfacePreset = surfacePreset
+            };
         }
 
         private static string ReadArgument(string[] arguments, string name)
@@ -631,7 +788,8 @@ namespace RocketFooxball.Editor
             };
         }
 
-        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string qualityLevel, string visualMode, string evidenceDirectory)
+        private static ImageEvidence CaptureImage(Camera camera, ViewDefinition view, string qualityLevel, string visualMode,
+            string surfacePreset, string evidenceDirectory)
         {
             var absolutePath = Path.Combine(evidenceDirectory, qualityLevel + "_" + view.FileName);
             RenderTexture.active = camera.targetTexture;
@@ -653,6 +811,7 @@ namespace RocketFooxball.Editor
                 var evidence = AnalyzeImage(absolutePath, view.Name, png);
                 evidence.qualityLevel = qualityLevel;
                 evidence.visualMode = visualMode;
+                evidence.surfacePreset = surfacePreset;
                 return evidence;
             }
             finally
