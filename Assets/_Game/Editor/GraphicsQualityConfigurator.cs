@@ -151,6 +151,7 @@ namespace RocketFooxball.Editor
 
             var fullQuality = high && !iteration;
             SetBool(serialized, "m_SupportsHDR", high);
+            SetBool(serialized, "m_SupportsLightLayers", true);
             SetInt(serialized, "m_HDRColorBufferPrecision", 0);
             SetInt(serialized, "m_MSAA", 1);
             SetFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
@@ -322,6 +323,7 @@ namespace RocketFooxball.Editor
             var fullQuality = high && !iteration;
             ExpectFloat(serialized, "m_RenderScale", fullQuality ? HighRenderScale : LowRenderScale);
             ExpectInt(serialized, "m_MainLightRenderingMode", (int)LightRenderingMode.PerPixel);
+            ExpectBool(serialized, "m_SupportsLightLayers", true);
             ExpectBool(serialized, "m_MainLightShadowsSupported", fullQuality);
             ExpectInt(serialized, "m_MainLightShadowmapResolution", fullQuality ? HighShadowResolution : LowShadowResolution);
             ExpectInt(serialized, "m_AdditionalLightsRenderingMode", (int)LightRenderingMode.PerPixel);
