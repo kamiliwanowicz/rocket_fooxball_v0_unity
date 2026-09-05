@@ -332,17 +332,21 @@ SURFACE_PHASES = {
 NATURAL_SURFACE_CONTRACT = {
     "grass": {
         "construction": "continuous-periodic-field",
-        "palette_u8": ((5, 63, 63), (20, 124, 121)),
-        "mean_rgb_u8": ((9.0, 82.0, 81.0), (16.0, 108.0, 106.0)),
-        "teal_dominance_fraction": 0.99,
+        "palette_u8": ((36, 78, 6), (78, 138, 24)),
+        "mean_rgb_u8": ((50.0, 100.0, 10.0), (70.0, 122.0, 24.0)),
+        "green_dominance_fraction": 0.99,
+        "yellow_green_fraction": 0.97,
+        "maximum_blue_green_ratio": 0.34,
         "near_white_threshold_u8": 236,
-        "maximum_directional_coherence": 0.24,
+        "maximum_directional_coherence": 0.38,
         "maximum_axis_band_fraction": 0.035,
-        "maximum_low_frequency_rms_u8": 6.0,
-        "maximum_luminance_span_u8": 36,
-        "metallic": (0.02, 0.06),
-        "smoothness": (0.44, 0.60),
-        "ao": (0.90, 0.99),
+        "maximum_low_frequency_rms_u8": 6.1,
+        "maximum_luminance_span_u8": 50,
+        "minimum_microstructure_energy_fraction": 0.30,
+        "maximum_microstructure_orientation_fraction": 0.52,
+        "metallic": (0.02, 0.04),
+        "smoothness": (0.44, 0.52),
+        "ao": (0.91, 0.99),
         "motif_inventory": (),
     },
     "wall": {
@@ -421,6 +425,53 @@ def _irregular_periodic_mottle(u, v, layers, warp_layers):
     return field / np.float64(total_weight)
 
 
+def _grass_interwoven_fields(u, v):
+    """Author seamless yellow-green turf variation with fine crossed blade ridges."""
+    u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
+    v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
+    broad = (
+        0.44 * np.sin(np.float64(math.tau) * (2.0 * u + 3.0 * v) + 0.61)
+        + 0.31 * np.sin(np.float64(math.tau) * (5.0 * u - 2.0 * v) + 2.34)
+        + 0.25 * np.sin(np.float64(math.tau) * (3.0 * u + 7.0 * v) + 4.87)
+    )
+    broad /= np.float64(1.0)
+    patch_frequency = 47.0
+    scaled_u = u * patch_frequency
+    scaled_v = v * patch_frequency
+    patch_u = np.floor(scaled_u)
+    patch_v = np.floor(scaled_v)
+    local_u = scaled_u - patch_u
+    local_v = scaled_v - patch_v
+    blade_sum = np.zeros(np.broadcast_shapes(u.shape, v.shape), dtype=np.float64)
+
+    def hash01(cell_u, cell_v, salt):
+        value = np.sin(cell_u * 127.1 + cell_v * 311.7 + salt * 74.7) * 43758.5453123
+        return value - np.floor(value)
+
+    for offset_v in (-1.0, 0.0, 1.0):
+        for offset_u in (-1.0, 0.0, 1.0):
+            cell_u = np.mod(patch_u + offset_u, patch_frequency)
+            cell_v = np.mod(patch_v + offset_v, patch_frequency)
+            for blade_index in (0.0, 1.0, 2.0):
+                centre_u = offset_u + 0.10 + 0.80 * hash01(cell_u, cell_v, blade_index + 0.17)
+                centre_v = offset_v + 0.10 + 0.80 * hash01(cell_u, cell_v, blade_index + 1.83)
+                angle = math.tau * hash01(cell_u, cell_v, blade_index + 3.41)
+                half_length = 0.22 + 0.30 * hash01(cell_u, cell_v, blade_index + 5.09)
+                half_width = 0.040 + 0.022 * hash01(cell_u, cell_v, blade_index + 6.67)
+                direction_u = np.cos(angle)
+                direction_v = np.sin(angle)
+                relative_u = local_u - centre_u
+                relative_v = local_v - centre_v
+                along = np.clip(relative_u * direction_u + relative_v * direction_v, -half_length, half_length)
+                across_u = relative_u - along * direction_u
+                across_v = relative_v - along * direction_v
+                across_squared = across_u * across_u + across_v * across_v
+                tip_fade = np.cos(math.pi * along / (2.0 * half_length))
+                blade_sum += np.exp(-across_squared / (half_width * half_width)) * tip_fade * tip_fade
+    blades = np.tanh((blade_sum - 0.14) * 4.2)
+    return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), blades
+
+
 def _natural_surface_layers(kind: str, u, v):
     """Return deterministic multi-scale periodic values for a natural surface."""
     if kind not in NATURAL_SURFACE_CONTRACT:
@@ -428,16 +479,7 @@ def _natural_surface_layers(kind: str, u, v):
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
     if kind == "grass":
-        layers = (
-            (2.0, 3.0, 0.37, 0.42),
-            (5.0, -2.0, 2.11, 0.27),
-            (4.0, 7.0, 4.03, 0.19),
-            (9.0, 5.0, 1.47, 0.12),
-        )
-        detail_layers = (
-            (11.0, 4.0, 0.93, 0.38), (5.0, 13.0, 2.41, 0.29),
-            (17.0, -9.0, 3.31, 0.20), (23.0, 11.0, 5.03, 0.13),
-        )
+        return _grass_interwoven_fields(u, v)
     else:
         layers = (
             (3.0, 8.0, 1.17, 0.30),
@@ -485,17 +527,17 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
         fine_tone = np.clip(0.5 + 0.5 * detail, 0.0, 1.0)
         colour = np.stack(
             (
-                np.clip(0.020 + 0.028 * broad_tone + 0.008 * fine_tone, 0.0, 1.0),
-                np.clip(0.245 + 0.160 * broad_tone + 0.050 * fine_tone, 0.0, 1.0),
-                np.clip(0.245 + 0.145 * broad_tone + 0.055 * fine_tone, 0.0, 1.0),
+                np.clip(0.155 + 0.100 * broad_tone + 0.026 * fine_tone, 0.0, 1.0),
+                np.clip(0.330 + 0.140 * broad_tone + 0.042 * fine_tone, 0.0, 1.0),
+                np.clip(0.028 + 0.035 * broad_tone + 0.008 * fine_tone, 0.0, 1.0),
             ),
             axis=-1,
         )
-        height = 0.50 + 0.018 * n + 0.007 * detail
-        response = np.clip(0.5 + 0.25 * n + 0.10 * detail, 0.0, 1.0)
-        metallic = np.clip(0.02 + 0.04 * response, 0.02, 0.06)
-        smoothness = np.clip(0.44 + 0.16 * response, 0.44, 0.60)
-        ao = np.clip(0.90 + 0.09 * (0.5 + 0.25 * n + 0.10 * detail), 0.90, 0.99)
+        height = 0.50 + 0.003 * n + 0.007 * detail
+        response = np.clip(0.5 + 0.22 * n + 0.10 * detail, 0.0, 1.0)
+        metallic = np.clip(0.02 + 0.02 * response, 0.02, 0.04)
+        smoothness = np.clip(0.44 + 0.08 * response, 0.44, 0.52)
+        ao = np.clip(0.91 + 0.08 * (0.5 + 0.22 * n + 0.10 * detail), 0.91, 0.99)
     else:
         aggregate = np.clip(0.5 + n * 0.5, 0.0, 1.0)
         pore_tone = np.clip(0.5 + detail * 0.5, 0.0, 1.0)
@@ -513,7 +555,7 @@ def _natural_surface_height(kind: str, u, v):
     """Return the authored height field before normal encoding."""
     n, _n01, detail = _natural_surface_layers(kind, u, v)
     if kind == "grass":
-        return 0.50 + 0.018 * n + 0.007 * detail
+        return 0.50 + 0.003 * n + 0.007 * detail
     if kind == "wall":
         return 0.50 + 0.018 * n + 0.006 * detail
     raise ValueError(f"Unknown natural surface kind: {kind}")
@@ -2109,6 +2151,14 @@ _NATURAL_FORBIDDEN_SOURCE_TOKENS = (
     "mowing",
 )
 
+_GRASS_FORBIDDEN_SOURCE_TOKENS = (
+    "teal",
+    "cyan",
+    "water",
+    "swirl",
+    "isotropic",
+)
+
 
 def _directional_structure_audit(field, maximum_coherence):
     """Measure global ridge bias from the wrapped luminance/density tensor."""
@@ -2160,6 +2210,43 @@ def _axis_periodic_band_audit(field, maximum_axis_fraction):
         "maximum": float(maximum_axis_fraction),
         "horizontal": horizontal,
         "vertical": vertical,
+    }
+
+
+def _grass_microstructure_audit(field, minimum_energy_fraction, maximum_orientation_fraction):
+    """Require high-frequency, multi-directional turf detail without a dominant weave."""
+    values = np.asarray(field, dtype=np.float64)
+    centred = values - float(np.mean(values))
+    spectrum = np.abs(np.fft.fft2(centred)) ** 2
+    height, width = values.shape
+    frequency_v = np.fft.fftfreq(height) * np.float64(height)
+    frequency_u = np.fft.fftfreq(width) * np.float64(width)
+    v_grid, u_grid = np.meshgrid(frequency_v, frequency_u, indexing="ij")
+    radius = np.sqrt(u_grid * u_grid + v_grid * v_grid)
+    non_dc = radius > 0.0
+    micro = (radius >= 18.0) & (radius <= 100.0)
+    total_energy = float(np.sum(spectrum[non_dc]))
+    micro_energy = float(np.sum(spectrum[micro]))
+    energy_fraction = micro_energy / total_energy if total_energy > np.finfo(np.float64).eps else 0.0
+    orientation = np.mod(np.arctan2(v_grid, u_grid), math.pi)
+    sector_energy = []
+    for index in range(6):
+        lower = math.pi * index / 6.0
+        upper = math.pi * (index + 1) / 6.0
+        sector_energy.append(float(np.sum(spectrum[micro & (orientation >= lower) & (orientation < upper)])))
+    orientation_fraction = max(sector_energy) / micro_energy if micro_energy > np.finfo(np.float64).eps else 1.0
+    gates = {
+        "microstructure_energy": bool(np.isfinite(energy_fraction) and energy_fraction >= minimum_energy_fraction),
+        "orientation_balance": bool(np.isfinite(orientation_fraction) and orientation_fraction <= maximum_orientation_fraction),
+    }
+    return {
+        "pass": all(gates.values()),
+        "microstructure_energy_fraction": energy_fraction,
+        "minimum_microstructure_energy_fraction": float(minimum_energy_fraction),
+        "maximum_orientation_fraction": orientation_fraction,
+        "orientation_fraction_limit": float(maximum_orientation_fraction),
+        "sector_energy": sector_energy,
+        "gates": gates,
     }
 
 
@@ -2269,6 +2356,7 @@ def _natural_surface_source_guard():
     path_functions = (
         _balanced_toroidal_field,
         _irregular_periodic_mottle,
+        _grass_interwoven_fields,
         _natural_surface_layers,
         _natural_surface_fields,
         _natural_surface_height,
@@ -2282,6 +2370,10 @@ def _natural_surface_source_guard():
     except (OSError, TypeError):
         return {"pass": False, "forbidden_tokens": ["<source-unavailable>"], "path_functions": [function.__name__ for function in path_functions]}
     forbidden = sorted(token for token in _NATURAL_FORBIDDEN_SOURCE_TOKENS if token in source)
+    grass_source = "\n".join(
+        inspect.getsource(function) for function in (_grass_interwoven_fields, _natural_surface_layers, _natural_surface_fields)
+    ).lower()
+    grass_forbidden = sorted(token for token in _GRASS_FORBIDDEN_SOURCE_TOKENS if token in grass_source)
     route_requirements = {
         "map_generation": (
             inspect.getsource(generate_surface_maps).lower(),
@@ -2291,11 +2383,16 @@ def _natural_surface_source_guard():
             inspect.getsource(run_semantic_audits).lower(),
             "checks[kind] = audit_continuous_surface(kind, generated)",
         ),
+        "grass_interwoven_route": (
+            inspect.getsource(_natural_surface_layers).lower(),
+            "return _grass_interwoven_fields(u, v)",
+        ),
     }
     missing = [name for name, (route_source, required) in route_requirements.items() if required not in route_source]
     return {
-        "pass": not forbidden and not missing,
+        "pass": not forbidden and not grass_forbidden and not missing,
         "forbidden_tokens": forbidden,
+        "grass_forbidden_tokens": grass_forbidden,
         "missing_continuous_route_tokens": missing,
         "path_functions": [function.__name__ for function in path_functions],
     }
@@ -2367,10 +2464,18 @@ def audit_continuous_surface(kind, generated):
     wall_pattern = None
 
     if kind == "grass":
-        teal_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 2] > base[:, :, 0])
-        teal_fraction = float(np.mean(teal_dominant))
+        green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
+        green_fraction = float(np.mean(green_dominant))
+        yellow_green = green_dominant & (base[:, :, 0].astype(np.float64) >= base[:, :, 2].astype(np.float64) * 1.5)
+        yellow_green_fraction = float(np.mean(yellow_green))
+        blue_green_ratio = float(np.max(base[:, :, 2].astype(np.float64) / np.maximum(base[:, :, 1], 1)))
         near_white = int(np.count_nonzero(np.all(base[:, :, :3] >= contract["near_white_threshold_u8"], axis=-1)))
-        palette_semantics = teal_fraction >= contract["teal_dominance_fraction"] and near_white == 0
+        palette_semantics = (
+            green_fraction >= contract["green_dominance_fraction"]
+            and yellow_green_fraction >= contract["yellow_green_fraction"]
+            and blue_green_ratio <= contract["maximum_blue_green_ratio"]
+            and near_white == 0
+        )
         palette_mean = [float(np.mean(base[:, :, channel])) for channel in range(3)]
         mean_floor, mean_ceiling = contract["mean_rgb_u8"]
         palette_mean_ok = all(mean_floor[channel] <= palette_mean[channel] <= mean_ceiling[channel] for channel in range(3))
@@ -2396,6 +2501,11 @@ def audit_continuous_surface(kind, generated):
             radius=6,
             maximum_rms_u8=contract["maximum_low_frequency_rms_u8"],
         )
+        microstructure = _grass_microstructure_audit(
+            height_field,
+            contract["minimum_microstructure_energy_fraction"],
+            contract["maximum_microstructure_orientation_fraction"],
+        )
         luminance_u8 = _quantized_audit_field(luminance[:-1, :-1], normalized=True)
         luminance_span_u8 = int(np.max(luminance_u8) - np.min(luminance_u8))
         surface_spread = None
@@ -2410,8 +2520,11 @@ def audit_continuous_surface(kind, generated):
             maximum_diagonal_fraction=contract["maximum_diagonal_spectral_fraction"],
             maximum_autocorrelation_limit=contract["maximum_diagonal_autocorrelation"],
         )
-        teal_fraction = None
+        green_fraction = None
+        yellow_green_fraction = None
+        blue_green_ratio = None
         near_white = None
+        microstructure = None
     source_guard = _natural_surface_source_guard()
     motif_inventory = list(contract["motif_inventory"])
     gates = {
@@ -2434,6 +2547,7 @@ def audit_continuous_surface(kind, generated):
     }
     if kind == "grass":
         gates["low_frequency_detail"] = radial_low_frequency["pass"]
+        gates["interwoven_microstructure"] = microstructure["pass"]
         gates["luminance_span"] = luminance_span_u8 <= contract["maximum_luminance_span_u8"]
     else:
         gates["wall_diagonal_pattern"] = wall_pattern["pass"]
@@ -2445,7 +2559,7 @@ def audit_continuous_surface(kind, generated):
         "motifs": {"inventory": motif_inventory, "counts": {}},
         "edges": edge_errors,
         "wrapped_continuity": wrapped_continuity,
-        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "teal_dominant_fraction": teal_fraction, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
+        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "green_dominant_fraction": green_fraction, "yellow_green_fraction": yellow_green_fraction, "maximum_blue_green_ratio": blue_green_ratio, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
         "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges, "unit_error": unit_error},
         "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
         "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
@@ -2461,6 +2575,7 @@ def audit_continuous_surface(kind, generated):
         result["directional_balance"] = {"pass": directional_ok, "fields": directional_fields}
         result["periodic_bands"] = {"pass": axis_bands_ok, "fields": axis_bands}
         result["radial_low_frequency"] = radial_low_frequency
+        result["interwoven_microstructure"] = microstructure
         result["ao_spectral"] = radial_low_frequency["fields"]["ao"]
         result["palette"].update({"luminance_span_u8": luminance_span_u8, "maximum_luminance_span_u8": contract["maximum_luminance_span_u8"]})
         result["pass"] = all(gates.values())
