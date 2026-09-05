@@ -505,6 +505,8 @@ namespace RocketFooxball.Editor
                             }
 
                             captureCamera.targetTexture = renderTarget;
+                            DynamicGI.UpdateEnvironment();
+                            captureCamera.Render();
                             captureCamera.Render();
                             cameras.Add(new CameraPose
                             {

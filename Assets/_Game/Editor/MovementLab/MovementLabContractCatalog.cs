@@ -299,6 +299,7 @@ namespace RocketFooxball.Editor
         internal static readonly Vector3 ViewmodelLightLocalEuler = MovementLabContract.ViewmodelLightLocalEuler;
         internal const float ViewmodelLightIntensity = MovementLabContract.ViewmodelLightIntensity;
         internal const int ViewmodelLightCullingMask = MovementLabContract.ViewmodelLightCullingMask;
+        internal const uint ViewmodelRenderingLayerMask = MovementLabContract.ViewmodelRenderingLayerMask;
         internal const LightType ViewmodelLightType = MovementLabContract.ViewmodelLightType;
         internal const LightmapBakeType ViewmodelLightBakeType = MovementLabContract.ViewmodelLightBakeType;
         internal const LightShadows ViewmodelLightShadows = MovementLabContract.ViewmodelLightShadows;

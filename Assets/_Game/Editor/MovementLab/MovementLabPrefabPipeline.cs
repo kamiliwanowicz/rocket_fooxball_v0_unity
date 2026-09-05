@@ -317,7 +317,10 @@ namespace RocketFooxball.Editor
                     viewmodelLight.cullingMask = MovementLabContractCatalog.ViewmodelLightCullingMask;
                     viewmodelLight.cookie = null;
                     viewmodelLight.enabled = false;
+                    var viewmodelLightAdditionalData = viewmodelLightObject.AddComponent<UniversalAdditionalLightData>();
+                    viewmodelLightAdditionalData.renderingLayers = MovementLabContractCatalog.ViewmodelRenderingLayerMask;
                     SetLayerRecursively(viewmodels.gameObject, MovementLabContractCatalog.ViewmodelsLayer);
+                    SetViewmodelRenderingLayerMask(viewmodels.gameObject);
 
                     BuildCrosshair(camera);
 
@@ -1345,6 +1348,29 @@ namespace RocketFooxball.Editor
                     for (var i = 0; i < root.transform.childCount; i++) SetLayerRecursively(root.transform.GetChild(i).gameObject, layer);
                 }
 
+                internal static void SetViewmodelRenderingLayerMask(GameObject root)
+                {
+                    var renderers = root.GetComponentsInChildren<Renderer>(true);
+                    for (var i = 0; i < renderers.Length; i++)
+                    {
+                        renderers[i].renderingLayerMask = MovementLabContractCatalog.ViewmodelRenderingLayerMask;
+                    }
+                }
+
+                internal static void ValidateViewmodelRenderingLayerMask(GameObject root, string label)
+                {
+                    var renderers = root.GetComponentsInChildren<Renderer>(true);
+                    for (var i = 0; i < renderers.Length; i++)
+                    {
+                        var renderer = renderers[i];
+                        if (renderer == null || renderer.renderingLayerMask != MovementLabContractCatalog.ViewmodelRenderingLayerMask)
+                        {
+                            throw new InvalidOperationException(label + " Renderer must use the dedicated viewmodel rendering layer: " +
+                                (renderer == null ? "<missing>" : renderer.name));
+                        }
+                    }
+                }
+
                 internal static void ValidateLayerRecursively(GameObject root, int expectedLayer, string label)
                 {
                     var transforms = root.GetComponentsInChildren<Transform>(true);
@@ -1507,6 +1533,7 @@ namespace RocketFooxball.Editor
                             var prefabCamera = root.transform.Find("Head/Camera").GetComponent<Camera>();
                             ValidateCrosshair(prefabCamera);
                             ValidateLayerRecursively(prefabViewmodels.gameObject, MovementLabContractCatalog.ViewmodelsLayer, "Player prefab Viewmodels");
+                            ValidateViewmodelRenderingLayerMask(prefabViewmodels.gameObject, "Player prefab Viewmodels");
                             if (prefabViewmodelLight.type != MovementLabContractCatalog.ViewmodelLightType ||
                                 prefabViewmodelLight.lightmapBakeType != MovementLabContractCatalog.ViewmodelLightBakeType ||
                                 Quaternion.Angle(prefabViewmodelLight.transform.localRotation, Quaternion.Euler(MovementLabContractCatalog.ViewmodelLightLocalEuler)) > 0.001f ||
@@ -1516,6 +1543,12 @@ namespace RocketFooxball.Editor
                                 prefabViewmodelLight.cullingMask != MovementLabContractCatalog.ViewmodelLightCullingMask ||
                                 prefabViewmodelLight.cookie != null || prefabViewmodelLight.enabled)
                                 throw new InvalidOperationException("Player prefab ViewmodelLight contract invalid.");
+                            var prefabViewmodelLightAdditionalData = prefabViewmodelLight.GetComponents<UniversalAdditionalLightData>();
+                            if (prefabViewmodelLightAdditionalData.Length != 1 ||
+                                prefabViewmodelLightAdditionalData[0] == null ||
+                                prefabViewmodelLightAdditionalData[0].gameObject != prefabViewmodelLight.gameObject ||
+                                prefabViewmodelLightAdditionalData[0].renderingLayers != MovementLabContractCatalog.ViewmodelRenderingLayerMask)
+                                throw new InvalidOperationException("Player prefab ViewmodelLight rendering-layer contract invalid.");
                              if ((prefabCamera.cullingMask & MovementLabContractCatalog.ViewmodelLightCullingMask) != MovementLabContractCatalog.ViewmodelLightCullingMask)
                                  throw new InvalidOperationException("Player prefab Camera must include Viewmodels layer.");
                              ValidateCharacterMaterialAssets();

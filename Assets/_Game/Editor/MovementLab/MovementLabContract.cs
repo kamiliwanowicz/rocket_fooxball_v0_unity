@@ -197,6 +197,9 @@ namespace RocketFooxball.Editor
         internal static readonly Vector3 ViewmodelLightLocalEuler = new Vector3(35f, -30f, 0f);
         internal const float ViewmodelLightIntensity = 1.25f;
         internal const int ViewmodelLightCullingMask = 1 << ViewmodelsLayer;
+        // URP Forward+ uses rendering layers, rather than Light.cullingMask, for
+        // per-object light filtering. Keep viewmodels on their own bit.
+        internal const uint ViewmodelRenderingLayerMask = 1u << 1;
         internal const LightType ViewmodelLightType = LightType.Directional;
         internal const LightmapBakeType ViewmodelLightBakeType = LightmapBakeType.Realtime;
         internal const LightShadows ViewmodelLightShadows = LightShadows.None;

@@ -1890,6 +1890,7 @@ namespace RocketFooxball.Editor
                   if (item == null || item.gameObject.layer != MovementLabContract.ViewmodelsLayer)
                       throw new InvalidOperationException(label + " hierarchy must use Viewmodels layer 11: " + (item == null ? "<missing>" : item.name));
               }
+              MovementLabPrefabPipeline.ValidateViewmodelRenderingLayerMask(root, label);
           }
 
           private static void ValidatePrivateViewmodelLight(ParticipantState participant, Transform viewmodels, bool local, string label)
@@ -1919,6 +1920,11 @@ namespace RocketFooxball.Editor
                   throw new InvalidOperationException(label + " ViewmodelLight type/mode/color/intensity/culling/shadow/cookie/bake contract is invalid.");
               if (light.gameObject.layer != MovementLabContract.ViewmodelsLayer)
                   throw new InvalidOperationException(label + " ViewmodelLight must use Viewmodels layer 11.");
+              var additionalData = light.GetComponents<UniversalAdditionalLightData>();
+              if (additionalData.Length != 1 || additionalData[0] == null ||
+                  additionalData[0].gameObject != light.gameObject ||
+                  additionalData[0].renderingLayers != MovementLabContract.ViewmodelRenderingLayerMask)
+                  throw new InvalidOperationException(label + " ViewmodelLight must have exactly one same-object UniversalAdditionalLightData on the dedicated viewmodel rendering layer.");
 
               ValidateReference(participant.Presentation, "viewmodelLight", light, label + ".PlayerPresentation.viewmodelLight");
               var source = PrefabUtility.GetCorrespondingObjectFromSource(light);
