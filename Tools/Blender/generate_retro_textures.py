@@ -332,17 +332,17 @@ SURFACE_PHASES = {
 NATURAL_SURFACE_CONTRACT = {
     "grass": {
         "construction": "continuous-periodic-field",
-        "palette_u8": ((72, 92, 15), (94, 122, 26)),
-        "mean_rgb_u8": ((80.0, 103.0, 17.0), (86.0, 111.0, 24.0)),
-        "green_dominance_fraction": 0.99,
+        "palette_u8": ((5, 63, 63), (20, 124, 121)),
+        "mean_rgb_u8": ((9.0, 82.0, 81.0), (16.0, 108.0, 106.0)),
+        "teal_dominance_fraction": 0.99,
         "near_white_threshold_u8": 236,
-        "maximum_directional_coherence": 0.12,
-        "maximum_axis_band_fraction": 0.02,
-        "maximum_low_frequency_rms_u8": 0.5,
-        "maximum_luminance_span_u8": 8,
-        "metallic": (0.0, 0.0),
-        "smoothness": (0.12, 0.26),
-        "ao": (0.88, 1.0),
+        "maximum_directional_coherence": 0.24,
+        "maximum_axis_band_fraction": 0.035,
+        "maximum_low_frequency_rms_u8": 6.0,
+        "maximum_luminance_span_u8": 36,
+        "metallic": (0.02, 0.06),
+        "smoothness": (0.44, 0.60),
+        "ao": (0.90, 0.99),
         "motif_inventory": (),
     },
     "wall": {
@@ -350,8 +350,8 @@ NATURAL_SURFACE_CONTRACT = {
         "palette_u8": ((82, 82, 82), (220, 220, 220)),
         "rgb_spread_max": 0.08,
         "metallic": (0.0, 0.0),
-        "smoothness": (0.18, 0.32),
-        "ao": (0.90, 1.0),
+        "smoothness": (0.42, 0.58),
+        "ao": (0.91, 0.99),
         "effective_tile": (13, 2),
         "maximum_diagonal_spectral_fraction": 0.40,
         "maximum_diagonal_autocorrelation": 0.72,
@@ -429,12 +429,15 @@ def _natural_surface_layers(kind: str, u, v):
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
     if kind == "grass":
         layers = (
-            (2.0, 1.0, 0.37, 0.52),
-            (4.0, 3.0, 2.11, 0.28),
-            (8.0, 5.0, 4.03, 0.14),
-            (16.0, 9.0, 1.47, 0.06),
+            (2.0, 3.0, 0.37, 0.42),
+            (5.0, -2.0, 2.11, 0.27),
+            (4.0, 7.0, 4.03, 0.19),
+            (9.0, 5.0, 1.47, 0.12),
         )
-        detail_layers = ((12.0, 3.0, 0.93, 0.60), (24.0, 7.0, 3.31, 0.40))
+        detail_layers = (
+            (11.0, 4.0, 0.93, 0.38), (5.0, 13.0, 2.41, 0.29),
+            (17.0, -9.0, 3.31, 0.20), (23.0, 11.0, 5.03, 0.13),
+        )
     else:
         layers = (
             (3.0, 8.0, 1.17, 0.30),
@@ -453,16 +456,12 @@ def _natural_surface_layers(kind: str, u, v):
             (19.0, -61.0, 3.12, 0.06), (-61.0, 19.0, 0.72, 0.06),
         )
 
-    if kind == "grass":
-        broad = _balanced_toroidal_field(u, v, layers)
-        detail = _balanced_toroidal_field(u, v, detail_layers)
-    else:
-        warp_layers = (
-            (2.0, 5.0, 0.73, 0.018), (5.0, 2.0, 3.41, 0.018),
-            (3.0, -11.0, 5.19, 0.011), (-11.0, 3.0, 1.83, 0.011),
-        )
-        broad = _irregular_periodic_mottle(u, v, layers, warp_layers)
-        detail = _irregular_periodic_mottle(u, v, detail_layers, warp_layers)
+    warp_layers = (
+        (2.0, 5.0, 0.73, 0.018), (5.0, 2.0, 3.41, 0.018),
+        (3.0, -11.0, 5.19, 0.011), (-11.0, 3.0, 1.83, 0.011),
+    )
+    broad = _irregular_periodic_mottle(u, v, layers, warp_layers)
+    detail = _irregular_periodic_mottle(u, v, detail_layers, warp_layers)
     return broad, np.clip(0.5 + broad * 0.5, 0.0, 1.0), detail
 
 
@@ -482,19 +481,21 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
     shape = np.broadcast_shapes(u.shape, v.shape)
     zero = np.zeros(shape, dtype=np.float64)
     if kind == "grass":
-        micro = np.clip(0.5 + 0.10 * detail, 0.0, 1.0)
+        broad_tone = np.clip(0.5 + 0.5 * n, 0.0, 1.0)
+        fine_tone = np.clip(0.5 + 0.5 * detail, 0.0, 1.0)
         colour = np.stack(
             (
-                np.clip(0.270 + 0.110 * micro, 0.0, 1.0),
-                np.clip(0.340 + 0.160 * micro, 0.0, 1.0),
-                np.clip(0.055 + 0.050 * micro, 0.0, 1.0),
+                np.clip(0.020 + 0.028 * broad_tone + 0.008 * fine_tone, 0.0, 1.0),
+                np.clip(0.245 + 0.160 * broad_tone + 0.050 * fine_tone, 0.0, 1.0),
+                np.clip(0.245 + 0.145 * broad_tone + 0.055 * fine_tone, 0.0, 1.0),
             ),
             axis=-1,
         )
-        height = 0.50 + 0.012 * detail
-        response = micro
-        smoothness = np.clip(0.12 + 0.14 * response, 0.12, 0.26)
-        ao = np.clip(0.88 + 0.12 * micro, 0.88, 1.0)
+        height = 0.50 + 0.018 * n + 0.007 * detail
+        response = np.clip(0.5 + 0.25 * n + 0.10 * detail, 0.0, 1.0)
+        metallic = np.clip(0.02 + 0.04 * response, 0.02, 0.06)
+        smoothness = np.clip(0.44 + 0.16 * response, 0.44, 0.60)
+        ao = np.clip(0.90 + 0.09 * (0.5 + 0.25 * n + 0.10 * detail), 0.90, 0.99)
     else:
         aggregate = np.clip(0.5 + n * 0.5, 0.0, 1.0)
         pore_tone = np.clip(0.5 + detail * 0.5, 0.0, 1.0)
@@ -503,16 +504,16 @@ def _natural_surface_fields(kind: str, u, v, n=None, n01=None):
         colour = np.clip(neutral[..., None] + tint, 0.0, 1.0)
         height = 0.50 + 0.018 * n + 0.006 * detail
         response = np.clip(0.5 + n * 0.22 + detail * 0.04, 0.0, 1.0)
-        smoothness = np.clip(0.22 + 0.08 * response, 0.18, 0.32)
-        ao = np.clip(0.93 + 0.05 * np.clip(0.5 + n * 0.25 + detail * 0.05, 0.0, 1.0), 0.90, 1.0)
-    return colour, height, zero, smoothness, ao, {}
+        smoothness = np.clip(0.42 + 0.16 * response, 0.42, 0.58)
+        ao = np.clip(0.91 + 0.08 * np.clip(0.5 + n * 0.25 + detail * 0.05, 0.0, 1.0), 0.91, 0.99)
+    return colour, height, metallic if kind == "grass" else zero, smoothness, ao, {}
 
 
 def _natural_surface_height(kind: str, u, v):
     """Return the authored height field before normal encoding."""
     n, _n01, detail = _natural_surface_layers(kind, u, v)
     if kind == "grass":
-        return 0.50 + 0.012 * detail
+        return 0.50 + 0.018 * n + 0.007 * detail
     if kind == "wall":
         return 0.50 + 0.018 * n + 0.006 * detail
     raise ValueError(f"Unknown natural surface kind: {kind}")
@@ -537,11 +538,6 @@ WEAPON_READABILITY_TARGETS = {
         "luminance": (0.11, 0.20, 0.28),
     },
 }
-
-# The arena deliberately retains the original dense tiled motifs.  Keep this
-# selection local to grass and wall so the accepted weapon texture branches
-# continue through their current generator path unchanged.
-LEGACY_ARENA_SURFACE_KINDS = frozenset(("grass", "wall"))
 
 WEAPON_ACCENT_CONTRACT = {
     "palette": ((0.18, 0.012, 0.018), (0.58, 0.035, 0.050), (0.96, 0.14, 0.12)),
@@ -701,7 +697,7 @@ def _surface_fields(kind: str, u: float, v: float):
     """Return base RGB, height, metallic, smoothness, AO for one tiled material."""
     u %= 1.0
     v %= 1.0
-    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
+    if kind in NATURAL_SURFACE_CONTRACT:
         u_array = np.asarray(u, dtype=np.float64)
         v_array = np.asarray(v, dtype=np.float64)
         n, n01, _detail = _natural_surface_layers(kind, u_array, v_array)
@@ -773,7 +769,7 @@ def _surface_fields(kind: str, u: float, v: float):
 
 
 def _surface_normal(kind: str, u: float, v: float):
-    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
+    if kind in NATURAL_SURFACE_CONTRACT:
         delta = 1.0 / 2048.0
         height_u0 = float(_natural_surface_height(kind, u - delta, v))
         height_u1 = float(_natural_surface_height(kind, u + delta, v))
@@ -799,7 +795,7 @@ def _surface_fields_array(kind: str, u, v):
     """Vectorized surface fields for one bounded row chunk."""
     u = np.mod(np.asarray(u, dtype=np.float64), 1.0)
     v = np.mod(np.asarray(v, dtype=np.float64), 1.0)
-    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
+    if kind in NATURAL_SURFACE_CONTRACT:
         n, n01, _detail = _natural_surface_layers(kind, u, v)
         base, height, metallic, smoothness, ao, _masks = _natural_surface_fields(kind, u, v, n, n01)
         return base, height, metallic, smoothness, ao
@@ -926,7 +922,7 @@ def _generate_natural_surface_maps(kind: str, width: int, height: int):
 
 
 def generate_surface_maps(kind: str, width: int, height: int):
-    if kind in NATURAL_SURFACE_CONTRACT and kind not in LEGACY_ARENA_SURFACE_KINDS:
+    if kind in NATURAL_SURFACE_CONTRACT:
         return _generate_natural_surface_maps(kind, width, height)
     # Author at 1024? then deterministic nearest-upsample weapon maps to 2048?.
     # This preserves the approved source resolution while keeping background
@@ -2101,6 +2097,9 @@ _NATURAL_FORBIDDEN_SOURCE_TOKENS = (
     "_periodic_grid_distance",
     "_periodic_ellipse_mask",
     "_segment_mask",
+    "panel",
+    "stripe",
+    "grid",
     "plate",
     "slab",
     "fastener",
@@ -2266,24 +2265,40 @@ def _wall_diagonal_pattern_audit(field, tile_u=13, tile_v=2, maximum_diagonal_fr
 
 
 def _natural_surface_source_guard():
-    """Keep the grass/concrete call path free of discrete motif helpers."""
+    """Prove grass and wall use only the continuous toroidal construction path."""
     path_functions = (
         _balanced_toroidal_field,
         _irregular_periodic_mottle,
         _natural_surface_layers,
         _natural_surface_fields,
         _natural_surface_height,
-        _surface_fields,
-        _surface_fields_array,
         _wrapped_central_differences,
         _generate_natural_surface_maps,
+        generate_surface_maps,
+        run_semantic_audits,
     )
     try:
         source = "\n".join(inspect.getsource(function) for function in path_functions).lower()
     except (OSError, TypeError):
         return {"pass": False, "forbidden_tokens": ["<source-unavailable>"], "path_functions": [function.__name__ for function in path_functions]}
     forbidden = sorted(token for token in _NATURAL_FORBIDDEN_SOURCE_TOKENS if token in source)
-    return {"pass": not forbidden, "forbidden_tokens": forbidden, "path_functions": [function.__name__ for function in path_functions]}
+    route_requirements = {
+        "map_generation": (
+            inspect.getsource(generate_surface_maps).lower(),
+            "if kind in natural_surface_contract:\n        return _generate_natural_surface_maps(kind, width, height)",
+        ),
+        "semantic_audit": (
+            inspect.getsource(run_semantic_audits).lower(),
+            "checks[kind] = audit_continuous_surface(kind, generated)",
+        ),
+    }
+    missing = [name for name, (route_source, required) in route_requirements.items() if required not in route_source]
+    return {
+        "pass": not forbidden and not missing,
+        "forbidden_tokens": forbidden,
+        "missing_continuous_route_tokens": missing,
+        "path_functions": [function.__name__ for function in path_functions],
+    }
 
 
 def audit_continuous_surface(kind, generated):
@@ -2352,10 +2367,10 @@ def audit_continuous_surface(kind, generated):
     wall_pattern = None
 
     if kind == "grass":
-        green_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 1] > base[:, :, 2])
-        green_fraction = float(np.mean(green_dominant))
+        teal_dominant = (base[:, :, 1] > base[:, :, 0]) & (base[:, :, 2] > base[:, :, 0])
+        teal_fraction = float(np.mean(teal_dominant))
         near_white = int(np.count_nonzero(np.all(base[:, :, :3] >= contract["near_white_threshold_u8"], axis=-1)))
-        palette_semantics = green_fraction >= contract["green_dominance_fraction"] and near_white == 0
+        palette_semantics = teal_fraction >= contract["teal_dominance_fraction"] and near_white == 0
         palette_mean = [float(np.mean(base[:, :, channel])) for channel in range(3)]
         mean_floor, mean_ceiling = contract["mean_rgb_u8"]
         palette_mean_ok = all(mean_floor[channel] <= palette_mean[channel] <= mean_ceiling[channel] for channel in range(3))
@@ -2395,7 +2410,7 @@ def audit_continuous_surface(kind, generated):
             maximum_diagonal_fraction=contract["maximum_diagonal_spectral_fraction"],
             maximum_autocorrelation_limit=contract["maximum_diagonal_autocorrelation"],
         )
-        green_fraction = None
+        teal_fraction = None
         near_white = None
     source_guard = _natural_surface_source_guard()
     motif_inventory = list(contract["motif_inventory"])
@@ -2430,7 +2445,7 @@ def audit_continuous_surface(kind, generated):
         "motifs": {"inventory": motif_inventory, "counts": {}},
         "edges": edge_errors,
         "wrapped_continuity": wrapped_continuity,
-        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "green_dominant_fraction": green_fraction, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
+        "palette": {"ranges_u8": palette_ranges, "bounds_u8": [list(palette_floor), list(palette_ceiling)], "luminance_span": luminance_span, "teal_dominant_fraction": teal_fraction, "near_white_pixels": near_white, "max_rgb_spread": None if surface_spread is None else float(np.max(surface_spread))},
         "normal": {**normal_audit, "xy_ranges_u8": normal_xy_ranges, "unit_error": unit_error},
         "metallic": {"range": metallic_range, "target": list(contract["metallic"])},
         "smoothness": {"range": smoothness_range, "target": list(contract["smoothness"])},
@@ -2621,17 +2636,6 @@ def audit_weapon_accent_glass(generated, selected_families):
     }
 
 
-def audit_legacy_arena_surface(kind, generated):
-    """Preserve the legacy tiled arena response without applying natural-surface gates."""
-    prefix = "Retro" + kind.capitalize()
-    metallic = _rgba_view(generated[prefix + "_MetallicSmoothness"]["buffer"])
-    base = _rgba_view(generated[prefix]["buffer"])
-    nonmetallic = kind != "wall" or int(np.max(metallic[:, :, 0])) == 0
-    patterned = int(np.max(base[:, :, :3])) > int(np.min(base[:, :, :3]))
-    gates = {"legacy_patterned": patterned, "wall_nonmetallic": nonmetallic}
-    return {"pass": all(gates.values()), "gates": gates}
-
-
 def run_semantic_audits(generated, frames=None, selected_families=None):
     """Run only semantic checks whose family buffers were selected/generated."""
     selected_ordered = tuple(selected_families or FAMILY_IDS)
@@ -2660,7 +2664,7 @@ def run_semantic_audits(generated, frames=None, selected_families=None):
         checks["shield"] = audit_shield_semantics(generated["RetroShield"]["buffer"])
     for kind in ("grass", "wall"):
         if kind in selected:
-            checks[kind] = audit_legacy_arena_surface(kind, generated) if kind in LEGACY_ARENA_SURFACE_KINDS else audit_continuous_surface(kind, generated)
+            checks[kind] = audit_continuous_surface(kind, generated)
     if "sky" in selected:
         checks["sky"] = audit_sky_clouds(generated)
     if any(family_id in selected for family_id in ("weapon-metal", "weapon-dark")):

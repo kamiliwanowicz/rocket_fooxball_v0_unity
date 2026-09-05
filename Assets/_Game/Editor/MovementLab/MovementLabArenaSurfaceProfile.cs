@@ -65,13 +65,13 @@ namespace RocketFooxball.Editor
             new ReadOnlyDictionary<Surface, SurfaceExpectation>(new Dictionary<Surface, SurfaceExpectation>
             {
                 { Surface.Floor, new SurfaceExpectation(GrassTexturePath, GrassNormalTexturePath, GrassMetallicTexturePath,
-                    GrassOcclusionTexturePath, DetailNormalTexturePath, new Vector2(32.5f, 22.5f), new Vector2(65f, 45f), 0.35f,
+                    GrassOcclusionTexturePath, DetailNormalTexturePath, new Vector2(13f, 9f), new Vector2(26f, 18f), 0.35f,
                     0.65f, 0.85f, 1f) },
                 { Surface.Wall, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
-                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(8f, 2f), new Vector2(52f, 12f), 0.25f,
+                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(13f, 2f), new Vector2(26f, 4f), 0.25f,
                     0.80f, 0.90f, 1f) },
                 { Surface.ArenaPrimary, new SurfaceExpectation(WallTexturePath, WallNormalTexturePath, WallMetallicTexturePath,
-                    WallOcclusionTexturePath, DetailNormalTexturePath, Vector2.one, new Vector2(52f, 12f), 0.25f,
+                    WallOcclusionTexturePath, DetailNormalTexturePath, new Vector2(13f, 2f), new Vector2(26f, 4f), 0.25f,
                     0.80f, 0.90f, 1f) }
             });
 
