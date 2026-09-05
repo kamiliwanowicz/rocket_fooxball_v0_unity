@@ -1,9 +1,9 @@
 {
     "schemaVersion": 8,
-    "gitSha": "d82c38c70b299b79d11a3383e6879f4110488a76",
+    "gitSha": "1f58ff61ede098f89bb2c68bccb8ac27f95d8bd6",
     "manifestStatus": "stale",
-    "sourceSignature": "4e100f0c6dd16740aa3637fe535eeb335ea9cb584cfdc9e1d157c23b2a9cc8d0",
-    "generatedOutputFingerprint": "46826b334285e05e3df2c2fe8f586a37852526281c233925fa1c3688171f7b8c",
+    "sourceSignature": "e0f326caffc3ebcb573dc1912c9fcae37f67a4264e34dc110c94968caca5df28",
+    "generatedOutputFingerprint": "5a3522025349d2dca4654e7040f80082c4115b971122abf7131d882d1b69b812",
     "unityVersion": "6000.5.6f1",
     "lightingInputDigest": "e513713c814e47730d88573dd86ecac96abd86f03168d0dcfc0c258be8647f8c",
     "bakedProfile": "Production",
@@ -292,7 +292,7 @@
         "49c4dabbadbd02d41b80191f94645307",
         "831fdb79b7b6e2d332579abcd4ad65385da47db76fe0a6c200bef00bd4801755",
         "6391b7c8c608aff43bb6322c026feb67",
-        "4902faa1c51a43bdc56bf79c47df435a5d100c80fd4d24800203f43922da0511",
+        "280583a290be8a4c5e434973c571be9cbe71d7453dc69eb49332f9210a8eb190",
         "180678f372fc13a4caeadb4e6fa9a084",
         "564b013a4f0fcde694e1ce80ad88239881df9d481086b91eed2e54e41794d212",
         "d14fb7c67f2006c46bc0d9177df4b143",
@@ -320,7 +320,7 @@
         "b5a9e54c0b5ca6f48b28b4a1cd30592f",
         "f672ece41db74921f1cde6c428e859ba0efe3ef28ed662c165c8b9ceffbf14e8",
         "ce405be7ddf242646991074551e65d6c",
-        "e7be33edfcb66836ce3c022773243bafbcc273a9acbbac33f43589799b3ad23c",
+        "d79ade7ea10b70ad7efdb8b836496fd39d7af6a0c94343c6f80b4c789406513b",
         "e693f4f10592518419e679a3c1266cfd",
         "b1331bc80ceb40c14bcba76c2ae4c86a5d12d825c12351d1626721142c9d7330",
         "a256dce2cbc89e54f934981d48c00e70",
@@ -370,7 +370,7 @@
         "5a702ad7e41f9b04aa188c268a09fc5e",
         "e9b7d1492ea797b78fb8a9ee6ee6a1a0e27d4653e1d347363ce1f3a1c0c477cc",
         "fcdd2739449183b48aedb5cba5a1f8b9",
-        "32066a5af674d5e2308d2f6e8e5603abf8457f36fb65452e4d8bb938a75f4a20",
+        "6d43a5e7b1d0f70be3221e44f8f5913157e182e37f1cf84aad7d3d43241a0f35",
         "7a152a4b7f543df41a4721a78ffd259a",
         "2dc50c8f65780fd7dd45af400bf69cbeb8b9853c23607d2b2206459e3500fdb5",
         "8f518237f01f0174899ae335f094f6bf",
@@ -397,7 +397,7 @@
         "f908bc8bd3dd0074fbdf3c27d12c70b0",
         "eb54f478e00511c0774018c73e2243e06c53e8f5d6f161d5a06b7178eeabc202",
         "50df7b6af8a168d4c9e73b1c38864f37",
-        "496747aa8b8a7e85b644b338b58d1d1d440149a55cd6e15be53dca626968b2af",
+        "d9ada3d3a50026f36d4eac0994aecbf4d21e3d6a66de244836aa7fdc835daf70",
         "04f6dead4185c42458fce3ea760fc4b7",
         "d643f666fb6482262bdd46bc7017dc2519ecbff57e282f7f2cd95424d28a7857",
         "8cf33930ca4c1194a8901597f06610c0",
@@ -511,8 +511,8 @@
             "schemaVersion": 8,
             "contractVersion": "importer-contract:6",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "0f61d902da57e4781dd37af191bd21a8128630e5ae83ac504fd385f39bb70e86",
-            "repositoryInputDigest": "0f61d902da57e4781dd37af191bd21a8128630e5ae83ac504fd385f39bb70e86",
+            "inputDigest": "b7ddfeb4efa0f17be430118edc21fe4f7a497bd52a76901824a08c8588a4620b",
+            "repositoryInputDigest": "b7ddfeb4efa0f17be430118edc21fe4f7a497bd52a76901824a08c8588a4620b",
             "dependencyDigest": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
             "outputDigest": "816dd05d30c9ca2a1cd5989d6ec370bfb48383d14483fa28f6150e564dd7afb8",
             "predecessorDigests": [],
@@ -838,10 +838,10 @@
             "schemaVersion": 8,
             "contractVersion": "material-prefab-contract:18;serialized:16",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "cd593bbc84efeda2104444c4d3a4a5ebe41a21a02880bca99d2a56073382327f",
-            "repositoryInputDigest": "9339b5275a6629889c42d2f96887b3c5f200297bd9a21346018f029c3908e578",
-            "dependencyDigest": "0e22da45a5399725b01f16128e24184bbbdd1e93842d3da36d21c427433cafc6",
-            "outputDigest": "7e4799de6bf45a2527d4c5894804d97e6e0b7ee9898c6bdc99d6a4cdaeaac3d2",
+            "inputDigest": "559e148c1b4ccbd357bd7e9eab897d1aa10dff8c036ed860fe900624e883a693",
+            "repositoryInputDigest": "b4fc95b376074f45774b1e40b8d7670e376bc4789b16f6183329cdebba3718a2",
+            "dependencyDigest": "333247ea406377a004a3a9a1eb3e551adac2f7dcd209d2de522827b65cf456e9",
+            "outputDigest": "3abe16c12ec34ddc632cb54333f484dbea893ff34240ea91416d82ab628da78a",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -920,7 +920,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/ArenaPrimary.mat",
-                    "digest": "4902faa1c51a43bdc56bf79c47df435a5d100c80fd4d24800203f43922da0511",
+                    "digest": "280583a290be8a4c5e434973c571be9cbe71d7453dc69eb49332f9210a8eb190",
                     "missing": false
                 },
                 {
@@ -1060,7 +1060,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Floor.mat",
-                    "digest": "e7be33edfcb66836ce3c022773243bafbcc273a9acbbac33f43589799b3ad23c",
+                    "digest": "d79ade7ea10b70ad7efdb8b836496fd39d7af6a0c94343c6f80b4c789406513b",
                     "missing": false
                 },
                 {
@@ -1310,7 +1310,7 @@
                 },
                 {
                     "path": "Assets/_Game/Materials/Wall.mat",
-                    "digest": "32066a5af674d5e2308d2f6e8e5603abf8457f36fb65452e4d8bb938a75f4a20",
+                    "digest": "6d43a5e7b1d0f70be3221e44f8f5913157e182e37f1cf84aad7d3d43241a0f35",
                     "missing": false
                 },
                 {
@@ -1410,7 +1410,7 @@
                 },
                 {
                     "path": "Assets/_Game/Prefabs/Player.prefab",
-                    "digest": "496747aa8b8a7e85b644b338b58d1d1d440149a55cd6e15be53dca626968b2af",
+                    "digest": "d9ada3d3a50026f36d4eac0994aecbf4d21e3d6a66de244836aa7fdc835daf70",
                     "missing": false
                 },
                 {
@@ -1450,10 +1450,10 @@
             "schemaVersion": 8,
             "contractVersion": "gameplay-scene-contract:20;serialized:16",
             "unityVersion": "6000.5.6f1",
-            "inputDigest": "bd23bdeaa8bf421ea7d8add346574e747f75332a6e47c4f153f380ff4b33471c",
+            "inputDigest": "5815644d7849e720c1b16997ff187f9a7fe45d268f701fe8028a7793f4c5cb4d",
             "repositoryInputDigest": "d9d3abffee4981a7950f3c14f139ce1b3d7f3fd7fa6a3ebd8620731b8302039a",
-            "dependencyDigest": "fb218fb6ab05cafd17621cc294b6fa7462079cd42406a165bf671603996e69e2",
-            "outputDigest": "b1088af1f6d8fb7f407af5b7a2ed1cdf7f209ff6b4fb26882c039c611155da6e",
+            "dependencyDigest": "5344da3f65b35afd43b4d2b4252f7296352c37fda29395055deb35617037490b",
+            "outputDigest": "b8d84d82b72bd7576ee1acd45bb97e980a49892874b8693c4b3a2ed335805800",
             "predecessorDigests": [],
             "staleReasons": [],
             "priorInputDigest": "",
@@ -1462,7 +1462,7 @@
             "outputs": [
                 {
                     "path": "Assets/_Game/Scenes/MovementLab.unity",
-                    "digest": "e6e5a2a29fe23f80ffc47394bf8e129a367db6d5a0a951c1b6de8bab5db634d2",
+                    "digest": "7817e5bc8ff147fa1c776a74c26fff5d21f30aa593e6d442dd3626b9d1a7056d",
                     "missing": false
                 },
                 {
